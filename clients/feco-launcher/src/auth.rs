@@ -339,6 +339,27 @@ impl Auth {
         Ok(body["name"].as_str().map(str::to_owned))
     }
 
+    /// Báo F-Store rằng người dùng đã cài app (điều kiện để đánh giá; spec app-catalog).
+    pub async fn record_install(&self, access: &str, app_id: &str) -> Result<(), AuthError> {
+        let url = self
+            .server
+            .join("v1/catalog/installs")
+            .expect("URL máy chủ hợp lệ");
+        let res = self
+            .http
+            .post(url)
+            .bearer_auth(access)
+            .json(&serde_json::json!({ "app_id": app_id }))
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        match res.status() {
+            s if s.is_success() => Ok(()),
+            reqwest::StatusCode::UNAUTHORIZED => Err(AuthError::Expired),
+            s => Err(AuthError::Failed(format!("/v1/catalog/installs trả {s}"))),
+        }
+    }
+
     /// Xin mã khởi chạy cho app `client_id` (spec launcher, "Mở app con và truyền phiên đăng nhập").
     pub async fn launch_code(
         &self,

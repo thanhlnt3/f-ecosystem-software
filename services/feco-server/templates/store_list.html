@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("store.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("store.title") }}</h1>
+<form method="get" action="/store" class="filters" role="search">
+  <input type="search" name="q" value="{{ q }}" placeholder="{{ i18n.t("store.search_placeholder") }}" aria-label="{{ i18n.t("store.search") }}">
+  <select name="category" aria-label="{{ i18n.t("store.category") }}">
+    <option value="">{{ i18n.t("store.category_all") }}</option>
+    {% for c in categories %}<option value="{{ c }}"{% if c.as_str() == category.as_str() %} selected{% endif %}>{{ c }}</option>{% endfor %}
+  </select>
+  <select name="os" aria-label="{{ i18n.t("store.platforms") }}">
+    <option value="">{{ i18n.t("store.os_all") }}</option>
+    <option value="windows"{% if os == "windows" %} selected{% endif %}>Windows</option>
+    <option value="macos"{% if os == "macos" %} selected{% endif %}>macOS</option>
+  </select>
+  <select name="price" aria-label="{{ i18n.t("store.price") }}">
+    <option value="">{{ i18n.t("store.price_all") }}</option>
+    <option value="free"{% if price == "free" %} selected{% endif %}>{{ i18n.t("store.price_free") }}</option>
+    <option value="paid"{% if price == "paid" %} selected{% endif %}>{{ i18n.t("store.price_paid") }}</option>
+  </select>
+  <label style="display:inline;font-weight:400;margin:0"><input type="checkbox" name="verified" value="1"{% if verified %} checked{% endif %}> {{ i18n.t("store.verified_only") }}</label>
+  <button type="submit">{{ i18n.t("store.search") }}</button>
+</form>
+{% if cards.is_empty() %}
+<p class="muted" id="no-results">{{ i18n.t("store.empty") }}</p>
+{% else %}
+<div class="grid" id="results">
+{% for c in cards %}
+  <a class="app" href="/store/{{ c.id }}" data-app="{{ c.id }}" style="color:inherit;text-decoration:none">
+    <h3>{{ c.name }}{% if c.first_party %}<span class="badge brand">{{ i18n.t("store.first_party") }}</span>{% endif %}</h3>
+    <div class="muted">{{ c.developer }}{% if c.verified %}<span class="badge ok">{{ i18n.t("store.verified") }}</span>{% endif %}</div>
+    <p>{{ c.summary }}</p>
+    <div class="muted">{{ c.rating }} · {{ c.price }} · {{ c.platforms }}</div>
+  </a>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

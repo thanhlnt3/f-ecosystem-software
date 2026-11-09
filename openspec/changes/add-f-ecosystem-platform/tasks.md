@@ -82,10 +82,14 @@
 
 ## 7. Danh mục (`app-catalog`)
 
-- [ ] 7.1 API và trang danh mục, trang chi tiết (scope, license, chính sách quyền riêng tư); xác minh bằng test E2E
-- [ ] 7.2 Tìm kiếm không phân biệt dấu tiếng Việt, cùng các bộ lọc; xác minh "so tay hoc tap" tìm ra "Sổ tay Học tập"
-- [ ] 7.3 Đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi phạm; xác minh bằng các scenario trong spec
-- [ ] 7.4 App bị gỡ biến khỏi danh mục trong 5 phút; xác minh bằng test có đo thời gian
+- [x] 7.1 API và trang danh mục, trang chi tiết (scope, license, chính sách quyền riêng tư); xác minh bằng test E2E
+  - Đã xác minh bằng E2E `catalog_search_detail_reviews_reports_and_removal`: `/store`, `/store/{id}`, `/v1/catalog`, `/v1/catalog/{id}` chỉ hiện app có phiên bản đã phát hành (app chưa duyệt trả 404); trang chi tiết có tên, nhà phát triển kèm "Đã xác minh", mô tả, ảnh, phiên bản, ngày cập nhật, hệ điều hành, dung lượng, giá, license, liên kết chính sách quyền riêng tư, lịch sử thay đổi, và dòng "Tên hiển thị và ảnh đại diện (bắt buộc): Hiển thị trên bản nhạc bạn chia sẻ" đứng trước nút cài; app của nền tảng có nhãn "Của F-Eco" và vẫn đủ scope, chính sách. Scope và mục đích đọc từ OAuth client trong Hydra (một nguồn với màn hình đồng ý). Kiểm tra giao diện trong trình duyệt (tiếng Việt và tiếng Anh). App được đưa vào danh mục tạm bằng `feco-catalog` cho tới nhóm 8, 9.
+- [x] 7.2 Tìm kiếm không phân biệt dấu tiếng Việt, cùng các bộ lọc; xác minh "so tay hoc tap" tìm ra "Sổ tay Học tập"
+  - Đã xác minh: test đơn vị `search_ignores_vietnamese_accents_and_case` (dạng dựng sẵn và dạng tổ hợp, `đ`) và E2E: "so tay hoc tap" và "SỔ TAY" tìm ra "Sổ tay Học tập", tìm theo tên nhà phát triển; bộ lọc danh mục, hệ điều hành, miễn phí/trả phí, nhà phát triển đã xác minh.
+- [x] 7.3 Đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi phạm; xác minh bằng các scenario trong spec
+  - Đã xác minh bằng E2E: người chưa cài gửi nhận xét nhận "Bạn cần cài app trước khi đánh giá"; launcher báo đã cài qua `POST /v1/catalog/installs` (chỉ token của launcher) rồi mới đánh giá được; nhà phát triển (chủ app) trả lời, câu trả lời hiện ngay dưới nhận xét với nhãn "Nhà phát triển", người khác trả lời bị 403; báo cáo app vi phạm bản quyền vào hàng chờ, khi xử lý người báo cáo nhận email (Mailpit); nhận xét bị báo cáo và được xác nhận thì bị ẩn. Hàng chờ tạm xem và xử lý bằng `feco-catalog reports|resolve`; giao diện quản trị ở nhóm 14.
+- [x] 7.4 App bị gỡ biến khỏi danh mục trong 5 phút; xác minh bằng test có đo thời gian
+  - Đã xác minh bằng E2E có đo thời gian: sau khi gỡ, trang chi tiết trả 404 ngay; kết quả tìm kiếm (đã nằm trong bộ nhớ đệm của một bản máy chủ khác) hết app sau 60,6 giây, dưới 5 phút. Bộ nhớ đệm tìm kiếm giữ tối đa 60 giây (`CACHE_TTL`) và bị xóa ngay khi có thay đổi trên cùng máy chủ.
 
 ## 8. Cổng nhà phát triển (`developer-portal`)
 

@@ -2,15 +2,16 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–6):
+> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–7):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện tiếng Việt và tiếng Anh.
 > - Bảo mật: HSTS và header bảo vệ, mã hóa dữ liệu nhạy cảm khi lưu (AES-256-GCM), giới hạn tần suất, nhật ký kiểm toán chỉ ghi thêm, cảnh báo đăng nhập từ thiết bị mới. Quy trình xử lý sự cố: [`docs/security/incident-response.md`](docs/security/incident-response.md).
 > - Chuỗi tin cậy cho gói cài đặt theo TUF (dùng `tough`): ký phiên bản đã duyệt, thu hồi tới launcher trong 1 giờ, chặn gói hoặc metadata bị sửa, rollback, đóng băng; xoay khóa targets và root (ngưỡng 2/3). Công cụ `feco-tuf`, quy trình giữ khóa: [`docs/security/tuf-keys.md`](docs/security/tuf-keys.md).
 > - F-Launcher (Rust + egui): đăng nhập qua trình duyệt, nhớ đăng nhập qua khởi động lại máy, cài/cập nhật/quay lại/gỡ app con có xác minh TUF, chạy được khi ngoại tuyến, chặn phiên bản bị thu hồi, mở app con bằng mã khởi chạy dùng một lần.
+> - F-Store (`/store`): danh mục app đã duyệt, tìm không phân biệt dấu tiếng Việt, lọc theo danh mục, hệ điều hành, giá, nhà phát triển đã xác minh; trang chi tiết có scope dữ liệu kèm mục đích, license, chính sách quyền riêng tư, lịch sử thay đổi; đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi phạm.
 >
-> Chưa có: dịch vụ danh mục app (launcher tạm lấy danh mục từ kho TUF), cổng nhà phát triển, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
+> Chưa có: cổng nhà phát triển (app tạm được đưa vào danh mục bằng công cụ `feco-catalog`), kiểm duyệt, bảng quản trị, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
 
 ## Mục lục
 
@@ -212,6 +213,19 @@ Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8
 (root.json tin cậy; mặc định `metadata/1.root.json` của kho cục bộ), `FECO_LAUNCHER_FONT` (phông chữ
 `.ttf` nếu máy không có Segoe UI/Arial). Ngoài dev, các địa chỉ phải là HTTPS.
 
+F-Store: `scripts/dev-launcher.sh setup` cũng đưa Demo App vào danh mục, xem ở
+http://127.0.0.1:8080/store. Sau khi cài Demo App bằng launcher (đã đăng nhập), bạn viết được nhận
+xét ở trang chi tiết. Cho tới khi có cổng nhà phát triển và bảng quản trị (nhóm 8, 14), quản trị
+danh mục bằng công cụ dòng lệnh (đọc cấu hình giống `feco-server`):
+
+```bash
+cargo run -p feco-server --bin feco-catalog -- add-app docs/catalog-app.example.json
+cargo run -p feco-server --bin feco-catalog -- release <app> <phiên bản> windows-x64 <số byte> <tên target TUF> "<thay đổi>"
+cargo run -p feco-server --bin feco-catalog -- remove <app> "<lý do>"           # gỡ khỏi danh mục
+cargo run -p feco-server --bin feco-catalog -- reports                          # hàng chờ báo cáo vi phạm
+cargo run -p feco-server --bin feco-catalog -- resolve <id> upheld "<ghi chú>"  # xử lý, gửi email cho người báo cáo
+```
+
 ### 7. Dừng và xóa dữ liệu
 
 - Dừng `feco-server` và app mẫu bằng `Ctrl+C`.
@@ -222,7 +236,7 @@ Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8
 
 | Dịch vụ | Địa chỉ | Dùng để |
 |---|---|---|
-| feco-server | http://127.0.0.1:8080 | Trang tài khoản, màn hình đồng ý, API `/v1/me` |
+| feco-server | http://127.0.0.1:8080 | Trang tài khoản, màn hình đồng ý, F-Store (`/store`), API `/v1/...` |
 | Mailpit | http://127.0.0.1:8025 (SMTP 1025) | Xem email của hệ thống dev |
 | Kratos public / admin | http://127.0.0.1:4433 / :4434 | Tài khoản (feco-server gọi; không mở trực tiếp) |
 | Hydra public / admin | http://127.0.0.1:4444 / :4445 | OAuth 2.0/OIDC cho app con; `/.well-known/openid-configuration` |
@@ -239,6 +253,9 @@ Các API chính của `feco-server`:
 | `/security/not-me/{token}` | Nút "Không phải tôi" trong email cảnh báo thiết bị mới |
 | `/oauth/login`, `/oauth/consent`, `/oauth/logout` | Login & consent provider của Hydra |
 | `POST /v1/launch-codes` | Chỉ token của F-Launcher: `{"client_id"}` → mã khởi chạy dùng một lần, sống 60 giây |
+| `/store`, `/store/{id}` | F-Store: danh mục, tìm kiếm (`?q=&category=&os=windows\|macos&price=free\|paid&verified=1`), trang chi tiết; `POST /store/{id}/reviews`, `/store/{id}/reviews/{rid}/reply`, `/store/{id}/report` |
+| `GET /v1/catalog`, `GET /v1/catalog/{id}` | Danh mục dạng JSON (cùng tham số tìm kiếm); chi tiết kèm scope, mục đích, phiên bản, nhận xét |
+| `POST /v1/catalog/installs` | Chỉ token của F-Launcher: `{"app_id"}` ghi nhận đã cài (điều kiện để đánh giá) |
 | `POST /v1/launch-codes/exchange` | App con: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → `authorization_code` để đổi lấy token tại Hydra bằng PKCE. Chỉ cấp lại scope người dùng đã đồng ý; chưa đồng ý thì trả `consent_required` |
 | `GET /v1/me` | Dữ liệu người dùng theo scope của access token (`Authorization: Bearer …`); `?fields=email,phone_number` để chọn trường. Lỗi trả JSON `{error, message, message_vi, request_id}` |
 
@@ -329,7 +346,7 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `crates/feco-core` | Kiểu dữ liệu dùng chung: tiền VND, scope dữ liệu, môi trường |
 | `crates/feco-config` | Đọc và kiểm tra cấu hình lúc khởi động |
 | `crates/feco-tuf` | Kho TUF (dựng, ký, thu hồi, xoay khóa) và client xác minh cho launcher; công cụ `feco-tuf` |
-| `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
+| `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu, F-Store; công cụ `feco-catalog`; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
 | `clients/feco-launcher` | F-Launcher: thư viện (đăng nhập, cài/cập nhật/gỡ qua TUF, mã khởi chạy, API cục bộ) và giao diện egui |
 | `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me`; khi được launcher mở thì đăng nhập bằng mã khởi chạy |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |

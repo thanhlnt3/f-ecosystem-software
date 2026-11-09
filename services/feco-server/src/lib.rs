@@ -8,6 +8,7 @@ pub mod api;
 pub mod apps;
 pub mod audit;
 pub mod auth;
+pub mod catalog;
 pub mod challenge;
 pub mod connected;
 pub mod crypto;
@@ -23,6 +24,7 @@ pub mod pairwise;
 pub mod ratelimit;
 pub mod security;
 pub mod store;
+pub mod store_web;
 pub mod throttle;
 pub mod views;
 pub mod webhooks;
@@ -73,6 +75,8 @@ pub struct AppState {
     pub data_key: crypto::DataKey,
     pub ratelimit: ratelimit::RateLimiter,
     pub limits: Limits,
+    /// Bộ nhớ đệm kết quả tìm kiếm danh mục.
+    pub catalog: catalog::Cache,
 }
 
 /// Ngưỡng giới hạn tần suất (yêu cầu mỗi phút).
@@ -132,6 +136,7 @@ impl AppState {
             data_key: crypto::DataKey::from_base64(config.security.data_key.expose())?,
             ratelimit: ratelimit::RateLimiter::default(),
             limits: Limits::from_config(&config.security),
+            catalog: catalog::Cache::default(),
         })
     }
 }
@@ -197,6 +202,17 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/apps/{client_id}", get(connected::detail))
         .route("/apps/{client_id}/revoke", post(connected::revoke))
         .route("/v1/me", get(api::me))
+        .route("/v1/catalog", get(store_web::api_list))
+        .route("/v1/catalog/installs", post(store_web::api_install))
+        .route("/v1/catalog/{id}", get(store_web::api_detail))
+        .route("/store", get(store_web::list))
+        .route("/store/{id}", get(store_web::show))
+        .route("/store/{id}/reviews", post(store_web::submit_review))
+        .route(
+            "/store/{id}/reviews/{rid}/reply",
+            post(store_web::submit_reply),
+        )
+        .route("/store/{id}/report", post(store_web::submit_report))
         .route("/v1/launch-codes", post(launch::issue))
         .route("/v1/launch-codes/exchange", post(launch::exchange))
         .route(
@@ -252,6 +268,7 @@ mod tests {
                 app_per_min: 1000,
                 user_per_min: 1000,
             },
+            catalog: catalog::Cache::default(),
         }
     }
 

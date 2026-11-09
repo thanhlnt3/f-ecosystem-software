@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ card.name }}{% endblock %}
+{% block content %}
+<p><a href="/store">← {{ i18n.t("store.back") }}</a></p>
+<h1>{{ card.name }}{% if card.first_party %}<span class="badge brand" id="first-party">{{ i18n.t("store.first_party") }}</span>{% endif %}</h1>
+<p class="muted">{{ card.developer }}{% if card.verified %}<span class="badge ok" id="verified">{{ i18n.t("store.verified") }}</span>{% endif %} · {{ card.rating }}</p>
+{% for m in messages %}<div class="msg {{ m.kind }}">{{ m.text }}</div>{% endfor %}
+<p>{{ card.summary }}</p>
+{% if !screenshots.is_empty() %}
+<h2>{{ i18n.t("store.screenshots") }}</h2>
+<div class="shots">{% for s in screenshots %}<img src="{{ s }}" alt="{{ card.name }}" loading="lazy">{% endfor %}</div>
+{% endif %}
+<h2>{{ i18n.t("store.description") }}</h2>
+<p style="white-space:pre-line">{{ description }}</p>
+<div class="facts">
+  <span class="muted">{{ i18n.t("store.version") }}</span><span id="version">{{ latest }}</span>
+  <span class="muted">{{ i18n.t("store.updated") }}</span><span>{{ updated }}</span>
+  <span class="muted">{{ i18n.t("store.platforms") }}</span><span>{{ card.platforms }}</span>
+  <span class="muted">{{ i18n.t("store.size") }}</span><span>{{ size }}</span>
+  <span class="muted">{{ i18n.t("store.price") }}</span><span>{{ card.price }}</span>
+  <span class="muted">{{ i18n.t("store.license") }}</span><span id="license">{{ license }}</span>
+  <span class="muted">{{ i18n.t("store.privacy") }}</span><span>{% if policy_uri.is_empty() %}—{% else %}<a id="privacy" href="{{ policy_uri }}" rel="noopener">{{ policy_uri }}</a>{% endif %}</span>
+</div>
+
+<h2>{{ i18n.t("store.data_title") }}</h2>
+{% if scopes.is_empty() %}
+<p class="muted">{{ i18n.t("store.no_data") }}</p>
+{% else %}
+<ul id="scopes">{% for s in scopes %}<li class="scope{% if s.required %} required{% endif %}">{{ s.text }}</li>{% endfor %}</ul>
+{% endif %}
+<p class="muted">{{ i18n.t("store.isolation") }}</p>
+<p id="install"><strong>{{ i18n.t("store.install") }}</strong>: {{ i18n.t("store.install_hint") }}</p>
+
+<h2>{{ i18n.t("store.changelog") }}</h2>
+<table id="versions">
+{% for v in versions %}<tr><td><strong>{{ v.version }}</strong><br><span class="muted">{{ v.platform }} · {{ v.date }} · {{ v.size }}</span></td><td style="white-space:pre-line">{{ v.changelog }}</td></tr>{% endfor %}
+</table>
+
+<h2 id="reviews">{{ i18n.t("store.reviews") }}</h2>
+{% for r in reviews %}
+<div class="review" id="review-{{ r.id }}">
+  <div><span aria-label="{{ r.stars }}">{{ r.stars }}</span> · <strong>{{ r.author }}</strong> · <span class="muted">{{ r.date }}</span></div>
+  <p style="white-space:pre-line">{{ r.body }}</p>
+  {% match r.reply %}{% when Some with (reply) %}
+  <div class="reply"><span class="badge brand">{{ i18n.t("store.developer_label") }}</span><p style="white-space:pre-line">{{ reply }}</p></div>
+  {% when None %}{% endmatch %}
+  {% if signed_in %}
+  <details><summary>{{ i18n.t("store.report_review") }}</summary>
+    <form method="post" action="/store/{{ card.id }}/report">
+      <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+      <input type="hidden" name="review_id" value="{{ r.id }}">
+      <label>{{ i18n.t("store.reason") }}</label>
+      <select name="reason">{% for (k, label) in reasons %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select>
+      <label>{{ i18n.t("store.details") }}</label>
+      <textarea name="details" maxlength="4000"></textarea>
+      <button type="submit" class="secondary">{{ i18n.t("store.submit_report") }}</button>
+    </form>
+  </details>
+  {% endif %}
+  {% if is_owner %}
+  <details><summary>{{ i18n.t("store.reply") }}</summary>
+    <form method="post" action="/store/{{ card.id }}/reviews/{{ r.id }}/reply">
+      <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+      <textarea name="body" maxlength="4000" required></textarea>
+      <button type="submit">{{ i18n.t("store.submit_reply") }}</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if signed_in %}
+<h2>{{ i18n.t("store.write_review") }}</h2>
+<form method="post" action="/store/{{ card.id }}/reviews" id="review-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="rating">{{ i18n.t("store.rating") }}</label>
+  <select name="rating" id="rating">
+    <option value="5">★★★★★</option><option value="4">★★★★☆</option><option value="3">★★★☆☆</option><option value="2">★★☆☆☆</option><option value="1">★☆☆☆☆</option>
+  </select>
+  <label for="body">{{ i18n.t("store.review_body") }}</label>
+  <textarea name="body" id="body" maxlength="4000"></textarea>
+  <button type="submit">{{ i18n.t("store.submit_review") }}</button>
+</form>
+<details><summary>{{ i18n.t("store.report_app") }}</summary>
+  <form method="post" action="/store/{{ card.id }}/report" id="report-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label>{{ i18n.t("store.reason") }}</label>
+    <select name="reason">{% for (k, label) in reasons %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select>
+    <label>{{ i18n.t("store.details") }}</label>
+    <textarea name="details" maxlength="4000"></textarea>
+    <button type="submit" class="secondary">{{ i18n.t("store.submit_report") }}</button>
+  </form>
+</details>
+{% else %}
+<p class="muted"><a href="/login">{{ i18n.t("store.login_to_review") }}</a></p>
+{% endif %}
+{% endblock %}

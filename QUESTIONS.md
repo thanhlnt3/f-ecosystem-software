@@ -72,3 +72,16 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 21. **Nguồn danh mục trong launcher**: trước khi có dịch vụ danh mục (nhóm 7), launcher lấy tên app,
     phiên bản và file chạy từ trường `custom` đã ký trong metadata TUF. Khi có dịch vụ danh mục, mô tả,
     ảnh và đánh giá lấy từ dịch vụ, còn thông tin cài đặt vẫn lấy từ TUF.
+
+## Nhóm 7: danh mục F-Store
+
+22. **"Đã cài" để được đánh giá** do launcher báo (`POST /v1/catalog/installs` bằng token của
+    launcher), tức là người dùng tự khai. Có cần chặt hơn (ví dụ chỉ tính khi đã tải gói từ máy chủ
+    phân phối, hoặc đã mở app ít nhất một lần) không?
+23. **Danh sách danh mục** (Giáo dục, Công cụ, Âm nhạc...) hiện là chữ tự do do nhà phát triển ghi.
+    Cần chốt danh sách cố định và tên tiếng Anh tương ứng trước khi làm cổng nhà phát triển (nhóm 8).
+24. **Quyền quản trị**: hàng chờ báo cáo và việc gỡ app tạm dùng công cụ dòng lệnh `feco-catalog` trên
+    máy chủ. Bảng quản trị có phân quyền (nhóm 14) cần biết ai là quản trị viên và có cần hai người
+    duyệt cho việc gỡ app không.
+25. **Một nhận xét cho mỗi người mỗi app** (viết lại thì cập nhật). Có cần giữ lịch sử các lần sửa,
+    và nhận xét có gắn với phiên bản app đang dùng không?

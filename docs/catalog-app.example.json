@@ -1,0 +1,15 @@
+{
+  "id": "so-tay-hoc-tap",
+  "client_id": "<client_id của app trong Hydra>",
+  "name": "Sổ tay Học tập",
+  "developer": "Công ty Ví Dụ",
+  "developer_verified": true,
+  "owner_subject": null,
+  "first_party": false,
+  "summary": "Ghi chép bài học, lịch ôn tập và thẻ ghi nhớ.",
+  "description": "Sổ tay Học tập giúp bạn ghi chép theo môn, đặt lịch ôn tập và luyện thẻ ghi nhớ.\nDữ liệu được lưu trên máy của bạn.",
+  "category": "Giáo dục",
+  "price_vnd": 0,
+  "license": "Phần mềm độc quyền, miễn phí cho cá nhân",
+  "screenshots": []
+}

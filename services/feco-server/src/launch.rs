@@ -445,6 +445,52 @@ async fn authorize_headless(
         .ok_or_else(|| Headless::Upstream(format!("thiếu code: {callback}")))
 }
 
+/// Danh tính người dùng từ access token của F-Launcher; token của client khác bị từ chối
+/// (`launcher_only`). Dùng cho các API chỉ launcher được gọi.
+pub async fn launcher_subject(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<Uuid, Box<Response>> {
+    let invalid = || {
+        Box::new(api_error(
+            StatusCode::UNAUTHORIZED,
+            "invalid_token",
+            "The access token is missing, expired or revoked.",
+            "Access token bị thiếu, đã hết hạn hoặc đã bị thu hồi.",
+        ))
+    };
+    let Some(launcher) = state.launcher_client_id.as_deref() else {
+        return Err(Box::new(api_error(
+            StatusCode::NOT_FOUND,
+            "not_enabled",
+            "F-Launcher is not configured on this server.",
+            "Máy chủ chưa cấu hình F-Launcher.",
+        )));
+    };
+    let token = bearer(headers).ok_or_else(invalid)?;
+    let info = match state.hydra.introspect(token).await {
+        Ok(Some(i)) => i,
+        Ok(None) => return Err(invalid()),
+        Err(e) => {
+            tracing::error!(error = %e, "không kiểm tra được token");
+            return Err(Box::new(unavailable()));
+        }
+    };
+    let subject = info["sub"]
+        .as_str()
+        .and_then(|s| s.parse::<Uuid>().ok())
+        .ok_or_else(invalid)?;
+    if info["client_id"].as_str() != Some(launcher) {
+        return Err(Box::new(api_error(
+            StatusCode::FORBIDDEN,
+            "launcher_only",
+            "Only F-Launcher can call this API.",
+            "Chỉ F-Launcher được gọi API này.",
+        )));
+    }
+    Ok(subject)
+}
+
 /// Xóa mã khởi chạy đã hết hạn quá 1 ngày (chạy cùng các tác vụ dọn dẹp định kỳ).
 pub async fn purge_expired(db: &crate::store::Db) -> Result<u64, sqlx::Error> {
     let res = sqlx::query("DELETE FROM launch_codes WHERE expires_at < now() - interval '1 day'")

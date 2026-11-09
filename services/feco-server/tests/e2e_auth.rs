@@ -1730,3 +1730,376 @@ async fn launcher_login_and_single_use_launch_codes() {
         (404, Some("unknown_client"))
     );
 }
+
+// ---------- Nhóm 7: danh mục F-Store (spec app-catalog) ----------
+
+async fn register_in(user: &reqwest::Client, email: &str, password: &str, name: &str) {
+    let form = parse_form(&get(user, "/registration").await);
+    submit(
+        user,
+        &form,
+        &[
+            ("traits.email", email),
+            ("traits.name", name),
+            ("password", password),
+            ("method", "password"),
+        ],
+    )
+    .await;
+    assert!(login(user, email, password).await.contains(email));
+}
+
+async fn catalog_ids(query: &str) -> Vec<String> {
+    let body: Value = reqwest::Client::new()
+        .get(format!("{BASE}/v1/catalog?{query}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    body["apps"]
+        .as_array()
+        .expect("apps")
+        .iter()
+        .map(|a| a["id"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+fn catalog_app(id: &str, client_id: &str, name: &str) -> feco_server::catalog::AppInput {
+    feco_server::catalog::AppInput {
+        id: id.into(),
+        client_id: client_id.into(),
+        name: name.into(),
+        developer: "Công ty Ví Dụ".into(),
+        license: "MIT".into(),
+        category: "Giáo dục".into(),
+        summary: "Ghi chép và ôn tập".into(),
+        description: "Mô tả dài".into(),
+        ..Default::default()
+    }
+}
+
+fn version(v: &str, platform: &str) -> feco_server::catalog::VersionInput {
+    feco_server::catalog::VersionInput {
+        version: v.into(),
+        platform: platform.into(),
+        size_bytes: 12 * 1_048_576,
+        tuf_target: format!("app-{v}-{platform}.zip"),
+        changelog: format!("Thay đổi của bản {v}"),
+    }
+}
+
+/// Spec app-catalog: chỉ hiện app đã duyệt, tìm không dấu và lọc, trang chi tiết có scope trước
+/// nút cài, nhãn "Của F-Eco", đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi
+/// phạm có email kết quả, nhận xét vi phạm bị ẩn, app bị gỡ biến mất trong 5 phút.
+#[tokio::test]
+async fn catalog_search_detail_reviews_reports_and_removal() {
+    use feco_server::catalog;
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let st = local_state();
+    let stamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .to_string();
+
+    // Nhà phát triển và người dùng.
+    let (dev_email, dev_password) = unique("dev");
+    let developer = app_browser();
+    register_in(&developer, &dev_email, &dev_password, "Nhà phát triển").await;
+    let dev_subject = subject_of(&dev_email).await;
+    let (email, password) = unique("store");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Hà Linh").await;
+
+    let client_id = create_app(
+        "SoundLab",
+        serde_json::json!({
+            "profile": {"required": true, "purpose_vi": "Hiển thị trên bản nhạc bạn chia sẻ", "purpose_en": "Shown on tracks you share"},
+            "email": {"required": false, "purpose_vi": "Gửi bản tin", "purpose_en": "Newsletter"}
+        }),
+    )
+    .await;
+    let notebook = format!("so-tay-{stamp}");
+    let paid = format!("paid-{stamp}");
+    let builder = format!("f-builder-{stamp}");
+    let draft = format!("draft-{stamp}");
+    let mut a = catalog_app(&notebook, &client_id, "Sổ tay Học tập");
+    a.owner_subject = Some(dev_subject);
+    a.developer = format!("Nhà PT {stamp}");
+    catalog::upsert_app(&st.db, &st.catalog, &a).await.unwrap();
+    catalog::release_version(
+        &st.db,
+        &st.catalog,
+        &notebook,
+        &version("1.1.0", "windows-x64"),
+    )
+    .await
+    .unwrap();
+    catalog::release_version(
+        &st.db,
+        &st.catalog,
+        &notebook,
+        &version("1.2.0", "windows-x64"),
+    )
+    .await
+    .unwrap();
+    let mut b = catalog_app(&paid, &client_id, &format!("Studio {stamp}"));
+    b.price_vnd = 49_000;
+    b.developer_verified = true;
+    catalog::upsert_app(&st.db, &st.catalog, &b).await.unwrap();
+    catalog::release_version(&st.db, &st.catalog, &paid, &version("2.0.0", "macos-arm64"))
+        .await
+        .unwrap();
+    let mut c = catalog_app(&builder, &client_id, &format!("F-Builder {stamp}"));
+    c.first_party = true;
+    catalog::upsert_app(&st.db, &st.catalog, &c).await.unwrap();
+    catalog::release_version(
+        &st.db,
+        &st.catalog,
+        &builder,
+        &version("0.1.0", "windows-x64"),
+    )
+    .await
+    .unwrap();
+    // App chưa có phiên bản nào qua kiểm duyệt: không hiện.
+    catalog::upsert_app(
+        &st.db,
+        &st.catalog,
+        &catalog_app(&draft, &client_id, &format!("Nháp {stamp}")),
+    )
+    .await
+    .unwrap();
+
+    // --- "Tìm không dấu": "so tay hoc tap" tìm ra "Sổ tay Học tập".
+    assert!(catalog_ids("q=so%20tay%20hoc%20tap")
+        .await
+        .contains(&notebook));
+    assert!(
+        catalog_ids("q=S%E1%BB%94%20TAY").await.contains(&notebook),
+        "SỔ TAY"
+    );
+    assert!(
+        catalog_ids(&format!("q=nha%20pt%20{stamp}"))
+            .await
+            .contains(&notebook),
+        "theo nhà phát triển"
+    );
+    // Bộ lọc.
+    let paid_ids = catalog_ids(&format!("q={stamp}&price=paid")).await;
+    assert_eq!(paid_ids, vec![paid.clone()]);
+    assert_eq!(
+        catalog_ids(&format!("q={stamp}&os=macos")).await,
+        vec![paid.clone()]
+    );
+    assert_eq!(
+        catalog_ids(&format!("q={stamp}&verified=1")).await,
+        vec![paid.clone()]
+    );
+    let free = catalog_ids(&format!("q={stamp}&price=free&os=windows")).await;
+    assert!(free.contains(&notebook) && free.contains(&builder) && !free.contains(&paid));
+    assert!(
+        !catalog_ids(&format!("q={stamp}")).await.contains(&draft),
+        "chưa duyệt"
+    );
+    let res = reqwest::get(format!("{BASE}/store/{draft}")).await.unwrap();
+    assert_eq!(res.status(), 404);
+
+    // --- Trang chi tiết: scope và mục đích trước nút cài; license; chính sách; lịch sử.
+    let page = get(&user, &format!("/store/{notebook}")).await;
+    let scope_line = "Tên hiển thị và ảnh đại diện (bắt buộc): Hiển thị trên bản nhạc bạn chia sẻ";
+    let scope_at = page
+        .find(scope_line)
+        .unwrap_or_else(|| panic!("thiếu scope:\n{page}"));
+    assert!(scope_at < page.find("Cài bằng F-Launcher").expect("nút cài"));
+    assert!(page.contains("Địa chỉ email (không bắt buộc): Gửi bản tin"));
+    assert!(page.contains("https://app.example/privacy") && page.contains("MIT"));
+    assert!(page.contains("1.2.0") && page.contains("Thay đổi của bản 1.1.0"));
+    assert!(page.contains("quyền như mọi ứng dụng khác"));
+    let detail: Value = reqwest::get(format!("{BASE}/v1/catalog/{notebook}"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(detail["latest_version"], "1.2.0");
+    assert_eq!(detail["scopes"][0]["required"], true);
+    // "Nhãn app của nền tảng".
+    let page = get(&user, &format!("/store/{builder}")).await;
+    assert!(page.contains("Của F-Eco") && page.contains(scope_line));
+    assert!(page.contains("https://app.example/privacy"));
+
+    // --- "Chưa cài app": không đánh giá được.
+    let page = get(&user, &format!("/store/{notebook}")).await;
+    let review_form = parse_form_where(&page, "#review-form");
+    let page = submit(
+        &user,
+        &review_form,
+        &[("rating", "2"), ("body", "Hay treo máy")],
+    )
+    .await;
+    assert!(
+        page.contains("Bạn cần cài app trước khi đánh giá"),
+        "{page}"
+    );
+
+    // Launcher báo đã cài (chỉ token của launcher được báo).
+    let launcher = LAUNCHER.get().unwrap().clone();
+    let a = authorize(&user, &launcher, "openid offline_access profile").await;
+    let launcher_token = exchange(&launcher, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let install = |token: String, app: String| async move {
+        reqwest::Client::new()
+            .post(format!("{BASE}/v1/catalog/installs"))
+            .bearer_auth(token)
+            .json(&serde_json::json!({ "app_id": app }))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16()
+    };
+    assert_eq!(install(launcher_token.clone(), notebook.clone()).await, 204);
+    assert_eq!(
+        install(launcher_token.clone(), format!("khong-co-{stamp}")).await,
+        404
+    );
+
+    let page = submit(
+        &user,
+        &review_form,
+        &[("rating", "2"), ("body", "Hay treo máy")],
+    )
+    .await;
+    assert!(
+        page.contains("Đã lưu nhận xét") && page.contains("★★☆☆☆"),
+        "{page}"
+    );
+    assert!(page.contains("Hà Linh") && page.contains("Hay treo máy"));
+    let review_id = catalog::reviews(&st.db, &notebook).await.unwrap()[0].id;
+
+    // Người không phải nhà phát triển không trả lời được (và không thấy biểu mẫu trả lời).
+    assert!(!page.contains("/reply\""));
+    let csrf_form = parse_form_where(&page, "#review-form");
+    let mut fake = csrf_form.fields.clone();
+    fake.push(("body".into(), "Mạo danh".into()));
+    let body = form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(fake.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .finish();
+    let res = user
+        .post(format!("{BASE}/store/{notebook}/reviews/{review_id}/reply"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 403);
+
+    // --- "Nhà phát triển trả lời": hiện ngay dưới nhận xét, nhãn "Nhà phát triển".
+    let page = get(&developer, &format!("/store/{notebook}")).await;
+    let reply_form = parse_form_where(
+        &page,
+        &format!("form[action=\"/store/{notebook}/reviews/{review_id}/reply\"]"),
+    );
+    let page = submit(
+        &developer,
+        &reply_form,
+        &[("body", "Đã sửa ở bản 1.2.1, cảm ơn bạn")],
+    )
+    .await;
+    let review_at = page.find("Hay treo máy").expect("nhận xét");
+    let reply_at = page.find("Đã sửa ở bản 1.2.1").expect("trả lời");
+    assert!(review_at < reply_at);
+    assert!(page[review_at..reply_at].contains("Nhà phát triển"));
+
+    // --- "Báo cáo vi phạm bản quyền": vào hàng chờ, người báo cáo nhận email khi xử lý.
+    let page = get(&user, &format!("/store/{paid}")).await;
+    let report_form = parse_form_where(&page, "#report-form");
+    let page = submit(
+        &user,
+        &report_form,
+        &[
+            ("reason", "copyright"),
+            ("details", "Sao chép giao diện của app khác"),
+        ],
+    )
+    .await;
+    assert!(page.contains("Đã gửi báo cáo"), "{page}");
+    let queue = catalog::open_reports(&st.db).await.unwrap();
+    let report = queue
+        .iter()
+        .find(|r| r.app_id == paid)
+        .expect("báo cáo trong hàng chờ");
+    assert_eq!(report.reason, "copyright");
+    assert!(feco_server::store_web::resolve_and_notify(
+        &st,
+        report.id,
+        true,
+        "Đã gỡ phiên bản vi phạm"
+    )
+    .await
+    .unwrap());
+    let mail = wait_mail(&email, "Kết quả xử lý báo cáo").await;
+    assert!(
+        mail.contains(&paid) && mail.contains("Đã gỡ phiên bản vi phạm"),
+        "{mail}"
+    );
+
+    // Nhận xét vi phạm bị ẩn sau khi quản trị viên xác nhận báo cáo.
+    let page = get(&developer, &format!("/store/{notebook}")).await;
+    let report_review = parse_form_where(
+        &page,
+        &format!("#review-{review_id} form[action=\"/store/{notebook}/report\"]"),
+    );
+    submit(
+        &developer,
+        &report_review,
+        &[("reason", "inappropriate"), ("details", "Spam")],
+    )
+    .await;
+    let report = catalog::open_reports(&st.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.review_id == Some(review_id))
+        .expect("báo cáo nhận xét");
+    feco_server::store_web::resolve_and_notify(&st, report.id, true, "Ẩn nhận xét")
+        .await
+        .unwrap();
+    let page = get(&user, &format!("/store/{notebook}")).await;
+    assert!(!page.contains("Hay treo máy"), "nhận xét đã bị ẩn");
+
+    // --- "App bị gỡ": biến khỏi tìm kiếm và trang danh mục trong tối đa 5 phút (đo thời gian).
+    // Tìm một lần để kết quả nằm trong bộ nhớ đệm của máy chủ, rồi gỡ từ một tiến trình khác
+    // (như khi chạy nhiều bản feco-server).
+    let q = "q=so%20tay&category=Gi%C3%A1o%20d%E1%BB%A5c&os=windows".to_owned();
+    assert!(catalog_ids(&q).await.contains(&notebook));
+    let started = std::time::Instant::now();
+    assert!(
+        catalog::remove_app(&st.db, &st.catalog, &notebook, "FakeCleaner")
+            .await
+            .unwrap()
+    );
+    let res = reqwest::get(format!("{BASE}/store/{notebook}"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404, "trang chi tiết không còn ngay");
+    while catalog_ids(&q).await.contains(&notebook) {
+        assert!(
+            started.elapsed() < Duration::from_secs(5 * 60),
+            "quá 5 phút"
+        );
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    let elapsed = started.elapsed();
+    eprintln!("app bị gỡ biến khỏi kết quả tìm kiếm sau {elapsed:?}");
+    assert!(elapsed <= catalog::CACHE_TTL + Duration::from_secs(5));
+    let list = get(&user, "/store?q=so+tay").await;
+    assert!(!list.contains(&format!("/store/{notebook}")));
+}

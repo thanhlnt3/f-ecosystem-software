@@ -7,6 +7,8 @@
 #   scripts/dev-launcher.sh refresh   # ký lại timestamp (hết hạn sau 1 giờ)
 #   scripts/dev-launcher.sh env       # in biến môi trường cho feco-server và launcher
 #
+# setup và publish cũng ghi Demo App vào danh mục F-Store (cần PostgreSQL đang chạy).
+#
 # Mọi thứ nằm trong .dev/ (không commit). Khóa ở đây chỉ dùng cho dev.
 set -euo pipefail
 
@@ -21,9 +23,26 @@ PY="$(command -v python3 || command -v python)"
 exe() { if [[ -f "$1.exe" ]]; then echo "$1.exe"; else echo "$1"; fi; }
 
 build() {
-  cargo build -q --manifest-path "$ROOT/Cargo.toml" -p feco-tuf --bin feco-tuf -p feco-demo-app >&2
+  cargo build -q --manifest-path "$ROOT/Cargo.toml" -p feco-tuf -p feco-demo-app >&2
+  cargo build -q --manifest-path "$ROOT/Cargo.toml" -p feco-server --bin feco-catalog >&2
   TUF="$(exe "$TARGET_DIR/debug/feco-tuf")"
   DEMO="$(exe "$TARGET_DIR/debug/feco-demo-app")"
+  CATALOG="$(exe "$TARGET_DIR/debug/feco-catalog")"
+}
+
+# Ghi vào danh mục F-Store; không chặn nếu PostgreSQL chưa chạy.
+catalog() { FECO_ENV="${FECO_ENV:-dev}" "$CATALOG" "$@" || echo "(bỏ qua danh mục: PostgreSQL chưa chạy?)" >&2; }
+
+catalog_app() {
+  local json="$DEV/catalog-demo-app.json"
+  cat > "$json" <<EOF
+{"id":"feco-demo-app","client_id":"$(cat "$DEV/demo-client-id")","name":"Demo App",
+ "developer":"F-Eco","developer_verified":true,"first_party":true,
+ "summary":"App con mẫu: đăng nhập một lần bằng tài khoản F-Eco và đọc hồ sơ.",
+ "description":"Demo App cho thấy cách một app con dùng tài khoản F-Eco: đăng nhập không cần trình duyệt khi được F-Launcher mở, rồi gọi /v1/me.",
+ "category":"Công cụ","price_vnd":0,"license":"MIT OR Apache-2.0","screenshots":[]}
+EOF
+  catalog add-app "$json"
 }
 
 platform() {
@@ -45,9 +64,13 @@ k() { echo "$KEYS/$1.pk8"; }
 RELEASE_KEYS() { echo "$(k targets),$(k snapshot),$(k timestamp)"; }
 
 create_client() {
-  local id
-  id="$(curl -sf -X POST "$HYDRA_ADMIN/admin/clients" -H 'content-type: application/json' -d "$1" |
-    sed -n 's/.*"client_id":"\([^"]*\)".*/\1/p')"
+  local id body="$DEV/client.json"
+  # Gửi qua file UTF-8: trên Windows, tham số dòng lệnh của curl bị đổi sang bảng mã ANSI
+  # và làm hỏng chữ có dấu.
+  printf '%s' "$1" > "$body"
+  id="$(curl -sf -X POST "$HYDRA_ADMIN/admin/clients" -H 'content-type: application/json; charset=utf-8' \
+    --data-binary "@$body" | sed -n 's/.*"client_id":"\([^"]*\)".*/\1/p')"
+  rm -f "$body"
   [[ -n "$id" ]] || { echo "không tạo được client trong Hydra ($HYDRA_ADMIN)" >&2; exit 1; }
   echo "$id"
 }
@@ -78,6 +101,7 @@ setup() {
         "email":{"required":false,"purpose_vi":"Gửi thông báo về tài khoản","purpose_en":"Send account notifications"}}}}' \
       > "$DEV/demo-client-id"
   fi
+  catalog_app
   publish
   env_vars
 }
@@ -104,6 +128,8 @@ EOF
   "$TUF" publish --repo "$REPO" --file "$zipfile" --name "$name" --app feco-demo-app --version "$version" \
     --platform "$plat" --title "Demo App" --entry "$entry" --client-id "$(cat "$DEV/demo-client-id")" \
     --sign "$(RELEASE_KEYS)"
+  catalog release feco-demo-app "$version" "$plat" "$(wc -c < "$zipfile" | tr -d ' ')" "$name" \
+    "Bản dựng dev lúc $(date '+%H:%M %d/%m/%Y')"
 }
 
 revoke() {
@@ -111,6 +137,8 @@ revoke() {
   local latest
   latest="$(ls "$DEV/uploads" | sort | tail -1)"
   "$TUF" revoke --repo "$REPO" --name "$latest" --reason "${1:-Diễn tập thu hồi}" --sign "$(RELEASE_KEYS)"
+  local version="${latest#feco-demo-app-}"
+  catalog revoke feco-demo-app "${version%-*-*.zip}"
 }
 
 refresh() {

@@ -359,6 +359,7 @@ impl LauncherApp {
                             .install(&entry, Timestamp::now())
                             .await
                             .map_err(|e| e.to_string())?;
+                        report_install(&s, &entry.app).await;
                         Ok(format!("Đã cài {} {}", entry.title, entry.version))
                     },
                 )
@@ -721,6 +722,15 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
         }
     }
     Ok(String::new())
+}
+
+/// Báo F-Store đã cài (để được đánh giá app). Không chặn việc cài nếu thất bại.
+async fn report_install(s: &Shared, app: &str) {
+    if let Ok(token) = s.identity.access_token().await {
+        if let Err(e) = s.identity.auth.record_install(&token, app).await {
+            eprintln!("không báo được lượt cài {app}: {e}");
+        }
+    }
 }
 
 async fn open_app(s: &Shared, app: &str) -> Result<String, String> {
