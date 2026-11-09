@@ -4,7 +4,7 @@
 //! giao diện egui gọi vào đây.
 //!
 //! - [`auth`]: đăng nhập qua trình duyệt hệ thống bằng OAuth 2.0 + PKCE với địa chỉ loopback;
-//!   refresh token nằm trong kho bảo mật của hệ điều hành (crate `keyring`).
+//!   refresh token nằm trong kho bảo mật của hệ điều hành (`keyring-core` cùng kho gốc của Windows và macOS).
 //! - [`install::Launcher`]: đồng bộ danh mục qua TUF (`feco-tuf`/`tough`), cài, cập nhật nguyên
 //!   tử, quay lại bản trước, gỡ app, chặn mở phiên bản bị thu hồi; "App của tôi" vẫn dùng được
 //!   khi ngoại tuyến.

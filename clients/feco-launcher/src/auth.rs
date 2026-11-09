@@ -4,7 +4,7 @@
 //!   client công khai, địa chỉ chuyển hướng loopback `http://127.0.0.1:47201/callback`).
 //!   Launcher không có ô nhập mật khẩu.
 //! - Refresh token nằm trong kho bảo mật của hệ điều hành (Windows Credential Manager, macOS
-//!   Keychain) qua crate `keyring`; access token chỉ nằm trong bộ nhớ. Khởi động lại máy rồi
+//!   Keychain) qua `keyring-core` và kho gốc của từng hệ điều hành; access token chỉ nằm trong bộ nhớ. Khởi động lại máy rồi
 //!   mở launcher thì dùng refresh token để vào lại, không phải đăng nhập lại.
 
 use crate::broker::LaunchCode;
@@ -52,8 +52,9 @@ impl KeyringStore {
         }
     }
 
-    fn entry(&self) -> Result<keyring::Entry, String> {
-        keyring::Entry::new(KEYRING_SERVICE, &self.user).map_err(|e| e.to_string())
+    fn entry(&self) -> Result<keyring_core::Entry, String> {
+        os_store()?;
+        keyring_core::Entry::new(KEYRING_SERVICE, &self.user).map_err(|e| e.to_string())
     }
 }
 
@@ -61,7 +62,7 @@ impl SecretStore for KeyringStore {
     fn load(&self) -> Result<Option<String>, String> {
         match self.entry()?.get_password() {
             Ok(v) => Ok(Some(v)),
-            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(keyring_core::Error::NoEntry) => Ok(None),
             Err(e) => Err(e.to_string()),
         }
     }
@@ -72,10 +73,38 @@ impl SecretStore for KeyringStore {
 
     fn clear(&self) -> Result<(), String> {
         match self.entry()?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
             Err(e) => Err(e.to_string()),
         }
     }
+}
+
+/// Chọn kho bảo mật của hệ điều hành làm kho mặc định (một lần).
+fn os_store() -> Result<(), String> {
+    static INIT: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+    INIT.get_or_init(|| {
+        #[cfg(windows)]
+        {
+            let store = windows_native_keyring_store::Store::new().map_err(|e| e.to_string())?;
+            keyring_core::set_default_store(store);
+            Ok(())
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let store =
+                apple_native_keyring_store::keychain::Store::new().map_err(|e| e.to_string())?;
+            keyring_core::set_default_store(store);
+            Ok(())
+        }
+        #[cfg(not(any(windows, target_os = "macos")))]
+        {
+            Err(
+                "F-Launcher chỉ hỗ trợ Windows và macOS: chưa có kho bảo mật cho hệ điều hành này"
+                    .into(),
+            )
+        }
+    })
+    .clone()
 }
 
 /// Kho trong bộ nhớ (kiểm thử).
