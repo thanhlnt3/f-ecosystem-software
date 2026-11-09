@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> Trạng thái: **đang xây dựng**. Nhóm task 1 (nền tảng dự án) gần xong; tiếp theo là nhóm 2 (tài khoản). Chưa dùng được cho người dùng cuối.
+> Trạng thái: **đang xây dựng**. Đã có: tài khoản (đăng ký, đăng nhập, hai lớp, thiết bị, xóa tài khoản) và đồng ý dữ liệu cho app con qua OAuth/OIDC (nhóm 1–3). Chưa dùng được cho người dùng cuối.
 
 ## Yêu cầu
 
@@ -45,6 +45,15 @@ FECO_ENV=dev cargo run -p feco-server   # http://127.0.0.1:8080/healthz
 ```
 
 Kratos: http://127.0.0.1:4433 · Hydra: http://127.0.0.1:4444 · Mailpit: http://127.0.0.1:8025
+
+Không có Docker: `scripts/dev-local.sh postgres|mailpit|kratos|hydra` chạy từng dịch vụ trực tiếp
+trên máy (cần các chương trình tương ứng trong PATH).
+
+Kiểm thử đầu-cuối (cần hạ tầng dev đang chạy, dùng cổng 8080):
+
+```bash
+FECO_E2E=1 cargo test -p feco-server --test e2e_auth
+```
 
 ## Kiểm tra license
 

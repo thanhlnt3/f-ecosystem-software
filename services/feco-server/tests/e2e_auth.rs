@@ -14,7 +14,7 @@ use std::{
 };
 
 use feco_config::Config;
-use feco_server::{account, kratos::KratosClient, router, AppState};
+use feco_server::{account, kratos::KratosClient, router, store, AppState};
 use regex::Regex;
 use scraper::{Html, Selector};
 use serde_json::Value;
@@ -54,7 +54,11 @@ fn e2e_ready() -> bool {
                     .map(|(k, v)| (k.to_string(), v.to_string()))
                     .collect();
                 let config = Config::from_vars(&vars).unwrap();
-                let state = AppState::from_config(&config).unwrap();
+                let state = std::sync::Arc::new(AppState::from_config(&config).unwrap());
+                store::MIGRATOR
+                    .run(&state.db)
+                    .await
+                    .expect("chạy migration");
                 let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
                     .await
                     .expect("cổng 8080 phải trống cho kiểm thử E2E");
@@ -70,6 +74,15 @@ fn e2e_ready() -> bool {
         rx.recv().unwrap();
     });
     true
+}
+
+/// AppState riêng cho runtime của từng test (pool kết nối CSDL gắn với runtime tạo ra nó).
+pub fn local_state() -> AppState {
+    let vars: HashMap<String, String> = [("FECO_ENV", "dev")]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+    AppState::from_config(&Config::from_vars(&vars).unwrap()).unwrap()
 }
 
 fn kratos() -> KratosClient {
@@ -645,13 +658,14 @@ async fn account_deletion_cancel_and_purge() {
     assert!(deletion_mark(&email).await.is_some());
     let k = kratos();
     let after_29_days = SystemTime::now() + Duration::from_secs(29 * 24 * 3600);
-    account::purge_due(&k, after_29_days).await.unwrap();
+    let st = local_state();
+    account::purge_due(&st, after_29_days).await.unwrap();
     assert!(
         k.identity_exists(&email).await.unwrap(),
         "chưa đủ 30 ngày thì chưa xóa"
     );
     let after_31_days = SystemTime::now() + Duration::from_secs(31 * 24 * 3600);
-    assert!(account::purge_due(&k, after_31_days).await.unwrap() >= 1);
+    assert!(account::purge_due(&st, after_31_days).await.unwrap() >= 1);
     assert!(!k.identity_exists(&email).await.unwrap());
     let page = login(&browser(), &email, &password).await;
     assert!(page.contains("Email hoặc mật khẩu không đúng"), "{page}");
@@ -707,4 +721,519 @@ async fn password_recovery_signs_out_other_sessions() {
     assert!(login(&browser(), &email, &new_password)
         .await
         .contains(&email));
+}
+
+// ====================== Nhóm 3: đồng ý dữ liệu và đăng nhập một lần ======================
+
+const HYDRA_PUBLIC: &str = "http://127.0.0.1:4444";
+const HYDRA_ADMIN: &str = "http://127.0.0.1:4445";
+const APP_CALLBACK: &str = "http://127.0.0.1:9999/cb";
+
+/// Tạo một app con (OAuth client) với các scope khai báo như cổng nhà phát triển sẽ ghi.
+async fn create_app(name: &str, scopes: Value) -> String {
+    let body = serde_json::json!({
+        "client_name": name,
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "scope": "openid offline_access profile email locale phone billing",
+        "redirect_uris": [APP_CALLBACK],
+        "token_endpoint_auth_method": "none",
+        "subject_type": "pairwise",
+        "policy_uri": "https://app.example/privacy",
+        "metadata": {"developer": "Acme", "scopes": scopes},
+    });
+    let res: Value = reqwest::Client::new()
+        .post(format!("{HYDRA_ADMIN}/admin/clients"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    res["client_id"].as_str().expect("client_id").to_owned()
+}
+
+/// Trình duyệt dừng khi được chuyển về địa chỉ callback của app (như app thật nhận code).
+fn app_browser() -> reqwest::Client {
+    reqwest::Client::builder()
+        .cookie_store(true)
+        .user_agent(UA_WINDOWS_CHROME)
+        .redirect(reqwest::redirect::Policy::custom(|a| {
+            if a.url().port() == Some(9999) {
+                a.stop()
+            } else {
+                a.follow()
+            }
+        }))
+        .timeout(Duration::from_secs(30))
+        .build()
+        .unwrap()
+}
+
+struct Authorize {
+    verifier: String,
+    /// Trang đồng ý (nếu có) hoặc `None` khi đã về thẳng callback.
+    consent_page: Option<String>,
+    callback: Option<url::Url>,
+}
+
+fn pkce() -> (String, String) {
+    use base64::Engine;
+    use sha2::Digest;
+    // RFC 7636: verifier dài 43–128 ký tự.
+    let verifier = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
+    let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(sha2::Sha256::digest(verifier.as_bytes()));
+    (verifier, challenge)
+}
+
+async fn authorize(c: &reqwest::Client, client_id: &str, scope: &str) -> Authorize {
+    let (verifier, challenge) = pkce();
+    let mut url = url::Url::parse(&format!("{HYDRA_PUBLIC}/oauth2/auth")).unwrap();
+    url.query_pairs_mut()
+        .append_pair("client_id", client_id)
+        .append_pair("response_type", "code")
+        .append_pair("scope", scope)
+        .append_pair("redirect_uri", APP_CALLBACK)
+        .append_pair("state", "trang-thai-du-dai")
+        .append_pair("code_challenge", &challenge)
+        .append_pair("code_challenge_method", "S256");
+    let res = c.get(url).send().await.unwrap();
+    finish(res, verifier).await
+}
+
+async fn finish(res: reqwest::Response, verifier: String) -> Authorize {
+    if res.status().is_redirection() {
+        let loc = res.headers()["location"].to_str().unwrap();
+        Authorize {
+            verifier,
+            consent_page: None,
+            callback: Some(url::Url::parse(loc).unwrap()),
+        }
+    } else {
+        Authorize {
+            verifier,
+            consent_page: Some(res.text().await.unwrap()),
+            callback: None,
+        }
+    }
+}
+
+/// Gửi màn hình đồng ý: `action` là "accept" hoặc "deny"; `optional` là scope không
+/// bắt buộc người dùng tích chọn.
+async fn answer_consent(
+    c: &reqwest::Client,
+    a: Authorize,
+    action: &str,
+    optional: &[&str],
+) -> Authorize {
+    let page = a.consent_page.expect("phải có màn hình đồng ý");
+    let form = parse_form_where(&page, "form[action=\"/oauth/consent\"]");
+    let mut pairs = form.fields.clone();
+    pairs.push(("action".into(), action.into()));
+    for s in optional {
+        pairs.push((format!("scope_{s}"), "on".into()));
+    }
+    let body = form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .finish();
+    let res = c
+        .post(format!("{BASE}/oauth/consent"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+    finish(res, a.verifier).await
+}
+
+fn query(u: &url::Url, k: &str) -> Option<String> {
+    u.query_pairs()
+        .find(|(n, _)| n == k)
+        .map(|(_, v)| v.into_owned())
+}
+
+async fn exchange(client_id: &str, a: &Authorize) -> Value {
+    let cb = a.callback.as_ref().expect("phải về callback");
+    let code = query(cb, "code").unwrap_or_else(|| panic!("không có code: {cb}"));
+    let body = form_urlencoded::Serializer::new(String::new())
+        .append_pair("grant_type", "authorization_code")
+        .append_pair("code", &code)
+        .append_pair("redirect_uri", APP_CALLBACK)
+        .append_pair("client_id", client_id)
+        .append_pair("code_verifier", &a.verifier)
+        .finish();
+    reqwest::Client::new()
+        .post(format!("{HYDRA_PUBLIC}/oauth2/token"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+fn id_token_sub(tokens: &Value) -> String {
+    use base64::Engine;
+    let payload = tokens["id_token"]
+        .as_str()
+        .unwrap()
+        .split('.')
+        .nth(1)
+        .unwrap();
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload)
+        .unwrap();
+    serde_json::from_slice::<Value>(&bytes).unwrap()["sub"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+async fn me(token: &str, fields: Option<&str>) -> (u16, Value) {
+    let mut url = format!("{BASE}/v1/me");
+    if let Some(f) = fields {
+        url.push_str(&format!("?fields={f}"));
+    }
+    let res = reqwest::Client::new()
+        .get(url)
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap();
+    (res.status().as_u16(), res.json().await.unwrap())
+}
+
+fn scope_rows(consent_page: &str) -> Vec<String> {
+    Html::parse_document(consent_page)
+        .select(&Selector::parse("tr[data-scope]").unwrap())
+        .map(|r| r.value().attr("data-scope").unwrap().to_owned())
+        .collect()
+}
+
+/// Bộ nhận webhook của "app": ghi lại header chữ ký và thân yêu cầu.
+/// Các yêu cầu webhook đã nhận: (sự kiện, chữ ký, thân).
+type Received = std::sync::Arc<std::sync::Mutex<Vec<(String, String, Vec<u8>)>>>;
+
+async fn webhook_receiver() -> (String, Received) {
+    use axum::{body::Bytes, http::HeaderMap, routing::post, Router};
+    let got: Received = Default::default();
+    let sink = got.clone();
+    let app = Router::new().route(
+        "/hook",
+        post(move |h: HeaderMap, b: Bytes| {
+            let sink = sink.clone();
+            async move {
+                let header = |n: &str| {
+                    h.get(n)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or_default()
+                        .to_owned()
+                };
+                sink.lock().unwrap().push((
+                    header("f-eco-event"),
+                    header("f-eco-signature"),
+                    b.to_vec(),
+                ));
+                "ok"
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/hook", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (url, got)
+}
+
+/// Spec user-data-consent: đồng ý một phần, ngoài scope, pairwise, xin thêm scope, từ chối,
+/// sửa hồ sơ, ứng dụng đã kết nối, nhật ký, thu hồi và webhook `user.revoked`.
+#[tokio::test]
+async fn consent_scopes_pairwise_and_revocation() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let st = local_state();
+    let (email, password) = unique("consent");
+    // Người dùng đăng ký và đăng nhập trên chính trình duyệt sẽ mở app.
+    let user = app_browser();
+    let form = parse_form(&get(&user, "/registration").await);
+    submit(
+        &user,
+        &form,
+        &[
+            ("traits.email", &email),
+            ("traits.name", "Lan Nguyễn"),
+            ("password", &password),
+            ("method", "password"),
+        ],
+    )
+    .await;
+    assert!(login(&user, &email, &password).await.contains(&email));
+
+    let soundlab = create_app(
+        "SoundLab",
+        serde_json::json!({
+            "profile": {"required": true, "purpose_vi": "Hiển thị trên bản nhạc bạn chia sẻ", "purpose_en": "Shown on tracks you share"},
+            "email": {"required": false, "purpose_vi": "Gửi bản tin", "purpose_en": "Newsletter"},
+            "phone": {"required": false, "purpose_vi": "Gửi mã xác nhận", "purpose_en": "Confirmation codes"}
+        }),
+    )
+    .await;
+    let (hook_url, hooks) = webhook_receiver().await;
+    let hook_secret = store::register_webhook(&st.db, &soundlab, &hook_url)
+        .await
+        .unwrap();
+
+    // --- Scenario "Đồng ý một phần": chỉ đồng ý profile (email không tích).
+    let a = authorize(&user, &soundlab, "openid profile email").await;
+    let page = a.consent_page.clone().expect("màn hình đồng ý");
+    assert!(page.contains("SoundLab") && page.contains("Acme"), "{page}");
+    assert!(
+        page.contains("Hiển thị trên bản nhạc bạn chia sẻ") && page.contains("Gửi bản tin"),
+        "{page}"
+    );
+    assert!(page.contains("https://app.example/privacy"), "{page}");
+    assert_eq!(scope_rows(&page), ["profile", "email"]);
+    let a = answer_consent(&user, a, "accept", &[]).await;
+    let tokens = exchange(&soundlab, &a).await;
+    assert_eq!(tokens["scope"], "openid profile", "{tokens}");
+    let token_a = tokens["access_token"].as_str().unwrap().to_owned();
+
+    let (status, body) = me(&token_a, None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["name"], "Lan Nguyễn");
+    assert!(body.get("email").is_none(), "không được có email: {body}");
+    // --- Scenario "Gọi API ngoài scope".
+    let (status, body) = me(&token_a, Some("email")).await;
+    assert_eq!(status, 403);
+    assert_eq!(body["error"], "insufficient_scope");
+    assert!(
+        body["message_vi"].as_str().unwrap().contains("email") && body["request_id"].is_string()
+    );
+
+    // --- Bản ghi đồng ý có phiên bản nội dung.
+    let subject: uuid::Uuid = kratos()
+        .list_identities()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|i| i["traits"]["email"] == email.as_str())
+        .and_then(|i| i["id"].as_str().and_then(|s| s.parse().ok()))
+        .unwrap();
+    let history = store::consent_history(&st.db, subject).await.unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].action, "grant");
+    assert_eq!(history[0].granted_scopes, ["openid", "profile"]);
+    assert!(
+        history[0].content_version.starts_with("v1-"),
+        "{:?}",
+        history[0]
+    );
+
+    // --- Scenario "Hai app khác nhau": `sub` riêng cho từng app, khớp giữa ID token và /v1/me.
+    let noteapp = create_app(
+        "NoteApp",
+        serde_json::json!({"profile": {"required": true}}),
+    )
+    .await;
+    let b = authorize(&user, &noteapp, "openid profile").await;
+    let b = answer_consent(&user, b, "accept", &[]).await;
+    let tokens_b = exchange(&noteapp, &b).await;
+    let token_b = tokens_b["access_token"].as_str().unwrap().to_owned();
+    let sub_a = me(&token_a, None).await.1["sub"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let sub_b = me(&token_b, None).await.1["sub"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_ne!(sub_a, sub_b);
+    assert_eq!(id_token_sub(&tokens), sub_a);
+    assert_ne!(sub_a, subject.to_string(), "không lộ id danh tính thật");
+
+    // --- Scenario "App xin thêm scope": chỉ hỏi phone, profile vẫn được giữ.
+    let a2 = authorize(&user, &soundlab, "openid profile phone").await;
+    let page = a2.consent_page.clone().expect("phải hỏi scope mới");
+    assert_eq!(scope_rows(&page), ["phone"]);
+    let a2 = answer_consent(&user, a2, "accept", &["phone"]).await;
+    let t2 = exchange(&soundlab, &a2).await;
+    assert_eq!(t2["scope"], "openid phone profile", "{t2}");
+
+    // --- Scenario "Từ chối": app không nhận code.
+    let mapapp = create_app("MapApp", serde_json::json!({"locale": {"required": true}})).await;
+    let d = authorize(&user, &mapapp, "openid locale").await;
+    let d = answer_consent(&user, d, "deny", &[]).await;
+    let cb = d.callback.expect("về callback với lỗi");
+    assert_eq!(query(&cb, "error").as_deref(), Some("access_denied"));
+    assert!(query(&cb, "code").is_none());
+
+    // --- Scenario "Sửa hồ sơ": đổi tên, app thấy tên mới ở lần gọi tiếp theo.
+    let settings = get(&user, "/settings").await;
+    let form = parse_group_form(&settings, "profile");
+    let page = submit(
+        &user,
+        &form,
+        &[
+            ("traits.email", &email),
+            ("traits.name", "Lan Nguyễn Thị"),
+            ("traits.locale", "vi"),
+            ("method", "profile"),
+        ],
+    )
+    .await;
+    assert!(page.contains("Đã lưu thay đổi."), "{page}");
+    assert_eq!(me(&token_b, None).await.1["name"], "Lan Nguyễn Thị");
+
+    // --- Trang "Ứng dụng đã kết nối" và nhật ký truy cập.
+    let apps = get(&user, "/apps").await;
+    assert!(
+        apps.contains("SoundLab") && apps.contains("NoteApp"),
+        "{apps}"
+    );
+    assert!(
+        !apps.contains("MapApp"),
+        "app bị từ chối không được liệt kê"
+    );
+    let detail = get(&user, &format!("/apps/{soundlab}")).await;
+    assert!(detail.contains("Tên hiển thị và ảnh đại diện"), "{detail}");
+
+    // --- Scenario "Thu hồi quyền".
+    let form = parse_form_where(&apps, &format!("form[action=\"/apps/{soundlab}/revoke\"]"));
+    let page = submit(&user, &form, &[]).await;
+    assert!(page.contains("Đã thu hồi quyền."), "{page}");
+    let (status, body) = me(&token_a, None).await;
+    assert_eq!(status, 401);
+    assert_eq!(body["error"], "invalid_token");
+    assert_eq!(
+        me(&token_b, None).await.0,
+        200,
+        "app khác không bị ảnh hưởng"
+    );
+    let again = authorize(&user, &soundlab, "openid profile").await;
+    assert!(
+        again.consent_page.is_some(),
+        "lần mở sau phải hiện lại màn hình đồng ý"
+    );
+    let history = store::consent_history(&st.db, subject).await.unwrap();
+    assert!(history
+        .iter()
+        .any(|r| r.action == "revoke" && r.client_id == soundlab));
+
+    // --- Webhook `user.revoked` có chữ ký hợp lệ, chỉ mang `sub` riêng của app.
+    feco_server::webhooks::deliver_due(&st.db, &st.http)
+        .await
+        .unwrap();
+    let got = hooks.lock().unwrap().clone();
+    assert_eq!(got.len(), 1, "{got:?}");
+    let (event, signature, body) = &got[0];
+    assert_eq!(event, "user.revoked");
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    assert!(feco_server::webhooks::verify(
+        &hook_secret,
+        signature,
+        body,
+        now
+    ));
+    let payload: Value = serde_json::from_slice(body).unwrap();
+    assert_eq!(payload["sub"], sub_a.as_str());
+    assert!(!String::from_utf8_lossy(body).contains(&email));
+}
+
+/// Spec user-data-consent, "Xuất dữ liệu cá nhân": ZIP đủ nhóm dữ liệu, chỉ chủ tài khoản tải được.
+#[tokio::test]
+async fn personal_data_export() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let (email, password) = unique("export");
+    let user = app_browser();
+    let form = parse_form(&get(&user, "/registration").await);
+    submit(
+        &user,
+        &form,
+        &[
+            ("traits.email", &email),
+            ("password", &password),
+            ("method", "password"),
+        ],
+    )
+    .await;
+    assert!(login(&user, &email, &password).await.contains(&email));
+    let app = create_app(
+        "ExportApp",
+        serde_json::json!({"profile": {"required": true}}),
+    )
+    .await;
+    let a = authorize(&user, &app, "openid profile").await;
+    let a = answer_consent(&user, a, "accept", &[]).await;
+    let token = exchange(&app, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(me(&token, None).await.0, 200);
+
+    let page = get(&user, "/account/export").await;
+    let form = parse_form_where(&page, "form[action=\"/account/export\"]");
+    let page = submit(&user, &form, &[]).await;
+    assert!(page.contains("Đã nhận yêu cầu"), "{page}");
+    let mail = wait_mail(&email, "Dữ liệu cá nhân").await;
+    let link = Regex::new(r"http://127\.0\.0\.1:8080/account/export/[0-9a-f]{64}")
+        .unwrap()
+        .find(&mail)
+        .expect("email có liên kết tải")
+        .as_str()
+        .to_owned();
+
+    // Người khác (chưa đăng nhập) không tải được.
+    let stranger = browser();
+    let res = stranger.get(&link).send().await.unwrap();
+    assert_ne!(
+        res.headers()
+            .get("content-type")
+            .map(|v| v.to_str().unwrap()),
+        Some("application/zip")
+    );
+
+    let res = user.get(&link).send().await.unwrap();
+    assert_eq!(res.headers()["content-type"], "application/zip");
+    let bytes = res.bytes().await.unwrap();
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec())).unwrap();
+    let mut names: Vec<String> = zip.file_names().map(|n| n.unwrap().into_owned()).collect();
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            "README.txt",
+            "access_log_90_days.json",
+            "builder_projects.json",
+            "connected_apps.json",
+            "consents.json",
+            "invoices.json",
+            "orders.json",
+            "profile.json",
+            "sessions.json"
+        ]
+    );
+    let mut read = |n: &str| -> Value {
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut zip.by_name(n).unwrap(), &mut s).unwrap();
+        serde_json::from_str(&s).unwrap()
+    };
+    assert_eq!(read("profile.json")["traits"]["email"], email.as_str());
+    assert_eq!(read("consents.json")[0]["client_id"], app.as_str());
+    assert_eq!(
+        read("access_log_90_days.json")[0]["client_id"],
+        app.as_str()
+    );
+    assert_eq!(read("connected_apps.json")[0]["app_name"], "ExportApp");
 }

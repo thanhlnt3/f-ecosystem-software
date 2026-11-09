@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("apps.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("apps.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+{% if rows.is_empty() %}
+<p class="muted" id="no-apps">{{ i18n.t("apps.none") }}</p>
+{% else %}
+<table id="apps">
+{% for r in rows %}
+  <tr data-client="{{ r.client_id }}">
+    <td>
+      <strong><a href="/apps/{{ r.client_id }}">{{ r.name }}</a></strong>{% if !r.developer.is_empty() %} · <span class="muted">{{ r.developer }}</span>{% endif %}<br>
+      <span class="muted">{{ i18n.t("apps.scopes") }}: {% for s in r.scopes %}{{ s }}{% if !loop.last %}, {% endif %}{% endfor %}<br>
+      {{ i18n.t("apps.granted_at") }}: {{ r.granted_at }} · {{ i18n.t("apps.last_access") }}: <span class="last-access">{{ r.last_access }}</span></span>
+    </td>
+    <td class="row-actions">
+      <form method="post" action="/apps/{{ r.client_id }}/revoke">
+        <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+        <button type="submit">{{ i18n.t("apps.revoke") }}</button>
+      </form>
+    </td>
+  </tr>
+{% endfor %}
+</table>
+{% endif %}
+<div class="links"><a href="/">{{ i18n.t("link.back_home") }}</a></div>
+{% endblock %}

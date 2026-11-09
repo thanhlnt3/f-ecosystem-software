@@ -14,18 +14,81 @@
           "maxLength": 320,
           "ory.sh/kratos": {
             "credentials": {
-              "password": { "identifier": true },
-              "totp": { "account_name": true },
-              "webauthn": { "identifier": true }
+              "password": {
+                "identifier": true
+              },
+              "totp": {
+                "account_name": true
+              },
+              "webauthn": {
+                "identifier": true
+              }
             },
-            "verification": { "via": "email" },
-            "recovery": { "via": "email" }
+            "verification": {
+              "via": "email"
+            },
+            "recovery": {
+              "via": "email"
+            }
           }
         },
-        "name": { "type": "string", "title": "Tên hiển thị", "maxLength": 100 },
-        "locale": { "type": "string", "title": "Ngôn ngữ", "enum": ["vi", "en"], "default": "vi" }
+        "name": {
+          "type": "string",
+          "title": "Tên hiển thị",
+          "maxLength": 100
+        },
+        "locale": {
+          "type": "string",
+          "title": "Ngôn ngữ",
+          "enum": [
+            "vi",
+            "en"
+          ],
+          "default": "vi"
+        },
+        "avatar_url": {
+          "type": "string",
+          "format": "uri",
+          "title": "Ảnh đại diện (URL)",
+          "maxLength": 2048
+        },
+        "timezone": {
+          "type": "string",
+          "title": "Múi giờ",
+          "default": "Asia/Ho_Chi_Minh",
+          "maxLength": 64
+        },
+        "phone": {
+          "type": "string",
+          "title": "Số điện thoại",
+          "pattern": "^\\+?[0-9 ]{8,16}$"
+        },
+        "billing": {
+          "type": "object",
+          "title": "Thông tin xuất hóa đơn",
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "Tên trên hóa đơn",
+              "maxLength": 200
+            },
+            "tax_code": {
+              "type": "string",
+              "title": "Mã số thuế",
+              "pattern": "^[0-9]{10}(-[0-9]{3})?$"
+            },
+            "address": {
+              "type": "string",
+              "title": "Địa chỉ xuất hóa đơn",
+              "maxLength": 300
+            }
+          },
+          "additionalProperties": false
+        }
       },
-      "required": ["email"],
+      "required": [
+        "email"
+      ],
       "additionalProperties": false
     }
   }

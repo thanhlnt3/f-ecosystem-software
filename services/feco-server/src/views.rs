@@ -212,6 +212,12 @@ fn schema_label(lang: Lang, text: &str) -> String {
     match (lang, text) {
         (Lang::En, "Tên hiển thị") => "Display name".into(),
         (Lang::En, "Ngôn ngữ") => "Language".into(),
+        (Lang::En, "Ảnh đại diện (URL)") => "Profile picture (URL)".into(),
+        (Lang::En, "Múi giờ") => "Time zone".into(),
+        (Lang::En, "Số điện thoại") => "Phone number".into(),
+        (Lang::En, "Tên trên hóa đơn") => "Billing name".into(),
+        (Lang::En, "Mã số thuế") => "Tax code".into(),
+        (Lang::En, "Địa chỉ xuất hóa đơn") => "Billing address".into(),
         _ => text.to_owned(),
     }
 }
@@ -388,6 +394,7 @@ pub fn flow_view(lang: Lang, kind: FlowKind, flow: &Value) -> FlowView {
         for n in nodes
             .iter()
             .filter(|n| n["group"] == group.as_str() && n["type"] != "script")
+            .filter(|n| kind != FlowKind::Registration || registration_field(n))
         {
             add_node(lang, &mut form, n);
         }
@@ -400,6 +407,17 @@ pub fn flow_view(lang: Lang, kind: FlowKind, flow: &Value) -> FlowView {
         messages: messages_of(lang, &ui["messages"]),
         forms,
         scripts,
+    }
+}
+
+/// Trang đăng ký chỉ hỏi những gì cần để tạo tài khoản; phần hồ sơ còn lại (ảnh, số
+/// điện thoại, thông tin hóa đơn) điền sau ở trang cài đặt.
+fn registration_field(node: &Value) -> bool {
+    match node["attributes"]["name"].as_str() {
+        Some(name) if name.starts_with("traits.") => {
+            matches!(name, "traits.email" | "traits.name" | "traits.locale")
+        }
+        _ => true,
     }
 }
 

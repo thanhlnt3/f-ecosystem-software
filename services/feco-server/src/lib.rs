@@ -1,15 +1,25 @@
-//! Dịch vụ HTTP của F-Eco: kiểm tra sức khỏe và các trang tài khoản (nhóm task 2).
+//! Dịch vụ HTTP của F-Eco: sức khỏe, trang tài khoản (nhóm 2), đồng ý dữ liệu và
+//! đăng nhập một lần cho app con qua Hydra (nhóm 3).
 //! Các API khác (danh mục, đơn hàng, thanh toán) được thêm theo từng nhóm task.
 
 pub mod account;
+pub mod api;
+pub mod apps;
 pub mod auth;
 pub mod challenge;
+pub mod connected;
 pub mod csrf;
+pub mod export;
+pub mod hydra;
 pub mod i18n;
 pub mod kratos;
 pub mod mailer;
+pub mod oauth;
+pub mod pairwise;
+pub mod store;
 pub mod throttle;
 pub mod views;
+pub mod webhooks;
 
 use std::sync::Arc;
 
@@ -28,9 +38,12 @@ use url::Url;
 use crate::{
     auth::FlowQuery,
     challenge::Challenge,
+    hydra::HydraClient,
     i18n::Lang,
     kratos::{FlowKind, KratosClient},
     mailer::{MailError, Mailer},
+    pairwise::Pairwise,
+    store::Db,
     throttle::LoginThrottle,
 };
 
@@ -41,11 +54,30 @@ pub struct AppState {
     pub throttle: LoginThrottle,
     pub challenge: Challenge,
     pub mailer: Mailer,
+    pub db: Db,
+    pub hydra: HydraClient,
+    pub pairwise: Pairwise,
+    /// HTTP client gửi webhook cho app con.
+    pub http: reqwest::Client,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum StartError {
+    #[error(transparent)]
+    Mail(#[from] MailError),
+    #[error("địa chỉ cơ sở dữ liệu không hợp lệ: {0}")]
+    Database(#[from] sqlx::Error),
 }
 
 impl AppState {
-    pub fn from_config(config: &Config) -> Result<Self, MailError> {
+    /// Dựng trạng thái từ cấu hình. Kết nối cơ sở dữ liệu được mở khi dùng lần đầu;
+    /// gọi [`store::MIGRATOR`] trước khi phục vụ yêu cầu.
+    pub fn from_config(config: &Config) -> Result<Self, StartError> {
         let a = &config.auth;
+        let db = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(10)
+            .acquire_timeout(std::time::Duration::from_secs(5))
+            .connect_lazy(config.database_url.expose())?;
         Ok(AppState {
             environment: config.environment,
             public_url: a.public_url.clone(),
@@ -53,6 +85,14 @@ impl AppState {
             throttle: LoginThrottle::default(),
             challenge: Challenge::from_config(&a.challenge),
             mailer: Mailer::smtp(&a.smtp_url, &a.email_from)?,
+            db,
+            hydra: HydraClient::new(a.hydra_admin_url.clone()),
+            pairwise: Pairwise::new(a.pairwise_secret.expose()),
+            http: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .expect("tạo HTTP client"),
         })
     }
 }
@@ -92,7 +132,7 @@ fn flow_routes(router: Router<Arc<AppState>>, kind: FlowKind) -> Router<Arc<AppS
     )
 }
 
-pub fn router(state: AppState) -> Router {
+pub fn router(state: Arc<AppState>) -> Router {
     let mut r = Router::new()
         .route("/healthz", get(healthz))
         .route("/", get(auth::home))
@@ -105,7 +145,19 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/account/delete",
             get(account::delete_form).post(account::delete_submit),
-        );
+        )
+        .route("/account/export", get(export::show).post(export::request))
+        .route("/account/export/{token}", get(export::download))
+        .route("/oauth/login", get(oauth::login))
+        .route(
+            "/oauth/consent",
+            get(oauth::consent).post(oauth::consent_submit),
+        )
+        .route("/oauth/logout", get(oauth::logout))
+        .route("/apps", get(connected::list))
+        .route("/apps/{client_id}", get(connected::detail))
+        .route("/apps/{client_id}/revoke", post(connected::revoke))
+        .route("/v1/me", get(api::me));
     for kind in [
         FlowKind::Login,
         FlowKind::Registration,
@@ -115,7 +167,7 @@ pub fn router(state: AppState) -> Router {
     ] {
         r = flow_routes(r, kind);
     }
-    r.with_state(Arc::new(state))
+    r.with_state(state)
 }
 
 #[cfg(test)]
@@ -136,12 +188,18 @@ mod tests {
             throttle: LoginThrottle::default(),
             challenge: Challenge::Test,
             mailer: Mailer::memory().0,
+            db: sqlx::postgres::PgPoolOptions::new()
+                .connect_lazy("postgres://x:y@127.0.0.1:9/x")
+                .unwrap(),
+            hydra: HydraClient::new(url("http://127.0.0.1:9/")),
+            pairwise: Pairwise::new("test-only-pairwise-secret-0123456789"),
+            http: reqwest::Client::new(),
         }
     }
 
     #[tokio::test]
     async fn healthz_reports_environment_and_version() {
-        let app = router(state(Environment::Staging));
+        let app = router(Arc::new(state(Environment::Staging)));
         let res = app
             .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
             .await
@@ -156,7 +214,7 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_path_is_404() {
-        let app = router(state(Environment::Dev));
+        let app = router(Arc::new(state(Environment::Dev)));
         let res = app
             .oneshot(Request::get("/khong-co").body(Body::empty()).unwrap())
             .await
@@ -166,7 +224,7 @@ mod tests {
 
     #[tokio::test]
     async fn flow_without_id_redirects_to_kratos_init() {
-        let app = router(state(Environment::Dev));
+        let app = router(Arc::new(state(Environment::Dev)));
         let res = app
             .oneshot(Request::get("/registration").body(Body::empty()).unwrap())
             .await
@@ -180,7 +238,7 @@ mod tests {
 
     #[tokio::test]
     async fn kratos_down_shows_friendly_error() {
-        let app = router(state(Environment::Dev));
+        let app = router(Arc::new(state(Environment::Dev)));
         let res = app
             .oneshot(Request::get("/login?flow=abc").body(Body::empty()).unwrap())
             .await

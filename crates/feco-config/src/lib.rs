@@ -85,13 +85,19 @@ pub struct AuthConfig {
     pub smtp_url: Url,
     pub email_from: String,
     pub challenge: ChallengeProvider,
+    /// API công khai của Ory Hydra (OAuth 2.0 / OIDC cho app con).
+    pub hydra_public_url: Url,
+    /// API quản trị của Ory Hydra (chỉ gọi từ mạng nội bộ).
+    pub hydra_admin_url: Url,
+    /// Khóa tạo định danh người dùng riêng cho từng app (spec user-data-consent).
+    pub pairwise_secret: Secret,
 }
 
 #[derive(Debug, Clone)]
 pub struct Config {
     pub environment: Environment,
     pub http_addr: SocketAddr,
-    pub database_url: Option<Secret>,
+    pub database_url: Secret,
     pub payments: PaymentsConfig,
     pub auth: AuthConfig,
 }
@@ -159,7 +165,14 @@ impl Config {
                 reason: e.to_string(),
             })?;
 
-        let database_url = get("FECO_DATABASE_URL").map(Secret::new);
+        let database_url = match get("FECO_DATABASE_URL") {
+            Some(v) => Secret::new(v),
+            None if environment.is_production() => {
+                return Err(ConfigError::Missing("FECO_DATABASE_URL"))
+            }
+            // Khớp dịch vụ postgres trong infra/docker-compose.yml.
+            None => Secret::new("postgres://feco:feco-dev-only@127.0.0.1:5432/feco"),
+        };
 
         let vnpay = group(
             "VNPAY",
@@ -282,6 +295,19 @@ fn auth_config<'a>(
         kratos_public_url: url_var("FECO_KRATOS_PUBLIC_URL", "http://127.0.0.1:4433/")?,
         kratos_admin_url: url_var("FECO_KRATOS_ADMIN_URL", "http://127.0.0.1:4434/")?,
         smtp_url: url_var("FECO_SMTP_URL", "smtp://127.0.0.1:1025")?,
+        hydra_public_url: url_var("FECO_HYDRA_PUBLIC_URL", "http://127.0.0.1:4444/")?,
+        hydra_admin_url: url_var("FECO_HYDRA_ADMIN_URL", "http://127.0.0.1:4445/")?,
+        pairwise_secret: match get("FECO_PAIRWISE_SECRET") {
+            Some(v) if v.len() >= 32 => Secret::new(v),
+            Some(_) => {
+                return Err(ConfigError::Invalid {
+                    var: "FECO_PAIRWISE_SECRET",
+                    reason: "phải dài ít nhất 32 ký tự".into(),
+                })
+            }
+            None if prod => return Err(ConfigError::Missing("FECO_PAIRWISE_SECRET")),
+            None => Secret::new("dev-only-pairwise-secret-not-for-production"),
+        },
         email_from: get("FECO_EMAIL_FROM")
             .unwrap_or("F-Eco <no-reply@f-eco.example>")
             .to_owned(),
@@ -511,6 +537,14 @@ mod tests {
     fn production_requires_auth_settings() {
         assert_eq!(
             Config::from_vars(&with_env("production", &[])).unwrap_err(),
+            ConfigError::Missing("FECO_DATABASE_URL")
+        );
+        let v = with_env(
+            "production",
+            &[("FECO_DATABASE_URL", "postgres://x@db/feco")],
+        );
+        assert_eq!(
+            Config::from_vars(&v).unwrap_err(),
             ConfigError::Missing("FECO_PUBLIC_URL")
         );
     }
@@ -520,6 +554,7 @@ mod tests {
         let v = with_env(
             "production",
             &[
+                ("FECO_DATABASE_URL", "postgres://x@db/feco"),
                 ("FECO_PUBLIC_URL", "https://f-eco.example/"),
                 ("FECO_CHALLENGE_PROVIDER", "test"),
             ],
@@ -534,7 +569,10 @@ mod tests {
     fn production_requires_https_public_url() {
         let v = with_env(
             "production",
-            &[("FECO_PUBLIC_URL", "http://f-eco.example/")],
+            &[
+                ("FECO_DATABASE_URL", "postgres://x@db/feco"),
+                ("FECO_PUBLIC_URL", "http://f-eco.example/"),
+            ],
         );
         assert!(matches!(
             Config::from_vars(&v).unwrap_err(),

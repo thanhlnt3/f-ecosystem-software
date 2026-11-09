@@ -115,6 +115,21 @@ pub mod templates {
         (subject, body)
     }
 
+    pub fn export_ready(link: &str) -> (String, String) {
+        let subject =
+            "Dữ liệu cá nhân của bạn đã sẵn sàng / Your personal data is ready".to_owned();
+        let body = format!(
+            "Xin chào,\n\n\
+             File chứa dữ liệu cá nhân bạn yêu cầu đã sẵn sàng. Hãy đăng nhập rồi tải tại:\n{link}\n\n\
+             Liên kết hết hạn sau 7 ngày.\n\n\
+             ---\n\
+             Hello,\n\n\
+             The personal data file you requested is ready. Sign in and download it at:\n{link}\n\n\
+             The link expires in 7 days.\n"
+        );
+        (subject, body)
+    }
+
     pub fn registration_attempt(public_url: &str) -> (String, String) {
         let subject =
             "Có người thử đăng ký bằng email của bạn / Sign-up attempt with your email".to_owned();

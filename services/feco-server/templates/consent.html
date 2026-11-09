@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("consent.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("consent.title") }}</h1>
+<p><strong id="app-name">{{ app_name }}</strong>
+  {% if !developer.is_empty() %}<br><span class="muted">{{ i18n.t("consent.by") }} {{ developer }}{% if developer_verified %} · {{ i18n.t("consent.verified") }}{% endif %}</span>{% endif %}
+</p>
+<p>{{ i18n.t("consent.intro") }}</p>
+<form method="post" action="/oauth/consent">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <input type="hidden" name="consent_challenge" value="{{ challenge }}">
+  <input type="hidden" name="content_version" value="{{ content_version }}">
+  <table id="scopes">
+  {% for r in rows %}
+    <tr data-scope="{{ r.name }}">
+      <td style="width:28px">
+        {% if r.required %}
+          <input type="checkbox" checked disabled aria-label="{{ r.description }}">
+        {% else %}
+          <input id="s-{{ r.name }}" type="checkbox" name="scope_{{ r.name }}">
+        {% endif %}
+      </td>
+      <td>
+        <label for="s-{{ r.name }}" style="margin:0">{{ r.description }}
+          ({% if r.required %}{{ i18n.t("consent.required") }}{% else %}{{ i18n.t("consent.optional") }}{% endif %})</label>
+        {% if !r.purpose.is_empty() %}<span class="muted">{{ i18n.t("consent.purpose") }}: {{ r.purpose }}</span>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </table>
+  {% if !policy_uri.is_empty() %}<p><a href="{{ policy_uri }}" rel="noopener" target="_blank">{{ i18n.t("consent.policy") }}</a></p>{% endif %}
+  <p class="muted">{{ i18n.t("consent.revoke_hint") }}</p>
+  <button type="submit" name="action" value="accept">{{ i18n.t("consent.accept") }}</button>
+  <button type="submit" name="action" value="deny" class="secondary">{{ i18n.t("consent.deny") }}</button>
+</form>
+{% endblock %}

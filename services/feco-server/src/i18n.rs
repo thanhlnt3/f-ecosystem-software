@@ -165,6 +165,60 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "sessions.revoked_others" => ("Đã đăng xuất mọi thiết bị khác.", "All other devices were signed out."),
         "sessions.none" => ("Không có thiết bị nào khác đang đăng nhập.", "No other devices are signed in."),
 
+        "home.apps" => ("Ứng dụng đã kết nối", "Connected apps"),
+        "home.export" => ("Xuất dữ liệu của tôi", "Export my data"),
+        "link.apps" => ("Ứng dụng đã kết nối", "Connected apps"),
+        "link.export" => ("Xuất dữ liệu của tôi", "Export my data"),
+
+        "oauth.bad_request" => ("Yêu cầu đăng nhập không hợp lệ.", "Invalid sign-in request."),
+        "consent.title" => ("Cho phép ứng dụng truy cập", "Allow app access"),
+        "consent.by" => ("của", "by"),
+        "consent.verified" => ("Đã xác minh", "Verified"),
+        "consent.intro" => (
+            "Ứng dụng này muốn dùng các dữ liệu sau trong tài khoản F-Eco của bạn:",
+            "This app wants to use the following data from your F-Eco account:",
+        ),
+        "consent.required" => ("bắt buộc", "required"),
+        "consent.optional" => ("không bắt buộc", "optional"),
+        "consent.purpose" => ("Mục đích", "Purpose"),
+        "consent.policy" => ("Chính sách quyền riêng tư của ứng dụng", "App privacy policy"),
+        "consent.revoke_hint" => (
+            "Bạn có thể thu hồi quyền bất kỳ lúc nào ở trang Ứng dụng đã kết nối.",
+            "You can revoke access at any time on the Connected apps page.",
+        ),
+        "consent.accept" => ("Cho phép", "Allow"),
+        "consent.deny" => ("Từ chối", "Deny"),
+
+        "apps.title" => ("Ứng dụng đã kết nối", "Connected apps"),
+        "apps.none" => ("Chưa có ứng dụng nào được bạn cấp quyền.", "You have not given any app access."),
+        "apps.scopes" => ("Dữ liệu được cấp", "Data shared"),
+        "apps.granted_at" => ("Cấp lúc", "Granted at"),
+        "apps.last_access" => ("Truy cập gần nhất", "Last access"),
+        "apps.never" => ("Chưa truy cập", "Never"),
+        "apps.revoke" => ("Thu hồi quyền", "Revoke access"),
+        "apps.revoked" => (
+            "Đã thu hồi quyền. Ứng dụng không còn đọc được dữ liệu của bạn.",
+            "Access revoked. The app can no longer read your data.",
+        ),
+        "apps.log_title" => ("Nhật ký truy cập 90 ngày", "Access log (90 days)"),
+        "apps.log_empty" => ("Không có lần truy cập nào trong 90 ngày qua.", "No access in the last 90 days."),
+
+        "export.title" => ("Xuất dữ liệu của tôi", "Export my data"),
+        "export.body" => (
+            "Bạn sẽ nhận email kèm liên kết tải một file ZIP chứa toàn bộ dữ liệu cá nhân F-Eco đang lưu: hồ sơ, phiên đăng nhập, ứng dụng đã kết nối, lịch sử đồng ý, nhật ký truy cập, dự án F-Builder, đơn hàng và hóa đơn. Liên kết có hạn 7 ngày.",
+            "You will receive an email with a link to a ZIP file containing all personal data F-Eco keeps: profile, sign-in sessions, connected apps, consent history, access log, F-Builder projects, orders and invoices. The link expires in 7 days.",
+        ),
+        "export.button" => ("Yêu cầu xuất dữ liệu", "Request export"),
+        "export.requested" => (
+            "Đã nhận yêu cầu. Chúng tôi sẽ gửi email khi file sẵn sàng (chậm nhất 72 giờ).",
+            "Request received. We will email you when the file is ready (within 72 hours).",
+        ),
+        "export.last" => ("Lần xuất gần nhất", "Last export"),
+        "export.status_ready" => ("đã sẵn sàng", "ready"),
+        "export.status_pending" => ("đang chuẩn bị", "being prepared"),
+        "export.status_failed" => ("thất bại, hãy thử lại", "failed, please try again"),
+        "export.expired" => ("Liên kết không hợp lệ hoặc đã hết hạn.", "The link is invalid or has expired."),
+
         "delete.title" => ("Xóa tài khoản", "Delete account"),
         "delete.body" => (
             "Tài khoản sẽ chuyển sang trạng thái chờ xóa trong 30 ngày, và mọi thiết bị bị đăng xuất. Nếu bạn đăng nhập lại trong 30 ngày, yêu cầu xóa sẽ bị hủy. Sau 30 ngày, hồ sơ, dữ liệu đã cấp cho app con và lịch sử F-Builder bị xóa; hóa đơn được giữ theo quy định pháp luật.",
@@ -225,6 +279,13 @@ mod tests {
             include_str!("../templates/message.html"),
             include_str!("../templates/sessions.html"),
             include_str!("../templates/delete.html"),
+            include_str!("oauth.rs"),
+            include_str!("connected.rs"),
+            include_str!("export.rs"),
+            include_str!("../templates/consent.html"),
+            include_str!("../templates/apps.html"),
+            include_str!("../templates/app_detail.html"),
+            include_str!("../templates/export.html"),
         ];
         let re = regex::Regex::new(r#"\.t\("([a-z_.0-9]+)"\)"#).unwrap();
         let mut checked = 0;

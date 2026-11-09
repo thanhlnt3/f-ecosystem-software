@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ name }}{% endblock %}
+{% block content %}
+<h1>{{ name }}</h1>
+<h2>{{ i18n.t("apps.log_title") }}</h2>
+{% if log.is_empty() %}
+<p class="muted">{{ i18n.t("apps.log_empty") }}</p>
+{% else %}
+<table id="access-log">
+{% for e in log %}<tr><td>{{ e.at }}</td><td>{{ e.scopes }}</td></tr>{% endfor %}
+</table>
+{% endif %}
+<div class="links"><a href="/apps">{{ i18n.t("apps.title") }}</a></div>
+{% endblock %}

@@ -360,6 +360,17 @@ impl KratosClient {
         }
     }
 
+    /// Mọi phiên của một danh tính (API quản trị), dùng khi xuất dữ liệu.
+    pub async fn identity_sessions(&self, id: &str) -> Result<Vec<Value>, KratosError> {
+        let res = self
+            .http
+            .get(self.identity_url(id, "/sessions"))
+            .send()
+            .await?;
+        let r = Self::into_response(res).await?;
+        Ok(r.body.as_array().cloned().unwrap_or_default())
+    }
+
     /// Thu hồi mọi phiên của một danh tính (API quản trị).
     pub async fn revoke_identity_sessions(&self, id: &str) -> Result<(), KratosError> {
         self.http

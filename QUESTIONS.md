@@ -22,3 +22,13 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
    cần chuyển dev sang tên miền `localhost` (Kratos, feco-server, cookie). Có làm ngay không?
 6. **Kratos ở staging và production dùng PostgreSQL.** Dev và CI dùng SQLite trong bộ nhớ, vốn
    báo "database table is locked" khi ghi đồng thời (test E2E vì vậy chạy lần lượt).
+
+## Nhóm 3: dữ liệu người dùng và đồng ý
+
+7. **Chính sách quyền riêng tư và điều khoản sử dụng (task 3.6)** cần luật sư soạn và rà soát
+   theo pháp luật Việt Nam về bảo vệ dữ liệu cá nhân. Mã nguồn chưa có văn bản này.
+8. **Đăng ký webhook và scope của app** hiện được tạo trực tiếp qua API quản trị Hydra và bảng
+   `app_webhooks` (dùng trong test). Cổng nhà phát triển (nhóm 8) sẽ ghi các thông tin này từ
+   `f-app.toml`.
+9. **File xuất dữ liệu lưu trong PostgreSQL** (cột `bytea`). Khi dữ liệu lớn (dự án F-Builder),
+   nên chuyển sang kho đối tượng (design D11).

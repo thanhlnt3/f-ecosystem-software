@@ -30,12 +30,18 @@
 
 ## 3. Dữ liệu người dùng và đồng ý (`user-data-consent`)
 
-- [ ] 3.1 Hồ sơ người dùng và thông tin xuất hóa đơn; xác minh bằng test API
-- [ ] 3.2 Danh mục scope cố định, màn hình đồng ý theo từng scope, lưu bản ghi đồng ý kèm phiên bản nội dung; xác minh bằng các scenario trong spec
-- [ ] 3.3 Trang "Ứng dụng đã kết nối", thu hồi trong 60 giây, nhật ký truy cập 90 ngày; xác minh bằng test E2E
-- [ ] 3.4 Định danh `pairwise` cho từng app; xác minh hai app nhận `sub` khác nhau cho cùng một người dùng
-- [ ] 3.5 Xuất dữ liệu cá nhân thành ZIP trong 72 giờ; webhook `user.revoked` và `user.deleted`; xác minh file xuất đủ các nhóm dữ liệu
+- [x] 3.1 Hồ sơ người dùng và thông tin xuất hóa đơn; xác minh bằng test API
+  - Đã xác minh: hồ sơ (tên, ảnh, email, ngôn ngữ, múi giờ, số điện thoại, thông tin xuất hóa đơn gồm tên, mã số thuế, địa chỉ) nằm trong schema danh tính Kratos, sửa được ở trang cài đặt; E2E `consent_scopes_pairwise_and_revocation` đổi tên rồi `GET /v1/me` của app có scope `profile` trả tên mới ở lần gọi tiếp theo.
+- [x] 3.2 Danh mục scope cố định, màn hình đồng ý theo từng scope, lưu bản ghi đồng ý kèm phiên bản nội dung; xác minh bằng các scenario trong spec
+  - Đã xác minh bằng E2E: danh mục 6 scope cố định (`feco-core::Scope`); feco-server là login/consent provider của Hydra; màn hình đồng ý hiện app, nhà phát triển, từng scope kèm mục đích và chính sách; scope không bắt buộc mặc định không chọn; đồng ý một phần, từ chối (app nhận `access_denied`), xin thêm scope chỉ hỏi scope mới; `consent_records` lưu hành động, scope và phiên bản nội dung (`v1-…`, băm của nội dung đã hiện).
+- [x] 3.3 Trang "Ứng dụng đã kết nối", thu hồi trong 60 giây, nhật ký truy cập 90 ngày; xác minh bằng test E2E
+  - Đã xác minh bằng E2E: `/apps` liệt kê app đã cấp quyền, scope, lần truy cập gần nhất; `/apps/{client}` hiện nhật ký 90 ngày; thu hồi làm token cũ trả `invalid_token` ngay (dưới 60 giây), app khác không ảnh hưởng, lần mở sau hiện lại màn hình đồng ý. Nhật ký quá 90 ngày được xóa mỗi giờ.
+- [x] 3.4 Định danh `pairwise` cho từng app; xác minh hai app nhận `sub` khác nhau cho cùng một người dùng
+  - Đã xác minh bằng E2E: `sub` của hai app cho cùng người dùng khác nhau, khớp giữa ID token và `/v1/me`, không phải id danh tính thật (HMAC-SHA256 qua `force_subject_identifier` của Hydra).
+- [x] 3.5 Xuất dữ liệu cá nhân thành ZIP trong 72 giờ; webhook `user.revoked` và `user.deleted`; xác minh file xuất đủ các nhóm dữ liệu
+  - Đã xác minh bằng E2E `personal_data_export`: ZIP gồm hồ sơ, phiên đăng nhập, ứng dụng đã kết nối, lịch sử đồng ý, nhật ký 90 ngày (và tệp rỗng cho F-Builder, đơn hàng, hóa đơn tới khi có dữ liệu), gửi email liên kết hạn 7 ngày, chỉ chủ tài khoản tải được. Webhook `user.revoked` ký HMAC-SHA256, gửi lại theo backoff trong 72 giờ, đã xác minh chữ ký trong E2E. `user.deleted` được đưa vào hàng đợi khi xóa hẳn tài khoản (chưa có E2E riêng).
 - [ ] 3.6 Chính sách quyền riêng tư và điều khoản sử dụng (có luật sư rà soát); xác minh bằng biên bản rà soát pháp lý
+  - Chưa làm: cần luật sư soạn và rà soát chính sách quyền riêng tư và điều khoản sử dụng.
 
 ## 4. Bảo mật nền tảng (`platform-security`)
 

@@ -501,16 +501,43 @@ fn deletion_due(identity: &Value, now: SystemTime) -> bool {
 ///
 /// Phần dữ liệu ngoài Kratos (đồng ý cho app con, dự án F-Builder, đơn hàng; hóa đơn
 /// được giữ) sẽ được xóa ở đây khi các nhóm task tương ứng có dữ liệu.
-pub async fn purge_due(kratos: &KratosClient, now: SystemTime) -> Result<usize, KratosError> {
+pub async fn purge_due(state: &AppState, now: SystemTime) -> Result<usize, String> {
+    let kratos = &state.kratos;
     let mut deleted = 0;
-    for identity in kratos.list_identities().await? {
-        if deletion_due(&identity, now) {
-            if let Some(id) = identity["id"].as_str() {
-                if kratos.delete_identity(id).await? {
-                    tracing::info!(identity = id, "đã xóa tài khoản sau 30 ngày chờ");
-                    deleted += 1;
-                }
-            }
+    for identity in kratos.list_identities().await.map_err(|e| e.to_string())? {
+        if !deletion_due(&identity, now) {
+            continue;
+        }
+        let Some(id) = identity["id"].as_str() else {
+            continue;
+        };
+        let subject: uuid::Uuid = id.parse().map_err(|e| format!("{e}"))?;
+        // Báo cho mọi app từng được cấp dữ liệu (spec user-data-consent, "Trách nhiệm
+        // của app con với dữ liệu"), trước khi xóa dấu vết đồng ý.
+        let clients = crate::store::granted_clients(&state.db, subject)
+            .await
+            .map_err(|e| e.to_string())?;
+        for client in &clients {
+            let payload = crate::connected::event_payload(state, "user.deleted", client, subject);
+            crate::store::enqueue_event(&state.db, client, "user.deleted", &payload)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        state
+            .hydra
+            .revoke_consent(id, None)
+            .await
+            .map_err(|e| e.to_string())?;
+        crate::store::delete_subject_data(&state.db, subject)
+            .await
+            .map_err(|e| e.to_string())?;
+        if kratos
+            .delete_identity(id)
+            .await
+            .map_err(|e| e.to_string())?
+        {
+            tracing::info!(identity = id, "đã xóa tài khoản sau 30 ngày chờ");
+            deleted += 1;
         }
     }
     Ok(deleted)

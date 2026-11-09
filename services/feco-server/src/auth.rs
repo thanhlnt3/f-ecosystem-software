@@ -135,6 +135,8 @@ fn links_for(lang: Lang, kind: FlowKind) -> Vec<(String, String)> {
         FlowKind::Settings => vec![
             l("/", "link.back_home"),
             l("/sessions", "link.sessions"),
+            l("/apps", "link.apps"),
+            l("/account/export", "link.export"),
             l("/account/delete", "link.delete_account"),
         ],
     }

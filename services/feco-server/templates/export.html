@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("export.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("export.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<p>{{ i18n.t("export.body") }}</p>
+{% if let Some((at, status)) = last %}<p class="muted" id="last-export">{{ i18n.t("export.last") }}: {{ at }} · {{ status }}</p>{% endif %}
+<form method="post" action="/account/export">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <button type="submit">{{ i18n.t("export.button") }}</button>
+</form>
+<div class="links"><a href="/settings">{{ i18n.t("home.settings") }}</a></div>
+{% endblock %}
