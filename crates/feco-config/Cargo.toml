@@ -1,0 +1,17 @@
+[package]
+name = "feco-config"
+description = "Đọc và kiểm tra cấu hình dịch vụ F-Eco lúc khởi động"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+feco-core.workspace = true
+thiserror.workspace = true
+url.workspace = true
+
+[lints]
+workspace = true

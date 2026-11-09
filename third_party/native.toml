@@ -1,0 +1,28 @@
+# Thành phần không phải crate Rust: dịch vụ và ảnh container.
+# Kiểm tra bằng: cargo run -p feco-license-check
+# Mỗi `image` trong infra/docker-compose.yml phải có đúng một mục ở đây.
+
+[[component]]
+name = "PostgreSQL"
+license = "PostgreSQL"
+image = "postgres:17-alpine"
+
+[[component]]
+name = "Valkey"
+license = "BSD-3-Clause"
+image = "valkey/valkey:8.0-alpine"
+
+[[component]]
+name = "Mailpit"
+license = "MIT"
+image = "axllent/mailpit:v1.21"
+
+[[component]]
+name = "Ory Kratos"
+license = "Apache-2.0"
+image = "oryd/kratos:v1.3.1"
+
+[[component]]
+name = "Ory Hydra"
+license = "Apache-2.0"
+image = "oryd/hydra:v2.3.0"

@@ -1,0 +1,89 @@
+# Cấu hình Ory Kratos cho dev (spec account-identity). Giá trị bí mật là giả.
+version: v1.3.1
+
+serve:
+  public:
+    base_url: http://127.0.0.1:4433/
+    cors:
+      enabled: true
+      allowed_origins: ["http://127.0.0.1:8080"]
+  admin:
+    base_url: http://127.0.0.1:4434/
+
+selfservice:
+  default_browser_return_url: http://127.0.0.1:8080/
+  allowed_return_urls: ["http://127.0.0.1:8080"]
+  methods:
+    password:
+      enabled: true
+      config:
+        # Spec: mật khẩu tối thiểu 10 ký tự, chặn mật khẩu đã bị lộ.
+        min_password_length: 10
+        haveibeenpwned_enabled: true
+    totp:
+      enabled: true
+      config:
+        issuer: F-Eco
+    lookup_secret:
+      enabled: true
+    webauthn:
+      enabled: true
+      config:
+        passwordless: false
+        rp:
+          display_name: F-Eco
+          id: 127.0.0.1
+          origins: ["http://127.0.0.1:8080"]
+  flows:
+    error:
+      ui_url: http://127.0.0.1:8080/error
+    settings:
+      ui_url: http://127.0.0.1:8080/settings
+      privileged_session_max_age: 15m
+      required_aal: highest_available
+    recovery:
+      enabled: true
+      ui_url: http://127.0.0.1:8080/recovery
+      use: code
+      lifespan: 30m
+    verification:
+      enabled: true
+      ui_url: http://127.0.0.1:8080/verification
+      use: link
+      lifespan: 24h
+    logout:
+      after:
+        default_browser_return_url: http://127.0.0.1:8080/login
+    login:
+      ui_url: http://127.0.0.1:8080/login
+      lifespan: 10m
+    registration:
+      ui_url: http://127.0.0.1:8080/registration
+      lifespan: 10m
+      after:
+        password:
+          hooks:
+            - hook: session
+
+log:
+  level: info
+  format: text
+
+secrets:
+  cookie: ["dev-only-cookie-secret-not-for-prod"]
+  cipher: ["dev-cipher-secret-0123456789abcd"]
+
+hashers:
+  algorithm: argon2
+
+identity:
+  default_schema_id: default
+  schemas:
+    - id: default
+      url: file:///etc/config/kratos/identity.schema.json
+
+courier:
+  smtp:
+    connection_uri: smtp://mailpit:1025/?disable_starttls=true
+    from_address: no-reply@f-eco.example
+    from_name: F-Eco

@@ -1,0 +1,37 @@
+# Cấu hình Ory Hydra cho dev (spec account-identity, user-data-consent). Bí mật là giả.
+serve:
+  public:
+    port: 4444
+  admin:
+    port: 4445
+
+urls:
+  self:
+    issuer: http://127.0.0.1:4444/
+  login: http://127.0.0.1:8080/oauth/login
+  consent: http://127.0.0.1:8080/oauth/consent
+  logout: http://127.0.0.1:8080/oauth/logout
+
+ttl:
+  # Spec account-identity, "Phiên đăng nhập": access token tối đa 15 phút,
+  # refresh token tối đa 30 ngày (720h).
+  access_token: 15m
+  refresh_token: 720h
+
+oauth2:
+  pkce:
+    enforced_for_public_clients: true
+
+oidc:
+  subject_identifiers:
+    # Spec user-data-consent, "Định danh riêng cho từng app".
+    supported_types: [pairwise, public]
+    pairwise:
+      salt: dev-only-pairwise-salt-not-for-prod
+
+secrets:
+  system: ["dev-only-system-secret-not-for-prod"]
+
+log:
+  level: info
+  format: text

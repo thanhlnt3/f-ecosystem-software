@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/feco-core",
+    "crates/feco-config",
+    "services/feco-server",
+    "tools/feco-license-check",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/thanhlnt3/f-ecosystem-software"
+publish = false
+rust-version = "1.85"
+
+[workspace.dependencies]
+feco-core = { path = "crates/feco-core" }
+feco-config = { path = "crates/feco-config" }
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+toml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+url = "2"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"

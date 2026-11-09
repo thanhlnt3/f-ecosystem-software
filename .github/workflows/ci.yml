@@ -1,0 +1,89 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    # tasks.md 1.1: build và test cả workspace.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  licenses:
+    # tasks.md 1.2 (license) và 1.3 (lỗ hổng phụ thuộc).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: License của dịch vụ và ảnh container (third_party/native.toml)
+        run: cargo run -p feco-license-check
+
+  secrets:
+    # tasks.md 1.3: chặn commit chứa bí mật.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  spec:
+    # Bộ OpenSpec phải luôn hợp lệ.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
+
+  infra:
+    # tasks.md 1.4: hạ tầng dev khởi động được và các dịch vụ sẵn sàng.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Khởi động PostgreSQL, Valkey, Mailpit, Kratos, Hydra
+        run: docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180
+      - name: Kiểm tra endpoint sức khỏe
+        run: |
+          curl -fsS http://127.0.0.1:4433/health/ready
+          curl -fsS http://127.0.0.1:4444/health/ready
+          curl -fsS http://127.0.0.1:4444/.well-known/openid-configuration | tee oidc.json
+          grep -q '"pairwise"' oidc.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: feco-server chạy và trả lời /healthz
+        env:
+          FECO_ENV: dev
+          FECO_HTTP_ADDR: 127.0.0.1:8080
+          FECO_DATABASE_URL: postgres://feco:feco-dev-only@127.0.0.1:5432/feco
+        run: |
+          cargo build -p feco-server
+          ./target/debug/feco-server &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && exit 0; sleep 1; done
+          exit 1
+      - name: Nhật ký khi lỗi
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml logs --no-color --tail 200

@@ -1,0 +1,9 @@
+# Ngoại lệ license đã duyệt (spec dependency-licensing). Mỗi mục bắt buộc có
+# license, component, reason, reviewer và date (YYYY-MM-DD); thiếu là CI thất bại.
+#
+# [[exception]]
+# license = "GPL-2.0-only"
+# component = "ClamAV"
+# reason = "Chạy thành dịch vụ quét riêng, không phân phối cho người dùng"
+# reviewer = "Họ tên"
+# date = "2026-11-09"
