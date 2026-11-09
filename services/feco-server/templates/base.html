@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="vi">
+<html lang="{{ i18n.code() }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,13 +9,18 @@
   @media (prefers-color-scheme: dark) { :root { --bg:#151514; --card:#1f1f1d; --fg:#ecebe6; --muted:#a3a29b; --line:#34332f; --accent:#4fb3a1; --err:#f2a39c; --ok:#8fd19e; } }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  main { max-width:440px; margin:48px auto; padding:0 16px; }
-  .brand { font-weight:700; letter-spacing:.02em; margin-bottom:16px; }
+  main { max-width:480px; margin:48px auto; padding:0 16px; }
+  .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .brand { font-weight:700; letter-spacing:.02em; }
+  .lang { font-size:.9rem; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:24px; }
   h1 { font-size:1.35rem; margin:0 0 16px; }
+  h2 { font-size:1.05rem; margin:22px 0 4px; }
+  form + form { border-top:1px solid var(--line); margin-top:22px; }
   label { display:block; font-weight:600; margin:14px 0 6px; }
   input[type=email],input[type=password],input[type=text],input[type=tel],select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font:inherit; }
   button { margin-top:18px; width:100%; padding:11px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  .danger { background:var(--err); }
   .msg { padding:10px 12px; border-radius:8px; margin:10px 0; border:1px solid var(--line); }
   .msg.error { color:var(--err); border-color:currentColor; }
   .msg.success { color:var(--ok); border-color:currentColor; }
@@ -27,11 +32,19 @@
   .muted { color:var(--muted); }
   img.qr { display:block; margin:12px auto; max-width:200px; background:#fff; padding:8px; border-radius:8px; }
   code { word-break:break-all; }
+  ul.codes { columns:2; font-family:ui-monospace,Consolas,monospace; }
+  table { width:100%; border-collapse:collapse; font-size:.95rem; }
+  td { padding:10px 0; border-bottom:1px solid var(--line); vertical-align:top; }
+  .row-actions { text-align:right; }
+  .row-actions button { width:auto; margin:0; padding:6px 10px; background:transparent; color:var(--accent); border:1px solid currentColor; }
 </style>
 </head>
 <body>
 <main>
-  <div class="brand">F-Eco</div>
+  <div class="top">
+    <span class="brand">F-Eco</span>
+    <a class="lang" href="/lang/{{ i18n.t("lang.switch.code") }}">{{ i18n.t("lang.switch.label") }}</a>
+  </div>
   <div class="card">
 {% block content %}{% endblock %}
   </div>

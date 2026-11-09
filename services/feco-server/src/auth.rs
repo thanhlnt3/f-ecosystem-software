@@ -6,14 +6,15 @@
 //! - đăng nhập sai: làm chậm dần, bắt buộc thử thách chống bot từ lần sai thứ 5
 //!   trong 15 phút, và gửi email cảnh báo cho chủ tài khoản;
 //! - đăng ký bằng email đã có tài khoản: hiện cùng thông báo như đăng ký mới, và gửi
-//!   email báo cho chủ tài khoản, để không lộ việc email đã tồn tại.
+//!   email báo cho chủ tài khoản, để không lộ việc email đã tồn tại;
+//! - đăng nhập lại khi tài khoản đang chờ xóa: hủy yêu cầu xóa.
 
 use std::{sync::Arc, time::Instant};
 
 use askama::Template;
 use axum::{
     body::Bytes,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{Html, IntoResponse, Response},
 };
@@ -21,22 +22,35 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    challenge,
-    kratos::{FlowKind, KratosResponse},
+    account, challenge,
+    i18n::{self, Lang},
+    kratos::{ClientInfo, FlowKind, InitOptions, KratosResponse, Whoami},
     mailer::templates,
     views::{flow_view, ids, FlowView, Msg},
     AppState,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct FlowQuery {
     pub flow: Option<String>,
     pub return_to: Option<String>,
+    pub aal: Option<String>,
+    pub refresh: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ErrorQuery {
     pub id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HomeQuery {
+    pub notice: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LangQuery {
+    pub next: Option<String>,
 }
 
 pub struct ChallengeBox {
@@ -48,6 +62,7 @@ pub struct ChallengeBox {
 #[derive(Template)]
 #[template(path = "flow.html")]
 struct FlowPage {
+    i18n: Lang,
     view: FlowView,
     challenge: Option<ChallengeBox>,
     links: Vec<(String, String)>,
@@ -56,6 +71,7 @@ struct FlowPage {
 #[derive(Template)]
 #[template(path = "message.html")]
 struct MessagePage {
+    i18n: Lang,
     title: String,
     messages: Vec<Msg>,
     links: Vec<(String, String)>,
@@ -70,15 +86,17 @@ pub struct HomeUser {
 #[derive(Template)]
 #[template(path = "home.html")]
 struct HomePage {
+    i18n: Lang,
     user: Option<HomeUser>,
+    notices: Vec<Msg>,
 }
 
-fn render(t: impl Template) -> Response {
+fn render(t: impl Template, lang: Lang) -> Response {
     match t.render() {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             tracing::error!(error = %e, "lỗi dựng trang");
-            (StatusCode::INTERNAL_SERVER_ERROR, "Lỗi dựng trang").into_response()
+            (StatusCode::INTERNAL_SERVER_ERROR, lang.t("error.render")).into_response()
         }
     }
 }
@@ -105,73 +123,106 @@ fn with_cookies(mut res: Response, set_cookies: &[HeaderValue]) -> Response {
     res
 }
 
-fn links_for(kind: FlowKind) -> Vec<(String, String)> {
-    let l = |h: &str, t: &str| (h.to_owned(), t.to_owned());
+fn links_for(lang: Lang, kind: FlowKind) -> Vec<(String, String)> {
+    let l = |h: &str, k: &str| (h.to_owned(), lang.t(k).to_owned());
     match kind {
         FlowKind::Login => vec![
-            l("/registration", "Chưa có tài khoản? Đăng ký"),
-            l("/recovery", "Quên mật khẩu?"),
+            l("/registration", "link.no_account"),
+            l("/recovery", "link.forgot"),
         ],
-        FlowKind::Registration => vec![l("/login", "Đã có tài khoản? Đăng nhập")],
-        FlowKind::Recovery | FlowKind::Verification => vec![l("/login", "Về trang đăng nhập")],
-        FlowKind::Settings => vec![l("/", "Về trang chủ")],
+        FlowKind::Registration => vec![l("/login", "link.have_account")],
+        FlowKind::Recovery | FlowKind::Verification => vec![l("/login", "link.back_login")],
+        FlowKind::Settings => vec![
+            l("/", "link.back_home"),
+            l("/sessions", "link.sessions"),
+            l("/account/delete", "link.delete_account"),
+        ],
     }
 }
 
-fn error_page(text: &str) -> Response {
-    render(MessagePage {
-        title: "Có lỗi xảy ra".into(),
-        messages: vec![Msg::error(text)],
-        links: vec![("/".into(), "Về trang chủ".into())],
-    })
+fn error_page(lang: Lang, text: &str) -> Response {
+    render(
+        MessagePage {
+            i18n: lang,
+            title: lang.t("error.title").into(),
+            messages: vec![Msg::error(text)],
+            links: vec![("/".into(), lang.t("link.back_home").into())],
+        },
+        lang,
+    )
 }
 
-fn unavailable(e: impl std::fmt::Display) -> Response {
+fn unavailable(lang: Lang, e: impl std::fmt::Display) -> Response {
     tracing::error!(error = %e, "không gọi được Kratos");
-    let mut res = error_page("Dịch vụ tài khoản đang tạm gián đoạn. Vui lòng thử lại sau ít phút.");
+    let mut res = error_page(lang, lang.t("error.unavailable"));
     *res.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
     res
 }
 
-fn flow_page(state: &AppState, kind: FlowKind, flow: &Value, challenge_required: bool) -> Response {
+fn flow_page(
+    state: &AppState,
+    lang: Lang,
+    kind: FlowKind,
+    flow: &Value,
+    challenge_required: bool,
+) -> Response {
     let challenge = challenge_required.then(|| ChallengeBox {
         field: challenge::FIELD,
         value: state.challenge.test_value(),
-        label: state.challenge.label(),
+        label: state.challenge.label(lang),
     });
-    render(FlowPage {
-        view: flow_view(kind, flow),
-        challenge,
-        links: links_for(kind),
-    })
+    render(
+        FlowPage {
+            i18n: lang,
+            view: flow_view(lang, kind, flow),
+            challenge,
+            links: links_for(lang, kind),
+        },
+        lang,
+    )
 }
 
 /// Thông báo sau khi gửi biểu mẫu đăng ký. Giống hệt nhau cho email mới và email đã có
 /// tài khoản (spec account-identity, "Email đã được dùng").
-fn registration_sent_page(email: &str) -> Response {
-    render(MessagePage {
-        title: "Hãy kiểm tra email".into(),
-        messages: vec![Msg::info(format!(
-            "Chúng tôi đã gửi email tới {email}. Hãy mở liên kết trong email để xác minh \
-             tài khoản (liên kết có hạn 24 giờ), rồi đăng nhập."
-        ))],
-        links: vec![("/login".into(), "Đăng nhập".into())],
-    })
+fn registration_sent_page(lang: Lang, email: &str) -> Response {
+    render(
+        MessagePage {
+            i18n: lang,
+            title: lang.t("reg.sent.title").into(),
+            messages: vec![Msg::info(lang.t("reg.sent.body").replace("{email}", email))],
+            links: vec![("/login".into(), lang.t("home.login").into())],
+        },
+        lang,
+    )
+}
+
+fn init_options(q: &FlowQuery) -> InitOptions {
+    InitOptions {
+        return_to: q.return_to.clone(),
+        aal: q.aal.clone().filter(|a| a == "aal2"),
+        refresh: q.refresh.unwrap_or(false),
+    }
 }
 
 /// GET trang của một luồng. Chưa có luồng thì để Kratos tạo luồng mới.
 pub async fn show_flow(
     kind: FlowKind,
     State(state): State<Arc<AppState>>,
+    lang: Lang,
     Query(q): Query<FlowQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let Some(id) = q.flow else {
-        let url = state.kratos.browser_init_url(kind, q.return_to.as_deref());
-        return redirect(url.as_str(), &[]);
+    let Some(id) = q.flow.clone() else {
+        return redirect(
+            state
+                .kratos
+                .browser_init_url(kind, &init_options(&q))
+                .as_str(),
+            &[],
+        );
     };
     match state.kratos.get_flow(kind, &id, cookie(&headers)).await {
-        Err(e) => unavailable(e),
+        Err(e) => unavailable(lang, e),
         Ok(r) if r.status == StatusCode::OK => {
             let challenge = kind == FlowKind::Login
                 && login_identifier_from_flow(&r.body).is_some_and(|id| {
@@ -180,15 +231,19 @@ pub async fn show_flow(
                         .status(&id, Instant::now())
                         .challenge_required
                 });
-            flow_page(&state, kind, &r.body, challenge)
+            flow_page(&state, lang, kind, &r.body, challenge)
         }
         // Luồng hết hạn, không tồn tại, hoặc thiếu cookie CSRF: bắt đầu luồng mới.
-        Ok(r) if matches!(r.status.as_u16(), 403 | 404 | 410) => {
-            redirect(state.kratos.browser_init_url(kind, None).as_str(), &[])
-        }
+        Ok(r) if matches!(r.status.as_u16(), 403 | 404 | 410) => redirect(
+            state
+                .kratos
+                .browser_init_url(kind, &InitOptions::default())
+                .as_str(),
+            &[],
+        ),
         Ok(r) => {
             tracing::warn!(status = %r.status, kind = kind.path(), "Kratos trả mã không mong đợi khi lấy luồng");
-            error_page("Không mở được biểu mẫu. Vui lòng thử lại.")
+            error_page(lang, lang.t("error.form"))
         }
     }
 }
@@ -213,7 +268,9 @@ fn field<'a>(form: &'a [(String, String)], name: &str) -> Option<&'a str> {
 pub async fn submit_flow(
     kind: FlowKind,
     State(state): State<Arc<AppState>>,
+    lang: Lang,
     Query(q): Query<FlowQuery>,
+    client: ClientInfo,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
@@ -226,7 +283,7 @@ pub async fn submit_flow(
     form.retain(|(k, _)| !k.starts_with("feco_"));
     let cookie = cookie(&headers);
 
-    // --- Đăng nhập: làm chậm và thử thách chống bot trước khi chuyển tới Kratos.
+    // --- Đăng nhập bằng mật khẩu: làm chậm và thử thách chống bot trước khi chuyển tới Kratos.
     let identifier = (kind == FlowKind::Login)
         .then(|| field(&form, "identifier").map(str::to_owned))
         .flatten();
@@ -238,14 +295,19 @@ pub async fn submit_flow(
                     let mut flow = r.body;
                     if let Some(msgs) = flow["ui"]["messages"].as_array_mut() {
                         msgs.push(serde_json::json!({
-                            "id": 0, "type": "error",
-                            "text": "Có nhiều lần đăng nhập sai vào tài khoản này. Hãy xác nhận bạn không phải robot rồi thử lại."
+                            "id": 0, "type": "error", "text": lang.t("challenge.needed")
                         }));
                     }
-                    flow_page(&state, kind, &flow, true)
+                    flow_page(&state, lang, kind, &flow, true)
                 }
-                Ok(_) => redirect(state.kratos.browser_init_url(kind, None).as_str(), &[]),
-                Err(e) => unavailable(e),
+                Ok(_) => redirect(
+                    state
+                        .kratos
+                        .browser_init_url(kind, &InitOptions::default())
+                        .as_str(),
+                    &[],
+                ),
+                Err(e) => unavailable(lang, e),
             };
         }
         if !status.delay.is_zero() {
@@ -253,15 +315,28 @@ pub async fn submit_flow(
         }
     }
 
-    let r = match state.kratos.submit(kind, &id, cookie, &form).await {
+    let r = match state.kratos.submit(kind, &id, cookie, &form, &client).await {
         Ok(r) => r,
-        Err(e) => return unavailable(e),
+        Err(e) => return unavailable(lang, e),
     };
-    handle_submit_response(&state, kind, &form, identifier.as_deref(), r).await
+    handle_submit_response(&state, lang, kind, &form, identifier.as_deref(), r).await
+}
+
+/// Địa chỉ Kratos muốn đưa trình duyệt tới sau khi đăng nhập (`return_to`), nếu nó
+/// nằm trong chính feco-server.
+fn post_login_target(state: &AppState, body: &Value) -> Option<String> {
+    body["continue_with"]
+        .as_array()?
+        .iter()
+        .find(|c| c["action"] == "redirect_browser_to")
+        .and_then(|c| c["redirect_browser_to"].as_str())
+        .filter(|to| to.starts_with(state.public_url.as_str()))
+        .map(str::to_owned)
 }
 
 async fn handle_submit_response(
     state: &Arc<AppState>,
+    lang: Lang,
     kind: FlowKind,
     form: &[(String, String)],
     identifier: Option<&str>,
@@ -273,17 +348,28 @@ async fn handle_submit_response(
             if let Some(ident) = identifier {
                 state.throttle.reset(ident);
             }
-            redirect("/", &r.set_cookies)
+            let mut target = post_login_target(state, &r.body).unwrap_or_else(|| "/".into());
+            // Spec: đăng nhập lại trong 30 ngày chờ thì hủy yêu cầu xóa tài khoản.
+            if let Some(id) = r.body["session"]["identity"]["id"].as_str() {
+                match account::cancel_deletion_if_pending(&state.kratos, id).await {
+                    Ok(true) => target = "/?notice=deletion_cancelled".into(),
+                    Ok(false) => {}
+                    Err(e) => {
+                        tracing::error!(error = %e, "không kiểm tra được yêu cầu xóa tài khoản")
+                    }
+                }
+            }
+            redirect(&target, &r.set_cookies)
         }
         (200, FlowKind::Registration) => {
             let email = field(form, "traits.email").unwrap_or_default();
-            with_cookies(registration_sent_page(email), &r.set_cookies)
+            with_cookies(registration_sent_page(lang, email), &r.set_cookies)
         }
-        (200, _) => with_cookies(flow_page(state, kind, &r.body, false), &r.set_cookies),
+        (200, _) => with_cookies(flow_page(state, lang, kind, &r.body, false), &r.set_cookies),
         (400, FlowKind::Registration) if msg_ids.contains(&ids::DUPLICATE_IDENTIFIER) => {
             let email = field(form, "traits.email").unwrap_or_default().to_owned();
             notify_registration_attempt(state, email.clone());
-            with_cookies(registration_sent_page(&email), &r.set_cookies)
+            with_cookies(registration_sent_page(lang, &email), &r.set_cookies)
         }
         (400, FlowKind::Login) => {
             let mut challenge = false;
@@ -294,23 +380,26 @@ async fn handle_submit_response(
                     notify_failed_logins(state, ident.to_owned());
                 }
             }
-            with_cookies(flow_page(state, kind, &r.body, challenge), &r.set_cookies)
+            with_cookies(
+                flow_page(state, lang, kind, &r.body, challenge),
+                &r.set_cookies,
+            )
         }
-        (400, _) => with_cookies(flow_page(state, kind, &r.body, false), &r.set_cookies),
+        (400, _) => with_cookies(flow_page(state, lang, kind, &r.body, false), &r.set_cookies),
         (410, _) => redirect(
-            state.kratos.browser_init_url(kind, None).as_str(),
+            state
+                .kratos
+                .browser_init_url(kind, &InitOptions::default())
+                .as_str(),
             &r.set_cookies,
         ),
         (422, _) => match r.body["redirect_browser_to"].as_str() {
             Some(to) => redirect(to, &r.set_cookies),
-            None => error_page("Không hoàn tất được yêu cầu. Vui lòng thử lại."),
+            None => error_page(lang, lang.t("error.submit")),
         },
         (status, _) => {
             tracing::warn!(status, kind = kind.path(), body = %r.body, "Kratos trả mã không mong đợi");
-            with_cookies(
-                error_page("Không hoàn tất được yêu cầu. Vui lòng thử lại."),
-                &r.set_cookies,
-            )
+            with_cookies(error_page(lang, lang.t("error.submit")), &r.set_cookies)
         }
     }
 }
@@ -344,11 +433,28 @@ fn notify_registration_attempt(state: &Arc<AppState>, email: String) {
 }
 
 /// Trang chủ: cho biết đã đăng nhập chưa và email đã xác minh chưa.
-pub async fn home(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+pub async fn home(
+    State(state): State<Arc<AppState>>,
+    lang: Lang,
+    Query(q): Query<HomeQuery>,
+    headers: HeaderMap,
+) -> Response {
+    let notices = match q.notice.as_deref() {
+        Some("deletion_cancelled") => vec![Msg::success(lang.t("home.deletion_cancelled"))],
+        _ => vec![],
+    };
     match state.kratos.whoami(cookie(&headers)).await {
-        Err(e) => unavailable(e),
-        Ok(None) => render(HomePage { user: None }),
-        Ok(Some(session)) => {
+        Err(e) => unavailable(lang, e),
+        Ok(Whoami::NeedsSecondFactor(to)) => redirect(&to, &[]),
+        Ok(Whoami::Anonymous) => render(
+            HomePage {
+                i18n: lang,
+                user: None,
+                notices,
+            },
+            lang,
+        ),
+        Ok(Whoami::Session(session)) => {
             let identity = &session["identity"];
             let email = identity["traits"]["email"]
                 .as_str()
@@ -359,57 +465,82 @@ pub async fn home(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Res
                 .into_iter()
                 .flatten()
                 .any(|a| a["value"].as_str() == Some(email.as_str()) && a["verified"] == true);
-            render(HomePage {
-                user: Some(HomeUser {
-                    name: identity["traits"]["name"]
-                        .as_str()
-                        .unwrap_or_default()
-                        .to_owned(),
-                    email,
-                    verified,
-                }),
-            })
+            render(
+                HomePage {
+                    i18n: lang,
+                    user: Some(HomeUser {
+                        name: identity["traits"]["name"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_owned(),
+                        email,
+                        verified,
+                    }),
+                    notices,
+                },
+                lang,
+            )
         }
     }
 }
 
-pub async fn logout(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+pub async fn logout(
+    State(state): State<Arc<AppState>>,
+    lang: Lang,
+    headers: HeaderMap,
+) -> Response {
     match state.kratos.logout_url(cookie(&headers)).await {
         Ok(Some(url)) => redirect(&url, &[]),
         Ok(None) => redirect("/", &[]),
-        Err(e) => unavailable(e),
+        Err(e) => unavailable(lang, e),
     }
 }
 
-pub async fn error(State(state): State<Arc<AppState>>, Query(q): Query<ErrorQuery>) -> Response {
+pub async fn error(
+    State(state): State<Arc<AppState>>,
+    lang: Lang,
+    Query(q): Query<ErrorQuery>,
+) -> Response {
     let Some(id) = q.id else {
-        return error_page("Đã có lỗi xảy ra.");
+        return error_page(lang, lang.t("error.generic"));
     };
     match state.kratos.error(&id).await {
         Ok(e) => {
+            tracing::warn!(error = %e, "lỗi tự phục vụ của Kratos");
             let reason = e["error"]["reason"]
                 .as_str()
                 .or_else(|| e["error"]["message"].as_str())
-                .unwrap_or("Đã có lỗi xảy ra.");
-            tracing::warn!(error = %e, "lỗi tự phục vụ của Kratos");
-            error_page(reason)
+                .map(str::to_owned)
+                .unwrap_or_else(|| lang.t("error.generic").to_owned());
+            error_page(lang, &reason)
         }
-        Err(err) => unavailable(err),
+        Err(err) => unavailable(lang, err),
     }
+}
+
+/// GET /lang/{vi|en}?next=/đường-dẫn — đổi ngôn ngữ giao diện (lưu cookie 1 năm).
+pub async fn set_lang(Path(code): Path<String>, Query(q): Query<LangQuery>) -> Response {
+    let lang = Lang::parse(&code).unwrap_or_default();
+    // Chỉ quay về đường dẫn nội bộ, tránh chuyển hướng mở.
+    let next = q
+        .next
+        .filter(|n| n.starts_with('/') && !n.starts_with("//"))
+        .unwrap_or_else(|| "/".into());
+    let cookie = format!(
+        "{}={}; Path=/; Max-Age=31536000; SameSite=Lax",
+        i18n::COOKIE,
+        lang.code()
+    );
+    redirect(
+        &next,
+        &[HeaderValue::from_str(&cookie).expect("cookie hợp lệ")],
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn registration_message_is_identical_for_new_and_existing_emails() {
-        // Cả hai nhánh (đăng ký mới và email trùng) đều gọi cùng một hàm dựng trang.
-        let a = registration_sent_page("lan@example.com");
-        let b = registration_sent_page("lan@example.com");
-        assert_eq!(a.status(), b.status());
-    }
 
     #[test]
     fn identifier_is_read_from_login_flow() {
@@ -422,5 +553,43 @@ mod tests {
             Some("lan@example.com")
         );
         assert_eq!(login_identifier_from_flow(&json!({})), None);
+    }
+
+    #[test]
+    fn only_aal2_is_passed_through() {
+        let q = FlowQuery {
+            aal: Some("aal3".into()),
+            ..Default::default()
+        };
+        assert_eq!(init_options(&q).aal, None);
+        let q = FlowQuery {
+            aal: Some("aal2".into()),
+            ..Default::default()
+        };
+        assert_eq!(init_options(&q).aal.as_deref(), Some("aal2"));
+    }
+
+    #[tokio::test]
+    async fn set_lang_rejects_open_redirects() {
+        let res = set_lang(
+            Path("en".into()),
+            Query(LangQuery {
+                next: Some("//evil.example".into()),
+            }),
+        )
+        .await;
+        assert_eq!(res.headers()["location"], "/");
+        assert!(res.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .starts_with("feco_lang=en"));
+        let res = set_lang(
+            Path("vi".into()),
+            Query(LangQuery {
+                next: Some("/settings".into()),
+            }),
+        )
+        .await;
+        assert_eq!(res.headers()["location"], "/settings");
     }
 }

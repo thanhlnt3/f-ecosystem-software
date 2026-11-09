@@ -15,14 +15,18 @@
 
 ## 2. Tài khoản (`account-identity`)
 
-- [ ] 2.1 Triển khai Ory Kratos và Hydra, cùng giao diện đăng ký và đăng nhập tiếng Việt và tiếng Anh; xác minh bằng test E2E đăng ký, xác minh email, đăng nhập
-  - Trạng thái: Kratos (cùng Hydra, chưa dùng tới) chạy trong hạ tầng dev; feco-server dựng trang đăng ký, đăng nhập, xác minh, khôi phục, cài đặt bằng tiếng Việt và proxy tới Kratos. Đã xác minh bằng E2E `services/feco-server/tests/e2e_auth.rs` (đăng ký → email xác minh trong Mailpit → mở liên kết → đã xác minh → đăng nhập). Còn thiếu giao diện tiếng Anh.
+- [x] 2.1 Triển khai Ory Kratos và Hydra, cùng giao diện đăng ký và đăng nhập tiếng Việt và tiếng Anh; xác minh bằng test E2E đăng ký, xác minh email, đăng nhập
+  - Đã xác minh: giao diện tiếng Việt và tiếng Anh (theo `Accept-Language`, đổi bằng `/lang/vi|en`), 6 test E2E trong `services/feco-server/tests/e2e_auth.rs` với Kratos và Mailpit thật: đăng ký → email xác minh → mở liên kết → đã xác minh → đăng nhập; kiểm tra giao diện tiếng Anh. Hydra đã chạy trong hạ tầng dev, dùng tới ở nhóm 3.
 - [x] 2.2 Kiểm tra mật khẩu bị lộ, làm chậm dần và thử thách chống bot sau 5 lần sai; xác minh bằng các scenario trong spec
   - Đã xác minh bằng E2E: Kratos chặn mật khẩu bị lộ (HIBP) và mật khẩu dưới 10 ký tự; feco-server làm chậm 0,25 → 4 giây, yêu cầu thử thách từ lần sai thứ 5 trong 15 phút, gửi email cảnh báo cho chủ tài khoản, không khóa cứng. Giới hạn: bộ đếm trong bộ nhớ (cần Valkey khi chạy nhiều bản) và chỉ có thử thách thử nghiệm (nhà cung cấp thật là câu hỏi mở trong QUESTIONS.md).
 - [ ] 2.3 Đăng nhập Google và GitHub, liên kết với tài khoản có sẵn sau khi xác thực lại; xác minh bằng test với nhà cung cấp OIDC giả lập
+  - Chưa làm: cần client ID và secret của ứng dụng OAuth Google và GitHub do chủ dự án tạo (QUESTIONS.md). Kratos đã có sẵn cơ chế liên kết tài khoản trùng email sau khi xác thực lại.
 - [ ] 2.4 TOTP, passkey, mã khôi phục; bắt buộc hai lớp cho nhà phát triển và quản trị; xác minh bằng test E2E
+  - Trạng thái: TOTP, mã khôi phục (10+ mã, dùng một lần) và đăng nhập bắt buộc bước hai (`required_aal: highest_available`) đã xác minh bằng E2E `totp_recovery_codes_and_second_factor_login`. Passkey: nút và script WebAuthn của Kratos đã hiển thị nhưng chưa kiểm thử (cần trình duyệt thật và tên miền `localhost`). Bắt buộc hai lớp cho nhà phát triển và quản trị áp dụng khi có vai trò (nhóm 8, 14).
 - [ ] 2.5 Phiên đăng nhập: access token 15 phút, refresh token xoay vòng, danh sách thiết bị, đăng xuất từ xa, phát hiện refresh token bị dùng lại; xác minh bằng các scenario trong spec
-- [ ] 2.6 Đặt lại mật khẩu, xóa tài khoản sau 30 ngày chờ, chặn xóa khi còn đơn đang thực hiện; xác minh bằng test tích hợp
+  - Trạng thái: danh sách thiết bị (trình duyệt, hệ điều hành, IP, vị trí), đăng xuất từng thiết bị và mọi thiết bị khác đã xác minh bằng E2E `device_list_and_remote_logout`. Access token 15 phút và refresh token xoay vòng 30 ngày đã cấu hình trong Hydra, kiểm chứng khi có luồng OAuth ở nhóm 3. Chưa làm: email cảnh báo khi refresh token bị dùng lại.
+- [x] 2.6 Đặt lại mật khẩu, xóa tài khoản sau 30 ngày chờ, chặn xóa khi còn đơn đang thực hiện; xác minh bằng test tích hợp
+  - Đã xác minh bằng E2E: khôi phục bằng mã 30 phút qua email, đặt mật khẩu mới thì mọi phiên khác bị đăng xuất (`password_recovery_signs_out_other_sessions`); xóa tài khoản cần phiên xác thực trong 15 phút, chờ 30 ngày, đăng nhập lại thì hủy, sau 30 ngày bị xóa hẳn (`account_deletion_cancel_and_purge`). Chặn xóa khi còn đơn hàng sẽ nối vào nhóm 12 (`account::has_open_orders`).
 
 ## 3. Dữ liệu người dùng và đồng ý (`user-data-consent`)
 

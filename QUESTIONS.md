@@ -14,3 +14,11 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
    Cần xác nhận, hoặc sửa spec cho khớp.
 3. **Bộ đếm đăng nhập sai nằm trong bộ nhớ.** Đúng khi chạy một bản feco-server. Khi chạy
    nhiều bản cần chuyển sang Valkey (đã có trong hạ tầng dev).
+4. **Đăng nhập Google và GitHub (task 2.3).** Cần chủ dự án tạo ứng dụng OAuth trên Google
+   Cloud Console và GitHub (Settings → Developer settings → OAuth Apps), với địa chỉ chuyển
+   hướng `http://127.0.0.1:4433/self-service/methods/oidc/callback/google` (và `.../github`)
+   cho dev, rồi cung cấp client ID và secret qua biến môi trường. Không đưa secret vào mã nguồn.
+5. **Passkey khi phát triển.** WebAuthn không chạy trên địa chỉ IP, nên muốn thử passkey ở máy
+   cần chuyển dev sang tên miền `localhost` (Kratos, feco-server, cookie). Có làm ngay không?
+6. **Kratos ở staging và production dùng PostgreSQL.** Dev và CI dùng SQLite trong bộ nhớ, vốn
+   báo "database table is locked" khi ghi đồng thời (test E2E vì vậy chạy lần lượt).

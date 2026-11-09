@@ -3,29 +3,40 @@
 {% block content %}
 <h1>{{ view.title }}</h1>
 {% for m in view.messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
-{% for t in view.texts %}<p><code>{{ t }}</code></p>{% endfor %}
-{% for src in view.images %}<img class="qr" src="{{ src }}" alt="Mã QR">{% endfor %}
-<form method="post" action="{{ view.form_action }}" novalidate>
-  {% for (name, value) in view.hidden %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
-  {% for f in view.fields %}
-    <label for="f-{{ f.name }}">{{ f.label }}</label>
-    {% if f.options.is_empty() %}
-      <input id="f-{{ f.name }}" name="{{ f.name }}" type="{{ f.input_type }}" value="{{ f.value }}"{% if f.required %} required{% endif %}{% if !f.autocomplete.is_empty() %} autocomplete="{{ f.autocomplete }}"{% endif %}>
+{% for form in view.forms %}
+<form method="post" action="{{ form.action }}" novalidate data-group="{{ form.group }}">
+  {% if view.forms.len() > 1 && !form.title.is_empty() %}<h2>{{ form.title }}</h2>{% endif %}
+  {% for (name, value) in form.hidden %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+  {% for src in form.images %}<img class="qr" src="{{ src }}" alt="QR">{% endfor %}
+  {% for t in form.texts %}
+    {% if t.lines.len() > 1 %}
+      <p>{{ t.label }}</p>
+      <ul class="codes" id="{{ t.id }}">{% for line in t.lines %}<li>{{ line }}</li>{% endfor %}</ul>
     {% else %}
-      <select id="f-{{ f.name }}" name="{{ f.name }}">
+      <p>{{ t.label }}<br><code id="{{ t.id }}">{% for line in t.lines %}{{ line }}{% endfor %}</code></p>
+    {% endif %}
+  {% endfor %}
+  {% for f in form.fields %}
+    <label for="f-{{ form.group }}-{{ f.name }}">{{ f.label }}</label>
+    {% if f.options.is_empty() %}
+      <input id="f-{{ form.group }}-{{ f.name }}" name="{{ f.name }}" type="{{ f.input_type }}" value="{{ f.value }}"{% if f.required %} required{% endif %}{% if !f.autocomplete.is_empty() %} autocomplete="{{ f.autocomplete }}"{% endif %}>
+    {% else %}
+      <select id="f-{{ form.group }}-{{ f.name }}" name="{{ f.name }}">
         {% for o in f.options %}<option value="{{ o.value }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>{% endfor %}
       </select>
     {% endif %}
     {% for m in f.messages %}<div class="field-msg {{ m.kind }}">{{ m.text }}</div>{% endfor %}
   {% endfor %}
-  {% if let Some(c) = challenge %}
+  {% if form.group == "password" %}{% if let Some(c) = challenge %}
     <div class="challenge">
       <input id="f-challenge" type="checkbox" name="{{ c.field }}" value="{{ c.value }}">
       <label for="f-challenge" style="margin:0;font-weight:400">{{ c.label }}</label>
     </div>
-  {% endif %}
-  {% for b in view.buttons %}<button type="submit" name="{{ b.name }}" value="{{ b.value }}">{{ b.label }}</button>{% endfor %}
+  {% endif %}{% endif %}
+  {% for b in form.buttons %}<button type="{{ b.button_type }}" name="{{ b.name }}" value="{{ b.value }}"{% if !b.onclick.is_empty() %} onclick="{{ b.onclick }}"{% endif %}>{{ b.label }}</button>{% endfor %}
 </form>
+{% endfor %}
+{% for s in view.scripts %}<script src="{{ s.src }}"{% if !s.id.is_empty() %} id="{{ s.id }}"{% endif %}{% if !s.integrity.is_empty() %} integrity="{{ s.integrity }}"{% endif %}{% if !s.crossorigin.is_empty() %} crossorigin="{{ s.crossorigin }}"{% endif %}{% if !s.referrerpolicy.is_empty() %} referrerpolicy="{{ s.referrerpolicy }}"{% endif %}{% if s.is_async %} async{% endif %}></script>{% endfor %}
 <div class="links">
   {% for (href, label) in links %}<a href="{{ href }}">{{ label }}</a>{% endfor %}
 </div>

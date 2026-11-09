@@ -84,6 +84,12 @@ selfservice:
       # Không tự đăng nhập sau khi đăng ký: đăng ký mới và đăng ký trùng email phải
       # hiện cùng một thông báo (spec account-identity, "Email đã được dùng").
 
+session:
+  whoami:
+    # Người đã bật xác thực hai lớp phải qua bước thứ hai mới dùng được phiên
+    # (spec account-identity, "Xác thực hai lớp").
+    required_aal: highest_available
+
 log:
   level: info
   format: text

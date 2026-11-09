@@ -1,8 +1,11 @@
 //! Dịch vụ HTTP của F-Eco: kiểm tra sức khỏe và các trang tài khoản (nhóm task 2).
 //! Các API khác (danh mục, đơn hàng, thanh toán) được thêm theo từng nhóm task.
 
+pub mod account;
 pub mod auth;
 pub mod challenge;
+pub mod csrf;
+pub mod i18n;
 pub mod kratos;
 pub mod mailer;
 pub mod throttle;
@@ -14,7 +17,7 @@ use axum::{
     body::Bytes,
     extract::{Query, State},
     http::HeaderMap,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use feco_config::Config;
@@ -25,6 +28,7 @@ use url::Url;
 use crate::{
     auth::FlowQuery,
     challenge::Challenge,
+    i18n::Lang,
     kratos::{FlowKind, KratosClient},
     mailer::{MailError, Mailer},
     throttle::LoginThrottle,
@@ -73,14 +77,17 @@ fn flow_routes(router: Router<Arc<AppState>>, kind: FlowKind) -> Router<Arc<AppS
     router.route(
         &format!("/{}", kind.path()),
         get(
-            move |s: State<Arc<AppState>>, q: Query<FlowQuery>, h: HeaderMap| {
-                auth::show_flow(kind, s, q, h)
+            move |s: State<Arc<AppState>>, l: Lang, q: Query<FlowQuery>, h: HeaderMap| {
+                auth::show_flow(kind, s, l, q, h)
             },
         )
         .post(
-            move |s: State<Arc<AppState>>, q: Query<FlowQuery>, h: HeaderMap, b: Bytes| {
-                auth::submit_flow(kind, s, q, h, b)
-            },
+            move |s: State<Arc<AppState>>,
+                  l: Lang,
+                  q: Query<FlowQuery>,
+                  c: kratos::ClientInfo,
+                  h: HeaderMap,
+                  b: Bytes| { auth::submit_flow(kind, s, l, q, c, h, b) },
         ),
     )
 }
@@ -90,7 +97,15 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(healthz))
         .route("/", get(auth::home))
         .route("/logout", get(auth::logout))
-        .route("/error", get(auth::error));
+        .route("/error", get(auth::error))
+        .route("/lang/{code}", get(auth::set_lang))
+        .route("/sessions", get(account::sessions))
+        .route("/sessions/revoke-others", post(account::revoke_others))
+        .route("/sessions/{id}/revoke", post(account::revoke))
+        .route(
+            "/account/delete",
+            get(account::delete_form).post(account::delete_submit),
+        );
     for kind in [
         FlowKind::Login,
         FlowKind::Registration,

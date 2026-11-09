@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("sessions.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("sessions.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<table id="sessions">
+{% for r in rows %}
+  <tr data-session="{{ r.id }}"{% if r.current %} data-current="true"{% endif %}>
+    <td>
+      <strong>{{ r.device }}</strong>{% if r.current %} · {{ i18n.t("sessions.current") }}{% endif %}<br>
+      <span class="muted">{{ i18n.t("sessions.signed_in_at") }}: {{ r.signed_in_at }}<br>
+      {{ i18n.t("sessions.ip") }}: {{ r.ip }} · {{ i18n.t("sessions.location") }}: {{ r.location }}</span>
+    </td>
+    <td class="row-actions">
+      {% if !r.current %}
+      <form method="post" action="/sessions/{{ r.id }}/revoke">
+        <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+        <button type="submit">{{ i18n.t("sessions.revoke") }}</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+{% endfor %}
+</table>
+{% if rows.len() > 1 %}
+<form method="post" action="/sessions/revoke-others">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <button type="submit">{{ i18n.t("sessions.revoke_others") }}</button>
+</form>
+{% else %}
+<p class="muted">{{ i18n.t("sessions.none") }}</p>
+{% endif %}
+<div class="links"><a href="/">{{ i18n.t("link.back_home") }}</a></div>
+{% endblock %}

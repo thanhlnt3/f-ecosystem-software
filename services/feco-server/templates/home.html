@@ -1,25 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Trang chủ{% endblock %}
+{% block title %}{{ i18n.t("home.title") }}{% endblock %}
 {% block content %}
+{% for m in notices %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
 {% if let Some(u) = user %}
-  <h1>Xin chào{% if !u.name.is_empty() %}, {{ u.name }}{% endif %}</h1>
+  <h1>{{ i18n.t("home.hello") }}{% if !u.name.is_empty() %}, {{ u.name }}{% endif %}</h1>
   <p>Email: <strong id="email">{{ u.email }}</strong></p>
   {% if u.verified %}
-    <div class="msg success" id="verify-status">Email đã xác minh.</div>
+    <div class="msg success" id="verify-status">{{ i18n.t("home.verified") }}</div>
   {% else %}
-    <div class="msg info" id="verify-status">Email chưa xác minh. Bạn cần xác minh email trước khi mua hàng, đặt đơn xây app hay đăng ký nhà phát triển.</div>
+    <div class="msg info" id="verify-status">{{ i18n.t("home.unverified") }}</div>
   {% endif %}
   <div class="links">
-    {% if !u.verified %}<a href="/verification">Gửi lại email xác minh</a>{% endif %}
-    <a href="/settings">Cài đặt tài khoản</a>
-    <a href="/logout">Đăng xuất</a>
+    {% if !u.verified %}<a href="/verification">{{ i18n.t("home.resend") }}</a>{% endif %}
+    <a href="/settings">{{ i18n.t("home.settings") }}</a>
+    <a href="/sessions">{{ i18n.t("home.sessions") }}</a>
+    <a href="/logout">{{ i18n.t("home.logout") }}</a>
   </div>
 {% else %}
-  <h1>Chào mừng tới F-Eco</h1>
-  <p class="muted">Một tài khoản cho mọi app con trong hệ sinh thái F-Eco.</p>
+  <h1>{{ i18n.t("home.welcome") }}</h1>
+  <p class="muted">{{ i18n.t("home.tagline") }}</p>
   <div class="links">
-    <a href="/login">Đăng nhập</a>
-    <a href="/registration">Đăng ký</a>
+    <a href="/login">{{ i18n.t("home.login") }}</a>
+    <a href="/registration">{{ i18n.t("home.register") }}</a>
   </div>
 {% endif %}
 {% endblock %}

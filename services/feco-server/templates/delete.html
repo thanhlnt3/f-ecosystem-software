@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("delete.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("delete.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<p>{{ i18n.t("delete.body") }}</p>
+<form method="post" action="/account/delete">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <div class="challenge">
+    <input id="f-confirm" type="checkbox" name="confirm" value="yes">
+    <label for="f-confirm" style="margin:0;font-weight:400">{{ i18n.t("delete.confirm") }}</label>
+  </div>
+  <button type="submit" class="danger">{{ i18n.t("delete.button") }}</button>
+</form>
+<div class="links"><a href="/settings">{{ i18n.t("link.back_home") }}</a></div>
+{% endblock %}

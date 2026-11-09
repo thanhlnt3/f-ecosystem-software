@@ -6,6 +6,8 @@
 
 use feco_config::ChallengeProvider;
 
+use crate::i18n::Lang;
+
 /// Tên trường biểu mẫu chứa kết quả thử thách. Trường này không được chuyển tới Kratos.
 pub const FIELD: &str = "feco_challenge";
 const TEST_PASS: &str = "pass";
@@ -30,11 +32,9 @@ impl Challenge {
     }
 
     /// Nhãn của ô thử thách trên biểu mẫu.
-    pub fn label(&self) -> &'static str {
+    pub fn label(&self, lang: Lang) -> &'static str {
         match self {
-            Challenge::Test => {
-                "Tôi không phải robot (thử thách thử nghiệm, chỉ có ở môi trường dev)"
-            }
+            Challenge::Test => lang.t("challenge.test_label"),
         }
     }
 
