@@ -21,12 +21,18 @@ allow = [
     "CC0-1.0",
     "MPL-2.0",
     "PostgreSQL",
+    "0BSD",
 ]
 
 [advisories]
 # Lỗ hổng đã biết trong phụ thuộc làm CI thất bại (platform-security, "Kiểm thử bảo mật").
 yanked = "deny"
-ignore = []
+ignore = [
+    # basic-toml chỉ chạy lúc biên dịch, trong askama_derive, để đọc askama.toml (dự án
+    # không có file này). Đây là cảnh báo "ngừng bảo trì", không phải lỗ hổng. Gỡ khi
+    # askama bỏ phụ thuộc này. Người duyệt: chủ dự án, 2026-11-09.
+    { id = "RUSTSEC-2026-0374", reason = "basic-toml chỉ dùng lúc biên dịch trong askama_derive" },
+]
 
 [bans]
 multiple-versions = "warn"

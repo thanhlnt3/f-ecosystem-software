@@ -74,6 +74,10 @@ jobs:
           grep -q '"pairwise"' oidc.json
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: E2E tài khoản với Kratos và Mailpit (tasks.md 2.1, 2.2)
+        env:
+          FECO_E2E: "1"
+        run: cargo test -p feco-server --test e2e_auth -- --nocapture
       - name: feco-server chạy và trả lời /healthz
         env:
           FECO_ENV: dev

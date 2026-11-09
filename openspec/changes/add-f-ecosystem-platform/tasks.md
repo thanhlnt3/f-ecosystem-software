@@ -16,7 +16,9 @@
 ## 2. Tài khoản (`account-identity`)
 
 - [ ] 2.1 Triển khai Ory Kratos và Hydra, cùng giao diện đăng ký và đăng nhập tiếng Việt và tiếng Anh; xác minh bằng test E2E đăng ký, xác minh email, đăng nhập
-- [ ] 2.2 Kiểm tra mật khẩu bị lộ, làm chậm dần và thử thách chống bot sau 5 lần sai; xác minh bằng các scenario trong spec
+  - Trạng thái: Kratos (cùng Hydra, chưa dùng tới) chạy trong hạ tầng dev; feco-server dựng trang đăng ký, đăng nhập, xác minh, khôi phục, cài đặt bằng tiếng Việt và proxy tới Kratos. Đã xác minh bằng E2E `services/feco-server/tests/e2e_auth.rs` (đăng ký → email xác minh trong Mailpit → mở liên kết → đã xác minh → đăng nhập). Còn thiếu giao diện tiếng Anh.
+- [x] 2.2 Kiểm tra mật khẩu bị lộ, làm chậm dần và thử thách chống bot sau 5 lần sai; xác minh bằng các scenario trong spec
+  - Đã xác minh bằng E2E: Kratos chặn mật khẩu bị lộ (HIBP) và mật khẩu dưới 10 ký tự; feco-server làm chậm 0,25 → 4 giây, yêu cầu thử thách từ lần sai thứ 5 trong 15 phút, gửi email cảnh báo cho chủ tài khoản, không khóa cứng. Giới hạn: bộ đếm trong bộ nhớ (cần Valkey khi chạy nhiều bản) và chỉ có thử thách thử nghiệm (nhà cung cấp thật là câu hỏi mở trong QUESTIONS.md).
 - [ ] 2.3 Đăng nhập Google và GitHub, liên kết với tài khoản có sẵn sau khi xác thực lại; xác minh bằng test với nhà cung cấp OIDC giả lập
 - [ ] 2.4 TOTP, passkey, mã khôi phục; bắt buộc hai lớp cho nhà phát triển và quản trị; xác minh bằng test E2E
 - [ ] 2.5 Phiên đăng nhập: access token 15 phút, refresh token xoay vòng, danh sách thiết bị, đăng xuất từ xa, phát hiện refresh token bị dùng lại; xác minh bằng các scenario trong spec

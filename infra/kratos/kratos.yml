@@ -26,6 +26,17 @@ selfservice:
         issuer: F-Eco
     lookup_secret:
       enabled: true
+    # Liên kết xác minh email: hạn 24 giờ (spec account-identity, "Đăng ký bằng email").
+    link:
+      enabled: true
+      config:
+        lifespan: 24h
+    # Mã khôi phục mật khẩu gửi qua email: dùng một lần, hạn 30 phút
+    # (spec account-identity, "Khôi phục tài khoản").
+    code:
+      enabled: true
+      config:
+        lifespan: 30m
     webauthn:
       enabled: true
       config:
@@ -41,11 +52,19 @@ selfservice:
       ui_url: http://127.0.0.1:8080/settings
       privileged_session_max_age: 15m
       required_aal: highest_available
+      after:
+        password:
+          hooks:
+            - hook: revoke_active_sessions
     recovery:
       enabled: true
       ui_url: http://127.0.0.1:8080/recovery
       use: code
       lifespan: 30m
+      after:
+        hooks:
+          # Spec account-identity, "Khôi phục tài khoản": đăng xuất mọi phiên khác.
+          - hook: revoke_active_sessions
     verification:
       enabled: true
       ui_url: http://127.0.0.1:8080/verification
@@ -60,10 +79,10 @@ selfservice:
     registration:
       ui_url: http://127.0.0.1:8080/registration
       lifespan: 10m
-      after:
-        password:
-          hooks:
-            - hook: session
+      # Nhập email và mật khẩu trên cùng một màn hình.
+      enable_legacy_one_step: true
+      # Không tự đăng nhập sau khi đăng ký: đăng ký mới và đăng ký trùng email phải
+      # hiện cùng một thông báo (spec account-identity, "Email đã được dùng").
 
 log:
   level: info
@@ -83,6 +102,34 @@ identity:
       url: file:///etc/config/kratos/identity.schema.json
 
 courier:
+  # Mẫu email song ngữ Việt/Anh (infra/kratos/templates).
+  templates:
+    verification:
+      valid:
+        email:
+          subject: file:///etc/config/kratos/templates/verification/valid/email.subject.gotmpl
+          body:
+            html: file:///etc/config/kratos/templates/verification/valid/email.body.gotmpl
+            plaintext: file:///etc/config/kratos/templates/verification/valid/email.body.plaintext.gotmpl
+      invalid:
+        email:
+          subject: file:///etc/config/kratos/templates/verification/invalid/email.subject.gotmpl
+          body:
+            html: file:///etc/config/kratos/templates/verification/invalid/email.body.gotmpl
+            plaintext: file:///etc/config/kratos/templates/verification/invalid/email.body.plaintext.gotmpl
+    recovery_code:
+      valid:
+        email:
+          subject: file:///etc/config/kratos/templates/recovery_code/valid/email.subject.gotmpl
+          body:
+            html: file:///etc/config/kratos/templates/recovery_code/valid/email.body.gotmpl
+            plaintext: file:///etc/config/kratos/templates/recovery_code/valid/email.body.plaintext.gotmpl
+      invalid:
+        email:
+          subject: file:///etc/config/kratos/templates/recovery_code/invalid/email.subject.gotmpl
+          body:
+            html: file:///etc/config/kratos/templates/recovery_code/invalid/email.body.gotmpl
+            plaintext: file:///etc/config/kratos/templates/recovery_code/invalid/email.body.plaintext.gotmpl
   smtp:
     connection_uri: smtp://mailpit:1025/?disable_starttls=true
     from_address: no-reply@f-eco.example

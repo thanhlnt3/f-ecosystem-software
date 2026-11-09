@@ -65,12 +65,35 @@ pub struct PaymentsConfig {
     pub momo: Option<MomoConfig>,
 }
 
+/// Nhà cung cấp thử thách chống bot (spec account-identity, "Chống dò mật khẩu").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChallengeProvider {
+    /// Thử thách giả cho dev và test: một ô đánh dấu. Bị cấm ở production.
+    Test,
+}
+
+/// Cấu hình đăng nhập và tài khoản (spec account-identity).
+#[derive(Debug, Clone)]
+pub struct AuthConfig {
+    /// Địa chỉ công khai của chính feco-server (để tạo liên kết trong email).
+    pub public_url: Url,
+    /// API công khai của Ory Kratos.
+    pub kratos_public_url: Url,
+    /// API quản trị của Ory Kratos (chỉ gọi từ mạng nội bộ).
+    pub kratos_admin_url: Url,
+    /// Máy chủ SMTP gửi email cảnh báo, ví dụ `smtp://127.0.0.1:1025`.
+    pub smtp_url: Url,
+    pub email_from: String,
+    pub challenge: ChallengeProvider,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub environment: Environment,
     pub http_addr: SocketAddr,
     pub database_url: Option<Secret>,
     pub payments: PaymentsConfig,
+    pub auth: AuthConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -102,6 +125,10 @@ pub enum ConfigError {
     },
     #[error("{var} phải dùng https, nhận {scheme:?}")]
     InsecureScheme { var: &'static str, scheme: String },
+    #[error(
+        "production không được dùng thử thách chống bot thử nghiệm (FECO_CHALLENGE_PROVIDER=test)"
+    )]
+    TestChallengeInProduction,
 }
 
 const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:8080";
@@ -172,10 +199,13 @@ impl Config {
         )
         .transpose()?;
 
+        let auth = auth_config(environment, &get)?;
+
         let config = Config {
             environment,
             http_addr,
             database_url,
+            auth,
             payments: PaymentsConfig { vnpay, momo },
         };
         config.validate()?;
@@ -206,6 +236,57 @@ impl Config {
         }
         Ok(())
     }
+}
+
+/// Cấu hình tài khoản. Ngoài production có giá trị mặc định trỏ tới hạ tầng dev
+/// (`infra/docker-compose.yml`); production bắt buộc khai báo đủ.
+fn auth_config<'a>(
+    environment: Environment,
+    get: &impl Fn(&str) -> Option<&'a str>,
+) -> Result<AuthConfig, ConfigError> {
+    let prod = environment.is_production();
+    let url_var = |var: &'static str, dev_default: &'static str| -> Result<Url, ConfigError> {
+        let raw = match get(var) {
+            Some(v) => v,
+            None if prod => return Err(ConfigError::Missing(var)),
+            None => dev_default,
+        };
+        Url::parse(raw).map_err(|e| ConfigError::Invalid {
+            var,
+            reason: e.to_string(),
+        })
+    };
+    let public_url = url_var("FECO_PUBLIC_URL", "http://127.0.0.1:8080/")?;
+    if prod && public_url.scheme() != "https" {
+        return Err(ConfigError::InsecureScheme {
+            var: "FECO_PUBLIC_URL",
+            scheme: public_url.scheme().to_owned(),
+        });
+    }
+    let challenge = match get("FECO_CHALLENGE_PROVIDER") {
+        Some("test") => ChallengeProvider::Test,
+        None if !prod => ChallengeProvider::Test,
+        None => return Err(ConfigError::Missing("FECO_CHALLENGE_PROVIDER")),
+        Some(other) => {
+            return Err(ConfigError::Invalid {
+                var: "FECO_CHALLENGE_PROVIDER",
+                reason: format!("nhà cung cấp chưa được hỗ trợ: {other:?}"),
+            })
+        }
+    };
+    if prod && challenge == ChallengeProvider::Test {
+        return Err(ConfigError::TestChallengeInProduction);
+    }
+    Ok(AuthConfig {
+        public_url,
+        kratos_public_url: url_var("FECO_KRATOS_PUBLIC_URL", "http://127.0.0.1:4433/")?,
+        kratos_admin_url: url_var("FECO_KRATOS_ADMIN_URL", "http://127.0.0.1:4434/")?,
+        smtp_url: url_var("FECO_SMTP_URL", "smtp://127.0.0.1:1025")?,
+        email_from: get("FECO_EMAIL_FROM")
+            .unwrap_or("F-Eco <no-reply@f-eco.example>")
+            .to_owned(),
+        challenge,
+    })
 }
 
 /// Một nhóm biến của một cổng: hoặc đặt đủ, hoặc không đặt biến nào.
@@ -381,10 +462,18 @@ mod tests {
         assert_eq!(c.payments.vnpay.unwrap().tmn_code, "DEMO0001");
     }
 
+    /// Production chưa khởi động được toàn bộ (chưa có nhà cung cấp chống bot thật),
+    /// nên quy tắc cổng thanh toán của production được kiểm tra qua `validate()`.
+    fn as_production(mut c: Config) -> Config {
+        c.environment = Environment::Production;
+        c
+    }
+
     #[test]
     fn production_with_sandbox_is_rejected() {
+        let c = as_production(Config::from_vars(&with_env("staging", VNPAY_SANDBOX)).unwrap());
         assert!(matches!(
-            Config::from_vars(&with_env("production", VNPAY_SANDBOX)).unwrap_err(),
+            c.validate().unwrap_err(),
             ConfigError::NonProductionGatewayInProduction {
                 gateway: "VNPAY",
                 ..
@@ -394,10 +483,66 @@ mod tests {
 
     #[test]
     fn production_with_live_gateways_is_accepted() {
-        let mut pairs = VNPAY_LIVE.to_vec();
-        pairs.extend_from_slice(MOMO_LIVE);
-        let c = Config::from_vars(&with_env("production", &pairs)).unwrap();
-        assert!(c.payments.vnpay.is_some() && c.payments.momo.is_some());
+        let mut c = as_production(Config::from_vars(&with_env("staging", &[])).unwrap());
+        c.payments.vnpay = Some(VnpayConfig {
+            tmn_code: "LIVE0001".into(),
+            hash_secret: Secret::new("live-secret"),
+            payment_url: Url::parse(VNPAY_LIVE[2].1).unwrap(),
+        });
+        c.payments.momo = Some(MomoConfig {
+            partner_code: "MOMOLIVE".into(),
+            access_key: Secret::new("live-access"),
+            secret_key: Secret::new("live-secret"),
+            endpoint: Url::parse(MOMO_LIVE[3].1).unwrap(),
+        });
+        c.validate().unwrap();
+    }
+
+    #[test]
+    fn dev_auth_defaults_point_at_dev_infra() {
+        let c = Config::from_vars(&with_env("dev", &[])).unwrap();
+        assert_eq!(c.auth.kratos_public_url.as_str(), "http://127.0.0.1:4433/");
+        assert_eq!(c.auth.kratos_admin_url.as_str(), "http://127.0.0.1:4434/");
+        assert_eq!(c.auth.smtp_url.as_str(), "smtp://127.0.0.1:1025");
+        assert_eq!(c.auth.challenge, ChallengeProvider::Test);
+    }
+
+    #[test]
+    fn production_requires_auth_settings() {
+        assert_eq!(
+            Config::from_vars(&with_env("production", &[])).unwrap_err(),
+            ConfigError::Missing("FECO_PUBLIC_URL")
+        );
+    }
+
+    #[test]
+    fn production_rejects_test_challenge() {
+        let v = with_env(
+            "production",
+            &[
+                ("FECO_PUBLIC_URL", "https://f-eco.example/"),
+                ("FECO_CHALLENGE_PROVIDER", "test"),
+            ],
+        );
+        assert_eq!(
+            Config::from_vars(&v).unwrap_err(),
+            ConfigError::TestChallengeInProduction
+        );
+    }
+
+    #[test]
+    fn production_requires_https_public_url() {
+        let v = with_env(
+            "production",
+            &[("FECO_PUBLIC_URL", "http://f-eco.example/")],
+        );
+        assert!(matches!(
+            Config::from_vars(&v).unwrap_err(),
+            ConfigError::InsecureScheme {
+                var: "FECO_PUBLIC_URL",
+                ..
+            }
+        ));
     }
 
     #[test]

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Trang chủ{% endblock %}
+{% block content %}
+{% if let Some(u) = user %}
+  <h1>Xin chào{% if !u.name.is_empty() %}, {{ u.name }}{% endif %}</h1>
+  <p>Email: <strong id="email">{{ u.email }}</strong></p>
+  {% if u.verified %}
+    <div class="msg success" id="verify-status">Email đã xác minh.</div>
+  {% else %}
+    <div class="msg info" id="verify-status">Email chưa xác minh. Bạn cần xác minh email trước khi mua hàng, đặt đơn xây app hay đăng ký nhà phát triển.</div>
+  {% endif %}
+  <div class="links">
+    {% if !u.verified %}<a href="/verification">Gửi lại email xác minh</a>{% endif %}
+    <a href="/settings">Cài đặt tài khoản</a>
+    <a href="/logout">Đăng xuất</a>
+  </div>
+{% else %}
+  <h1>Chào mừng tới F-Eco</h1>
+  <p class="muted">Một tài khoản cho mọi app con trong hệ sinh thái F-Eco.</p>
+  <div class="links">
+    <a href="/login">Đăng nhập</a>
+    <a href="/registration">Đăng ký</a>
+  </div>
+{% endif %}
+{% endblock %}

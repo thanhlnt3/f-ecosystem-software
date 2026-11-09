@@ -30,7 +30,14 @@ async fn main() -> ExitCode {
     };
     tracing::info!(environment = %config.environment, addr = %config.http_addr, "feco-server đang chạy");
 
-    let app = router(AppState::from_config(&config));
+    let state = match AppState::from_config(&config) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Cấu hình không hợp lệ, dịch vụ không khởi động: {e}");
+            return ExitCode::from(78);
+        }
+    };
+    let app = router(state);
     let shutdown = async {
         let _ = tokio::signal::ctrl_c().await;
         tracing::info!("nhận tín hiệu dừng");

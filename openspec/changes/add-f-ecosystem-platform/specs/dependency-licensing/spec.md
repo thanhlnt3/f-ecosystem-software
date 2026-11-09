@@ -7,7 +7,7 @@ Bảo đảm mọi thành phần bên thứ ba mà F-Eco phân phối (launcher,
 ## ADDED Requirements
 
 ### Requirement: Danh sách license cho phép
-Thành phần bên thứ ba đi kèm sản phẩm F-Eco SHALL có license thuộc danh sách cho phép: MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0 (kể cả biến thể WITH LLVM-exception), ISC, Zlib, BSL-1.0, Unicode-3.0, OFL-1.1, CC0-1.0, PostgreSQL, MPL-2.0 (không sửa file). License khác MUST chỉ được dùng khi có ngoại lệ đã duyệt, ghi người duyệt, ngày duyệt và lý do. GPL, AGPL, SSPL và license cấm dùng thương mại MUST không được dùng.
+Thành phần bên thứ ba đi kèm sản phẩm F-Eco SHALL có license thuộc danh sách cho phép: MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0 (kể cả biến thể WITH LLVM-exception), ISC, 0BSD, Zlib, BSL-1.0, Unicode-3.0, OFL-1.1, CC0-1.0, PostgreSQL, MPL-2.0 (không sửa file). License khác MUST chỉ được dùng khi có ngoại lệ đã duyệt, ghi người duyệt, ngày duyệt và lý do. GPL, AGPL, SSPL và license cấm dùng thương mại MUST không được dùng.
 
 #### Scenario: Thêm thư viện AGPL
 - **WHEN** một thay đổi thêm thư viện AGPL-3.0 vào F-Launcher

@@ -28,6 +28,7 @@ pub const ALLOWED: &[&str] = &[
     "CC0-1.0",
     "MPL-2.0",
     "PostgreSQL",
+    "0BSD",
 ];
 
 #[derive(Debug, Deserialize)]
