@@ -91,6 +91,9 @@ fn spawn_background_jobs(state: Arc<AppState>) {
             if let Err(e) = feco_server::audit::purge_older_than_one_year(&state.db).await {
                 tracing::error!(error = %e, "không dọn được nhật ký kiểm toán quá 1 năm");
             }
+            if let Err(e) = feco_server::launch::purge_expired(&state.db).await {
+                tracing::error!(error = %e, "không dọn được mã khởi chạy hết hạn");
+            }
         }
     });
 }

@@ -16,6 +16,7 @@ pub mod export;
 pub mod hydra;
 pub mod i18n;
 pub mod kratos;
+pub mod launch;
 pub mod mailer;
 pub mod oauth;
 pub mod pairwise;
@@ -61,6 +62,10 @@ pub struct AppState {
     pub mailer: Mailer,
     pub db: Db,
     pub hydra: HydraClient,
+    /// API công khai của Hydra (feco-server tự đi luồng ủy quyền khi đổi mã khởi chạy).
+    pub hydra_public: Url,
+    /// Client ID của F-Launcher (xem `feco_config::AuthConfig::launcher_client_id`).
+    pub launcher_client_id: Option<String>,
     pub pairwise: Pairwise,
     /// HTTP client gửi webhook cho app con.
     pub http: reqwest::Client,
@@ -116,6 +121,8 @@ impl AppState {
             mailer: Mailer::smtp(&a.smtp_url, &a.email_from)?,
             db,
             hydra: HydraClient::new(a.hydra_admin_url.clone()),
+            hydra_public: a.hydra_public_url.clone(),
+            launcher_client_id: a.launcher_client_id.clone(),
             pairwise: Pairwise::new(a.pairwise_secret.expose()),
             http: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
@@ -190,6 +197,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/apps/{client_id}", get(connected::detail))
         .route("/apps/{client_id}/revoke", post(connected::revoke))
         .route("/v1/me", get(api::me))
+        .route("/v1/launch-codes", post(launch::issue))
+        .route("/v1/launch-codes/exchange", post(launch::exchange))
         .route(
             "/security/not-me/{token}",
             get(alerts::not_me).post(alerts::not_me_confirm),
@@ -232,6 +241,8 @@ mod tests {
                 .connect_lazy("postgres://x:y@127.0.0.1:9/x")
                 .unwrap(),
             hydra: HydraClient::new(url("http://127.0.0.1:9/")),
+            hydra_public: url("http://127.0.0.1:9/"),
+            launcher_client_id: Some("launcher".into()),
             pairwise: Pairwise::new("test-only-pairwise-secret-0123456789"),
             http: reqwest::Client::new(),
             data_key: crypto::DataKey::from_bytes(&[9u8; 32]).unwrap(),

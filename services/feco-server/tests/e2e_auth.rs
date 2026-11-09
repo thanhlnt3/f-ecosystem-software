@@ -29,6 +29,8 @@ const UA_LINUX_FIREFOX: &str =
 /// Kratos dev dùng SQLite trong bộ nhớ (`DSN=memory`), vốn báo "database table is locked"
 /// khi nhiều luồng cùng ghi. Các test E2E vì vậy chạy lần lượt qua khóa này.
 static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// Client ID của F-Launcher, tạo trong Hydra khi khởi động máy chủ kiểm thử.
+static LAUNCHER: OnceLock<String> = OnceLock::new();
 
 /// Kiểm thử E2E chỉ chạy khi đặt FECO_E2E=1. Lần đầu gọi sẽ dựng feco-server ở cổng
 /// 8080 trên một luồng riêng, dùng chung cho mọi test trong file.
@@ -49,10 +51,15 @@ fn e2e_ready() -> bool {
         std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async move {
-                let vars: HashMap<String, String> = [("FECO_ENV", "dev")]
-                    .into_iter()
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .collect();
+                let launcher = create_launcher().await;
+                LAUNCHER.set(launcher.clone()).unwrap();
+                let vars: HashMap<String, String> = [
+                    ("FECO_ENV", "dev"),
+                    ("FECO_LAUNCHER_CLIENT_ID", launcher.as_str()),
+                ]
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
                 let config = Config::from_vars(&vars).unwrap();
                 let state = std::sync::Arc::new(AppState::from_config(&config).unwrap());
                 store::MIGRATOR
@@ -741,6 +748,28 @@ async fn create_app(name: &str, scopes: Value) -> String {
         "subject_type": "pairwise",
         "policy_uri": "https://app.example/privacy",
         "metadata": {"developer": "Acme", "scopes": scopes},
+    });
+    let res: Value = reqwest::Client::new()
+        .post(format!("{HYDRA_ADMIN}/admin/clients"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    res["client_id"].as_str().expect("client_id").to_owned()
+}
+
+/// F-Launcher: client công khai bên thứ nhất (không hiện màn hình đồng ý).
+async fn create_launcher() -> String {
+    let body = serde_json::json!({
+        "client_name": "F-Launcher",
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "scope": "openid offline_access profile",
+        "redirect_uris": [APP_CALLBACK, "http://127.0.0.1:47201/callback"],
+        "token_endpoint_auth_method": "none",
     });
     let res: Value = reqwest::Client::new()
         .post(format!("{HYDRA_ADMIN}/admin/clients"))
@@ -1520,4 +1549,184 @@ async fn v1_me_rate_limit_per_user() {
     assert_eq!(i, 121, "hạn mức mặc định 120 lần/phút cho mỗi người dùng");
     assert!((1..=60).contains(&retry));
     assert_eq!(body["error"], "rate_limited");
+}
+
+async fn issue_launch_code(token: &str, client_id: &str) -> (u16, Value) {
+    let res = reqwest::Client::new()
+        .post(format!("{BASE}/v1/launch-codes"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "client_id": client_id }))
+        .send()
+        .await
+        .unwrap();
+    (res.status().as_u16(), res.json().await.unwrap())
+}
+
+/// App con đổi mã khởi chạy: trả (mã HTTP, phản hồi, PKCE verifier).
+async fn exchange_launch_code(code: &str, client_id: &str, scope: &str) -> (u16, Value, String) {
+    let (verifier, challenge) = pkce();
+    let res = reqwest::Client::new()
+        .post(format!("{BASE}/v1/launch-codes/exchange"))
+        .json(&serde_json::json!({
+            "code": code,
+            "client_id": client_id,
+            "redirect_uri": APP_CALLBACK,
+            "code_challenge": challenge,
+            "scope": scope,
+        }))
+        .send()
+        .await
+        .unwrap();
+    (res.status().as_u16(), res.json().await.unwrap(), verifier)
+}
+
+async fn audit_actions(target: &str) -> Vec<String> {
+    let st = local_state();
+    sqlx::query_scalar("SELECT action FROM audit_log WHERE target = $1 ORDER BY id")
+        .bind(target)
+        .fetch_all(&st.db)
+        .await
+        .unwrap()
+}
+
+/// Spec launcher, "Đăng nhập trong launcher" và "Mở app con và truyền phiên đăng nhập":
+/// launcher đăng nhập không cần màn hình đồng ý, xin mã khởi chạy cho app; app đổi mã lấy token
+/// đúng một lần; mã dùng lại, dùng sai app, hết hạn hoặc do app khác xin đều bị từ chối.
+#[tokio::test]
+async fn launcher_login_and_single_use_launch_codes() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let launcher = LAUNCHER.get().unwrap().clone();
+    let (email, password) = unique("launch");
+    let user = app_browser();
+    let form = parse_form(&get(&user, "/registration").await);
+    submit(
+        &user,
+        &form,
+        &[
+            ("traits.email", &email),
+            ("traits.name", "Minh Trần"),
+            ("password", &password),
+            ("method", "password"),
+        ],
+    )
+    .await;
+    assert!(login(&user, &email, &password).await.contains(&email));
+
+    // Launcher (bên thứ nhất): về thẳng callback, không có màn hình đồng ý.
+    let a = authorize(&user, &launcher, "openid offline_access profile").await;
+    assert!(a.consent_page.is_none(), "launcher không được hỏi đồng ý");
+    let tokens = exchange(&launcher, &a).await;
+    let launcher_token = tokens["access_token"].as_str().expect("token").to_owned();
+    assert!(tokens["refresh_token"].is_string(), "{tokens}");
+    let (status, me_body) = me(&launcher_token, None).await;
+    assert_eq!((status, me_body["name"].as_str()), (200, Some("Minh Trần")));
+
+    let scopes = serde_json::json!({
+        "profile": {"required": true, "purpose_vi": "Hiển thị tên", "purpose_en": "Show your name"}
+    });
+    let soundlab = create_app("SoundLab", scopes.clone()).await;
+    let other = create_app("OtherApp", scopes).await;
+
+    // Chưa từng đồng ý cho SoundLab: mã khởi chạy không tự cấp quyền mới.
+    let (status, body) = issue_launch_code(&launcher_token, &soundlab).await;
+    assert_eq!(status, 200, "{body}");
+    let (status, body, _) =
+        exchange_launch_code(body["code"].as_str().unwrap(), &soundlab, "openid profile").await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (403, Some("consent_required"))
+    );
+
+    // Người dùng đồng ý một lần qua trình duyệt.
+    let a = authorize(&user, &soundlab, "openid profile").await;
+    let a = answer_consent(&user, a, "accept", &[]).await;
+    let interactive = exchange(&soundlab, &a).await;
+    let pairwise_sub = id_token_sub(&interactive);
+
+    // Mở SoundLab từ launcher: đổi mã lấy code, rồi đổi code lấy token bằng PKCE verifier.
+    let (status, issued) = issue_launch_code(&launcher_token, &soundlab).await;
+    assert_eq!((status, issued["expires_in"].as_u64()), (200, Some(60)));
+    let code = issued["code"].as_str().unwrap().to_owned();
+    let (status, body, verifier) = exchange_launch_code(&code, &soundlab, "openid profile").await;
+    assert_eq!(status, 200, "{body}");
+    let callback = url::Url::parse(&format!(
+        "{APP_CALLBACK}?code={}",
+        body["authorization_code"].as_str().unwrap()
+    ))
+    .unwrap();
+    let tokens = exchange(
+        &soundlab,
+        &Authorize {
+            verifier,
+            consent_page: None,
+            callback: Some(callback),
+        },
+    )
+    .await;
+    assert_eq!(tokens["scope"], "openid profile", "{tokens}");
+    assert_eq!(
+        id_token_sub(&tokens),
+        pairwise_sub,
+        "vẫn là định danh riêng của app"
+    );
+    let (status, me_body) = me(tokens["access_token"].as_str().unwrap(), None).await;
+    assert_eq!((status, me_body["name"].as_str()), (200, Some("Minh Trần")));
+
+    // Scenario "Mã bị dùng lại": máy chủ từ chối và ghi sự kiện bảo mật.
+    let (status, body, _) = exchange_launch_code(&code, &soundlab, "openid profile").await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (400, Some("invalid_grant"))
+    );
+    let actions = audit_actions(&soundlab).await;
+    assert!(
+        actions.contains(&"launch_code.reuse".to_owned()),
+        "{actions:?}"
+    );
+    assert!(
+        actions.contains(&"launch_code.exchange".to_owned()),
+        "{actions:?}"
+    );
+
+    // Mã của SoundLab bị app khác dùng: từ chối, và mã bị đốt luôn.
+    let (_, issued) = issue_launch_code(&launcher_token, &soundlab).await;
+    let code = issued["code"].as_str().unwrap().to_owned();
+    let (status, _, _) = exchange_launch_code(&code, &other, "openid profile").await;
+    assert_eq!(status, 400);
+    let (status, _, _) = exchange_launch_code(&code, &soundlab, "openid profile").await;
+    assert_eq!(status, 400, "mã đã bị đốt");
+    assert!(audit_actions(&soundlab)
+        .await
+        .contains(&"launch_code.client_mismatch".to_owned()));
+
+    // Hết 60 giây: từ chối.
+    let (_, issued) = issue_launch_code(&launcher_token, &soundlab).await;
+    let code = issued["code"].as_str().unwrap().to_owned();
+    let st = local_state();
+    sqlx::query(
+        "UPDATE launch_codes SET expires_at = now() - interval '1 second'
+         WHERE client_id = $1 AND used_at IS NULL",
+    )
+    .bind(&soundlab)
+    .execute(&st.db)
+    .await
+    .unwrap();
+    let (status, _, _) = exchange_launch_code(&code, &soundlab, "openid profile").await;
+    assert_eq!(status, 400);
+
+    // Chỉ token của launcher được xin mã; app con không xin được mã cho app khác.
+    let app_token = tokens["access_token"].as_str().unwrap();
+    let (status, body) = issue_launch_code(app_token, &other).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (403, Some("launcher_only"))
+    );
+    let (status, body) = issue_launch_code(&launcher_token, "khong-ton-tai").await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (404, Some("unknown_client"))
+    );
 }

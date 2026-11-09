@@ -157,4 +157,41 @@ impl Client {
             })?;
         Ok(stream.into_vec().await?)
     }
+
+    /// Tải một target thẳng vào file `dest` (không giữ cả gói trong bộ nhớ). Nếu độ dài hoặc
+    /// SHA-256 không khớp metadata đã ký, hoặc tải lỗi giữa chừng, file bị xóa và trả lỗi.
+    pub async fn download_to(&self, name: &str, dest: &Path) -> Result<u64> {
+        use futures::StreamExt;
+        use tokio::io::AsyncWriteExt;
+
+        let repo = self.load().await?;
+        let target_name = TargetName::new(name)?;
+        let mut stream = repo
+            .read_target(&target_name)
+            .await?
+            .filter(|_| name != REVOCATIONS_TARGET)
+            .ok_or_else(|| {
+                Error::Invalid(format!(
+                    "target {name} không có trong metadata đã ký (chưa phát hành hoặc đã bị thu hồi)"
+                ))
+            })?;
+        let mut file = tokio::fs::File::create(dest).await.map_err(io_err(dest))?;
+        let mut written = 0u64;
+        let result: Result<()> = async {
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk?;
+                file.write_all(&chunk).await.map_err(io_err(dest))?;
+                written += chunk.len() as u64;
+            }
+            file.flush().await.map_err(io_err(dest))?;
+            file.sync_all().await.map_err(io_err(dest))
+        }
+        .await;
+        drop(file);
+        if let Err(e) = result {
+            let _ = tokio::fs::remove_file(dest).await;
+            return Err(e);
+        }
+        Ok(written)
+    }
 }

@@ -1,0 +1,391 @@
+//! Đăng nhập launcher (spec launcher, "Đăng nhập trong launcher"; design D4).
+//!
+//! - Mở trang đăng nhập F-Eco trong trình duyệt mặc định (OAuth 2.0 Authorization Code + PKCE,
+//!   client công khai, địa chỉ chuyển hướng loopback `http://127.0.0.1:47201/callback`).
+//!   Launcher không có ô nhập mật khẩu.
+//! - Refresh token nằm trong kho bảo mật của hệ điều hành (Windows Credential Manager, macOS
+//!   Keychain) qua crate `keyring`; access token chỉ nằm trong bộ nhớ. Khởi động lại máy rồi
+//!   mở launcher thì dùng refresh token để vào lại, không phải đăng nhập lại.
+
+use crate::broker::LaunchCode;
+use base64::Engine;
+use jiff::{SignedDuration, Timestamp};
+use serde_json::Value;
+use sha2::Digest;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use url::Url;
+
+pub const REDIRECT_PORT: u16 = 47201;
+pub const SCOPE: &str = "openid offline_access profile";
+const KEYRING_SERVICE: &str = "F-Eco Launcher";
+
+#[derive(Debug, thiserror::Error)]
+pub enum AuthError {
+    #[error("Đang ngoại tuyến ({0})")]
+    Offline(String),
+    #[error("Phiên đăng nhập đã hết hạn hoặc bị thu hồi, hãy đăng nhập lại")]
+    Expired,
+    #[error("Đăng nhập không thành công: {0}")]
+    Failed(String),
+    #[error("Kho bảo mật của hệ điều hành: {0}")]
+    Store(String),
+}
+
+/// Nơi giữ refresh token.
+pub trait SecretStore: Send + Sync {
+    fn load(&self) -> Result<Option<String>, String>;
+    fn save(&self, value: &str) -> Result<(), String>;
+    fn clear(&self) -> Result<(), String>;
+}
+
+/// Kho bảo mật của hệ điều hành; mỗi client là một mục riêng.
+pub struct KeyringStore {
+    user: String,
+}
+
+impl KeyringStore {
+    pub fn for_client(client_id: &str) -> Self {
+        Self {
+            user: format!("refresh-token:{client_id}"),
+        }
+    }
+
+    fn entry(&self) -> Result<keyring::Entry, String> {
+        keyring::Entry::new(KEYRING_SERVICE, &self.user).map_err(|e| e.to_string())
+    }
+}
+
+impl SecretStore for KeyringStore {
+    fn load(&self) -> Result<Option<String>, String> {
+        match self.entry()?.get_password() {
+            Ok(v) => Ok(Some(v)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    fn save(&self, value: &str) -> Result<(), String> {
+        self.entry()?.set_password(value).map_err(|e| e.to_string())
+    }
+
+    fn clear(&self) -> Result<(), String> {
+        match self.entry()?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+
+/// Kho trong bộ nhớ (kiểm thử).
+#[derive(Default)]
+pub struct MemoryStore(Mutex<Option<String>>);
+
+impl SecretStore for MemoryStore {
+    fn load(&self) -> Result<Option<String>, String> {
+        Ok(self.0.lock().expect("khóa").clone())
+    }
+
+    fn save(&self, value: &str) -> Result<(), String> {
+        *self.0.lock().expect("khóa") = Some(value.to_owned());
+        Ok(())
+    }
+
+    fn clear(&self) -> Result<(), String> {
+        *self.0.lock().expect("khóa") = None;
+        Ok(())
+    }
+}
+
+/// PKCE (RFC 7636) và `state` chống CSRF.
+pub struct Pkce {
+    pub verifier: String,
+    pub challenge: String,
+    pub state: String,
+}
+
+impl Pkce {
+    pub fn new() -> Self {
+        let mut buf = [0u8; 32];
+        getrandom::fill(&mut buf).expect("nguồn ngẫu nhiên");
+        let verifier = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(buf);
+        let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(sha2::Sha256::digest(verifier.as_bytes()));
+        Self {
+            verifier,
+            challenge,
+            state: crate::random_hex(16),
+        }
+    }
+}
+
+impl Default for Pkce {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Session {
+    pub access_token: String,
+    pub name: Option<String>,
+    pub expires_at: Timestamp,
+}
+
+impl Session {
+    /// Còn dùng được ít nhất 1 phút nữa.
+    pub fn is_fresh(&self, now: Timestamp) -> bool {
+        self.expires_at > now + SignedDuration::from_mins(1)
+    }
+}
+
+pub struct Auth {
+    hydra: Url,
+    server: Url,
+    client_id: String,
+    redirect_port: u16,
+    http: reqwest::Client,
+    store: Arc<dyn SecretStore>,
+}
+
+impl Auth {
+    pub fn new(
+        hydra: Url,
+        server: Url,
+        client_id: impl Into<String>,
+        redirect_port: u16,
+        store: Arc<dyn SecretStore>,
+    ) -> Self {
+        Self {
+            hydra,
+            server,
+            client_id: client_id.into(),
+            redirect_port,
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(15))
+                .build()
+                .expect("tạo HTTP client"),
+            store,
+        }
+    }
+
+    pub fn redirect_uri(&self) -> String {
+        format!("http://127.0.0.1:{}/callback", self.redirect_port)
+    }
+
+    pub fn authorize_url(&self, pkce: &Pkce) -> Url {
+        let mut url = self.hydra.join("oauth2/auth").expect("URL Hydra hợp lệ");
+        url.query_pairs_mut()
+            .append_pair("client_id", &self.client_id)
+            .append_pair("response_type", "code")
+            .append_pair("scope", SCOPE)
+            .append_pair("redirect_uri", &self.redirect_uri())
+            .append_pair("state", &pkce.state)
+            .append_pair("code_challenge", &pkce.challenge)
+            .append_pair("code_challenge_method", "S256");
+        url
+    }
+
+    /// Đăng nhập qua trình duyệt: mở `authorize_url` bằng `open_browser`, chờ callback ở
+    /// 127.0.0.1 (tối đa 10 phút), đổi code lấy token, lưu refresh token.
+    pub async fn login(
+        &self,
+        open_browser: impl FnOnce(&Url) -> Result<(), String>,
+    ) -> Result<Session, AuthError> {
+        let pkce = Pkce::new();
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", self.redirect_port))
+            .await
+            .map_err(|e| AuthError::Failed(format!("cổng {} đang bận: {e}", self.redirect_port)))?;
+        open_browser(&self.authorize_url(&pkce)).map_err(AuthError::Failed)?;
+        let code = wait_for_callback(listener, &pkce.state, Duration::from_secs(600)).await?;
+        let redirect_uri = self.redirect_uri();
+        let tokens = self
+            .token_request(&[
+                ("grant_type", "authorization_code"),
+                ("code", &code),
+                ("redirect_uri", &redirect_uri),
+                ("client_id", &self.client_id),
+                ("code_verifier", &pkce.verifier),
+            ])
+            .await?;
+        self.finish(tokens).await
+    }
+
+    /// Vào lại bằng refresh token đã lưu. `Ok(None)`: chưa đăng nhập. `Offline`: giữ nguyên
+    /// refresh token để thử lại khi có mạng. `Expired`: token đã bị thu hồi, đã xóa khỏi kho.
+    pub async fn restore(&self) -> Result<Option<Session>, AuthError> {
+        let Some(refresh) = self.store.load().map_err(AuthError::Store)? else {
+            return Ok(None);
+        };
+        let tokens = match self
+            .token_request(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", &refresh),
+                ("client_id", &self.client_id),
+            ])
+            .await
+        {
+            Err(AuthError::Expired) => {
+                self.store.clear().map_err(AuthError::Store)?;
+                return Err(AuthError::Expired);
+            }
+            other => other?,
+        };
+        self.finish(tokens).await.map(Some)
+    }
+
+    /// Đăng xuất: thu hồi refresh token ở máy chủ (nếu có mạng) và xóa khỏi kho.
+    pub async fn logout(&self) -> Result<(), AuthError> {
+        if let Ok(Some(refresh)) = self.store.load() {
+            let url = self.hydra.join("oauth2/revoke").expect("URL Hydra hợp lệ");
+            let _ = self
+                .http
+                .post(url)
+                .form(&[("token", refresh.as_str()), ("client_id", &self.client_id)])
+                .send()
+                .await;
+        }
+        self.store.clear().map_err(AuthError::Store)
+    }
+
+    async fn finish(&self, tokens: Value) -> Result<Session, AuthError> {
+        let access = tokens["access_token"]
+            .as_str()
+            .ok_or_else(|| AuthError::Failed(format!("không có access token: {tokens}")))?
+            .to_owned();
+        // Hydra xoay refresh token mỗi lần dùng: luôn lưu bản mới.
+        if let Some(refresh) = tokens["refresh_token"].as_str() {
+            self.store.save(refresh).map_err(AuthError::Store)?;
+        }
+        let expires_in = tokens["expires_in"].as_i64().unwrap_or(3600);
+        let name = self.me(&access).await.unwrap_or(None);
+        Ok(Session {
+            access_token: access,
+            name,
+            expires_at: Timestamp::now() + SignedDuration::from_secs(expires_in),
+        })
+    }
+
+    async fn token_request(&self, form: &[(&str, &str)]) -> Result<Value, AuthError> {
+        let url = self.hydra.join("oauth2/token").expect("URL Hydra hợp lệ");
+        let res = self
+            .http
+            .post(url)
+            .form(form)
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        let status = res.status();
+        let body: Value = res
+            .json()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        if status.is_success() {
+            Ok(body)
+        } else if body["error"] == "invalid_grant" {
+            Err(AuthError::Expired)
+        } else {
+            Err(AuthError::Failed(format!("{status}: {body}")))
+        }
+    }
+
+    /// Tên người dùng từ `GET /v1/me` (scope `profile`).
+    pub async fn me(&self, access: &str) -> Result<Option<String>, AuthError> {
+        let url = self.server.join("v1/me").expect("URL máy chủ hợp lệ");
+        let res = self
+            .http
+            .get(url)
+            .bearer_auth(access)
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        if !res.status().is_success() {
+            return Err(AuthError::Failed(format!("/v1/me trả {}", res.status())));
+        }
+        let body: Value = res
+            .json()
+            .await
+            .map_err(|e| AuthError::Failed(e.to_string()))?;
+        Ok(body["name"].as_str().map(str::to_owned))
+    }
+
+    /// Xin mã khởi chạy cho app `client_id` (spec launcher, "Mở app con và truyền phiên đăng nhập").
+    pub async fn launch_code(
+        &self,
+        access: &str,
+        client_id: &str,
+    ) -> Result<LaunchCode, AuthError> {
+        let url = self
+            .server
+            .join("v1/launch-codes")
+            .expect("URL máy chủ hợp lệ");
+        let res = self
+            .http
+            .post(url)
+            .bearer_auth(access)
+            .json(&serde_json::json!({ "client_id": client_id }))
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        let status = res.status();
+        let body: Value = res
+            .json()
+            .await
+            .map_err(|e| AuthError::Failed(e.to_string()))?;
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(AuthError::Expired);
+        }
+        serde_json::from_value(body.clone())
+            .map_err(|_| AuthError::Failed(format!("{status}: {body}")))
+    }
+}
+
+/// Chờ trình duyệt quay về `http://127.0.0.1:<cổng>/callback?code=...&state=...`.
+pub async fn wait_for_callback(
+    listener: tokio::net::TcpListener,
+    expected_state: &str,
+    timeout: Duration,
+) -> Result<String, AuthError> {
+    use axum::{extract::Query, response::Html, routing::get, Router};
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<HashMap<String, String>>();
+    let tx = Arc::new(Mutex::new(Some(tx)));
+    let router = Router::new().route(
+        "/callback",
+        get(move |Query(q): Query<HashMap<String, String>>| {
+            let tx = tx.clone();
+            async move {
+                if let Some(tx) = tx.lock().expect("khóa").take() {
+                    let _ = tx.send(q);
+                }
+                Html(
+                    "<!doctype html><meta charset=utf-8><title>F-Launcher</title>\
+                     <p>Đã đăng nhập. Hãy quay lại F-Launcher.</p>\
+                     <p>Signed in. Return to F-Launcher.</p>",
+                )
+            }
+        }),
+    );
+    let server = tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+    let result = tokio::time::timeout(timeout, rx).await;
+    server.abort();
+    let query = result
+        .map_err(|_| AuthError::Failed("hết thời gian chờ đăng nhập".into()))?
+        .map_err(|_| AuthError::Failed("không nhận được kết quả từ trình duyệt".into()))?;
+    if let Some(error) = query.get("error") {
+        return Err(AuthError::Failed(format!(
+            "{error}: {}",
+            query.get("error_description").cloned().unwrap_or_default()
+        )));
+    }
+    if query.get("state").map(String::as_str) != Some(expected_state) {
+        return Err(AuthError::Failed("state không khớp, bỏ qua kết quả".into()));
+    }
+    query
+        .get("code")
+        .cloned()
+        .ok_or_else(|| AuthError::Failed("callback không có code".into()))
+}

@@ -8,6 +8,10 @@
 //!
 //! Chỉ dùng cho dev: app tự đăng ký qua API quản trị của Hydra. App thật được đăng ký qua
 //! cổng nhà phát triển (nhóm task 8).
+//!
+//! Khi được F-Launcher mở (có biến `FECO_LAUNCH_CODE`), app không mở trình duyệt: nó đổi mã
+//! khởi chạy lấy authorization code tại `POST /v1/launch-codes/exchange`, rồi đổi code lấy token
+//! tại Hydra bằng PKCE verifier của chính nó.
 
 use std::{process::ExitCode, sync::Arc, time::Duration};
 
@@ -99,6 +103,81 @@ async fn register(http: &reqwest::Client, admin: &str) -> Result<String, String>
         .ok_or(format!("Hydra không trả client_id: {res}"))
 }
 
+/// Được F-Launcher mở: đăng nhập bằng mã khởi chạy dùng một lần, không cần trình duyệt.
+async fn run_from_launcher(
+    http: &reqwest::Client,
+    opts: &Opts,
+    launch_code: &str,
+) -> Result<(), String> {
+    let client_id =
+        std::env::var("FECO_CLIENT_ID").map_err(|_| "thiếu FECO_CLIENT_ID".to_owned())?;
+    let server = std::env::var("FECO_SERVER_URL").unwrap_or_else(|_| format!("{}/", opts.api));
+    println!("Demo App được F-Launcher mở (client_id = {client_id}).");
+    let verifier = random_hex(32);
+    let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(sha2::Sha256::digest(verifier.as_bytes()));
+    let res = http
+        .post(format!(
+            "{}v1/launch-codes/exchange",
+            server.trim_end_matches('/').to_owned() + "/"
+        ))
+        .json(&json!({
+            "code": launch_code,
+            "client_id": client_id,
+            "redirect_uri": CALLBACK,
+            "code_challenge": challenge,
+            "scope": opts.scope,
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let status = res.status();
+    let body: Value = res.json().await.map_err(|e| e.to_string())?;
+    let Some(code) = body["authorization_code"].as_str() else {
+        if body["error"] == "consent_required" {
+            return Err("bạn chưa đồng ý cho app này; chạy `cargo run -p feco-demo-app -- --client-id <ID>` một lần để đồng ý qua trình duyệt".into());
+        }
+        return Err(format!("đổi mã khởi chạy thất bại ({status}): {body}"));
+    };
+    let form = form_urlencoded::Serializer::new(String::new())
+        .append_pair("grant_type", "authorization_code")
+        .append_pair("code", code)
+        .append_pair("redirect_uri", CALLBACK)
+        .append_pair("client_id", &client_id)
+        .append_pair("code_verifier", &verifier)
+        .finish();
+    let tokens: Value = http
+        .post(format!("{}/oauth2/token", opts.hydra_public))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(form)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    let access = tokens["access_token"]
+        .as_str()
+        .ok_or(format!("không đổi được code lấy token: {tokens}"))?;
+    let me: Value = http
+        .get(format!(
+            "{}v1/me",
+            server.trim_end_matches('/').to_owned() + "/"
+        ))
+        .bearer_auth(access)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    println!(
+        "Đã đăng nhập không cần trình duyệt. GET /v1/me:\n{}",
+        serde_json::to_string_pretty(&me).unwrap_or_default()
+    );
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     let opts = match parse_args() {
@@ -122,6 +201,15 @@ async fn run(opts: Opts) -> Result<(), String> {
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|e| e.to_string())?;
+    if let Ok(code) = std::env::var("FECO_LAUNCH_CODE") {
+        let result = run_from_launcher(&http, &opts, &code).await;
+        if let Err(e) = &result {
+            eprintln!("Lỗi: {e}");
+        }
+        println!("\nNhấn Enter để đóng.");
+        let _ = std::io::stdin().read_line(&mut String::new());
+        return result;
+    }
     let client_id = match opts.client_id {
         Some(id) => id,
         None => {

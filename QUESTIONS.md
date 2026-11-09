@@ -56,3 +56,19 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     buộc máy chủ ký lại timestamp liên tục và launcher có đồng hồ đúng. Nếu máy người dùng lệch giờ
     hơn khoảng đó, launcher sẽ báo metadata hết hạn. Cần quyết định có nới lên (ví dụ 4 giờ) và
     chấp nhận cửa sổ đóng băng dài hơn không.
+
+## Nhóm 6: F-Launcher
+
+17. **Chứng thư ký mã cho launcher tự cập nhật**: spec yêu cầu bản cập nhật launcher ký Authenticode
+    (Windows) và Developer ID + notarize (macOS). Cần mua chứng thư (EV code signing) và tài khoản
+    Apple Developer trước khi làm task 6.6 (tự cập nhật, bộ cài ký mã, xác minh trên máy ảo sạch).
+18. **Kiểm tra trên Windows 11 và macOS 13** (task 6.1): máy dev hiện là Windows 10 và chưa có máy Mac.
+    Cần máy (hoặc runner CI có giao diện) để kiểm tra tay giao diện, Keychain và trình duyệt mặc định.
+19. **Mở app khi người dùng chưa từng đồng ý**: mã khởi chạy không hiện được màn hình đồng ý nên trả
+    `consent_required`, và app phải tự mở luồng đăng nhập qua trình duyệt một lần. Có muốn launcher
+    tự mở màn hình đồng ý trong trình duyệt trước khi chạy app lần đầu không?
+20. **Giới hạn kích thước gói**: hiện chỉ có độ dài đã ký trong TUF. Cần chốt dung lượng tối đa của
+    một gói và tổng dung lượng sau giải nén (chống "zip bomb") khi làm kiểm duyệt (nhóm 9).
+21. **Nguồn danh mục trong launcher**: trước khi có dịch vụ danh mục (nhóm 7), launcher lấy tên app,
+    phiên bản và file chạy từ trường `custom` đã ký trong metadata TUF. Khi có dịch vụ danh mục, mô tả,
+    ảnh và đánh giá lấy từ dịch vụ, còn thông tin cài đặt vẫn lấy từ TUF.

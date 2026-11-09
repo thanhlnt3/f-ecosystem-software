@@ -139,6 +139,7 @@ fn meta(app: &str, version: &str) -> TargetMeta {
         app: app.into(),
         version: version.into(),
         platform: "windows-x64".into(),
+        ..Default::default()
     }
 }
 
@@ -281,6 +282,17 @@ async fn tampered_package_is_rejected() {
     // Dài hơn độ dài đã ký.
     std::fs::write(&stored, b"SoundLab 1.2.0 + malware").unwrap();
     client.download(SOUNDLAB).await.expect_err("vượt độ dài");
+
+    // Tải thẳng vào file: file không khớp bị xóa.
+    let dest = fixture.tmp.path().join("download.zip");
+    client
+        .download_to(SOUNDLAB, &dest)
+        .await
+        .expect_err("gói bị sửa");
+    assert!(!dest.exists(), "file không khớp phải bị xóa");
+    std::fs::write(&stored, b"SoundLab 1.2.0").unwrap();
+    assert_eq!(client.download_to(SOUNDLAB, &dest).await.unwrap(), 14);
+    assert_eq!(std::fs::read(&dest).unwrap(), b"SoundLab 1.2.0");
 }
 
 #[tokio::test]

@@ -192,7 +192,11 @@ pub async fn login(
 }
 
 /// Scope đã cấp trước đây cho app (theo phiên đồng ý còn hiệu lực của Hydra).
-async fn previously_granted(state: &AppState, subject: &str, client_id: &str) -> BTreeSet<String> {
+pub(crate) async fn previously_granted(
+    state: &AppState,
+    subject: &str,
+    client_id: &str,
+) -> BTreeSet<String> {
     match state.hydra.consent_sessions(subject).await {
         Ok(sessions) => sessions
             .iter()
@@ -207,7 +211,7 @@ async fn previously_granted(state: &AppState, subject: &str, client_id: &str) ->
     }
 }
 
-fn requested_scopes(request: &Value) -> Vec<String> {
+pub(crate) fn requested_scopes(request: &Value) -> Vec<String> {
     request["requested_scope"]
         .as_array()
         .into_iter()
@@ -220,7 +224,7 @@ fn subject_uuid(request: &Value) -> Option<Uuid> {
     request["subject"].as_str().and_then(|s| s.parse().ok())
 }
 
-async fn accept_and_record(
+pub(crate) async fn accept_and_record(
     state: &AppState,
     challenge: &str,
     request: &Value,
@@ -268,6 +272,22 @@ pub async fn consent(
     let app = AppInfo::from_client(&request["client"]);
     let subject = request["subject"].as_str().unwrap_or_default().to_owned();
     let requested = requested_scopes(&request);
+    // F-Launcher là app bên thứ nhất của nền tảng: không hỏi đồng ý cho chính nó.
+    if state.launcher_client_id.as_deref() == Some(app.client_id.as_str()) {
+        return match accept_and_record(
+            &state,
+            &challenge,
+            &request,
+            &app,
+            &requested,
+            "first-party-launcher",
+        )
+        .await
+        {
+            Ok(to) => see_other(&to),
+            Err(e) => upstream(lang, e),
+        };
+    }
     let previous = previously_granted(&state, &subject, &app.client_id).await;
     let to_ask = apps::scopes_to_ask(&app, &requested, &previous);
 

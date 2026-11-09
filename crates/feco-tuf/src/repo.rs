@@ -48,11 +48,20 @@ impl Default for Expiry {
 }
 
 /// Thông tin của một phiên bản app, ghi vào trường `custom` của target và được ký cùng hash.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TargetMeta {
     pub app: String,
     pub version: String,
     pub platform: String,
+    /// Tên hiển thị của app.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Đường dẫn (trong gói) tới file chạy của app.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<String>,
+    /// Client ID OAuth của app, để launcher xin mã khởi chạy đúng app.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
 }
 
 /// Một bản ghi thu hồi trong [`REVOCATIONS_TARGET`].

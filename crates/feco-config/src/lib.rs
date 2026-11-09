@@ -91,6 +91,9 @@ pub struct AuthConfig {
     pub hydra_admin_url: Url,
     /// Khóa tạo định danh người dùng riêng cho từng app (spec user-data-consent).
     pub pairwise_secret: Secret,
+    /// Client ID của F-Launcher trong Hydra (client công khai, bên thứ nhất). Chỉ token của
+    /// client này được xin mã khởi chạy app con. Không đặt thì tắt tính năng mã khởi chạy.
+    pub launcher_client_id: Option<String>,
 }
 
 /// Cấu hình bảo mật (spec platform-security).
@@ -324,6 +327,10 @@ fn auth_config<'a>(
             None if prod => return Err(ConfigError::Missing("FECO_PAIRWISE_SECRET")),
             None => Secret::new("dev-only-pairwise-secret-not-for-production"),
         },
+        launcher_client_id: get("FECO_LAUNCHER_CLIENT_ID")
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_owned),
         email_from: get("FECO_EMAIL_FROM")
             .unwrap_or("F-Eco <no-reply@f-eco.example>")
             .to_owned(),

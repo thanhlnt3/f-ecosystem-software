@@ -4,6 +4,16 @@
 
 [graph]
 all-features = true
+# Chỉ kiểm các nền tảng thật sự phát hành: launcher và app mẫu cho Windows, macOS; dịch vụ cho
+# Linux. Không có nền tảng wasm32/android nên các crate chỉ dùng ở đó không đi vào sản phẩm.
+targets = [
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+]
 
 [licenses]
 confidence-threshold = 0.9

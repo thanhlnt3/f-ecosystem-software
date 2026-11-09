@@ -2,14 +2,15 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–5):
+> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–6):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện tiếng Việt và tiếng Anh.
 > - Bảo mật: HSTS và header bảo vệ, mã hóa dữ liệu nhạy cảm khi lưu (AES-256-GCM), giới hạn tần suất, nhật ký kiểm toán chỉ ghi thêm, cảnh báo đăng nhập từ thiết bị mới. Quy trình xử lý sự cố: [`docs/security/incident-response.md`](docs/security/incident-response.md).
 > - Chuỗi tin cậy cho gói cài đặt theo TUF (dùng `tough`): ký phiên bản đã duyệt, thu hồi tới launcher trong 1 giờ, chặn gói hoặc metadata bị sửa, rollback, đóng băng; xoay khóa targets và root (ngưỡng 2/3). Công cụ `feco-tuf`, quy trình giữ khóa: [`docs/security/tuf-keys.md`](docs/security/tuf-keys.md).
+> - F-Launcher (Rust + egui): đăng nhập qua trình duyệt, nhớ đăng nhập qua khởi động lại máy, cài/cập nhật/quay lại/gỡ app con có xác minh TUF, chạy được khi ngoại tuyến, chặn phiên bản bị thu hồi, mở app con bằng mã khởi chạy dùng một lần.
 >
-> Chưa có: launcher, danh mục app, cổng nhà phát triển, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
+> Chưa có: dịch vụ danh mục app (launcher tạm lấy danh mục từ kho TUF), cổng nhà phát triển, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
 
 ## Mục lục
 
@@ -19,7 +20,8 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
   - [3. Chạy feco-server](#3-chạy-feco-server)
   - [4. Dùng thử tài khoản](#4-dùng-thử-tài-khoản)
   - [5. Dùng thử đăng nhập một lần với app mẫu](#5-dùng-thử-đăng-nhập-một-lần-với-app-mẫu)
-  - [6. Dừng và xóa dữ liệu](#6-dừng-và-xóa-dữ-liệu)
+  - [6. Dùng thử F-Launcher](#6-dùng-thử-f-launcher)
+  - [7. Dừng và xóa dữ liệu](#7-dừng-và-xóa-dữ-liệu)
 - [Địa chỉ các dịch vụ](#địa-chỉ-các-dịch-vụ)
 - [Cấu hình](#cấu-hình)
 - [Kiểm thử](#kiểm-thử)
@@ -158,7 +160,59 @@ cargo run -p feco-demo-app -- --client-id <client_id đã in ra lần trước>
 cargo run -p feco-demo-app -- --client-id <client_id> --scope "openid profile phone"   # xin thêm scope
 ```
 
-### 6. Dừng và xóa dữ liệu
+### 6. Dùng thử F-Launcher
+
+F-Launcher (`clients/feco-launcher`) là ứng dụng desktop. Bản dev đọc danh mục từ một kho TUF cục
+bộ mà script dưới đây dựng sẵn, với Demo App ở bước 5 làm app con.
+
+1. Chuẩn bị (cần Hydra đang chạy). Script tạo khóa và kho TUF trong `.dev/` (không commit), đăng ký
+   client OAuth của launcher và của Demo App trong Hydra, ký một phiên bản Demo App, rồi in các
+   biến môi trường cần dùng:
+
+   ```bash
+   scripts/dev-launcher.sh setup
+   ```
+
+2. Chạy lại `feco-server` (bước 3) với `FECO_LAUNCHER_CLIENT_ID` mà script in ra. Biến này bật mã
+   khởi chạy và cho launcher đăng nhập không cần màn hình đồng ý (launcher là app của nền tảng).
+3. Chạy launcher với hai biến script in ra:
+
+   ```bash
+   export FECO_LAUNCHER_CLIENT_ID=<client_id của launcher>
+   export FECO_LAUNCHER_TUF=<đường dẫn .dev/tuf/repo>
+   cargo run -p feco-launcher
+   ```
+
+4. Bấm **Đăng nhập**: trình duyệt mặc định mở trang đăng nhập F-Eco, sau đó launcher hiện tên bạn.
+   Refresh token được lưu trong Windows Credential Manager (macOS: Keychain), nên tắt mở lại launcher
+   hay khởi động lại máy vẫn còn đăng nhập.
+5. Tab **Danh mục** → **Cài** Demo App. Hộp thoại xác nhận có dòng "App này chạy với quyền như mọi
+   ứng dụng khác trên máy bạn". Gói được kiểm tra chữ ký và SHA-256 qua TUF rồi cài vào
+   `%LOCALAPPDATA%\F-Eco\Launcher\apps` (macOS: `~/Library/Application Support/F-Eco/Launcher`).
+6. Lần đầu, cho Demo App quyền qua trình duyệt một lần: `cargo run -p feco-demo-app -- --client-id
+   $(cat .dev/demo-client-id)`. Sau đó tab **App của tôi** → **Mở**: launcher xin mã khởi chạy dùng
+   một lần (sống 60 giây) và chạy Demo App; Demo App tự đổi mã lấy token, không mở trình duyệt, rồi
+   in kết quả `/v1/me`.
+7. Thử cập nhật, quay lại, thu hồi:
+
+   ```bash
+   scripts/dev-launcher.sh publish   # ký phiên bản mới → launcher hiện "Cập nhật lên ..."
+   scripts/dev-launcher.sh revoke    # thu hồi bản mới nhất → sau lần đồng bộ kế tiếp không mở được, hiện lý do
+   scripts/dev-launcher.sh refresh   # timestamp TUF hết hạn sau 1 giờ: chạy lại khi launcher báo metadata hết hạn
+   ```
+
+   Bấm **Đồng bộ** để launcher đồng bộ ngay (bình thường mỗi giờ). **Quay lại** khôi phục bản trước
+   mà không tải lại. **Gỡ** hỏi có xóa dữ liệu cục bộ không (mặc định giữ) và nhắc rằng quyền dữ liệu
+   chỉ thu hồi ở trang Ứng dụng đã kết nối.
+8. Ngắt mạng (hoặc dừng thư mục kho) rồi mở lại launcher: "App của tôi" vẫn mở được app đã cài,
+   thanh trên cùng báo "Đang ngoại tuyến".
+
+Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/`), `FECO_LAUNCHER_HYDRA`
+(`http://127.0.0.1:4444/`), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
+(root.json tin cậy; mặc định `metadata/1.root.json` của kho cục bộ), `FECO_LAUNCHER_FONT` (phông chữ
+`.ttf` nếu máy không có Segoe UI/Arial). Ngoài dev, các địa chỉ phải là HTTPS.
+
+### 7. Dừng và xóa dữ liệu
 
 - Dừng `feco-server` và app mẫu bằng `Ctrl+C`.
 - Cách A: `docker compose -f infra/docker-compose.yml down`. Lệnh này dừng và xóa mọi dữ liệu dev, vì compose không dùng volume.
@@ -184,6 +238,8 @@ Các API chính của `feco-server`:
 | `/sessions`, `/apps`, `/account/export`, `/account/delete`, `/lang/{vi\|en}` | Trang do feco-server xử lý |
 | `/security/not-me/{token}` | Nút "Không phải tôi" trong email cảnh báo thiết bị mới |
 | `/oauth/login`, `/oauth/consent`, `/oauth/logout` | Login & consent provider của Hydra |
+| `POST /v1/launch-codes` | Chỉ token của F-Launcher: `{"client_id"}` → mã khởi chạy dùng một lần, sống 60 giây |
+| `POST /v1/launch-codes/exchange` | App con: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → `authorization_code` để đổi lấy token tại Hydra bằng PKCE. Chỉ cấp lại scope người dùng đã đồng ý; chưa đồng ý thì trả `consent_required` |
 | `GET /v1/me` | Dữ liệu người dùng theo scope của access token (`Authorization: Bearer …`); `?fields=email,phone_number` để chọn trường. Lỗi trả JSON `{error, message, message_vi, request_id}` |
 
 ## Cấu hình
@@ -205,6 +261,7 @@ Các API chính của `feco-server`:
 | `FECO_DATA_KEY` | khóa dev cố định | Khóa AES-256 (32 byte, base64) mã hóa khóa webhook và file xuất dữ liệu khi lưu. Bắt buộc ở production. Tạo: `openssl rand -base64 32` |
 | `FECO_RATE_IP_PER_MIN` | `1200` | Số yêu cầu mỗi phút từ một IP; vượt thì trả 429 kèm `Retry-After` |
 | `FECO_RATE_APP_PER_MIN` / `FECO_RATE_USER_PER_MIN` | `1200` / `120` | Số lần gọi `/v1/me` mỗi phút của một app / một người dùng |
+| `FECO_LAUNCHER_CLIENT_ID` | không đặt | Client ID của F-Launcher trong Hydra. Có thì bật mã khởi chạy app con (`/v1/launch-codes`) và launcher không phải qua màn hình đồng ý |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |
 | `RUST_LOG` | `info` | Mức nhật ký, ví dụ `debug` |
 
@@ -247,6 +304,10 @@ CI (GitHub Actions) chạy tất cả những bước trên, kể cả kiểm th
 | App mẫu báo "cổng 9999 đang bận" | Một lần chạy app mẫu khác vẫn đang chờ; dừng nó bằng `Ctrl+C` |
 | Kiểm thử đầu-cuối báo "cổng 8080 phải trống" | Dừng `feco-server` đang chạy trước khi chạy kiểm thử |
 | Kratos báo `database table is locked` | Kratos dev dùng SQLite trong bộ nhớ, không chịu được ghi đồng thời nhiều; các kiểm thử đã chạy lần lượt. Staging và production phải dùng PostgreSQL cho Kratos |
+| Launcher báo "Metadata phân phối không hợp lệ ... ExpiredMetadata" | Timestamp của kho TUF dev hết hạn sau 1 giờ: `scripts/dev-launcher.sh refresh` rồi bấm **Đồng bộ** |
+| Launcher báo "cổng 47201 đang bận" khi đăng nhập | Một lần đăng nhập khác vẫn đang chờ trình duyệt; đóng launcher khác hoặc chờ hết 10 phút |
+| Launcher thoát ngay với "không tìm thấy phông chữ hệ thống" | Đặt `FECO_LAUNCHER_FONT` tới một file `.ttf` có dấu tiếng Việt |
+| Mở Demo App báo `consent_required` | Người dùng chưa từng đồng ý cho app; chạy app qua trình duyệt một lần (bước 6.6) |
 | Mật khẩu hợp lệ vẫn bị từ chối là "quá giống email" | Kratos chặn mật khẩu giống định danh; chọn mật khẩu khác hẳn email |
 
 ## Yêu cầu và thiết kế
@@ -269,10 +330,11 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `crates/feco-config` | Đọc và kiểm tra cấu hình lúc khởi động |
 | `crates/feco-tuf` | Kho TUF (dựng, ký, thu hồi, xoay khóa) và client xác minh cho launcher; công cụ `feco-tuf` |
 | `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
-| `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me` |
+| `clients/feco-launcher` | F-Launcher: thư viện (đăng nhập, cài/cập nhật/gỡ qua TUF, mã khởi chạy, API cục bộ) và giao diện egui |
+| `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me`; khi được launcher mở thì đăng nhập bằng mã khởi chạy |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |
 | `infra/` | Hạ tầng dev: `docker-compose.yml`, cấu hình Kratos (schema, mẫu email) và Hydra |
-| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF |
+| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher |
 | `docs/security/` | Quy trình xử lý sự cố, quản lý khóa TUF, biên bản diễn tập |
 | `third_party/` | Khai báo license và ngoại lệ đã duyệt |
 | `openspec/` | Yêu cầu, thiết kế, kế hoạch |
