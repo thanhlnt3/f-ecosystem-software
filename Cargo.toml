@@ -5,6 +5,7 @@ members = [
     "crates/feco-config",
     "services/feco-server",
     "tools/feco-license-check",
+    "tools/feco-demo-app",
 ]
 
 [workspace.package]

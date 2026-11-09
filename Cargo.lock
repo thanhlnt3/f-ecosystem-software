@@ -613,6 +613,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "feco-demo-app"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64 0.23.1",
+ "form_urlencoded",
+ "getrandom 0.4.3",
+ "reqwest",
+ "serde_json",
+ "sha2 0.11.1",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "feco-license-check"
 version = "0.1.0"
 dependencies = [
