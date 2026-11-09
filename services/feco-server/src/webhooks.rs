@@ -11,7 +11,10 @@ use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use time::OffsetDateTime;
 
-use crate::store::{self, Db, PendingDelivery};
+use crate::{
+    crypto::DataKey,
+    store::{self, Db, PendingDelivery},
+};
 
 pub const MAX_AGE: Duration = Duration::from_secs(72 * 3600);
 
@@ -71,7 +74,14 @@ pub fn verify(secret: &str, header: &str, body: &[u8], now: i64) -> bool {
             == 0
 }
 
-async fn deliver_one(http: &reqwest::Client, d: &PendingDelivery) -> Result<(), String> {
+async fn deliver_one(
+    http: &reqwest::Client,
+    key: &DataKey,
+    d: &PendingDelivery,
+) -> Result<(), String> {
+    let secret = key
+        .decrypt_text(&d.secret, &store::webhook_aad(&d.client_id))
+        .map_err(|e| format!("khóa webhook: {e}"))?;
     let body = serde_json::to_vec(&d.payload).map_err(|e| e.to_string())?;
     let now = OffsetDateTime::now_utc().unix_timestamp();
     let res = http
@@ -79,7 +89,7 @@ async fn deliver_one(http: &reqwest::Client, d: &PendingDelivery) -> Result<(), 
         .header("content-type", "application/json")
         .header("f-eco-event", &d.event_type)
         .header("f-eco-delivery", d.id.to_string())
-        .header("f-eco-signature", sign(&d.secret, now, &body))
+        .header("f-eco-signature", sign(&secret, now, &body))
         .body(body)
         .send()
         .await
@@ -92,12 +102,16 @@ async fn deliver_one(http: &reqwest::Client, d: &PendingDelivery) -> Result<(), 
 }
 
 /// Gửi mọi webhook đến hạn. Trả về (số đã gửi thành công, số thất bại lần này).
-pub async fn deliver_due(db: &Db, http: &reqwest::Client) -> sqlx::Result<(usize, usize)> {
+pub async fn deliver_due(
+    db: &Db,
+    http: &reqwest::Client,
+    key: &DataKey,
+) -> sqlx::Result<(usize, usize)> {
     let mut tx = db.begin().await?;
     let due = store::due_deliveries(&mut tx, 50).await?;
     let (mut ok, mut failed) = (0, 0);
     for d in &due {
-        match deliver_one(http, d).await {
+        match deliver_one(http, key, d).await {
             Ok(()) => {
                 ok += 1;
                 sqlx::query("UPDATE webhook_outbox SET delivered_at = now(), attempts = attempts + 1, last_error = NULL WHERE id = $1")

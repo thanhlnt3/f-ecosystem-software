@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("notme.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("notme.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+{% if !done %}
+<p>{{ i18n.t("notme.body") }}</p>
+<form method="post" action="/security/not-me/{{ token }}">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <button type="submit" class="danger">{{ i18n.t("notme.button") }}</button>
+</form>
+{% endif %}
+<div class="links"><a href="/recovery">{{ i18n.t("notme.reset") }}</a></div>
+{% endblock %}

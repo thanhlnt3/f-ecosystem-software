@@ -22,7 +22,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    account, challenge,
+    account, alerts,
+    audit::{self, Actor},
+    challenge,
     i18n::{self, Lang},
     kratos::{ClientInfo, FlowKind, InitOptions, KratosResponse, Whoami},
     mailer::templates,
@@ -321,7 +323,14 @@ pub async fn submit_flow(
         Ok(r) => r,
         Err(e) => return unavailable(lang, e),
     };
-    handle_submit_response(&state, lang, kind, &form, identifier.as_deref(), r).await
+    let req = SubmitContext {
+        kind,
+        form: &form,
+        identifier: identifier.as_deref(),
+        client: &client,
+        cookie,
+    };
+    handle_submit_response(&state, lang, &req, r).await
 }
 
 /// Địa chỉ Kratos muốn đưa trình duyệt tới sau khi đăng nhập (`return_to`), nếu nó
@@ -336,14 +345,28 @@ fn post_login_target(state: &AppState, body: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// Yêu cầu đã gửi tới Kratos, dùng khi xử lý phản hồi.
+struct SubmitContext<'a> {
+    kind: FlowKind,
+    form: &'a [(String, String)],
+    identifier: Option<&'a str>,
+    client: &'a ClientInfo,
+    cookie: Option<&'a str>,
+}
+
 async fn handle_submit_response(
     state: &Arc<AppState>,
     lang: Lang,
-    kind: FlowKind,
-    form: &[(String, String)],
-    identifier: Option<&str>,
+    req: &SubmitContext<'_>,
     r: KratosResponse,
 ) -> Response {
+    let SubmitContext {
+        kind,
+        form,
+        identifier,
+        client,
+        cookie,
+    } = *req;
     let msg_ids = r.message_ids();
     match (r.status.as_u16(), kind) {
         (200, FlowKind::Login) => {
@@ -351,10 +374,49 @@ async fn handle_submit_response(
                 state.throttle.reset(ident);
             }
             let mut target = post_login_target(state, &r.body).unwrap_or_else(|| "/".into());
+            let session = r.body["session"].clone();
+            let subject = session["identity"]["id"]
+                .as_str()
+                .and_then(|s| s.parse::<uuid::Uuid>().ok());
+            if let Some(subject) = subject {
+                audit::record(
+                    &state.db,
+                    Actor::User(subject),
+                    "auth.login",
+                    Some(&subject.to_string()),
+                    client.ip.as_deref(),
+                    serde_json::json!({
+                        "aal": session["authenticator_assurance_level"],
+                        "methods": session["authentication_methods"].as_array().map(|m| m.iter().map(|x| x["method"].clone()).collect::<Vec<_>>()),
+                    }),
+                )
+                .await;
+            }
+            // Spec platform-security: báo khi đăng nhập từ thiết bị hoặc quốc gia mới.
+            let st = state.clone();
+            let s2 = session.clone();
+            tokio::spawn(async move {
+                if let Err(e) = alerts::on_login(&st, &s2).await {
+                    tracing::error!(error = %e, "không kiểm tra được thiết bị đăng nhập");
+                }
+            });
             // Spec: đăng nhập lại trong 30 ngày chờ thì hủy yêu cầu xóa tài khoản.
             if let Some(id) = r.body["session"]["identity"]["id"].as_str() {
                 match account::cancel_deletion_if_pending(&state.kratos, id).await {
-                    Ok(true) => target = "/?notice=deletion_cancelled".into(),
+                    Ok(true) => {
+                        target = "/?notice=deletion_cancelled".into();
+                        if let Some(subject) = subject {
+                            audit::record(
+                                &state.db,
+                                Actor::User(subject),
+                                "account.deletion_cancelled",
+                                Some(id),
+                                client.ip.as_deref(),
+                                serde_json::json!({}),
+                            )
+                            .await;
+                        }
+                    }
                     Ok(false) => {}
                     Err(e) => {
                         tracing::error!(error = %e, "không kiểm tra được yêu cầu xóa tài khoản")
@@ -367,6 +429,29 @@ async fn handle_submit_response(
             let email = field(form, "traits.email").unwrap_or_default();
             with_cookies(registration_sent_page(lang, email), &r.set_cookies)
         }
+        (200, FlowKind::Settings) => {
+            // Spec platform-security, "Nhật ký kiểm toán": đổi thông tin bảo mật.
+            if let Ok(Whoami::Session(s)) = state.kratos.whoami(cookie).await {
+                if let Some(subject) = s["identity"]["id"].as_str().and_then(|v| v.parse().ok()) {
+                    let method = field(form, "method").unwrap_or_default();
+                    let action = if method == "profile" {
+                        "account.profile_changed"
+                    } else {
+                        "account.security_changed"
+                    };
+                    audit::record(
+                        &state.db,
+                        Actor::User(subject),
+                        action,
+                        s["identity"]["id"].as_str(),
+                        client.ip.as_deref(),
+                        serde_json::json!({"method": method}),
+                    )
+                    .await;
+                }
+            }
+            with_cookies(flow_page(state, lang, kind, &r.body, false), &r.set_cookies)
+        }
         (200, _) => with_cookies(flow_page(state, lang, kind, &r.body, false), &r.set_cookies),
         (400, FlowKind::Registration) if msg_ids.contains(&ids::DUPLICATE_IDENTIFIER) => {
             let email = field(form, "traits.email").unwrap_or_default().to_owned();
@@ -376,6 +461,15 @@ async fn handle_submit_response(
         (400, FlowKind::Login) => {
             let mut challenge = false;
             if let (Some(ident), true) = (identifier, msg_ids.contains(&ids::CREDENTIALS_INVALID)) {
+                audit::record(
+                    &state.db,
+                    Actor::Anonymous,
+                    "auth.login_failed",
+                    None,
+                    client.ip.as_deref(),
+                    serde_json::json!({"identifier_hash": audit::hash_identifier(ident)}),
+                )
+                .await;
                 let n = state.throttle.record_failure(ident, Instant::now());
                 challenge = n >= state.throttle.policy().challenge_after;
                 if state.throttle.crossed_threshold(n) {

@@ -180,6 +180,17 @@ pub async fn me(
     ) else {
         return invalid_token();
     };
+    // Spec platform-security, "Giới hạn tần suất": theo app và theo người dùng.
+    let minute = std::time::Duration::from_secs(60);
+    let now = std::time::Instant::now();
+    for (key, limit) in [
+        (format!("app:{client_id}"), state.limits.app_per_min),
+        (format!("user:{subject}"), state.limits.user_per_min),
+    ] {
+        if let Err(wait) = state.ratelimit.check(&key, limit, minute, now) {
+            return crate::security::too_many("/v1/me", wait);
+        }
+    }
     let identity = match state.kratos.get_identity(&subject.to_string()).await {
         Ok(Some(i)) => i,
         Ok(None) => return invalid_token(),

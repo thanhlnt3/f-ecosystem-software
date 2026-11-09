@@ -32,3 +32,15 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
    `f-app.toml`.
 9. **File xuất dữ liệu lưu trong PostgreSQL** (cột `bytea`). Khi dữ liệu lớn (dự án F-Builder),
    nên chuyển sang kho đối tượng (design D11).
+
+## Nhóm 4: bảo mật
+
+10. **Bộ đếm giới hạn tần suất nằm trong bộ nhớ** (giống bộ đếm đăng nhập sai). Khi chạy nhiều bản
+    feco-server cần chuyển sang Valkey. Ngưỡng mặc định: 1200 yêu cầu/phút mỗi IP, 1200 lần/phút
+    mỗi app và 120 lần/phút mỗi người dùng ở `/v1/me`. Cần chốt ngưỡng cho production.
+11. **Vai trò cơ sở dữ liệu ở production**: feco-server phải kết nối bằng vai trò không được
+    `ALTER TABLE`/`DISABLE TRIGGER`, nếu không trigger bảo vệ nhật ký kiểm toán có thể bị tắt.
+12. **Thời hạn thông báo sự cố** trong `docs/security/incident-response.md` (hiện ghi 72 giờ theo
+    Nghị định 13/2023/NĐ-CP) cần luật sư xác nhận theo văn bản đang có hiệu lực.
+13. **TLS**: feco-server chạy sau proxy TLS (ví dụ của nhà cung cấp đám mây). Quét cấu hình TLS 1.2+
+    làm khi có staging.

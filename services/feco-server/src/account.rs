@@ -277,8 +277,10 @@ pub async fn revoke(
         )
         .await;
     }
+    let actor = current_actor(&state, &headers).await;
     match state.kratos.revoke_session(cookie(&headers), &id).await {
         Ok(true) => {
+            audit_revoke(&state, actor, "session.revoked", &id, &headers).await;
             sessions_page(
                 &state,
                 lang,
@@ -316,8 +318,10 @@ pub async fn revoke_others(
         )
         .await;
     }
+    let actor = current_actor(&state, &headers).await;
     match state.kratos.revoke_other_sessions(cookie(&headers)).await {
         Ok(true) => {
+            audit_revoke(&state, actor, "session.revoked_others", "all", &headers).await;
             sessions_page(
                 &state,
                 lang,
@@ -337,6 +341,38 @@ pub async fn revoke_others(
         }
         Err(e) => unavailable(lang, e),
     }
+}
+
+async fn current_actor(state: &AppState, headers: &HeaderMap) -> Option<uuid::Uuid> {
+    match state.kratos.whoami(cookie(headers)).await {
+        Ok(Whoami::Session(s)) => s["identity"]["id"].as_str().and_then(|v| v.parse().ok()),
+        _ => None,
+    }
+}
+
+async fn audit_revoke(
+    state: &AppState,
+    actor: Option<uuid::Uuid>,
+    action: &str,
+    target: &str,
+    headers: &HeaderMap,
+) {
+    let ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.split(',').next().unwrap_or_default().trim().to_owned());
+    let actor = actor
+        .map(crate::audit::Actor::User)
+        .unwrap_or(crate::audit::Actor::Anonymous);
+    crate::audit::record(
+        &state.db,
+        actor,
+        action,
+        Some(target),
+        ip.as_deref(),
+        json!({}),
+    )
+    .await;
 }
 
 /// Phiên được xác thực đủ gần để làm thao tác nhạy cảm.
@@ -440,6 +476,17 @@ pub async fn delete_submit(
     if let Err(e) = request_deletion(&state.kratos, &id, SystemTime::now()).await {
         return unavailable(lang, e);
     }
+    if let Ok(subject) = id.parse::<uuid::Uuid>() {
+        crate::audit::record(
+            &state.db,
+            crate::audit::Actor::User(subject),
+            "account.deletion_requested",
+            Some(&id),
+            None,
+            json!({}),
+        )
+        .await;
+    }
     html(
         MessagePage {
             i18n: lang,
@@ -537,6 +584,15 @@ pub async fn purge_due(state: &AppState, now: SystemTime) -> Result<usize, Strin
             .map_err(|e| e.to_string())?
         {
             tracing::info!(identity = id, "đã xóa tài khoản sau 30 ngày chờ");
+            crate::audit::record(
+                &state.db,
+                crate::audit::Actor::System,
+                "account.deleted",
+                Some(id),
+                None,
+                json!({"apps_notified": clients.len()}),
+            )
+            .await;
             deleted += 1;
         }
     }

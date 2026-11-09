@@ -219,6 +219,22 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "export.status_failed" => ("thất bại, hãy thử lại", "failed, please try again"),
         "export.expired" => ("Liên kết không hợp lệ hoặc đã hết hạn.", "The link is invalid or has expired."),
 
+        "notme.title" => ("Không phải tôi đăng nhập", "This wasn't me"),
+        "notme.body" => (
+            "Bấm nút dưới đây để đăng xuất tài khoản khỏi mọi thiết bị. Sau đó hãy đặt lại mật khẩu và bật xác thực hai lớp.",
+            "Press the button below to sign your account out of every device. Then reset your password and turn on two-factor authentication.",
+        ),
+        "notme.button" => ("Đăng xuất mọi thiết bị", "Sign out all devices"),
+        "notme.done" => (
+            "Đã đăng xuất mọi thiết bị. Hãy đặt lại mật khẩu ngay.",
+            "All devices were signed out. Reset your password now.",
+        ),
+        "notme.invalid" => (
+            "Liên kết không hợp lệ, đã được dùng hoặc đã hết hạn.",
+            "The link is invalid, already used or expired.",
+        ),
+        "notme.reset" => ("Đặt lại mật khẩu", "Reset password"),
+
         "delete.title" => ("Xóa tài khoản", "Delete account"),
         "delete.body" => (
             "Tài khoản sẽ chuyển sang trạng thái chờ xóa trong 30 ngày, và mọi thiết bị bị đăng xuất. Nếu bạn đăng nhập lại trong 30 ngày, yêu cầu xóa sẽ bị hủy. Sau 30 ngày, hồ sơ, dữ liệu đã cấp cho app con và lịch sử F-Builder bị xóa; hóa đơn được giữ theo quy định pháp luật.",
@@ -286,6 +302,8 @@ mod tests {
             include_str!("../templates/apps.html"),
             include_str!("../templates/app_detail.html"),
             include_str!("../templates/export.html"),
+            include_str!("alerts.rs"),
+            include_str!("../templates/not_me.html"),
         ];
         let re = regex::Regex::new(r#"\.t\("([a-z_.0-9]+)"\)"#).unwrap();
         let mut checked = 0;

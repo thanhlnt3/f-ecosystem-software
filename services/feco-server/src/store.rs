@@ -6,6 +6,8 @@ use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use crate::crypto::DataKey;
+
 pub type Db = PgPool;
 
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
@@ -45,8 +47,18 @@ pub async fn record_consent(
     .bind(granted_scopes)
     .bind(content_version)
     .execute(db)
-    .await
-    .map(|_| ())
+    .await?;
+    // Spec platform-security, "Nhật ký kiểm toán": cấp và thu hồi đồng ý.
+    crate::audit::record(
+        db,
+        crate::audit::Actor::User(subject),
+        &format!("consent.{}", action.as_str()),
+        Some(client_id),
+        None,
+        serde_json::json!({"scopes": granted_scopes, "content_version": content_version}),
+    )
+    .await;
+    Ok(())
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
@@ -156,20 +168,31 @@ pub async fn delete_subject_data(db: &Db, subject: Uuid) -> sqlx::Result<()> {
 // ---------- Webhook ----------
 
 /// Đăng ký địa chỉ nhận sự kiện của app; trả về khóa ký (chỉ hiện một lần cho nhà phát triển).
-pub async fn register_webhook(db: &Db, client_id: &str, url: &str) -> sqlx::Result<String> {
+pub async fn register_webhook(
+    db: &Db,
+    key: &DataKey,
+    client_id: &str,
+    url: &str,
+) -> sqlx::Result<String> {
     let mut buf = [0u8; 32];
     getrandom::fill(&mut buf).expect("nguồn ngẫu nhiên");
     let secret: String = buf.iter().map(|b| format!("{b:02x}")).collect();
+    let stored = key.encrypt_text(&secret, &webhook_aad(client_id));
     sqlx::query(
         "INSERT INTO app_webhooks (client_id, url, secret) VALUES ($1, $2, $3)
          ON CONFLICT (client_id) DO UPDATE SET url = EXCLUDED.url, secret = EXCLUDED.secret",
     )
     .bind(client_id)
     .bind(url)
-    .bind(&secret)
+    .bind(&stored)
     .execute(db)
     .await?;
     Ok(secret)
+}
+
+/// Ngữ cảnh mã hóa khóa webhook: bản mã chỉ giải được cho đúng app.
+pub fn webhook_aad(client_id: &str) -> String {
+    format!("webhook-secret:{client_id}")
 }
 
 /// Đưa sự kiện vào hàng đợi nếu app có đăng ký webhook. Trả về `true` khi đã đưa vào.
@@ -194,6 +217,7 @@ pub async fn enqueue_event(
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PendingDelivery {
     pub id: i64,
+    pub client_id: String,
     pub event_type: String,
     pub payload: Value,
     pub attempts: i32,
@@ -208,7 +232,7 @@ pub async fn due_deliveries(
     limit: i64,
 ) -> sqlx::Result<Vec<PendingDelivery>> {
     sqlx::query_as(
-        "SELECT o.id, o.event_type, o.payload, o.attempts, o.created_at, w.url, w.secret
+        "SELECT o.id, o.client_id, o.event_type, o.payload, o.attempts, o.created_at, w.url, w.secret
          FROM webhook_outbox o JOIN app_webhooks w USING (client_id)
          WHERE o.delivered_at IS NULL AND o.failed_at IS NULL AND o.next_attempt_at <= now()
          ORDER BY o.next_attempt_at LIMIT $1
@@ -231,14 +255,21 @@ pub async fn create_export(db: &Db, subject: Uuid) -> sqlx::Result<Uuid> {
     Ok(id)
 }
 
-pub async fn finish_export(db: &Db, id: Uuid, file: &[u8], token: &str) -> sqlx::Result<()> {
+pub async fn finish_export(
+    db: &Db,
+    key: &DataKey,
+    id: Uuid,
+    file: &[u8],
+    token: &str,
+) -> sqlx::Result<()> {
+    let file = key.encrypt(file, &export_aad(id));
     sqlx::query(
-        "UPDATE data_exports SET status = 'ready', file = $2, download_token = $3,
+        "UPDATE data_exports SET status = 'ready', file = $2, download_token = $3, encrypted = true,
              ready_at = now(), expires_at = now() + interval '7 days'
          WHERE id = $1",
     )
     .bind(id)
-    .bind(file)
+    .bind(&file)
     .bind(token)
     .execute(db)
     .await
@@ -270,17 +301,34 @@ pub async fn latest_export(db: &Db, subject: Uuid) -> sqlx::Result<Option<Export
     .await
 }
 
-/// File xuất theo token, chỉ khi còn hạn và đúng chủ.
-pub async fn export_file(db: &Db, subject: Uuid, token: &str) -> sqlx::Result<Option<Vec<u8>>> {
-    sqlx::query_scalar(
-        "SELECT file FROM data_exports
+fn export_aad(id: Uuid) -> String {
+    format!("data-export:{id}")
+}
+
+/// File xuất theo token, chỉ khi còn hạn và đúng chủ; giải mã trước khi trả.
+pub async fn export_file(
+    db: &Db,
+    key: &DataKey,
+    subject: Uuid,
+    token: &str,
+) -> sqlx::Result<Option<Vec<u8>>> {
+    let row: Option<(Uuid, Option<Vec<u8>>, bool)> = sqlx::query_as(
+        "SELECT id, file, encrypted FROM data_exports
          WHERE subject = $1 AND download_token = $2 AND status = 'ready' AND expires_at > now()",
     )
     .bind(subject)
     .bind(token)
     .fetch_optional(db)
-    .await
-    .map(Option::flatten)
+    .await?;
+    Ok(row.and_then(|(id, file, encrypted)| {
+        let file = file?;
+        if !encrypted {
+            return Some(file);
+        }
+        key.decrypt(&file, &export_aad(id))
+            .map_err(|e| tracing::error!(error = %e, "không giải mã được file xuất"))
+            .ok()
+    }))
 }
 
 /// Xóa file xuất đã hết hạn.

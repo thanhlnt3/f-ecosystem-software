@@ -46,10 +46,15 @@
 ## 4. Bảo mật nền tảng (`platform-security`)
 
 - [ ] 4.1 TLS, HSTS, mã hóa dữ liệu khi lưu, Argon2id; xác minh bằng quét cấu hình TLS và test băm mật khẩu
-- [ ] 4.2 Giới hạn tần suất theo người dùng, app, IP, kèm mã 429 và `Retry-After`; xác minh bằng test tải
-- [ ] 4.3 Nhật ký kiểm toán chỉ ghi thêm, lưu 1 năm, không chứa bí mật; xác minh bằng test thử sửa nhật ký và quét nội dung nhật ký
-- [ ] 4.4 Email cảnh báo đăng nhập từ thiết bị lạ, ký HMAC cho webhook đi ra; xác minh bằng các scenario trong spec
+  - Trạng thái: đã xác minh bằng test HSTS (khi địa chỉ công khai là https), chuyển HTTP sang HTTPS ở production (308), header chống nhúng khung và đoán kiểu nội dung; E2E `argon2id_passwords_and_encrypted_webhook_secrets` xác nhận Kratos băm mật khẩu bằng Argon2id; khóa ký webhook và file xuất dữ liệu được mã hóa AES-256-GCM khi lưu (`src/crypto.rs`). Còn lại: quét cấu hình TLS 1.2+ và mã hóa đĩa của PostgreSQL ở staging/production (chờ hạ tầng, task 1.4).
+- [x] 4.2 Giới hạn tần suất theo người dùng, app, IP, kèm mã 429 và `Retry-After`; xác minh bằng test tải
+  - Đã xác minh: giới hạn theo IP cho mọi yêu cầu (test `ip_rate_limit_returns_429_with_retry_after`), theo app và theo người dùng ở `/v1/me` (E2E `v1_me_rate_limit_per_user`: lần thứ 121 trong một phút nhận 429, `Retry-After`, `error: rate_limited`). Ngưỡng đổi được qua `FECO_RATE_*`. Bộ đếm trong bộ nhớ; cần Valkey khi chạy nhiều bản (QUESTIONS.md).
+- [x] 4.3 Nhật ký kiểm toán chỉ ghi thêm, lưu 1 năm, không chứa bí mật; xác minh bằng test thử sửa nhật ký và quét nội dung nhật ký
+  - Đã xác minh bằng E2E `audit_log_append_only_and_secret_free`: ghi đăng nhập, đăng nhập sai (chỉ lưu mã băm định danh), đổi hồ sơ và thông tin bảo mật, đồng ý, thu hồi, xóa tài khoản, thiết bị, xuất dữ liệu; UPDATE, DELETE bản ghi chưa quá 1 năm và TRUNCATE bị trigger từ chối; bản ghi quá 1 năm được tác vụ lưu trữ xóa; nội dung không chứa mật khẩu hay token. Chưa có: ghi lại chính lần thử sửa ở mức cơ sở dữ liệu (lỗi làm giao dịch bị hủy); thao tác của quản trị viên sẽ được ghi ở nhóm 14.
+- [x] 4.4 Email cảnh báo đăng nhập từ thiết bị lạ, ký HMAC cho webhook đi ra; xác minh bằng các scenario trong spec
+  - Đã xác minh bằng E2E `new_device_alert_and_not_me`: lần đăng nhập đầu và thiết bị cũ không gửi email; thiết bị mới gửi email kèm thiết bị, vị trí gần đúng, thời điểm và liên kết "Không phải tôi" (dùng một lần, 7 ngày) đăng xuất mọi thiết bị. Webhook đi ra ký HMAC-SHA256 (đã xác minh ở nhóm 3).
 - [ ] 4.5 Quy trình xử lý sự cố lộ dữ liệu bằng văn bản, kèm một buổi diễn tập; xác minh bằng biên bản diễn tập
+  - Trạng thái: quy trình bằng văn bản ở `docs/security/incident-response.md` (vai trò, mức độ, 6 bước, truy vấn điều tra, thao tác ngăn chặn, mẫu thông báo, kịch bản diễn tập). Còn lại: luật sư xác nhận thời hạn và mẫu thông báo; tổ chức buổi diễn tập đầu tiên.
 
 ## 5. Phân phối và chuỗi tin cậy
 

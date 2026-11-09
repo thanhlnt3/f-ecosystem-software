@@ -105,6 +105,15 @@ pub async fn request(
         Ok(id) => id,
         Err(e) => return unavailable(lang, e),
     };
+    crate::audit::record(
+        &state.db,
+        crate::audit::Actor::User(subject),
+        "data.export_requested",
+        Some(&id.to_string()),
+        None,
+        json!({}),
+    )
+    .await;
     let st = state.clone();
     tokio::spawn(async move {
         if let Err(e) = build_and_send(&st, id, subject).await {
@@ -203,7 +212,7 @@ pub async fn build_and_send(state: &AppState, id: Uuid, subject: Uuid) -> Result
     .map_err(|e| e.to_string())??;
 
     let token = random_token();
-    store::finish_export(&state.db, id, &zip, &token)
+    store::finish_export(&state.db, &state.data_key, id, &zip, &token)
         .await
         .map_err(|e| e.to_string())?;
     let email = identity["traits"]["email"]
@@ -247,8 +256,17 @@ pub async fn download(
         Ok(s) => s,
         Err(r) => return *r,
     };
-    match store::export_file(&state.db, subject, &token).await {
+    match store::export_file(&state.db, &state.data_key, subject, &token).await {
         Ok(Some(file)) => {
+            crate::audit::record(
+                &state.db,
+                crate::audit::Actor::User(subject),
+                "data.export_downloaded",
+                Some(&subject.to_string()),
+                None,
+                json!({}),
+            )
+            .await;
             let mut res = file.into_response();
             let h = res.headers_mut();
             h.insert(

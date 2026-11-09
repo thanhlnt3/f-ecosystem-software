@@ -3,11 +3,14 @@
 //! Các API khác (danh mục, đơn hàng, thanh toán) được thêm theo từng nhóm task.
 
 pub mod account;
+pub mod alerts;
 pub mod api;
 pub mod apps;
+pub mod audit;
 pub mod auth;
 pub mod challenge;
 pub mod connected;
+pub mod crypto;
 pub mod csrf;
 pub mod export;
 pub mod hydra;
@@ -16,6 +19,8 @@ pub mod kratos;
 pub mod mailer;
 pub mod oauth;
 pub mod pairwise;
+pub mod ratelimit;
+pub mod security;
 pub mod store;
 pub mod throttle;
 pub mod views;
@@ -59,6 +64,28 @@ pub struct AppState {
     pub pairwise: Pairwise,
     /// HTTP client gửi webhook cho app con.
     pub http: reqwest::Client,
+    /// Khóa mã hóa dữ liệu nhạy cảm khi lưu.
+    pub data_key: crypto::DataKey,
+    pub ratelimit: ratelimit::RateLimiter,
+    pub limits: Limits,
+}
+
+/// Ngưỡng giới hạn tần suất (yêu cầu mỗi phút).
+#[derive(Debug, Clone, Copy)]
+pub struct Limits {
+    pub ip_per_min: u32,
+    pub app_per_min: u32,
+    pub user_per_min: u32,
+}
+
+impl Limits {
+    pub fn from_config(c: &feco_config::SecurityConfig) -> Self {
+        Limits {
+            ip_per_min: c.rate_ip_per_min,
+            app_per_min: c.rate_app_per_min,
+            user_per_min: c.rate_user_per_min,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -67,6 +94,8 @@ pub enum StartError {
     Mail(#[from] MailError),
     #[error("địa chỉ cơ sở dữ liệu không hợp lệ: {0}")]
     Database(#[from] sqlx::Error),
+    #[error("khóa mã hóa dữ liệu không hợp lệ: {0}")]
+    DataKey(#[from] crypto::CryptoError),
 }
 
 impl AppState {
@@ -93,6 +122,9 @@ impl AppState {
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
                 .expect("tạo HTTP client"),
+            data_key: crypto::DataKey::from_base64(config.security.data_key.expose())?,
+            ratelimit: ratelimit::RateLimiter::default(),
+            limits: Limits::from_config(&config.security),
         })
     }
 }
@@ -157,7 +189,11 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/apps", get(connected::list))
         .route("/apps/{client_id}", get(connected::detail))
         .route("/apps/{client_id}/revoke", post(connected::revoke))
-        .route("/v1/me", get(api::me));
+        .route("/v1/me", get(api::me))
+        .route(
+            "/security/not-me/{token}",
+            get(alerts::not_me).post(alerts::not_me_confirm),
+        );
     for kind in [
         FlowKind::Login,
         FlowKind::Registration,
@@ -167,7 +203,11 @@ pub fn router(state: Arc<AppState>) -> Router {
     ] {
         r = flow_routes(r, kind);
     }
-    r.with_state(state)
+    r.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        security::layer,
+    ))
+    .with_state(state)
 }
 
 #[cfg(test)]
@@ -194,6 +234,13 @@ mod tests {
             hydra: HydraClient::new(url("http://127.0.0.1:9/")),
             pairwise: Pairwise::new("test-only-pairwise-secret-0123456789"),
             http: reqwest::Client::new(),
+            data_key: crypto::DataKey::from_bytes(&[9u8; 32]).unwrap(),
+            ratelimit: ratelimit::RateLimiter::default(),
+            limits: Limits {
+                ip_per_min: 1000,
+                app_per_min: 1000,
+                user_per_min: 1000,
+            },
         }
     }
 
@@ -233,6 +280,94 @@ mod tests {
         assert_eq!(
             res.headers()["location"],
             "http://127.0.0.1:9/self-service/registration/browser"
+        );
+    }
+
+    fn production(mut s: AppState) -> AppState {
+        s.environment = Environment::Production;
+        s.public_url = Url::parse("https://f-eco.example/").unwrap();
+        s
+    }
+
+    /// Spec platform-security, scenario "Kết nối HTTP thường".
+    #[tokio::test]
+    async fn production_redirects_plain_http_and_sets_hsts() {
+        let app = router(Arc::new(production(state(Environment::Dev))));
+        let res = app
+            .oneshot(
+                Request::get("/login?x=1")
+                    .header("x-forwarded-proto", "http")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), 308);
+        assert_eq!(res.headers()["location"], "https://f-eco.example/login?x=1");
+        assert!(res.headers()["strict-transport-security"]
+            .to_str()
+            .unwrap()
+            .starts_with("max-age=31536000"));
+    }
+
+    #[tokio::test]
+    async fn security_headers_on_every_response() {
+        let app = router(Arc::new(production(state(Environment::Dev))));
+        let res = app
+            .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let h = res.headers();
+        assert_eq!(h["x-content-type-options"], "nosniff");
+        assert_eq!(h["x-frame-options"], "DENY");
+        assert!(h["content-security-policy"]
+            .to_str()
+            .unwrap()
+            .contains("frame-ancestors 'none'"));
+        assert!(h.contains_key("strict-transport-security"));
+        // Ở dev (http) không gửi HSTS.
+        let dev = router(Arc::new(state(Environment::Dev)));
+        let res = dev
+            .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert!(!res.headers().contains_key("strict-transport-security"));
+    }
+
+    /// Spec platform-security, "Giới hạn tần suất" theo IP.
+    #[tokio::test]
+    async fn ip_rate_limit_returns_429_with_retry_after() {
+        let mut s = state(Environment::Dev);
+        s.limits.ip_per_min = 3;
+        let app = router(Arc::new(s));
+        let call = |ip: &'static str| {
+            let app = app.clone();
+            async move {
+                app.oneshot(
+                    Request::get("/khong-co")
+                        .header("x-forwarded-for", ip)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+            }
+        };
+        for _ in 0..3 {
+            assert_eq!(call("203.0.113.7").await.status(), 404);
+        }
+        let res = call("203.0.113.7").await;
+        assert_eq!(res.status(), 429);
+        let retry: u64 = res.headers()["retry-after"]
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((1..=60).contains(&retry));
+        assert_eq!(
+            call("198.51.100.9").await.status(),
+            404,
+            "IP khác không bị ảnh hưởng"
         );
     }
 

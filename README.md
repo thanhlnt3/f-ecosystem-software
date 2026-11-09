@@ -2,10 +2,11 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–3):
+> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–4):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện tiếng Việt và tiếng Anh.
+> - Bảo mật: HSTS và header bảo vệ, mã hóa dữ liệu nhạy cảm khi lưu (AES-256-GCM), giới hạn tần suất, nhật ký kiểm toán chỉ ghi thêm, cảnh báo đăng nhập từ thiết bị mới. Quy trình xử lý sự cố: [`docs/security/incident-response.md`](docs/security/incident-response.md).
 >
 > Chưa có: launcher, danh mục app, cổng nhà phát triển, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
 
@@ -118,9 +119,10 @@ Mở http://127.0.0.1:8080 trong trình duyệt. Giao diện theo ngôn ngữ c�
    - tạo **mã khôi phục** và lưu lại. Từ lần đăng nhập sau, bạn phải nhập mã TOTP hoặc mã khôi phục.
 5. **Thiết bị đang đăng nhập** tại http://127.0.0.1:8080/sessions: đăng nhập thêm bằng một trình duyệt khác để thấy hai thiết bị, rồi thử "Đăng xuất thiết bị này".
 6. **Quên mật khẩu** tại http://127.0.0.1:8080/recovery: mã khôi phục 6 số được gửi tới Mailpit.
-7. **Chống dò mật khẩu**: đăng nhập sai 5 lần liên tiếp. Mỗi lần sai bị làm chậm dần, và từ lần thứ 5 xuất hiện ô "Tôi không phải robot" (thử thách thử nghiệm, chỉ có ở dev). Chủ tài khoản nhận email cảnh báo trong Mailpit.
-8. **Xuất dữ liệu** tại http://127.0.0.1:8080/account/export: liên kết tải file ZIP được gửi tới Mailpit.
-9. **Xóa tài khoản** tại http://127.0.0.1:8080/account/delete: tài khoản chờ xóa 30 ngày; đăng nhập lại trong thời gian đó để hủy.
+7. **Cảnh báo thiết bị mới**: đăng nhập bằng một trình duyệt khác (khác trình duyệt hoặc hệ điều hành) để nhận email "Đăng nhập từ thiết bị mới" trong Mailpit. Liên kết "Không phải tôi" trong email đăng xuất mọi thiết bị.
+8. **Chống dò mật khẩu**: đăng nhập sai 5 lần liên tiếp. Mỗi lần sai bị làm chậm dần, và từ lần thứ 5 xuất hiện ô "Tôi không phải robot" (thử thách thử nghiệm, chỉ có ở dev). Chủ tài khoản nhận email cảnh báo trong Mailpit.
+9. **Xuất dữ liệu** tại http://127.0.0.1:8080/account/export: liên kết tải file ZIP được gửi tới Mailpit.
+10. **Xóa tài khoản** tại http://127.0.0.1:8080/account/delete: tài khoản chờ xóa 30 ngày; đăng nhập lại trong thời gian đó để hủy.
 
 ### 5. Dùng thử đăng nhập một lần với app mẫu
 
@@ -169,7 +171,7 @@ cargo run -p feco-demo-app -- --client-id <client_id> --scope "openid profile ph
 | Mailpit | http://127.0.0.1:8025 (SMTP 1025) | Xem email của hệ thống dev |
 | Kratos public / admin | http://127.0.0.1:4433 / :4434 | Tài khoản (feco-server gọi; không mở trực tiếp) |
 | Hydra public / admin | http://127.0.0.1:4444 / :4445 | OAuth 2.0/OIDC cho app con; `/.well-known/openid-configuration` |
-| PostgreSQL | 127.0.0.1:5432, người dùng `feco`, CSDL `feco` | Đồng ý, nhật ký truy cập, webhook, xuất dữ liệu |
+| PostgreSQL | 127.0.0.1:5432, người dùng `feco`, CSDL `feco` | Đồng ý, nhật ký truy cập, webhook, xuất dữ liệu, nhật ký kiểm toán |
 | Valkey | 127.0.0.1:6379 | Chưa dùng (dành cho bộ đếm dùng chung khi chạy nhiều bản) |
 
 Các API chính của `feco-server`:
@@ -179,6 +181,7 @@ Các API chính của `feco-server`:
 | `GET /healthz` | Kiểm tra sức khỏe |
 | `/registration`, `/login`, `/verification`, `/recovery`, `/settings`, `/logout` | Trang tài khoản (qua Kratos) |
 | `/sessions`, `/apps`, `/account/export`, `/account/delete`, `/lang/{vi\|en}` | Trang do feco-server xử lý |
+| `/security/not-me/{token}` | Nút "Không phải tôi" trong email cảnh báo thiết bị mới |
 | `/oauth/login`, `/oauth/consent`, `/oauth/logout` | Login & consent provider của Hydra |
 | `GET /v1/me` | Dữ liệu người dùng theo scope của access token (`Authorization: Bearer …`); `?fields=email,phone_number` để chọn trường. Lỗi trả JSON `{error, message, message_vi, request_id}` |
 
@@ -198,6 +201,9 @@ Các API chính của `feco-server`:
 | `FECO_SMTP_URL` | `smtp://127.0.0.1:1025` | Bắt buộc ở production |
 | `FECO_EMAIL_FROM` | `F-Eco <no-reply@f-eco.example>` | |
 | `FECO_CHALLENGE_PROVIDER` | `test` | Production cấm `test`; nhà cung cấp thật chưa được chọn (xem `QUESTIONS.md`) |
+| `FECO_DATA_KEY` | khóa dev cố định | Khóa AES-256 (32 byte, base64) mã hóa khóa webhook và file xuất dữ liệu khi lưu. Bắt buộc ở production. Tạo: `openssl rand -base64 32` |
+| `FECO_RATE_IP_PER_MIN` | `1200` | Số yêu cầu mỗi phút từ một IP; vượt thì trả 429 kèm `Retry-After` |
+| `FECO_RATE_APP_PER_MIN` / `FECO_RATE_USER_PER_MIN` | `1200` / `120` | Số lần gọi `/v1/me` mỗi phút của một app / một người dùng |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |
 | `RUST_LOG` | `info` | Mức nhật ký, ví dụ `debug` |
 

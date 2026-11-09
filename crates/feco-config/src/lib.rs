@@ -93,6 +93,19 @@ pub struct AuthConfig {
     pub pairwise_secret: Secret,
 }
 
+/// Cấu hình bảo mật (spec platform-security).
+#[derive(Debug, Clone)]
+pub struct SecurityConfig {
+    /// Khóa AES-256 mã hóa dữ liệu nhạy cảm khi lưu (32 byte, khai báo dạng base64).
+    pub data_key: Secret,
+    /// Số yêu cầu tối đa mỗi phút từ một địa chỉ IP (mọi trang và API).
+    pub rate_ip_per_min: u32,
+    /// Số lần gọi API dữ liệu người dùng tối đa mỗi phút của một app.
+    pub rate_app_per_min: u32,
+    /// Số lần gọi API dữ liệu tối đa mỗi phút cho một người dùng (mọi app cộng lại).
+    pub rate_user_per_min: u32,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub environment: Environment,
@@ -100,6 +113,7 @@ pub struct Config {
     pub database_url: Secret,
     pub payments: PaymentsConfig,
     pub auth: AuthConfig,
+    pub security: SecurityConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -213,12 +227,14 @@ impl Config {
         .transpose()?;
 
         let auth = auth_config(environment, &get)?;
+        let security = security_config(environment, &get)?;
 
         let config = Config {
             environment,
             http_addr,
             database_url,
             auth,
+            security,
             payments: PaymentsConfig { vnpay, momo },
         };
         config.validate()?;
@@ -313,6 +329,79 @@ fn auth_config<'a>(
             .to_owned(),
         challenge,
     })
+}
+
+fn security_config<'a>(
+    environment: Environment,
+    get: &impl Fn(&str) -> Option<&'a str>,
+) -> Result<SecurityConfig, ConfigError> {
+    let data_key = match get("FECO_DATA_KEY") {
+        Some(v) => {
+            let decoded = decode_base64(v).ok_or(ConfigError::Invalid {
+                var: "FECO_DATA_KEY",
+                reason: "không phải base64 hợp lệ".into(),
+            })?;
+            if decoded.len() != 32 {
+                return Err(ConfigError::Invalid {
+                    var: "FECO_DATA_KEY",
+                    reason: format!("phải là 32 byte, nhận {}", decoded.len()),
+                });
+            }
+            Secret::new(v)
+        }
+        None if environment.is_production() => return Err(ConfigError::Missing("FECO_DATA_KEY")),
+        // Khóa cố định chỉ dùng cho dev: 32 byte "feco-dev-only-data-key-not-prod!".
+        None => Secret::new("ZmVjby1kZXYtb25seS1kYXRhLWtleS1ub3QtcHJvZCE="), // gitleaks:allow (khóa dev công khai)
+    };
+    let num = |var: &'static str, default: u32| -> Result<u32, ConfigError> {
+        match get(var) {
+            None => Ok(default),
+            Some(v) => v
+                .parse::<u32>()
+                .ok()
+                .filter(|n| *n > 0)
+                .ok_or(ConfigError::Invalid {
+                    var,
+                    reason: "phải là số nguyên dương".into(),
+                }),
+        }
+    };
+    Ok(SecurityConfig {
+        data_key,
+        rate_ip_per_min: num("FECO_RATE_IP_PER_MIN", 1200)?,
+        rate_app_per_min: num("FECO_RATE_APP_PER_MIN", 1200)?,
+        rate_user_per_min: num("FECO_RATE_USER_PER_MIN", 120)?,
+    })
+}
+
+/// Giải mã base64 chuẩn (có hoặc không có `=`), không cần thêm thư viện.
+pub fn decode_base64(s: &str) -> Option<Vec<u8>> {
+    let val = |c: u8| -> Option<u32> {
+        Some(match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        } as u32)
+    };
+    let bytes: Vec<u8> = s.trim().trim_end_matches('=').bytes().collect();
+    if bytes.len() % 4 == 1 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(bytes.len() * 3 / 4);
+    for chunk in bytes.chunks(4) {
+        let mut acc = 0u32;
+        for (i, &c) in chunk.iter().enumerate() {
+            acc |= val(c)? << (18 - 6 * i);
+        }
+        let n = chunk.len() * 6 / 8;
+        for i in 0..n {
+            out.push((acc >> (16 - 8 * i)) as u8);
+        }
+    }
+    Some(out)
 }
 
 /// Một nhóm biến của một cổng: hoặc đặt đủ, hoặc không đặt biến nào.
@@ -522,6 +611,48 @@ mod tests {
             endpoint: Url::parse(MOMO_LIVE[3].1).unwrap(),
         });
         c.validate().unwrap();
+    }
+
+    #[test]
+    fn dev_security_defaults() {
+        let c = Config::from_vars(&with_env("dev", &[])).unwrap();
+        assert_eq!(
+            decode_base64(c.security.data_key.expose()).unwrap().len(),
+            32
+        );
+        assert_eq!(c.security.rate_user_per_min, 120);
+    }
+
+    #[test]
+    fn data_key_must_be_32_bytes() {
+        let v = with_env("dev", &[("FECO_DATA_KEY", "c2hvcnQ=")]);
+        assert!(matches!(
+            Config::from_vars(&v).unwrap_err(),
+            ConfigError::Invalid {
+                var: "FECO_DATA_KEY",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn rate_limits_must_be_positive() {
+        let v = with_env("dev", &[("FECO_RATE_IP_PER_MIN", "0")]);
+        assert!(matches!(
+            Config::from_vars(&v).unwrap_err(),
+            ConfigError::Invalid {
+                var: "FECO_RATE_IP_PER_MIN",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn base64_decoder_matches_known_vectors() {
+        assert_eq!(decode_base64("Zm9vYmFy").unwrap(), b"foobar");
+        assert_eq!(decode_base64("Zm9vYg==").unwrap(), b"foob");
+        assert_eq!(decode_base64("Zm9vYmE").unwrap(), b"fooba");
+        assert!(decode_base64("Zm9v!").is_none());
     }
 
     #[test]

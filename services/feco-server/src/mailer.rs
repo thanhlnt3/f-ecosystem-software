@@ -115,6 +115,26 @@ pub mod templates {
         (subject, body)
     }
 
+    pub fn new_device(device: &str, location: &str, when: &str, not_me: &str) -> (String, String) {
+        let loc = if location.is_empty() { "?" } else { location };
+        let subject = "Đăng nhập từ thiết bị mới / New sign-in to your F-Eco account".to_owned();
+        let body = format!(
+            "Xin chào,\n\n\
+             Tài khoản F-Eco của bạn vừa được đăng nhập từ một thiết bị mới.\n\
+             Thiết bị: {device}\nVị trí gần đúng: {loc}\nThời điểm: {when}\n\n\
+             Nếu đó là bạn, bạn không cần làm gì. Nếu không phải bạn, hãy mở liên kết sau để \
+             đăng xuất mọi thiết bị rồi đặt lại mật khẩu (liên kết dùng được một lần, trong 7 ngày):\n\
+             {not_me}\n\n\
+             ---\n\
+             Hello,\n\n\
+             Your F-Eco account was just signed in from a new device.\n\
+             Device: {device}\nApproximate location: {loc}\nTime: {when}\n\n\
+             If this was you, no action is needed. If not, open this link to sign out all \
+             devices and then reset your password (single use, valid for 7 days):\n{not_me}\n"
+        );
+        (subject, body)
+    }
+
     pub fn export_ready(link: &str) -> (String, String) {
         let subject =
             "Dữ liệu cá nhân của bạn đã sẵn sàng / Your personal data is ready".to_owned();

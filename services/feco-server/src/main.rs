@@ -66,7 +66,7 @@ fn spawn_background_jobs(state: Arc<AppState>) {
         let mut tick = tokio::time::interval(Duration::from_secs(10));
         loop {
             tick.tick().await;
-            if let Err(e) = webhooks::deliver_due(&s.db, &s.http).await {
+            if let Err(e) = webhooks::deliver_due(&s.db, &s.http, &s.data_key).await {
                 tracing::error!(error = %e, "không gửi được webhook");
             }
         }
@@ -87,6 +87,9 @@ fn spawn_background_jobs(state: Arc<AppState>) {
             }
             if let Err(e) = store::purge_expired_exports(&state.db).await {
                 tracing::error!(error = %e, "không dọn được file xuất hết hạn");
+            }
+            if let Err(e) = feco_server::audit::purge_older_than_one_year(&state.db).await {
+                tracing::error!(error = %e, "không dọn được nhật ký kiểm toán quá 1 năm");
             }
         }
     });

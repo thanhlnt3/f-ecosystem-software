@@ -988,7 +988,7 @@ async fn consent_scopes_pairwise_and_revocation() {
     )
     .await;
     let (hook_url, hooks) = webhook_receiver().await;
-    let hook_secret = store::register_webhook(&st.db, &soundlab, &hook_url)
+    let hook_secret = store::register_webhook(&st.db, &st.data_key, &soundlab, &hook_url)
         .await
         .unwrap();
 
@@ -1129,7 +1129,7 @@ async fn consent_scopes_pairwise_and_revocation() {
         .any(|r| r.action == "revoke" && r.client_id == soundlab));
 
     // --- Webhook `user.revoked` có chữ ký hợp lệ, chỉ mang `sub` riêng của app.
-    feco_server::webhooks::deliver_due(&st.db, &st.http)
+    feco_server::webhooks::deliver_due(&st.db, &st.http, &st.data_key)
         .await
         .unwrap();
     let got = hooks.lock().unwrap().clone();
@@ -1236,4 +1236,288 @@ async fn personal_data_export() {
         app.as_str()
     );
     assert_eq!(read("connected_apps.json")[0]["app_name"], "ExportApp");
+
+    // File xuất được mã hóa khi lưu (spec platform-security, "Mã hóa khi truyền và khi lưu").
+    let st = local_state();
+    let (encrypted, head): (bool, Vec<u8>) = sqlx::query_as(
+        "SELECT encrypted, substring(file from 1 for 4) FROM data_exports ORDER BY created_at DESC LIMIT 1",
+    )
+    .fetch_one(&st.db)
+    .await
+    .unwrap();
+    assert!(encrypted);
+    assert_ne!(&head[..2], b"PK", "file lưu không được là ZIP dạng rõ");
+}
+
+// ====================== Nhóm 4: bảo mật nền tảng ======================
+
+async fn subject_of(email: &str) -> uuid::Uuid {
+    kratos()
+        .list_identities()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|i| i["traits"]["email"] == email)
+        .and_then(|i| i["id"].as_str().and_then(|s| s.parse().ok()))
+        .expect("có danh tính")
+}
+
+/// Spec platform-security, "Mã hóa khi truyền và khi lưu": mật khẩu băm Argon2id, khóa
+/// webhook của nhà phát triển được mã hóa.
+#[tokio::test]
+async fn argon2id_passwords_and_encrypted_webhook_secrets() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let (email, password) = unique("argon");
+    register_and_login(&email, &password, UA_WINDOWS_CHROME).await;
+    let id = subject_of(&email).await;
+    let identity: Value = reqwest::Client::new()
+        .get(format!(
+            "http://127.0.0.1:4434/admin/identities/{id}?include_credential=password"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let hash = identity["credentials"]["password"]["config"]["hashed_password"]
+        .as_str()
+        .expect("có mã băm mật khẩu");
+    assert!(hash.starts_with("$argon2id$"), "{hash}");
+    assert!(!hash.contains(&password));
+
+    let st = local_state();
+    let secret =
+        store::register_webhook(&st.db, &st.data_key, "argon-app", "http://127.0.0.1:9/hook")
+            .await
+            .unwrap();
+    let stored: String =
+        sqlx::query_scalar("SELECT secret FROM app_webhooks WHERE client_id = 'argon-app'")
+            .fetch_one(&st.db)
+            .await
+            .unwrap();
+    assert!(stored.starts_with("enc:v1:"), "{stored}");
+    assert!(!stored.contains(&secret));
+}
+
+/// Spec platform-security, "Nhật ký kiểm toán": ghi các thao tác nhạy cảm, không chứa bí
+/// mật, không sửa được, chỉ xóa được bản ghi quá 1 năm.
+#[tokio::test]
+async fn audit_log_append_only_and_secret_free() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let (email, password) = unique("audit");
+    let c = register_and_login(&email, &password, UA_WINDOWS_CHROME).await;
+    let subject = subject_of(&email).await;
+    // Một lần đăng nhập sai và một lần đổi hồ sơ.
+    let other = browser();
+    login(&other, &email, "sai-mat-khau-hoan-toan").await;
+    let settings = get(&c, "/settings").await;
+    let form = parse_group_form(&settings, "profile");
+    submit(
+        &c,
+        &form,
+        &[
+            ("traits.email", &email),
+            ("traits.name", "Kiểm toán"),
+            ("method", "profile"),
+        ],
+    )
+    .await;
+
+    let st = local_state();
+    let actions: Vec<String> =
+        sqlx::query_scalar("SELECT action FROM audit_log WHERE actor_id = $1 ORDER BY id")
+            .bind(subject.to_string())
+            .fetch_all(&st.db)
+            .await
+            .unwrap();
+    assert!(actions.contains(&"auth.login".to_string()), "{actions:?}");
+    assert!(
+        actions.contains(&"account.profile_changed".to_string()),
+        "{actions:?}"
+    );
+    let failed: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'auth.login_failed' AND details->>'identifier_hash' = $1",
+    )
+    .bind(feco_server::audit::hash_identifier(&email))
+    .fetch_one(&st.db)
+    .await
+    .unwrap();
+    assert_eq!(failed, 1);
+
+    // Không có mật khẩu, token hay email dạng rõ của lần đăng nhập sai.
+    let dump: String = sqlx::query_scalar("SELECT coalesce(string_agg(details::text || coalesce(target, ''), ' '), '') FROM audit_log")
+        .fetch_one(&st.db)
+        .await
+        .unwrap();
+    assert!(!dump.contains(&password));
+    assert!(!dump.contains("sai-mat-khau-hoan-toan"));
+    assert!(!dump.to_lowercase().contains("csrf"));
+
+    // Scenario "Thử sửa nhật ký": cơ sở dữ liệu từ chối.
+    let upd = sqlx::query("UPDATE audit_log SET action = 'x' WHERE actor_id = $1")
+        .bind(subject.to_string())
+        .execute(&st.db)
+        .await;
+    assert!(upd.unwrap_err().to_string().contains("append-only"));
+    let del = sqlx::query("DELETE FROM audit_log WHERE actor_id = $1")
+        .bind(subject.to_string())
+        .execute(&st.db)
+        .await;
+    assert!(del.unwrap_err().to_string().contains("append-only"));
+    let trunc = sqlx::query("TRUNCATE audit_log").execute(&st.db).await;
+    assert!(trunc.is_err());
+
+    // Lưu 1 năm: bản ghi quá 1 năm được tác vụ lưu trữ xóa, bản ghi mới thì không.
+    sqlx::query(
+        "INSERT INTO audit_log (at, actor_type, action) VALUES (now() - interval '366 days', 'system', 'test.old')",
+    )
+    .execute(&st.db)
+    .await
+    .unwrap();
+    assert!(
+        feco_server::audit::purge_older_than_one_year(&st.db)
+            .await
+            .unwrap()
+            >= 1
+    );
+    let remaining: i64 = sqlx::query_scalar("SELECT count(*) FROM audit_log WHERE actor_id = $1")
+        .bind(subject.to_string())
+        .fetch_one(&st.db)
+        .await
+        .unwrap();
+    assert!(remaining >= 2);
+}
+
+async fn mail_count(to: &str, subject: &str) -> usize {
+    let list: Value = reqwest::Client::new()
+        .get(format!("{MAILPIT}/api/v1/messages"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    list["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|m| {
+            m["To"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|t| t["Address"] == to)
+                && m["Subject"].as_str().is_some_and(|s| s.contains(subject))
+        })
+        .count()
+}
+
+/// Spec platform-security, "Phát hiện đăng nhập bất thường".
+#[tokio::test]
+async fn new_device_alert_and_not_me() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let (email, password) = unique("device");
+    let laptop = register_and_login(&email, &password, UA_WINDOWS_CHROME).await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(
+        mail_count(&email, "thiết bị mới").await,
+        0,
+        "lần đăng nhập đầu tiên không gửi cảnh báo"
+    );
+    // Đăng nhập lại cùng thiết bị: không cảnh báo.
+    assert!(login(&browser(), &email, &password).await.contains(&email));
+
+    // Thiết bị mới: có email kèm thông tin thiết bị và nút "Không phải tôi".
+    let phone = browser_with(UA_LINUX_FIREFOX, "vi-VN");
+    assert!(login(&phone, &email, &password).await.contains(&email));
+    let mail = wait_mail(&email, "thiết bị mới").await;
+    assert!(mail.contains("Firefox · Linux"), "{mail}");
+    assert_eq!(mail_count(&email, "thiết bị mới").await, 1);
+    let link = Regex::new(r"http://127\.0\.0\.1:8080/security/not-me/[0-9a-f]{64}")
+        .unwrap()
+        .find(&mail)
+        .expect("có liên kết Không phải tôi")
+        .as_str()
+        .to_owned();
+
+    // Chủ tài khoản bấm "Không phải tôi" từ trình duyệt bất kỳ.
+    let owner = browser();
+    let page = get(&owner, &link).await;
+    let form = parse_form_where(&page, "form[action^=\"/security/not-me/\"]");
+    let done = submit(&owner, &form, &[]).await;
+    assert!(done.contains("Đã đăng xuất mọi thiết bị"), "{done}");
+    assert!(get(&laptop, "/").await.contains("Chào mừng tới F-Eco"));
+    assert!(get(&phone, "/").await.contains("Chào mừng tới F-Eco"));
+    // Liên kết chỉ dùng được một lần.
+    assert!(get(&owner, &link).await.contains("Liên kết không hợp lệ"));
+}
+
+/// Spec platform-security, "Giới hạn tần suất": vượt hạn mức nhận 429 kèm Retry-After.
+#[tokio::test]
+async fn v1_me_rate_limit_per_user() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let (email, password) = unique("rate");
+    let user = app_browser();
+    let form = parse_form(&get(&user, "/registration").await);
+    submit(
+        &user,
+        &form,
+        &[
+            ("traits.email", &email),
+            ("password", &password),
+            ("method", "password"),
+        ],
+    )
+    .await;
+    assert!(login(&user, &email, &password).await.contains(&email));
+    let app = create_app(
+        "RateApp",
+        serde_json::json!({"profile": {"required": true}}),
+    )
+    .await;
+    let a = authorize(&user, &app, "openid profile").await;
+    let a = answer_consent(&user, a, "accept", &[]).await;
+    let token = exchange(&app, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let http = reqwest::Client::new();
+    let mut limited = None;
+    for i in 1..=130 {
+        let res = http
+            .get(format!("{BASE}/v1/me"))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap();
+        if res.status() == 429 {
+            let retry: u64 = res.headers()["retry-after"]
+                .to_str()
+                .unwrap()
+                .parse()
+                .unwrap();
+            let body: Value = res.json().await.unwrap();
+            limited = Some((i, retry, body));
+            break;
+        }
+        assert_eq!(res.status(), 200, "lần {i}");
+    }
+    let (i, retry, body) = limited.expect("phải bị giới hạn trước 130 lần");
+    assert_eq!(i, 121, "hạn mức mặc định 120 lần/phút cho mỗi người dùng");
+    assert!((1..=60).contains(&retry));
+    assert_eq!(body["error"], "rate_limited");
 }
