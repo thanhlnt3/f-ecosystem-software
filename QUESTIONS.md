@@ -44,3 +44,15 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     Nghị định 13/2023/NĐ-CP) cần luật sư xác nhận theo văn bản đang có hiệu lực.
 13. **TLS**: feco-server chạy sau proxy TLS (ví dụ của nhà cung cấp đám mây). Quét cấu hình TLS 1.2+
     làm khi có staging.
+
+## Nhóm 5: phân phối và chuỗi tin cậy
+
+14. **Người giữ khóa root**: cần chỉ định 3 người (khác bộ phận, không cùng đi công tác) và thiết bị
+    giữ khóa (USB HSM hay máy ngoại tuyến mã hóa đĩa) trước buổi ký root thật và buổi diễn tập 5.3.
+15. **KMS cho khóa targets, snapshot, timestamp**: phụ thuộc nhà cung cấp hạ tầng (task 1.4).
+    `tough` có sẵn nguồn khóa cho AWS KMS; nếu chọn nhà cung cấp trong nước không có KMS tương thích
+    thì cần HSM riêng.
+16. **Thời hạn timestamp 1 giờ** (để thu hồi tới launcher trong 1 giờ kể cả khi bị đóng băng metadata)
+    buộc máy chủ ký lại timestamp liên tục và launcher có đồng hồ đúng. Nếu máy người dùng lệch giờ
+    hơn khoảng đó, launcher sẽ báo metadata hết hạn. Cần quyết định có nới lên (ví dụ 4 giờ) và
+    chấp nhận cửa sổ đóng băng dài hơn không.

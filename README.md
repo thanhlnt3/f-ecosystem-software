@@ -2,11 +2,12 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–4):
+> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–5):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện tiếng Việt và tiếng Anh.
 > - Bảo mật: HSTS và header bảo vệ, mã hóa dữ liệu nhạy cảm khi lưu (AES-256-GCM), giới hạn tần suất, nhật ký kiểm toán chỉ ghi thêm, cảnh báo đăng nhập từ thiết bị mới. Quy trình xử lý sự cố: [`docs/security/incident-response.md`](docs/security/incident-response.md).
+> - Chuỗi tin cậy cho gói cài đặt theo TUF (dùng `tough`): ký phiên bản đã duyệt, thu hồi tới launcher trong 1 giờ, chặn gói hoặc metadata bị sửa, rollback, đóng băng; xoay khóa targets và root (ngưỡng 2/3). Công cụ `feco-tuf`, quy trình giữ khóa: [`docs/security/tuf-keys.md`](docs/security/tuf-keys.md).
 >
 > Chưa có: launcher, danh mục app, cổng nhà phát triển, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
 
@@ -225,7 +226,14 @@ npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
 FECO_E2E=1 cargo test -p feco-server --test e2e_auth
 ```
 
-CI (GitHub Actions) chạy tất cả những bước trên, kể cả kiểm thử đầu-cuối với hạ tầng Docker, ở mỗi lần push.
+**Chuỗi tin cậy TUF**: `cargo test -p feco-tuf` chạy các tình huống tấn công (gói bị sửa, metadata bị sửa, khóa lạ, rollback, đóng băng) cùng thu hồi và xoay khóa. Diễn tập toàn bộ quy trình bằng công cụ dòng lệnh, in biên bản Markdown:
+
+```bash
+scripts/tuf-drill.sh > /tmp/tuf-drill.md
+cargo run -p feco-tuf -- help                   # các lệnh: keygen, init, publish, revoke, refresh, resign, rotate, status
+```
+
+CI (GitHub Actions) chạy tất cả những bước trên, kể cả kiểm thử đầu-cuối với hạ tầng Docker và diễn tập TUF, ở mỗi lần push.
 
 ## Xử lý sự cố
 
@@ -259,11 +267,13 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 |---|---|
 | `crates/feco-core` | Kiểu dữ liệu dùng chung: tiền VND, scope dữ liệu, môi trường |
 | `crates/feco-config` | Đọc và kiểm tra cấu hình lúc khởi động |
+| `crates/feco-tuf` | Kho TUF (dựng, ký, thu hồi, xoay khóa) và client xác minh cho launcher; công cụ `feco-tuf` |
 | `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
 | `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me` |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |
 | `infra/` | Hạ tầng dev: `docker-compose.yml`, cấu hình Kratos (schema, mẫu email) và Hydra |
-| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker |
+| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF |
+| `docs/security/` | Quy trình xử lý sự cố, quản lý khóa TUF, biên bản diễn tập |
 | `third_party/` | Khai báo license và ngoại lệ đã duyệt |
 | `openspec/` | Yêu cầu, thiết kế, kế hoạch |
 

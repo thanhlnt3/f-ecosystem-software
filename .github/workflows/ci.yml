@@ -24,6 +24,9 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - name: Diễn tập chuỗi tin cậy TUF bằng feco-tuf (tasks.md 5.1–5.3)
+        shell: bash
+        run: scripts/tuf-drill.sh
 
   licenses:
     # tasks.md 1.2 (license) và 1.3 (lỗ hổng phụ thuộc).

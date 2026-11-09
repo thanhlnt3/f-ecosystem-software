@@ -1,0 +1,26 @@
+[package]
+name = "feco-tuf"
+description = "Chuỗi tin cậy cho gói cài đặt F-Eco theo mô hình TUF (dựng kho, ký, thu hồi, xoay khóa, xác minh)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+aws-lc-rs = "1"
+hex = "0.4"
+jiff = { version = "0.2", features = ["serde"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs"] }
+tough = "0.24.0"
+url.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

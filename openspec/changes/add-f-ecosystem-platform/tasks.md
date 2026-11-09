@@ -59,8 +59,11 @@
 ## 5. Phân phối và chuỗi tin cậy
 
 - [ ] 5.1 Kho TUF: các vai trò root, targets, snapshot, timestamp; khóa root ngoại tuyến, ngưỡng 2/3; khóa còn lại trong KMS; xác minh bằng test ký và xác minh bằng `tough`
-- [ ] 5.2 Ký target sau khi phiên bản được duyệt, và thu hồi bằng metadata mới; xác minh bằng test thu hồi lan tới client giả lập trong 1 giờ
+  - Trạng thái: crate `crates/feco-tuf` dựng kho 4 vai trò bằng `tough` (consistent snapshot, Ed25519), root ngưỡng 2/3, targets/snapshot/timestamp ngưỡng 1. Đã xác minh bằng test `tests/chain_of_trust.rs`: dựng kho bị từ chối khi chỉ 1/3 khóa root ký; client `tough` chặn gói bị sửa (sai SHA-256, vượt độ dài), metadata bị sửa, metadata ký bằng khóa lạ, rollback về metadata cũ, metadata bị đóng băng quá hạn timestamp 1 giờ. Quy trình giữ khóa: `docs/security/tuf-keys.md`. Còn lại: đưa khóa targets/snapshot/timestamp vào KMS (chờ chọn nhà cung cấp, task 1.4); bản dev giữ khóa trong file.
+- [x] 5.2 Ký target sau khi phiên bản được duyệt, và thu hồi bằng metadata mới; xác minh bằng test thu hồi lan tới client giả lập trong 1 giờ
+  - Đã xác minh bằng test `revocation_reaches_client_on_next_hourly_sync`: client đồng bộ mỗi giờ (`SYNC_INTERVAL`) thấy target biến mất và đọc được lý do thu hồi đã ký ở lần đồng bộ kế tiếp, không tải được gói đã thu hồi, không phát hành lại được cùng tên; test `frozen_metadata_expires_within_one_hour` xác nhận timestamp hết hạn sau 1 giờ nên metadata cũ giấu bản thu hồi bị từ chối. `Repo::publish` sẽ được dịch vụ kiểm duyệt (nhóm 9) gọi sau khi duyệt.
 - [ ] 5.3 Diễn tập xoay khóa targets và root; xác minh bằng biên bản diễn tập
+  - Trạng thái: diễn tập kỹ thuật bằng `scripts/tuf-drill.sh` (CI chạy ở mỗi commit trên Ubuntu và Windows), biên bản `docs/security/drills/2026-11-09-tuf-drill.md`: sau khi xoay, khóa targets cũ không ký được; root mới ký bởi 1/3 khóa root hiện tại bị từ chối, 2/3 được chấp nhận; khóa root bị loại không còn được tính; launcher đang chạy và launcher mới cài (chỉ có `1.root.json`) đều đi theo chuỗi root. Còn lại: buổi diễn tập với người giữ khóa root thật trên máy ngoại tuyến (chờ chỉ định người giữ khóa).
 
 ## 6. F-Launcher (`launcher`)
 

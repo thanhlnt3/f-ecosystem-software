@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/feco-core",
     "crates/feco-config",
+    "crates/feco-tuf",
     "services/feco-server",
     "tools/feco-license-check",
     "tools/feco-demo-app",
