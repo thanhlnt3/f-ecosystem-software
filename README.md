@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> Trạng thái: **đang xây dựng** (nhóm task 1: nền tảng dự án). Chưa dùng được cho người dùng cuối.
+> Trạng thái: **đang xây dựng**. Nhóm task 1 (nền tảng dự án) gần xong; tiếp theo là nhóm 2 (tài khoản). Chưa dùng được cho người dùng cuối.
 
 ## Yêu cầu
 
@@ -34,3 +34,21 @@ cargo test --workspace
 
 Phát hành theo lựa chọn của bạn một trong hai giấy phép: MIT ([LICENSE-MIT](LICENSE-MIT)) hoặc Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE)).
 Trừ khi bạn nói rõ khác đi, mọi đóng góp bạn gửi vào dự án được cấp phép theo cả hai giấy phép trên, không kèm điều khoản bổ sung.
+
+## Chạy hạ tầng phát triển
+
+Cần Docker:
+
+```bash
+docker compose -f infra/docker-compose.yml up -d --wait
+FECO_ENV=dev cargo run -p feco-server   # http://127.0.0.1:8080/healthz
+```
+
+Kratos: http://127.0.0.1:4433 · Hydra: http://127.0.0.1:4444 · Mailpit: http://127.0.0.1:8025
+
+## Kiểm tra license
+
+```bash
+cargo deny check                  # crate Rust
+cargo run -p feco-license-check   # dịch vụ và ảnh container (third_party/native.toml)
+```
