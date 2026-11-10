@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–7):
+> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–8):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện tiếng Việt và tiếng Anh.
@@ -11,7 +11,9 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 > - F-Launcher (Rust + egui): đăng nhập qua trình duyệt, nhớ đăng nhập qua khởi động lại máy, cài/cập nhật/quay lại/gỡ app con có xác minh TUF, chạy được khi ngoại tuyến, chặn phiên bản bị thu hồi, mở app con bằng mã khởi chạy dùng một lần.
 > - F-Store (`/store`): danh mục app đã duyệt, tìm không phân biệt dấu tiếng Việt, lọc theo danh mục, hệ điều hành, giá, nhà phát triển đã xác minh; trang chi tiết có scope dữ liệu kèm mục đích, license, chính sách quyền riêng tư, lịch sử thay đổi; đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi phạm.
 >
-> Chưa có: cổng nhà phát triển (app tạm được đưa vào danh mục bằng công cụ `feco-catalog`), kiểm duyệt, bảng quản trị, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
+> - Cổng nhà phát triển (`/developer`): đăng ký cá nhân hoặc tổ chức (cần email đã xác minh và TOTP), Thỏa thuận nhà phát triển, xác minh tên miền bằng DNS TXT, nhóm và vai trò, client ID cùng địa chỉ chuyển hướng, manifest `f-app.toml`, nộp gói qua web hoặc CLI `f-dev`, kiểm tra chữ ký mã, kênh stable/beta và phát hành dần theo phần trăm, số liệu tổng hợp.
+>
+> Chưa có: kiểm duyệt (phiên bản tạm được duyệt bằng công cụ `feco-catalog`), bảng quản trị, môi trường sandbox, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
 
 ## Mục lục
 
@@ -22,7 +24,8 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
   - [4. Dùng thử tài khoản](#4-dùng-thử-tài-khoản)
   - [5. Dùng thử đăng nhập một lần với app mẫu](#5-dùng-thử-đăng-nhập-một-lần-với-app-mẫu)
   - [6. Dùng thử F-Launcher](#6-dùng-thử-f-launcher)
-  - [7. Dừng và xóa dữ liệu](#7-dừng-và-xóa-dữ-liệu)
+  - [7. Dùng thử cổng nhà phát triển](#7-dùng-thử-cổng-nhà-phát-triển)
+  - [8. Dừng và xóa dữ liệu](#8-dừng-và-xóa-dữ-liệu)
 - [Địa chỉ các dịch vụ](#địa-chỉ-các-dịch-vụ)
 - [Cấu hình](#cấu-hình)
 - [Kiểm thử](#kiểm-thử)
@@ -226,7 +229,44 @@ cargo run -p feco-server --bin feco-catalog -- reports                          
 cargo run -p feco-server --bin feco-catalog -- resolve <id> upheld "<ghi chú>"  # xử lý, gửi email cho người báo cáo
 ```
 
-### 7. Dừng và xóa dữ liệu
+### 7. Dùng thử cổng nhà phát triển
+
+1. Đăng nhập ở http://127.0.0.1:8080, xác minh email (liên kết trong Mailpit), rồi vào **Cài đặt
+   tài khoản** để bật ứng dụng xác thực (TOTP). Cổng yêu cầu cả hai trước khi cho đăng ký.
+2. Mở http://127.0.0.1:8080/developer, đăng ký **Cá nhân** hoặc **Tổ chức** và tích chấp nhận Thỏa
+   thuận nhà phát triển. Tổ chức được cấp một bản ghi DNS TXT để xác minh tên miền; bản dev không
+   có DNS thật nên bỏ qua bước này (app vẫn phát hành được, chỉ không có dấu "Đã xác minh").
+3. **Tạo app mới**: mã app, tên, loại (desktop: client công khai dùng PKCE; có máy chủ riêng: có
+   client secret, hiện một lần và xoay vòng được) và địa chỉ chuyển hướng. Trang app hiện client ID.
+4. **Tạo token** cho `f-dev` (hiện một lần), viết `f-app.toml` (mẫu ở
+   http://127.0.0.1:8080/developer/docs), rồi nộp phiên bản:
+
+   ```bash
+   cargo run -p f-dev -- validate --manifest f-app.toml
+   FDEV_TOKEN=fdev_... cargo run -p f-dev -- publish --manifest f-app.toml --package dist/
+   ```
+
+   Lệnh in "Chờ duyệt" và mã phiên bản. Gói Windows có tệp chạy chưa ký Authenticode bị từ chối;
+   gói macOS phải được ký Developer ID và đính vé notarize. Cũng nộp được qua trang app (dán
+   manifest, tải file `.zip` cho từng nền tảng, bấm **Gửi duyệt**).
+5. Duyệt tạm bằng tay (khâu kiểm duyệt tự động là nhóm 9):
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- review <app> <phiên bản> approve "Đạt"
+   ```
+
+6. Trên trang app, chọn kênh `stable` hoặc `beta` và phần trăm (10%, 50%, 100%) rồi bấm **Phát
+   hành** (cần vai trò Quản trị hoặc Chủ sở hữu). App xuất hiện ở F-Store; scope và mục đích trên
+   màn hình đồng ý lấy từ manifest. **Dừng phát hành dần** để các máy chưa nhận không nhận nữa.
+7. Muốn launcher cài được bản vừa phát hành, chạy `feco-server` với kho TUF dev để máy chủ ký gói
+   khi phát hành (đường dẫn do `scripts/dev-launcher.sh setup` tạo):
+
+   ```bash
+   export FECO_TUF_REPO=.dev/tuf/repo
+   export FECO_TUF_SIGN_KEYS=.dev/tuf/keys/targets.pk8,.dev/tuf/keys/snapshot.pk8,.dev/tuf/keys/timestamp.pk8
+   ```
+
+### 8. Dừng và xóa dữ liệu
 
 - Dừng `feco-server` và app mẫu bằng `Ctrl+C`.
 - Cách A: `docker compose -f infra/docker-compose.yml down`. Lệnh này dừng và xóa mọi dữ liệu dev, vì compose không dùng volume.
@@ -255,7 +295,11 @@ Các API chính của `feco-server`:
 | `POST /v1/launch-codes` | Chỉ token của F-Launcher: `{"client_id"}` → mã khởi chạy dùng một lần, sống 60 giây |
 | `/store`, `/store/{id}` | F-Store: danh mục, tìm kiếm (`?q=&category=&os=windows\|macos&price=free\|paid&verified=1`), trang chi tiết; `POST /store/{id}/reviews`, `/store/{id}/reviews/{rid}/reply`, `/store/{id}/report` |
 | `GET /v1/catalog`, `GET /v1/catalog/{id}` | Danh mục dạng JSON (cùng tham số tìm kiếm); chi tiết kèm scope, mục đích, phiên bản, nhận xét |
-| `POST /v1/catalog/installs` | Chỉ token của F-Launcher: `{"app_id"}` ghi nhận đã cài (điều kiện để đánh giá) |
+| `POST /v1/catalog/installs` | Chỉ token của F-Launcher: `{"app_id", "version"}` ghi nhận đã cài (điều kiện để đánh giá) |
+| `GET /v1/catalog/{id}/update?platform=&device=&channel=` | Phiên bản một launcher nên dùng, theo kênh và phần trăm phát hành dần |
+| `/developer`, `/developer/apps/{id}`, `/developer/docs` | Cổng nhà phát triển và tài liệu |
+| `POST /v1/dev/apps/{app}/versions`, `PUT /v1/dev/versions/{id}/packages/{platform}`, `POST /v1/dev/versions/{id}/submit` | API cho CLI `f-dev` (token `fdev_...`): nộp `f-app.toml`, tải gói (header `X-Feco-Sha256`, tối đa 2 GB), gửi duyệt |
+| `POST /v1/apps/crashes` | App báo một lần lỗi khi chạy (`{"version"}`, access token của app); chỉ dùng cho số liệu tổng hợp |
 | `POST /v1/launch-codes/exchange` | App con: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → `authorization_code` để đổi lấy token tại Hydra bằng PKCE. Chỉ cấp lại scope người dùng đã đồng ý; chưa đồng ý thì trả `consent_required` |
 | `GET /v1/me` | Dữ liệu người dùng theo scope của access token (`Authorization: Bearer …`); `?fields=email,phone_number` để chọn trường. Lỗi trả JSON `{error, message, message_vi, request_id}` |
 
@@ -278,6 +322,9 @@ Các API chính của `feco-server`:
 | `FECO_DATA_KEY` | khóa dev cố định | Khóa AES-256 (32 byte, base64) mã hóa khóa webhook và file xuất dữ liệu khi lưu. Bắt buộc ở production. Tạo: `openssl rand -base64 32` |
 | `FECO_RATE_IP_PER_MIN` | `1200` | Số yêu cầu mỗi phút từ một IP; vượt thì trả 429 kèm `Retry-After` |
 | `FECO_RATE_APP_PER_MIN` / `FECO_RATE_USER_PER_MIN` | `1200` / `120` | Số lần gọi `/v1/me` mỗi phút của một app / một người dùng |
+| `FECO_DNS_SERVERS` | `1.1.1.1:53,8.8.8.8:53` | Máy chủ DNS dùng để tra bản ghi TXT khi xác minh tên miền của nhà phát triển |
+| `FECO_PACKAGE_DIR` | `infra/.data/packages` | Thư mục lưu gói nhà phát triển tải lên. Bắt buộc ở production |
+| `FECO_TUF_REPO` / `FECO_TUF_SIGN_KEYS` | không đặt | Kho TUF và các file khóa targets, snapshot, timestamp để ký gói khi phát hành. Không đặt thì bỏ qua bước ký |
 | `FECO_LAUNCHER_CLIENT_ID` | không đặt | Client ID của F-Launcher trong Hydra. Có thì bật mã khởi chạy app con (`/v1/launch-codes`) và launcher không phải qua màn hình đồng ý |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |
 | `RUST_LOG` | `info` | Mức nhật ký, ví dụ `debug` |
@@ -345,10 +392,12 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 |---|---|
 | `crates/feco-core` | Kiểu dữ liệu dùng chung: tiền VND, scope dữ liệu, môi trường |
 | `crates/feco-config` | Đọc và kiểm tra cấu hình lúc khởi động |
+| `crates/feco-manifest` | Lược đồ và trình kiểm tra `f-app.toml` (dùng chung cho cổng, CLI và kiểm duyệt) |
 | `crates/feco-tuf` | Kho TUF (dựng, ký, thu hồi, xoay khóa) và client xác minh cho launcher; công cụ `feco-tuf` |
 | `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu, F-Store; công cụ `feco-catalog`; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
 | `clients/feco-launcher` | F-Launcher: thư viện (đăng nhập, cài/cập nhật/gỡ qua TUF, mã khởi chạy, API cục bộ) và giao diện egui |
 | `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me`; khi được launcher mở thì đăng nhập bằng mã khởi chạy |
+| `tools/f-dev` | CLI cho nhà phát triển: `f-dev validate`, `f-dev publish` |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |
 | `infra/` | Hạ tầng dev: `docker-compose.yml`, cấu hình Kratos (schema, mẫu email) và Hydra |
 | `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher |

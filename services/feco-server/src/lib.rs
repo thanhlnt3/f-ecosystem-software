@@ -10,9 +10,13 @@ pub mod audit;
 pub mod auth;
 pub mod catalog;
 pub mod challenge;
+pub mod codesign;
 pub mod connected;
 pub mod crypto;
 pub mod csrf;
+pub mod dev_web;
+pub mod developer;
+pub mod dns;
 pub mod export;
 pub mod hydra;
 pub mod i18n;
@@ -77,6 +81,13 @@ pub struct AppState {
     pub limits: Limits,
     /// Bộ nhớ đệm kết quả tìm kiếm danh mục.
     pub catalog: catalog::Cache,
+    /// Máy chủ DNS để xác minh tên miền của nhà phát triển.
+    pub dns_servers: Vec<std::net::SocketAddr>,
+    /// Thư mục lưu gói nhà phát triển tải lên.
+    pub package_dir: std::path::PathBuf,
+    /// Kho TUF để ký target khi phát hành (không cấu hình thì bỏ qua bước ký).
+    pub tuf: Option<feco_config::TufConfig>,
+    pub tuf_lock: tokio::sync::Mutex<()>,
 }
 
 /// Ngưỡng giới hạn tần suất (yêu cầu mỗi phút).
@@ -137,6 +148,10 @@ impl AppState {
             ratelimit: ratelimit::RateLimiter::default(),
             limits: Limits::from_config(&config.security),
             catalog: catalog::Cache::default(),
+            dns_servers: config.developer.dns_servers.clone(),
+            package_dir: config.developer.package_dir.clone(),
+            tuf: config.developer.tuf.clone(),
+            tuf_lock: tokio::sync::Mutex::new(()),
         })
     }
 }
@@ -205,6 +220,28 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/catalog", get(store_web::api_list))
         .route("/v1/catalog/installs", post(store_web::api_install))
         .route("/v1/catalog/{id}", get(store_web::api_detail))
+        .route("/v1/catalog/{id}/update", get(dev_web::api_update))
+        .route("/v1/apps/crashes", post(dev_web::api_crash))
+        .route("/v1/dev/apps/{app}/versions", post(dev_web::api_manifest))
+        .route(
+            "/v1/dev/versions/{id}/packages/{platform}",
+            axum::routing::put(dev_web::api_package),
+        )
+        .route("/v1/dev/versions/{id}/submit", post(dev_web::api_submit))
+        .route("/developer", get(dev_web::home))
+        .route("/developer/docs", get(dev_web::docs))
+        .route("/developer/register", post(dev_web::register))
+        .route("/developer/apps/{id}", get(dev_web::app_page))
+        .route("/developer/apps/{id}/{action}", post(dev_web::app_action))
+        .route(
+            "/developer/versions/{id}/packages",
+            post(dev_web::upload_package).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/developer/versions/{id}/{action}",
+            post(dev_web::version_action),
+        )
+        .route("/developer/{action}", post(dev_web::account_action))
         .route("/store", get(store_web::list))
         .route("/store/{id}", get(store_web::show))
         .route("/store/{id}/reviews", post(store_web::submit_review))
@@ -269,6 +306,10 @@ mod tests {
                 user_per_min: 1000,
             },
             catalog: catalog::Cache::default(),
+            dns_servers: Vec::new(),
+            package_dir: std::env::temp_dir(),
+            tuf: None,
+            tuf_lock: tokio::sync::Mutex::new(()),
         }
     }
 

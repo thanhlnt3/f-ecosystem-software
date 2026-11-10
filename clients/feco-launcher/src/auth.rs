@@ -339,8 +339,47 @@ impl Auth {
         Ok(body["name"].as_str().map(str::to_owned))
     }
 
+    /// Phiên bản máy chủ cho phép thiết bị này nhận (phát hành dần; spec developer-portal).
+    /// `Ok(None)`: app không có trong danh mục của máy chủ.
+    pub async fn rollout_version(
+        &self,
+        app_id: &str,
+        platform: &str,
+        device: &str,
+    ) -> Result<Option<String>, AuthError> {
+        let mut url = self
+            .server
+            .join(&format!("v1/catalog/{app_id}/update"))
+            .map_err(|e| AuthError::Failed(e.to_string()))?;
+        url.query_pairs_mut()
+            .append_pair("platform", platform)
+            .append_pair("device", device);
+        let res = self
+            .http
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        if res.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !res.status().is_success() {
+            return Err(AuthError::Failed(format!("máy chủ trả {}", res.status())));
+        }
+        let body: Value = res
+            .json()
+            .await
+            .map_err(|e| AuthError::Failed(e.to_string()))?;
+        Ok(body["version"].as_str().map(str::to_owned))
+    }
+
     /// Báo F-Store rằng người dùng đã cài app (điều kiện để đánh giá; spec app-catalog).
-    pub async fn record_install(&self, access: &str, app_id: &str) -> Result<(), AuthError> {
+    pub async fn record_install(
+        &self,
+        access: &str,
+        app_id: &str,
+        version: &str,
+    ) -> Result<(), AuthError> {
         let url = self
             .server
             .join("v1/catalog/installs")
@@ -349,7 +388,7 @@ impl Auth {
             .http
             .post(url)
             .bearer_auth(access)
-            .json(&serde_json::json!({ "app_id": app_id }))
+            .json(&serde_json::json!({ "app_id": app_id, "version": version }))
             .send()
             .await
             .map_err(|e| AuthError::Offline(e.to_string()))?;

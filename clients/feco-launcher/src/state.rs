@@ -46,6 +46,13 @@ pub struct LocalState {
     pub auto_update: bool,
     #[serde(default)]
     pub last_update_check: Option<Timestamp>,
+    /// Mã ngẫu nhiên của bản cài launcher này, dùng để máy chủ chia nhóm phát hành dần.
+    /// Không gắn với tài khoản người dùng.
+    #[serde(default)]
+    pub device_id: Option<String>,
+    /// Phiên bản máy chủ cho phép thiết bị này nhận, theo từng app (phát hành dần).
+    #[serde(default)]
+    pub rollout: BTreeMap<String, String>,
 }
 
 impl LocalState {

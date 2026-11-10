@@ -359,7 +359,7 @@ impl LauncherApp {
                             .install(&entry, Timestamp::now())
                             .await
                             .map_err(|e| e.to_string())?;
-                        report_install(&s, &entry.app).await;
+                        report_install(&s, &entry.app, &entry.version).await;
                         Ok(format!("Đã cài {} {}", entry.title, entry.version))
                     },
                 )
@@ -715,6 +715,23 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
         Err(LauncherError::Offline(_)) => return Ok(String::new()),
         Err(e) => return Err(e.to_string()),
     }
+    // Phát hành dần: hỏi máy chủ thiết bị này được nhận bản nào của từng app đã cài.
+    if let Ok(device) = l.device_id() {
+        for (app, _) in l.installed() {
+            match s
+                .identity
+                .auth
+                .rollout_version(&app, &s.config.platform, &device)
+                .await
+            {
+                Ok(version) => {
+                    let _ = l.set_rollout(&app, version);
+                }
+                // Không hỏi được thì giữ câu trả lời lần trước.
+                Err(e) => eprintln!("không hỏi được bản phát hành của {app}: {e}"),
+            }
+        }
+    }
     if l.state().auto_update && l.due_for_update_check(now) {
         let results = l.update_all(now).await;
         if !results.is_empty() {
@@ -725,9 +742,9 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
 }
 
 /// Báo F-Store đã cài (để được đánh giá app). Không chặn việc cài nếu thất bại.
-async fn report_install(s: &Shared, app: &str) {
+async fn report_install(s: &Shared, app: &str, version: &str) {
     if let Ok(token) = s.identity.access_token().await {
-        if let Err(e) = s.identity.auth.record_install(&token, app).await {
+        if let Err(e) = s.identity.auth.record_install(&token, app, version).await {
             eprintln!("không báo được lượt cài {app}: {e}");
         }
     }

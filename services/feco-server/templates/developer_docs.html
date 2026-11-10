@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("dev.docs") }}{% endblock %}
+{% block content %}
+<p><a href="/developer">← {{ i18n.t("dev.title") }}</a></p>
+<h1>{{ i18n.t("dev.docs") }}</h1>
+
+<h2>f-app.toml</h2>
+<p>{{ i18n.t("dev.docs_manifest") }}</p>
+<pre><code>id = "soundlab"
+name = "SoundLab"
+version = "1.3.0"
+license = "MIT"
+privacy_policy = "https://soundlab.example/privacy"
+webhook = "https://soundlab.example/feco/webhook"
+summary = "Thu âm và phối nhạc"
+category = "Âm nhạc"
+
+[[platforms]]
+os = "windows"        # windows | macos
+arch = "x64"          # x64 | arm64
+entry = "SoundLab.exe"
+
+[scopes.profile]      # profile | email | locale | phone | billing | purchases
+required = true
+purpose = "Hiển thị trên bản nhạc bạn chia sẻ"
+purpose_en = "Shown on tracks you share"
+
+[permissions]
+network = true
+microphone = true
+user_folders = ["music"]</code></pre>
+
+<h2>f-dev</h2>
+<p>{{ i18n.t("dev.docs_cli") }}</p>
+<pre><code>f-dev validate --manifest f-app.toml
+FDEV_TOKEN=fdev_... f-dev publish --manifest f-app.toml --package dist/ --server {{ server }}</code></pre>
+
+<h2>API</h2>
+<p>{{ i18n.t("dev.docs_api") }}</p>
+<pre><code>GET  {{ hydra }}.well-known/openid-configuration      OAuth 2.0 / OIDC (Authorization Code + PKCE)
+GET  {{ server }}v1/me                                  Authorization: Bearer &lt;access token&gt;
+POST {{ server }}v1/launch-codes/exchange               {code, client_id, redirect_uri, code_challenge, scope}
+POST {{ server }}v1/apps/crashes                        {version}
+GET  {{ server }}v1/catalog/{app}/update?platform=&amp;device=&amp;channel=
+
+POST {{ server }}v1/dev/apps/{app}/versions             f-app.toml           Authorization: Bearer fdev_...
+PUT  {{ server }}v1/dev/versions/{id}/packages/{platform}   zip, X-Feco-Sha256
+POST {{ server }}v1/dev/versions/{id}/submit</code></pre>
+
+<h2>{{ i18n.t("dev.docs_sample_title") }}</h2>
+<p>{{ i18n.t("dev.docs_sample") }} <a href="https://github.com/thanhlnt3/f-ecosystem-software/tree/main/tools/feco-demo-app" rel="noopener">tools/feco-demo-app</a></p>
+
+<h2>Sandbox</h2>
+<p>{{ i18n.t("dev.docs_sandbox") }}</p>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("dev.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("dev.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" style="white-space:pre-line">{{ m.text }}</div>{% endfor %}
+{% match secret %}{% when Some with (value) %}
+<div class="msg success" id="secret">{{ i18n.t("dev.secret_once") }}<br><code>{{ value }}</code></div>
+{% when None %}{% endmatch %}
+
+{% if blocked %}
+<div class="links"><a href="/settings">{{ i18n.t("home.settings") }}</a><a href="/">{{ i18n.t("link.back_home") }}</a></div>
+{% else if !registered %}
+{% for inv in invitations %}
+<form method="post" action="/developer/join" class="invitation">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <input type="hidden" name="account" value="{{ inv.account }}">
+  <p>{{ i18n.t("dev.invited_to") }} <strong>{{ inv.name }}</strong> ({{ inv.role }})</p>
+  <button type="submit">{{ i18n.t("dev.accept_invite") }}</button>
+</form>
+{% endfor %}
+<h2>{{ i18n.t("dev.register") }}</h2>
+<form method="post" action="/developer/register" id="register-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="kind">{{ i18n.t("dev.kind") }}</label>
+  <select name="kind" id="kind">
+    <option value="individual">{{ i18n.t("dev.kind_individual") }}</option>
+    <option value="organization">{{ i18n.t("dev.kind_organization") }}</option>
+  </select>
+  <label for="display_name">{{ i18n.t("dev.display_name") }}</label>
+  <input type="text" name="display_name" id="display_name" maxlength="80" required>
+  <p class="muted">{{ i18n.t("dev.org_only") }}</p>
+  <label for="legal_name">{{ i18n.t("dev.legal_name") }}</label>
+  <input type="text" name="legal_name" id="legal_name">
+  <label for="business_id">{{ i18n.t("dev.business_id") }}</label>
+  <input type="text" name="business_id" id="business_id">
+  <label for="domain">{{ i18n.t("dev.domain") }}</label>
+  <input type="text" name="domain" id="domain" placeholder="acme.vn">
+  <label style="font-weight:400"><input type="checkbox" name="accept_agreement"> {{ i18n.t("dev.accept_agreement") }} ({{ agreement_version }})</label>
+  <p class="muted">{{ i18n.t("dev.agreement_note") }}</p>
+  <button type="submit">{{ i18n.t("dev.register") }}</button>
+</form>
+{% else %}
+<div class="facts">
+  <span class="muted">{{ i18n.t("dev.account") }}</span><span><strong>{{ name }}</strong>{% if domain_verified %}<span class="badge ok" id="verified">{{ i18n.t("store.verified") }}</span>{% endif %}</span>
+  <span class="muted">{{ i18n.t("dev.your_role") }}</span><span id="role">{{ role }}</span>
+</div>
+
+{% if !agreement_current %}
+<h2>{{ i18n.t("dev.agreement") }}</h2>
+<p>{{ i18n.t("dev.agreement_required") }}</p>
+{% if can_manage %}
+<form method="post" action="/developer/agreement" id="agreement-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label style="font-weight:400"><input type="checkbox" name="accept_agreement"> {{ i18n.t("dev.accept_agreement") }} ({{ agreement_version }})</label>
+  <button type="submit">{{ i18n.t("dev.agreement_submit") }}</button>
+</form>
+{% endif %}
+{% endif %}
+
+{% if organization %}
+<h2>{{ i18n.t("dev.domain") }}</h2>
+{% if domain_verified %}
+<p>{{ domain }}: {{ i18n.t("store.verified") }}</p>
+{% else %}
+<p>{{ i18n.t("dev.domain_howto") }} <strong>{{ domain }}</strong>:</p>
+<p><code id="txt-record">{{ txt_record }}</code></p>
+{% if can_manage %}
+<form method="post" action="/developer/domain" id="domain-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <button type="submit">{{ i18n.t("dev.domain_check") }}</button>
+</form>
+{% endif %}
+{% endif %}
+
+<h2>{{ i18n.t("dev.members") }}</h2>
+<table id="members">
+{% for mb in members %}<tr><td>{{ mb.email }}</td><td>{{ mb.role }}</td><td>{% if !mb.active %}{{ i18n.t("dev.pending") }}{% endif %}</td></tr>{% endfor %}
+</table>
+{% if can_manage %}
+<form method="post" action="/developer/members" id="invite-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="email">{{ i18n.t("dev.invite_email") }}</label>
+  <input type="email" name="email" id="email" required>
+  <label for="invite-role">{{ i18n.t("dev.role") }}</label>
+  <select name="role" id="invite-role">
+    <option value="developer">{{ i18n.t("dev.role_developer") }}</option>
+    <option value="admin">{{ i18n.t("dev.role_admin") }}</option>
+    <option value="viewer">{{ i18n.t("dev.role_viewer") }}</option>
+    <option value="owner">{{ i18n.t("dev.role_owner") }}</option>
+  </select>
+  <button type="submit">{{ i18n.t("dev.invite") }}</button>
+</form>
+{% endif %}
+{% endif %}
+
+<h2>{{ i18n.t("dev.apps") }}</h2>
+{% if apps.is_empty() %}<p class="muted">{{ i18n.t("dev.no_apps") }}</p>{% endif %}
+<ul id="apps">{% for a in apps %}<li><a href="/developer/apps/{{ a.app_id }}">{{ a.name }}</a> <span class="muted">{{ a.app_id }}</span></li>{% endfor %}</ul>
+{% if can_edit %}
+<details{% if apps.is_empty() %} open{% endif %}><summary>{{ i18n.t("dev.new_app") }}</summary>
+<form method="post" action="/developer/apps" id="app-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="app_id">{{ i18n.t("dev.app_id") }}</label>
+  <input type="text" name="app_id" id="app_id" placeholder="soundlab" required>
+  <label for="app_name">{{ i18n.t("dev.app_name") }}</label>
+  <input type="text" name="name" id="app_name" required>
+  <label for="app_kind">{{ i18n.t("dev.app_kind") }}</label>
+  <select name="kind" id="app_kind">
+    <option value="desktop">{{ i18n.t("dev.app_kind_desktop") }}</option>
+    <option value="server">{{ i18n.t("dev.app_kind_server") }}</option>
+  </select>
+  <label for="redirects">{{ i18n.t("dev.redirects") }}</label>
+  <textarea name="redirects" id="redirects" placeholder="http://127.0.0.1:9999/cb" required></textarea>
+  <button type="submit">{{ i18n.t("dev.create_app") }}</button>
+</form>
+</details>
+
+<h2>{{ i18n.t("dev.tokens") }}</h2>
+<p class="muted">{{ i18n.t("dev.tokens_note") }}</p>
+<form method="post" action="/developer/tokens" id="token-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="token_name">{{ i18n.t("dev.token_name") }}</label>
+  <input type="text" name="name" id="token_name" value="f-dev" required>
+  <button type="submit" class="secondary">{{ i18n.t("dev.create_token") }}</button>
+</form>
+{% endif %}
+<div class="links"><a href="/developer/docs">{{ i18n.t("dev.docs") }}</a><a href="/store">F-Store</a></div>
+{% endif %}
+{% endblock %}

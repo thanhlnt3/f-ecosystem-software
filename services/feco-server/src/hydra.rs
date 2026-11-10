@@ -214,6 +214,34 @@ impl HydraClient {
         Self::json(res).await.map(Some)
     }
 
+    /// Ghi đè OAuth client (địa chỉ chuyển hướng, secret, metadata).
+    pub async fn update_client(
+        &self,
+        client_id: &str,
+        client: &Value,
+    ) -> Result<Value, HydraError> {
+        Self::json(
+            self.http
+                .put(self.url(&format!("admin/clients/{}", enc(client_id))))
+                .json(client)
+                .send()
+                .await?,
+        )
+        .await
+    }
+
+    pub async fn delete_client(&self, client_id: &str) -> Result<(), HydraError> {
+        let res = self
+            .http
+            .delete(self.url(&format!("admin/clients/{}", enc(client_id))))
+            .send()
+            .await?;
+        if res.status() == StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        Self::json(res).await.map(|_| ())
+    }
+
     /// Tạo OAuth client cho một app (cổng nhà phát triển ở nhóm 8 sẽ gọi hàm này).
     pub async fn create_client(&self, client: &Value) -> Result<Value, HydraError> {
         Self::json(

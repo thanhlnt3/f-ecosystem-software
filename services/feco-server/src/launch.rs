@@ -196,6 +196,7 @@ pub async fn issue(
         tracing::error!(error = %e, "không lưu được mã khởi chạy");
         return unavailable();
     }
+    crate::developer::record_activity(&state.db, &req.client_id, subject).await;
     audit::record(
         &state.db,
         Actor::User(subject),

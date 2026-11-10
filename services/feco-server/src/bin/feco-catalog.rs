@@ -14,6 +14,7 @@ feco-catalog: quản trị danh mục F-Store (tạm thời)
   feco-catalog release <app> <version> <platform> <size-bytes> <tuf-target> [changelog]
   feco-catalog revoke <app> <version>             thu hồi một phiên bản khỏi danh mục
   feco-catalog remove <app> <lý do>               gỡ app khỏi danh mục
+  feco-catalog review <app> <version> approve|reject [ghi chú]   kết quả kiểm duyệt (tạm, tới nhóm 9)
   feco-catalog reports                            hàng chờ báo cáo vi phạm
   feco-catalog resolve <report-id> upheld|rejected <ghi chú>
 ";
@@ -92,6 +93,35 @@ async fn run(args: Vec<String>) -> Result<(), String> {
                     "đã gỡ app khỏi danh mục"
                 } else {
                     "app không có hoặc đã bị gỡ"
+                }
+            );
+        }
+        "review" => {
+            let approve = match arg(&args, 3)? {
+                "approve" => true,
+                "reject" => false,
+                other => {
+                    return Err(format!(
+                        "kết quả phải là approve hoặc reject, không phải {other}"
+                    ))
+                }
+            };
+            let note = args.get(4).cloned().unwrap_or_default();
+            let done = feco_server::developer::review(
+                &state.db,
+                arg(&args, 1)?,
+                arg(&args, 2)?,
+                approve,
+                &note,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            println!(
+                "{}",
+                if done {
+                    "đã ghi kết quả kiểm duyệt"
+                } else {
+                    "không có phiên bản đang chờ duyệt"
                 }
             );
         }

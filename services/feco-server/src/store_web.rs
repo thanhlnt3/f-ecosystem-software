@@ -639,6 +639,9 @@ pub async fn api_detail(State(state): State<Arc<AppState>>, Path(id): Path<Strin
 #[derive(Debug, Deserialize)]
 pub struct InstallRequest {
     pub app_id: String,
+    /// Phiên bản vừa cài (để nhà phát triển thấy phân bố phiên bản, dạng tổng hợp).
+    #[serde(default)]
+    pub version: Option<String>,
 }
 
 /// POST /v1/catalog/installs (chỉ token của F-Launcher)
@@ -651,7 +654,7 @@ pub async fn api_install(
         Ok(s) => s,
         Err(r) => return *r,
     };
-    match catalog::record_install(&state.db, subject, &req.app_id).await {
+    match catalog::record_install(&state.db, subject, &req.app_id, req.version.as_deref()).await {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
         Ok(false) => api_error(
             StatusCode::NOT_FOUND,

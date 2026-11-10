@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ app.name }}{% endblock %}
+{% block content %}
+<p><a href="/developer">← {{ i18n.t("dev.title") }}</a></p>
+<h1>{{ app.name }} <span class="muted">{{ app.app_id }}</span></h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" style="white-space:pre-line">{{ m.text }}</div>{% endfor %}
+{% match secret %}{% when Some with (value) %}
+<div class="msg success" id="secret">{{ i18n.t("dev.secret_once") }}<br><code>{{ value }}</code></div>
+{% when None %}{% endmatch %}
+
+<h2>{{ i18n.t("dev.credentials") }}</h2>
+<div class="facts">
+  <span class="muted">Client ID</span><code id="client-id">{{ app.client_id }}</code>
+  <span class="muted">{{ i18n.t("dev.app_kind") }}</span><span>{% if server_side %}{{ i18n.t("dev.app_kind_server") }}{% else %}{{ i18n.t("dev.app_kind_desktop") }}{% endif %}</span>
+</div>
+{% if can_release %}
+<form method="post" action="/developer/apps/{{ app.app_id }}/redirects" id="redirects-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="redirects">{{ i18n.t("dev.redirects") }}</label>
+  <textarea name="redirects" id="redirects">{{ redirects }}</textarea>
+  <button type="submit" class="secondary">{{ i18n.t("dev.save") }}</button>
+</form>
+{% if server_side %}
+<form method="post" action="/developer/apps/{{ app.app_id }}/secret" id="secret-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <button type="submit" class="secondary">{{ i18n.t("dev.rotate_secret") }}</button>
+</form>
+{% endif %}
+{% else %}
+<pre id="redirect-list">{{ redirects }}</pre>
+{% endif %}
+
+<h2>{{ i18n.t("dev.versions") }}</h2>
+{% if versions.is_empty() %}<p class="muted">{{ i18n.t("dev.no_versions") }}</p>{% endif %}
+{% for v in versions %}
+<div class="review version" data-version="{{ v.version }}">
+  <div><strong>{{ v.version }}</strong> · <span class="status">{{ v.status }}</span>{% if !v.channel.is_empty() %} · {{ v.channel }} {{ v.percent }}%{% endif %} · <span class="muted">{{ v.platforms }}</span></div>
+  {% if !v.note.is_empty() %}<p class="muted">{{ v.note }}</p>{% endif %}
+  {% if v.draft && can_edit %}
+  {% for p in v.missing %}
+  <form method="post" action="/developer/versions/{{ v.id }}/packages" enctype="multipart/form-data">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="hidden" name="platform" value="{{ p }}">
+    <label>{{ i18n.t("dev.package_for") }} {{ p }} (.zip)</label>
+    <input type="file" name="file" accept=".zip" required>
+    <button type="submit" class="secondary">{{ i18n.t("dev.upload") }}</button>
+  </form>
+  {% endfor %}
+  {% if v.missing.is_empty() %}
+  <form method="post" action="/developer/versions/{{ v.id }}/submit">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <button type="submit">{{ i18n.t("dev.submit_review") }}</button>
+  </form>
+  {% endif %}
+  {% endif %}
+  {% if v.releasable && can_release %}
+  <form method="post" action="/developer/versions/{{ v.id }}/release" class="release-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label>{{ i18n.t("dev.channel") }}</label>
+    <select name="channel"><option value="stable">stable</option><option value="beta">beta</option></select>
+    <label>{{ i18n.t("dev.percent") }}</label>
+    <select name="percent"><option value="10">10%</option><option value="50">50%</option><option value="100">100%</option></select>
+    <button type="submit">{{ i18n.t("dev.release") }}</button>
+  </form>
+  {% endif %}
+  {% if v.released && can_release %}
+  <form method="post" action="/developer/versions/{{ v.id }}/pause" class="pause-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <button type="submit" class="secondary">{{ i18n.t("dev.pause") }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if can_edit %}
+<h2>{{ i18n.t("dev.new_version") }}</h2>
+<form method="post" action="/developer/apps/{{ app.app_id }}/manifest" id="manifest-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="manifest">f-app.toml</label>
+  <textarea name="manifest" id="manifest" style="min-height:220px;font-family:ui-monospace,Consolas,monospace" required></textarea>
+  <button type="submit">{{ i18n.t("dev.save_manifest") }}</button>
+</form>
+{% endif %}
+
+<h2>{{ i18n.t("dev.metrics") }}</h2>
+<p class="muted">{{ i18n.t("dev.metrics_note") }}</p>
+<div class="facts" id="metrics">
+  <span class="muted">{{ i18n.t("dev.metric_installs") }}</span><span id="m-installs">{{ installs }}</span>
+  <span class="muted">{{ i18n.t("dev.metric_active7") }}</span><span id="m-active7">{{ active_7d }}</span>
+  <span class="muted">{{ i18n.t("dev.metric_active30") }}</span><span id="m-active30">{{ active_30d }}</span>
+  <span class="muted">{{ i18n.t("dev.metric_crashes") }}</span><span id="m-crashes">{{ crashes_30d }}</span>
+  <span class="muted">{{ i18n.t("dev.metric_rating") }}</span><span>{{ rating }}</span>
+  <span class="muted">{{ i18n.t("dev.metric_versions") }}</span><span id="m-versions">{% for (ver, n) in distribution %}{{ ver }}: {{ n }}{% if !loop.last %}, {% endif %}{% endfor %}</span>
+</div>
+
+{% if can_delete %}
+<details><summary>{{ i18n.t("dev.delete_app") }}</summary>
+<form method="post" action="/developer/apps/{{ app.app_id }}/delete" id="delete-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <p>{{ i18n.t("dev.delete_warning") }}</p>
+  <button type="submit" class="danger">{{ i18n.t("dev.delete_app") }}</button>
+</form>
+</details>
+{% endif %}
+{% endblock %}

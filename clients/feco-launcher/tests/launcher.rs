@@ -377,6 +377,35 @@ async fn interrupted_update_keeps_old_version_and_rollback_needs_no_download() {
     assert_eq!(l.my_apps()[0].previous_version.as_deref(), Some("1.2.0"));
 }
 
+/// Scenario "Phát hành 10%" phía launcher: thiết bị ngoài nhóm vẫn ở bản cũ; vào nhóm thì
+/// được đề nghị bản mới.
+#[tokio::test]
+async fn staged_rollout_limits_offered_update() {
+    let f = Fixture::new().await;
+    f.publish_app("soundlab", "1.2.0").await;
+    let mut l = f.launcher().await;
+    l.sync(Timestamp::now()).await.unwrap();
+    l.install(&entry(&l, "soundlab", "1.2.0"), Timestamp::now())
+        .await
+        .unwrap();
+    f.publish_app("soundlab", "1.3.0").await;
+    l.sync(Timestamp::now()).await.unwrap();
+
+    let device = l.device_id().unwrap();
+    assert_eq!(device.len(), 32);
+    assert_eq!(l.device_id().unwrap(), device, "mã thiết bị không đổi");
+    // Máy chủ: thiết bị này vẫn ở 1.2.0 (ngoài 10%).
+    l.set_rollout("soundlab", Some("1.2.0".into())).unwrap();
+    assert!(l.my_apps()[0].update.is_none());
+    assert!(l.update_all(Timestamp::now()).await.is_empty());
+    // Máy chủ: thiết bị này được nhận 1.3.0.
+    l.set_rollout("soundlab", Some("1.3.0".into())).unwrap();
+    assert_eq!(l.my_apps()[0].update.as_ref().unwrap().version, "1.3.0");
+    // Không có thông tin phát hành dần (app không qua danh mục): nhận bản mới nhất đã ký.
+    l.set_rollout("soundlab", None).unwrap();
+    assert_eq!(l.update_for("soundlab").unwrap().version, "1.3.0");
+}
+
 /// Scenario "Không có mạng": "App của tôi" vẫn hiện và mở được; danh mục báo ngoại tuyến.
 #[tokio::test]
 async fn offline_start_keeps_my_apps_usable() {

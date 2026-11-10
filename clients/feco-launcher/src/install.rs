@@ -212,12 +212,45 @@ impl Launcher {
     /// Bản mới hơn bản đang cài, nếu có.
     pub fn update_for(&self, app: &str) -> Option<&CatalogEntry> {
         let current = &self.state.apps.get(app)?.current;
+        // Phát hành dần: nếu máy chủ đã cho biết thiết bị này nhận bản nào thì chỉ đề nghị tới
+        // bản đó; app không có thông tin phát hành dần thì nhận bản mới nhất đã ký.
+        let limit = self.state.rollout.get(app);
         self.state
             .catalog
             .iter()
             .filter(|e| e.app == app)
             .filter(|e| compare(&e.version, &current.version) == Ordering::Greater)
+            .filter(|e| limit.is_none_or(|l| compare(&e.version, l) != Ordering::Greater))
             .max_by(|a, b| compare(&a.version, &b.version))
+    }
+
+    /// Mã thiết bị dùng cho phát hành dần (tạo một lần, lưu trong `state.json`).
+    pub fn device_id(&mut self) -> Result<String, LauncherError> {
+        if let Some(id) = &self.state.device_id {
+            return Ok(id.clone());
+        }
+        let id = crate::random_hex(16);
+        self.state.device_id = Some(id.clone());
+        self.save()?;
+        Ok(id)
+    }
+
+    /// Ghi phiên bản máy chủ cho phép thiết bị này nhận (`None`: không có thông tin).
+    pub fn set_rollout(&mut self, app: &str, version: Option<String>) -> Result<(), LauncherError> {
+        match version {
+            Some(v) => self.state.rollout.insert(app.to_owned(), v),
+            None => self.state.rollout.remove(app),
+        };
+        self.save()
+    }
+
+    /// Các app đã cài cùng phiên bản hiện tại.
+    pub fn installed(&self) -> Vec<(String, String)> {
+        self.state
+            .apps
+            .values()
+            .map(|a| (a.current.app.clone(), a.current.version.clone()))
+            .collect()
     }
 
     pub fn my_apps(&self) -> Vec<MyApp> {

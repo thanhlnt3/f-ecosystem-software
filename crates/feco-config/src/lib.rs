@@ -9,7 +9,7 @@
 //! Spec `platform-security`: bí mật không được xuất hiện trong nhật ký, nên mọi bí mật
 //! được bọc trong [`Secret`], kiểu này in ra `***` khi debug.
 
-use std::{collections::HashMap, fmt, net::SocketAddr};
+use std::{collections::HashMap, fmt, net::SocketAddr, path::PathBuf};
 
 use feco_core::Environment;
 use url::Url;
@@ -109,6 +109,25 @@ pub struct SecurityConfig {
     pub rate_user_per_min: u32,
 }
 
+/// Kho TUF mà máy chủ ký target khi một phiên bản được phát hành (design D3). Bản dev dùng khóa
+/// trong file; production dùng KMS (chưa chọn nhà cung cấp, xem QUESTIONS.md).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TufConfig {
+    pub repo: PathBuf,
+    /// File khóa targets, snapshot, timestamp.
+    pub sign_keys: Vec<PathBuf>,
+}
+
+/// Cấu hình cổng nhà phát triển (spec developer-portal).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeveloperConfig {
+    /// Máy chủ DNS dùng để xác minh tên miền bằng bản ghi TXT.
+    pub dns_servers: Vec<SocketAddr>,
+    /// Thư mục lưu gói nhà phát triển tải lên.
+    pub package_dir: PathBuf,
+    pub tuf: Option<TufConfig>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub environment: Environment,
@@ -117,6 +136,7 @@ pub struct Config {
     pub payments: PaymentsConfig,
     pub auth: AuthConfig,
     pub security: SecurityConfig,
+    pub developer: DeveloperConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -231,6 +251,7 @@ impl Config {
 
         let auth = auth_config(environment, &get)?;
         let security = security_config(environment, &get)?;
+        let developer = developer_config(environment, &get)?;
 
         let config = Config {
             environment,
@@ -238,6 +259,7 @@ impl Config {
             database_url,
             auth,
             security,
+            developer,
             payments: PaymentsConfig { vnpay, momo },
         };
         config.validate()?;
@@ -378,6 +400,45 @@ fn security_config<'a>(
         rate_ip_per_min: num("FECO_RATE_IP_PER_MIN", 1200)?,
         rate_app_per_min: num("FECO_RATE_APP_PER_MIN", 1200)?,
         rate_user_per_min: num("FECO_RATE_USER_PER_MIN", 120)?,
+    })
+}
+
+fn developer_config<'a>(
+    environment: Environment,
+    get: &impl Fn(&str) -> Option<&'a str>,
+) -> Result<DeveloperConfig, ConfigError> {
+    let dns_servers = get("FECO_DNS_SERVERS")
+        .unwrap_or("1.1.1.1:53,8.8.8.8:53")
+        .split(',')
+        .map(|s| {
+            s.trim()
+                .parse::<SocketAddr>()
+                .map_err(|_| ConfigError::Invalid {
+                    var: "FECO_DNS_SERVERS",
+                    reason: format!("{s:?} không phải địa chỉ ip:cổng"),
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let package_dir = match get("FECO_PACKAGE_DIR") {
+        Some(p) => PathBuf::from(p),
+        None if environment.is_production() => {
+            return Err(ConfigError::Missing("FECO_PACKAGE_DIR"))
+        }
+        None => PathBuf::from("infra/.data/packages"),
+    };
+    let tuf = match (get("FECO_TUF_REPO"), get("FECO_TUF_SIGN_KEYS")) {
+        (None, None) => None,
+        (Some(repo), Some(keys)) => Some(TufConfig {
+            repo: PathBuf::from(repo),
+            sign_keys: keys.split(',').map(|k| PathBuf::from(k.trim())).collect(),
+        }),
+        (Some(_), None) => return Err(ConfigError::Missing("FECO_TUF_SIGN_KEYS")),
+        (None, Some(_)) => return Err(ConfigError::Missing("FECO_TUF_REPO")),
+    };
+    Ok(DeveloperConfig {
+        dns_servers,
+        package_dir,
+        tuf,
     })
 }
 

@@ -85,3 +85,25 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     duyệt cho việc gỡ app không.
 25. **Một nhận xét cho mỗi người mỗi app** (viết lại thì cập nhật). Có cần giữ lịch sử các lần sửa,
     và nhận xét có gắn với phiên bản app đang dùng không?
+
+## Nhóm 8: cổng nhà phát triển
+
+26. **Nội dung Thỏa thuận nhà phát triển**: cổng ghi phiên bản (`2026-11-01`) và thời điểm chấp
+    nhận, nhưng văn bản thỏa thuận chưa có. Cần luật sư soạn (cùng điều khoản IP, chia sẻ doanh
+    thu, chính sách nội dung) trước khi mở đăng ký thật.
+27. **Mỗi người dùng thuộc tối đa một tài khoản nhà phát triển**. Có cần cho một người vừa có tài
+    khoản cá nhân vừa là thành viên của tổ chức không?
+28. **Xác minh tên miền không kiểm DNSSEC** và hỏi máy chủ DNS công cộng (`FECO_DNS_SERVERS`). Đủ cho
+    dấu "Đã xác minh", hay cần thêm xác minh pháp nhân (đối chiếu mã số doanh nghiệp)?
+29. **Passkey làm lớp xác thực thứ hai của nhà phát triển**: hiện chỉ TOTP được tính (task 2.4 cũng
+    còn thiếu test passkey). Cần phân biệt được passkey đã đăng ký thật trong Kratos.
+30. **Xác minh mật mã chữ ký mã**: bước nộp chỉ kiểm tệp chạy có mang chữ ký. Khâu kiểm duyệt
+    (task 9.1) cần máy Windows (`signtool verify`) và macOS (`codesign`, `spctl`, `stapler`) để
+    xác minh chữ ký, chuỗi chứng thư và notarize. Cần quyết định hạ tầng cho hai máy quét này.
+31. **App trả phí**: manifest chưa có giá; mọi app phát hành qua cổng hiện miễn phí. Giá và chia sẻ
+    doanh thu thuộc nhóm thanh toán (12–13).
+32. **Kho gói**: gói tải lên nằm trên đĩa của máy chủ (`FECO_PACKAGE_DIR`). Production cần lưu trữ
+    đối tượng (S3 tương thích) và phân phối `targets/` của TUF qua CDN; phụ thuộc task 1.4.
+33. **Phát hành dần dựa trên mã thiết bị ngẫu nhiên của launcher** (không gắn tài khoản). Người dùng
+    có nhiều máy có thể nhận bản khác nhau trên mỗi máy. Có chấp nhận không, hay chia nhóm theo
+    tài khoản?

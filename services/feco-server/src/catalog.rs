@@ -489,14 +489,20 @@ pub async fn remove_app(db: &Db, cache: &Cache, app: &str, reason: &str) -> sqlx
 }
 
 /// Ghi nhận người dùng đã cài app (launcher báo sau khi cài).
-pub async fn record_install(db: &Db, subject: Uuid, app: &str) -> sqlx::Result<bool> {
+pub async fn record_install(
+    db: &Db,
+    subject: Uuid,
+    app: &str,
+    version: Option<&str>,
+) -> sqlx::Result<bool> {
     let n = sqlx::query(
-        "INSERT INTO catalog_installs (subject, app_id)
-         SELECT $1, id FROM catalog_apps WHERE id = $2
-         ON CONFLICT DO NOTHING",
+        "INSERT INTO catalog_installs (subject, app_id, version)
+         SELECT $1, id, $3 FROM catalog_apps WHERE id = $2
+         ON CONFLICT (subject, app_id) DO UPDATE SET version = COALESCE($3, catalog_installs.version)",
     )
     .bind(subject)
     .bind(app)
+    .bind(version.filter(|v| v.len() <= 64))
     .execute(db)
     .await?
     .rows_affected();

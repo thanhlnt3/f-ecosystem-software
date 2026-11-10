@@ -31,6 +31,59 @@ const UA_LINUX_FIREFOX: &str =
 static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Client ID của F-Launcher, tạo trong Hydra khi khởi động máy chủ kiểm thử.
 static LAUNCHER: OnceLock<String> = OnceLock::new();
+/// Bản ghi của máy chủ DNS giả mà máy chủ kiểm thử dùng để xác minh tên miền.
+static DNS: OnceLock<feco_server::dns::testing::Records> = OnceLock::new();
+/// Kho TUF mà máy chủ kiểm thử ký target khi phát hành.
+static TUF_REPO: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+/// Dựng kho TUF tạm; trả (thư mục kho, danh sách file khóa targets, snapshot, timestamp).
+async fn init_tuf(work: &std::path::Path) -> (std::path::PathBuf, String) {
+    use feco_tuf::{keys, Expiry, InitKeys, Repo};
+    let mut paths = Vec::new();
+    let mut public = Vec::new();
+    for name in [
+        "root-1",
+        "root-2",
+        "root-3",
+        "targets",
+        "snapshot",
+        "timestamp",
+    ] {
+        let path = work.join("keys").join(format!("{name}.pk8"));
+        keys::generate(&path).await.unwrap();
+        public.push(
+            keys::public_key(keys::source(&path).as_ref())
+                .await
+                .unwrap(),
+        );
+        paths.push(path);
+    }
+    let repo = Repo::open(work.join("tuf"));
+    let signers: Vec<_> = [0, 1, 3, 4, 5]
+        .iter()
+        .map(|i| keys::source(&paths[*i]))
+        .collect();
+    repo.init(
+        &InitKeys {
+            root: public[..3].to_vec(),
+            root_threshold: 2,
+            targets: vec![public[3].clone()],
+            snapshot: vec![public[4].clone()],
+            timestamp: vec![public[5].clone()],
+        },
+        &signers,
+        Expiry::default(),
+        jiff::Timestamp::now(),
+    )
+    .await
+    .unwrap();
+    let keys = paths[3..]
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join(",");
+    (repo.dir().to_path_buf(), keys)
+}
 
 /// Kiểm thử E2E chỉ chạy khi đặt FECO_E2E=1. Lần đầu gọi sẽ dựng feco-server ở cổng
 /// 8080 trên một luồng riêng, dùng chung cho mọi test trong file.
@@ -53,12 +106,28 @@ fn e2e_ready() -> bool {
             rt.block_on(async move {
                 let launcher = create_launcher().await;
                 LAUNCHER.set(launcher.clone()).unwrap();
+                let records = feco_server::dns::testing::Records::default();
+                let dns = feco_server::dns::testing::serve("127.0.0.1:0", records.clone())
+                    .await
+                    .unwrap();
+                let _ = DNS.set(records);
+                let work = std::env::temp_dir().join(format!("feco-e2e-{}", std::process::id()));
+                let _ = std::fs::remove_dir_all(&work);
+                let (tuf_repo, tuf_keys) = init_tuf(&work).await;
+                let _ = TUF_REPO.set(tuf_repo.clone());
                 let vars: HashMap<String, String> = [
-                    ("FECO_ENV", "dev"),
-                    ("FECO_LAUNCHER_CLIENT_ID", launcher.as_str()),
+                    ("FECO_ENV", "dev".to_owned()),
+                    ("FECO_LAUNCHER_CLIENT_ID", launcher.clone()),
+                    ("FECO_DNS_SERVERS", dns.to_string()),
+                    (
+                        "FECO_PACKAGE_DIR",
+                        work.join("packages").to_string_lossy().into_owned(),
+                    ),
+                    ("FECO_TUF_REPO", tuf_repo.to_string_lossy().into_owned()),
+                    ("FECO_TUF_SIGN_KEYS", tuf_keys),
                 ]
                 .into_iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .map(|(k, v)| (k.to_string(), v))
                 .collect();
                 let config = Config::from_vars(&vars).unwrap();
                 let state = std::sync::Arc::new(AppState::from_config(&config).unwrap());
@@ -2102,4 +2171,702 @@ async fn catalog_search_detail_reviews_reports_and_removal() {
     assert!(elapsed <= catalog::CACHE_TTL + Duration::from_secs(5));
     let list = get(&user, "/store?q=so+tay").await;
     assert!(!list.contains(&format!("/store/{notebook}")));
+}
+
+// ---------- Nhóm 8: cổng nhà phát triển (spec developer-portal) ----------
+
+fn csrf_of(page: &str) -> String {
+    Regex::new(r#"name="feco_csrf" value="([^"]+)""#)
+        .unwrap()
+        .captures(page)
+        .unwrap_or_else(|| panic!("trang không có token CSRF:\n{page}"))[1]
+        .to_owned()
+}
+
+/// Gửi một biểu mẫu; trả mã HTTP và nội dung trang cuối cùng (sau chuyển hướng).
+async fn post(
+    c: &reqwest::Client,
+    path: &str,
+    csrf: &str,
+    fields: &[(&str, &str)],
+) -> (u16, String) {
+    let body = form_urlencoded::Serializer::new(String::new())
+        .append_pair("feco_csrf", csrf)
+        .extend_pairs(fields.iter().copied())
+        .finish();
+    let res = c
+        .post(format!("{BASE}{path}"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+    (res.status().as_u16(), res.text().await.unwrap())
+}
+
+async fn verify_email(c: &reqwest::Client, email: &str) {
+    let mail = wait_mail(email, "Xác minh email").await;
+    let link = Regex::new(r"https?://\S+/self-service/verification\?\S+")
+        .unwrap()
+        .find(&mail)
+        .expect("email có liên kết xác minh")
+        .as_str()
+        .to_owned();
+    let page = get(c, &link).await;
+    assert!(page.contains("Bạn đã xác minh email thành công"), "{page}");
+}
+
+async fn enable_totp(c: &reqwest::Client) {
+    let settings = get(c, "/settings").await;
+    let secret = text_of(&settings, "code#totp_secret_key");
+    let form = parse_group_form(&settings, "totp");
+    let page = submit(
+        c,
+        &form,
+        &[("totp_code", &totp_now(&secret)), ("method", "totp")],
+    )
+    .await;
+    assert!(page.contains("Đã lưu thay đổi."), "{page}");
+}
+
+/// Người dùng đủ điều kiện làm nhà phát triển: email đã xác minh, đã bật TOTP.
+async fn developer_user(prefix: &str, name: &str) -> (reqwest::Client, String) {
+    let (email, password) = unique(prefix);
+    let c = app_browser();
+    register_in(&c, &email, &password, name).await;
+    verify_email(&c, &email).await;
+    enable_totp(&c).await;
+    (c, email)
+}
+
+fn app_manifest(app_id: &str, version: &str) -> String {
+    format!(
+        r#"id = "{app_id}"
+name = "SoundLab"
+version = "{version}"
+license = "MIT"
+privacy_policy = "https://soundlab.example/privacy"
+summary = "Thu âm và phối nhạc"
+category = "Âm nhạc"
+
+[[platforms]]
+os = "windows"
+arch = "x64"
+entry = "SoundLab.exe"
+
+[scopes.profile]
+required = true
+purpose = "Hiển thị trên bản nhạc bạn chia sẻ"
+purpose_en = "Shown on tracks you share"
+
+[scopes.email]
+purpose = "Gửi bản tin"
+
+[permissions]
+network = true
+microphone = true
+"#
+    )
+}
+
+/// Thư mục `dist/` chứa tệp chạy Windows đã ký hoặc chưa ký.
+fn dist(root: &std::path::Path, signed: bool) -> std::path::PathBuf {
+    let dir = root.join(if signed {
+        "dist-signed"
+    } else {
+        "dist-unsigned"
+    });
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("SoundLab.exe"),
+        feco_server::codesign::fixtures::pe(signed),
+    )
+    .unwrap();
+    dir
+}
+
+async fn f_dev_publish(
+    manifest: &std::path::Path,
+    package: &std::path::Path,
+    token: &str,
+) -> Result<String, String> {
+    let args: Vec<String> = [
+        "publish",
+        "--manifest",
+        &manifest.to_string_lossy(),
+        "--package",
+        &package.to_string_lossy(),
+        "--server",
+        BASE,
+        "--token",
+        token,
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    f_dev::run(&args).await
+}
+
+async fn rollout_version(app_id: &str, device: &str) -> String {
+    let body: Value = reqwest::Client::new()
+        .get(format!(
+            "{BASE}/v1/catalog/{app_id}/update?platform=windows-x64&device={device}"
+        ))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    body["version"].as_str().unwrap_or_default().to_owned()
+}
+
+/// Spec developer-portal: đăng ký (email đã xác minh, 2FA, thỏa thuận), xác minh tên miền bằng
+/// DNS TXT, client ID và địa chỉ chuyển hướng, nhóm và vai trò, manifest, nộp gói bằng `f-dev`
+/// (đã ký và chưa ký), phát hành dần 10%, số liệu tổng hợp, xóa app.
+#[tokio::test]
+async fn developer_portal_end_to_end() {
+    use feco_server::developer;
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let st = local_state();
+    let stamp = (SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        % 1_000_000_000_000)
+        .to_string();
+    let app_id = format!("soundlab-{stamp}");
+    let domain = format!("acme-{stamp}.vn");
+    let work = tempfile::tempdir().unwrap();
+
+    // --- 8.1 Đăng ký: cần email đã xác minh và xác thực hai lớp.
+    let (email, password) = unique("owner");
+    let owner = app_browser();
+    register_in(&owner, &email, &password, "Chủ Acme").await;
+    let page = get(&owner, "/developer").await;
+    assert!(
+        page.contains("Bạn cần xác minh email trước khi đăng ký nhà phát triển"),
+        "{page}"
+    );
+    verify_email(&owner, &email).await;
+    let page = get(&owner, "/developer").await;
+    assert!(page.contains("Bạn cần bật xác thực hai lớp"), "{page}");
+    enable_totp(&owner).await;
+    let page = get(&owner, "/developer").await;
+    let form = parse_form_where(&page, "#register-form");
+    let page = submit(
+        &owner,
+        &form,
+        &[
+            ("kind", "organization"),
+            ("display_name", &format!("Acme {stamp}")),
+            ("legal_name", "Công ty TNHH Acme"),
+            ("business_id", "0101234567"),
+            ("domain", &domain),
+        ],
+    )
+    .await;
+    assert!(
+        page.contains("Đã đăng ký nhà phát triển") && page.contains("Chủ sở hữu"),
+        "{page}"
+    );
+    let csrf = csrf_of(&page);
+    let new_app: [(&str, &str); 4] = [
+        ("app_id", &app_id),
+        ("name", "SoundLab"),
+        ("kind", "desktop"),
+        ("redirects", APP_CALLBACK),
+    ];
+
+    // Scenario "Chưa chấp nhận thỏa thuận".
+    let (status, body) = post(&owner, "/developer/apps", &csrf, &new_app).await;
+    assert_eq!(status, 403, "{body}");
+    assert!(
+        body.contains("Bạn cần đọc và chấp nhận Thỏa thuận nhà phát triển trước"),
+        "{body}"
+    );
+    let (_, page) = post(
+        &owner,
+        "/developer/agreement",
+        &csrf,
+        &[("accept_agreement", "on")],
+    )
+    .await;
+    assert!(
+        page.contains("Đã ghi nhận việc chấp nhận thỏa thuận"),
+        "{page}"
+    );
+    let (version, accepted): (Option<String>, Option<time::OffsetDateTime>) = sqlx::query_as(
+        "SELECT agreement_version, agreement_accepted_at FROM developer_accounts WHERE domain = $1",
+    )
+    .bind(&domain)
+    .fetch_one(&st.db)
+    .await
+    .unwrap();
+    assert_eq!(version.as_deref(), Some(developer::AGREEMENT_VERSION));
+    assert!(accepted.is_some(), "ghi thời điểm chấp nhận");
+
+    // Scenario "Xác minh tên miền".
+    let txt = text_of(&page, "#txt-record");
+    assert!(txt.starts_with("feco-domain-verification="), "{txt}");
+    let (status, body) = post(&owner, "/developer/domain", &csrf, &[]).await;
+    assert_eq!(status, 409, "{body}");
+    assert!(body.contains("Chưa thấy bản ghi TXT"), "{body}");
+    DNS.get()
+        .unwrap()
+        .lock()
+        .unwrap()
+        .insert(domain.clone(), vec!["v=spf1 -all".into(), txt.clone()]);
+    let (_, page) = post(&owner, "/developer/domain", &csrf, &[]).await;
+    assert!(
+        page.contains("Tên miền đã được xác minh") && page.contains("id=\"verified\""),
+        "{page}"
+    );
+
+    // --- 8.2 Client ID và địa chỉ chuyển hướng.
+    let (_, page) = post(&owner, "/developer/apps", &csrf, &new_app).await;
+    let client_id = text_of(&page, "#client-id");
+    assert!(
+        !page.contains("id=\"secret\""),
+        "app desktop không có secret"
+    );
+    let http = reqwest::Client::new();
+    let client: Value = http
+        .get(format!("{HYDRA_ADMIN}/admin/clients/{client_id}"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(client["token_endpoint_auth_method"], "none");
+    assert_eq!(client["redirect_uris"][0], APP_CALLBACK);
+    let (status, body) = post(
+        &owner,
+        &format!("/developer/apps/{app_id}/secret"),
+        &csrf,
+        &[],
+    )
+    .await;
+    assert_eq!(status, 400, "{body}");
+
+    // Scenario "Địa chỉ chuyển hướng lạ": Hydra không cấp mã.
+    let (_, challenge) = pkce();
+    let mut url = url::Url::parse(&format!("{HYDRA_PUBLIC}/oauth2/auth")).unwrap();
+    url.query_pairs_mut()
+        .append_pair("client_id", &client_id)
+        .append_pair("response_type", "code")
+        .append_pair("scope", "openid")
+        .append_pair("redirect_uri", "http://127.0.0.1:9999/chua-dang-ky")
+        .append_pair("state", "trang-thai-du-dai")
+        .append_pair("code_challenge", &challenge)
+        .append_pair("code_challenge_method", "S256");
+    let res = owner.get(url).send().await.unwrap();
+    let (final_url, redirected_to) = (
+        res.url().to_string(),
+        res.headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_owned(),
+    );
+    let body = res.text().await.unwrap();
+    assert!(!final_url.contains("code=") && !redirected_to.contains("code="));
+    assert!(
+        final_url.contains("error") || body.contains("redirect"),
+        "Hydra phải từ chối: {final_url}\n{body}"
+    );
+
+    // App có máy chủ riêng: client secret hiện một lần và xoay vòng được.
+    let server_app = format!("api-{stamp}");
+    let (_, page) = post(
+        &owner,
+        "/developer/apps",
+        &csrf,
+        &[
+            ("app_id", &server_app),
+            ("name", "SoundLab API"),
+            ("kind", "server"),
+            ("redirects", "https://soundlab.example/cb"),
+        ],
+    )
+    .await;
+    let server_client = text_of(&page, "#client-id");
+    let secret_1 = text_of(&page, "#secret code");
+    let (_, page) = post(
+        &owner,
+        &format!("/developer/apps/{server_app}/secret"),
+        &csrf,
+        &[],
+    )
+    .await;
+    let secret_2 = text_of(&page, "#secret code");
+    assert_ne!(secret_1, secret_2);
+    let token_error = |secret: String| {
+        let http = http.clone();
+        let server_client = server_client.clone();
+        async move {
+            let v: Value = http
+                .post(format!("{HYDRA_PUBLIC}/oauth2/token"))
+                .basic_auth(&server_client, Some(&secret))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body("grant_type=refresh_token&refresh_token=khong-co")
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            v["error"].as_str().unwrap_or_default().to_owned()
+        }
+    };
+    assert_eq!(
+        token_error(secret_1).await,
+        "invalid_client",
+        "secret cũ hết hiệu lực"
+    );
+    assert_ne!(
+        token_error(secret_2).await,
+        "invalid_client",
+        "secret mới được chấp nhận"
+    );
+
+    // Nhóm và vai trò: mời một người Phát triển và một người Quản trị.
+    let (dev_c, dev_email) = developer_user("dev", "Dev Acme").await;
+    let (adm_c, adm_email) = developer_user("adm", "Admin Acme").await;
+    for (invitee, role) in [(&dev_email, "developer"), (&adm_email, "admin")] {
+        let (_, page) = post(
+            &owner,
+            "/developer/members",
+            &csrf,
+            &[("email", invitee), ("role", role)],
+        )
+        .await;
+        assert!(page.contains("Đã gửi lời mời"), "{page}");
+    }
+    assert!(wait_mail(&dev_email, "Lời mời vào nhóm nhà phát triển")
+        .await
+        .contains("Phát triển"));
+    for c in [&dev_c, &adm_c] {
+        let page = get(c, "/developer").await;
+        let form = parse_form_where(&page, "form.invitation");
+        let page = submit(c, &form, &[]).await;
+        assert!(page.contains("Bạn đã tham gia nhóm"), "{page}");
+    }
+    let dev_page = get(&dev_c, "/developer").await;
+    assert_eq!(text_of(&dev_page, "#role"), "Phát triển");
+    let csrf_dev = csrf_of(&dev_page);
+    let csrf_adm = csrf_of(&get(&adm_c, "/developer").await);
+
+    // --- 8.3 Manifest: scenario "Thiếu mục đích của scope" (qua cổng web).
+    let manifest_path = format!("/developer/apps/{app_id}/manifest");
+    let bad = app_manifest(&app_id, "1.2.0").replace("purpose = \"Gửi bản tin\"\n", "");
+    let (status, body) = post(&dev_c, &manifest_path, &csrf_dev, &[("manifest", &bad)]).await;
+    assert_eq!(status, 422, "{body}");
+    assert!(body.contains("scopes.email.purpose là bắt buộc"), "{body}");
+
+    // --- 8.4 Nộp bằng CLI f-dev: gói chưa ký bị từ chối, gói đã ký vào "Chờ duyệt".
+    let (_, page) = post(&dev_c, "/developer/tokens", &csrf_dev, &[("name", "ci")]).await;
+    let token = text_of(&page, "#secret code");
+    assert!(token.starts_with("fdev_"), "{token}");
+    let manifest_file = work.path().join("f-app.toml");
+    std::fs::write(&manifest_file, app_manifest(&app_id, "1.2.0")).unwrap();
+    let err = f_dev_publish(&manifest_file, &dist(work.path(), false), &token)
+        .await
+        .expect_err("gói chưa ký");
+    assert!(
+        err.contains("Gói Windows phải được ký Authenticode"),
+        "{err}"
+    );
+    let err = f_dev_publish(&manifest_file, &dist(work.path(), true), "fdev_sai")
+        .await
+        .expect_err("token sai");
+    assert!(err.contains("401"), "{err}");
+    let out = f_dev_publish(&manifest_file, &dist(work.path(), true), &token)
+        .await
+        .expect("gói đã ký");
+    assert!(out.contains("Chờ duyệt"), "{out}");
+    let version_id = out
+        .rsplit("mã phiên bản: ")
+        .next()
+        .unwrap()
+        .trim()
+        .to_owned();
+    assert!(version_id.parse::<uuid::Uuid>().is_ok(), "{out}");
+
+    // Chưa duyệt thì chưa phát hành được; duyệt xong (nhóm 9 sẽ làm tự động).
+    let release_path = format!("/developer/versions/{version_id}/release");
+    let full: [(&str, &str); 2] = [("channel", "stable"), ("percent", "100")];
+    let (status, _) = post(&adm_c, &release_path, &csrf_adm, &full).await;
+    assert_eq!(status, 409, "chưa qua kiểm duyệt");
+    assert!(developer::review(&st.db, &app_id, "1.2.0", true, "Đạt")
+        .await
+        .unwrap());
+
+    // Scenario "Phát triển viên phát hành".
+    let (status, body) = post(&dev_c, &release_path, &csrf_dev, &full).await;
+    assert_eq!(status, 403, "{body}");
+    assert!(
+        body.contains("Cần vai trò Quản trị hoặc Chủ sở hữu"),
+        "{body}"
+    );
+    let (_, page) = post(&adm_c, &release_path, &csrf_adm, &full).await;
+    assert!(page.contains("Đang phát hành"), "{page}");
+
+    // Bản phát hành lên F-Store với dấu "Đã xác minh" và scope kèm mục đích từ manifest,
+    // và được ký thành target TUF.
+    let store = get(&owner, &format!("/store/{app_id}")).await;
+    assert!(store.contains("Đã xác minh"), "{store}");
+    assert!(
+        store.contains(
+            "Tên hiển thị và ảnh đại diện (bắt buộc): Hiển thị trên bản nhạc bạn chia sẻ"
+        ),
+        "{store}"
+    );
+    assert!(store.contains("https://soundlab.example/privacy"));
+    let repo = feco_tuf::Repo::open(TUF_REPO.get().unwrap());
+    let tuf =
+        feco_tuf::Client::for_local_repo(&repo, &repo.root_path(1), work.path().join("tuf-client"))
+            .await
+            .unwrap();
+    let synced = tuf.sync().await.unwrap();
+    let target = &synced.targets[&format!("{app_id}-1.2.0-windows-x64.zip")];
+    let meta = target.meta.as_ref().expect("metadata của target");
+    assert_eq!(meta.entry.as_deref(), Some("SoundLab.exe"));
+    assert_eq!(meta.client_id.as_deref(), Some(client_id.as_str()));
+
+    // Chỉ Chủ sở hữu xóa được app.
+    let delete_path = format!("/developer/apps/{app_id}/delete");
+    let (status, body) = post(&adm_c, &delete_path, &csrf_adm, &[]).await;
+    assert_eq!(status, 403, "{body}");
+    assert!(body.contains("Chỉ Chủ sở hữu mới xóa được app"), "{body}");
+
+    // Scenario "Phiên bản không tăng".
+    let older = app_manifest(&app_id, "1.1.9");
+    let (status, body) = post(&dev_c, &manifest_path, &csrf_dev, &[("manifest", &older)]).await;
+    assert_eq!(status, 422, "{body}");
+    assert!(
+        body.contains("phải lớn hơn bản đã phát hành 1.2.0"),
+        "{body}"
+    );
+
+    // --- 8.5 Scenario "Phát hành 10%".
+    std::fs::write(&manifest_file, app_manifest(&app_id, "1.3.0")).unwrap();
+    let out = f_dev_publish(&manifest_file, &dist(work.path(), true), &token)
+        .await
+        .unwrap();
+    let next_id = out
+        .rsplit("mã phiên bản: ")
+        .next()
+        .unwrap()
+        .trim()
+        .to_owned();
+    assert!(developer::review(&st.db, &app_id, "1.3.0", true, "Đạt")
+        .await
+        .unwrap());
+    let next_release = format!("/developer/versions/{next_id}/release");
+    let (_, page) = post(
+        &adm_c,
+        &next_release,
+        &csrf_adm,
+        &[("channel", "stable"), ("percent", "10")],
+    )
+    .await;
+    assert!(page.contains("stable 10%"), "{page}");
+    let mut updated = Vec::new();
+    for i in 0..200 {
+        let device = format!("thiet-bi-{stamp}-{i}");
+        match rollout_version(&app_id, &device).await.as_str() {
+            "1.3.0" => updated.push(device),
+            "1.2.0" => {}
+            other => panic!("phiên bản lạ: {other:?}"),
+        }
+    }
+    assert!(
+        (8..=36).contains(&updated.len()),
+        "{} / 200 thiết bị nhận 1.3.0",
+        updated.len()
+    );
+    // Hỏi lại vẫn cùng kết quả; dừng phát hành dần thì không thiết bị nào nhận bản mới nữa.
+    assert_eq!(rollout_version(&app_id, &updated[0]).await, "1.3.0");
+    let (_, page) = post(
+        &adm_c,
+        &format!("/developer/versions/{next_id}/pause"),
+        &csrf_adm,
+        &[],
+    )
+    .await;
+    assert!(page.contains("Đã dừng phát hành"), "{page}");
+    for device in updated.iter().take(5) {
+        assert_eq!(rollout_version(&app_id, device).await, "1.2.0");
+    }
+    post(&adm_c, &next_release, &csrf_adm, &full).await;
+    for i in 0..20 {
+        assert_eq!(
+            rollout_version(&app_id, &format!("thiet-bi-{stamp}-{i}")).await,
+            "1.3.0"
+        );
+    }
+
+    // Nộp qua cổng web: manifest, tải gói (multipart), gửi duyệt.
+    let web_manifest = app_manifest(&app_id, "1.4.0");
+    let (_, page) = post(
+        &dev_c,
+        &manifest_path,
+        &csrf_dev,
+        &[("manifest", &web_manifest)],
+    )
+    .await;
+    assert!(page.contains("Manifest hợp lệ"), "{page}");
+    let upload_form = parse_form_where(&page, "form[enctype=\"multipart/form-data\"]");
+    let web_upload = |signed: bool| {
+        let (c, action, csrf) = (dev_c.clone(), upload_form.action.clone(), csrf_dev.clone());
+        async move {
+            let mut bytes = Vec::new();
+            {
+                use std::io::Write;
+                let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut bytes));
+                zip.start_file("SoundLab.exe", zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                zip.write_all(&feco_server::codesign::fixtures::pe(signed))
+                    .unwrap();
+                zip.finish().unwrap();
+            }
+            let form = reqwest::multipart::Form::new()
+                .text("feco_csrf", csrf)
+                .text("platform", "windows-x64")
+                .part(
+                    "file",
+                    reqwest::multipart::Part::bytes(bytes).file_name("windows-x64.zip"),
+                );
+            let res = c
+                .post(format!("{BASE}{action}"))
+                .multipart(form)
+                .send()
+                .await
+                .unwrap();
+            (res.status().as_u16(), res.text().await.unwrap())
+        }
+    };
+    let (status, body) = web_upload(false).await;
+    assert_eq!(status, 422, "{body}");
+    assert!(
+        body.contains("Gói Windows phải được ký Authenticode"),
+        "{body}"
+    );
+    let (_, page) = web_upload(true).await;
+    assert!(page.contains("Đã nhận gói"), "{page}");
+    let web_id = upload_form.action.split('/').nth(3).unwrap().to_owned();
+    let (_, page) = post(
+        &dev_c,
+        &format!("/developer/versions/{web_id}/submit"),
+        &csrf_dev,
+        &[],
+    )
+    .await;
+    assert!(
+        page.contains("Đã gửi duyệt") && page.contains("Chờ duyệt"),
+        "{page}"
+    );
+
+    // Nhà phát triển cá nhân: không cần tên pháp lý hay tên miền; không mời được thành viên.
+    let (solo, _) = developer_user("solo", "Lập Trình Viên").await;
+    let page = get(&solo, "/developer").await;
+    let form = parse_form_where(&page, "#register-form");
+    let page = submit(
+        &solo,
+        &form,
+        &[
+            ("kind", "individual"),
+            ("display_name", &format!("Solo {stamp}")),
+            ("accept_agreement", "on"),
+        ],
+    )
+    .await;
+    assert!(
+        page.contains("Đã đăng ký nhà phát triển") && page.contains("Chủ sở hữu"),
+        "{page}"
+    );
+    assert!(
+        !page.contains("id=\"agreement-form\"") && !page.contains("id=\"txt-record\""),
+        "{page}"
+    );
+    let (status, body) = post(
+        &solo,
+        "/developer/members",
+        &csrf_of(&page),
+        &[("email", "ai-do@example.com"), ("role", "developer")],
+    )
+    .await;
+    assert_eq!(status, 400, "{body}");
+
+    // Số liệu tổng hợp: một người dùng cài, mở app và app báo một lần lỗi.
+    let (fan_email, fan_password) = unique("fan");
+    let fan = app_browser();
+    register_in(&fan, &fan_email, &fan_password, "Người Hâm Mộ").await;
+    let launcher = LAUNCHER.get().unwrap().clone();
+    let a = authorize(&fan, &launcher, "openid offline_access profile").await;
+    let launcher_token = exchange(&launcher, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let res = http
+        .post(format!("{BASE}/v1/catalog/installs"))
+        .bearer_auth(&launcher_token)
+        .json(&serde_json::json!({ "app_id": app_id, "version": "1.3.0" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+    let a = authorize(&fan, &client_id, "openid profile").await;
+    let consent = a.consent_page.clone().expect("màn hình đồng ý");
+    assert!(
+        consent.contains("Hiển thị trên bản nhạc bạn chia sẻ"),
+        "{consent}"
+    );
+    let a = answer_consent(&fan, a, "accept", &[]).await;
+    let app_token = exchange(&client_id, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(issue_launch_code(&launcher_token, &client_id).await.0, 200);
+    let res = http
+        .post(format!("{BASE}/v1/apps/crashes"))
+        .bearer_auth(&app_token)
+        .json(&serde_json::json!({ "version": "1.3.0" }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 204);
+    // Scenario "Xem số liệu": số tổng hợp, không có email hay tên người dùng.
+    let page = get(&owner, &format!("/developer/apps/{app_id}")).await;
+    assert_eq!(text_of(&page, "#m-installs"), "1");
+    assert_eq!(text_of(&page, "#m-active7"), "1");
+    assert_eq!(text_of(&page, "#m-active30"), "1");
+    assert_eq!(text_of(&page, "#m-crashes"), "1");
+    assert_eq!(text_of(&page, "#m-versions"), "1.3.0: 1");
+    assert!(
+        !page.contains(&fan_email) && !page.contains("Người Hâm Mộ"),
+        "{page}"
+    );
+
+    // Chủ sở hữu xóa app: biến khỏi F-Store, OAuth client bị xóa.
+    let (_, page) = post(&owner, &delete_path, &csrf, &[]).await;
+    assert!(
+        !page.contains(&format!("/developer/apps/{app_id}\"")),
+        "{page}"
+    );
+    let res = reqwest::get(format!("{BASE}/store/{app_id}"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+    let res = http
+        .get(format!("{HYDRA_ADMIN}/admin/clients/{client_id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
 }

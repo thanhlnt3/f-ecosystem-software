@@ -4,10 +4,12 @@ members = [
     "crates/feco-core",
     "crates/feco-config",
     "crates/feco-tuf",
+    "crates/feco-manifest",
     "clients/feco-launcher",
     "services/feco-server",
     "tools/feco-license-check",
     "tools/feco-demo-app",
+    "tools/f-dev",
 ]
 
 [workspace.package]
