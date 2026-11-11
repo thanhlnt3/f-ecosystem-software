@@ -2,7 +2,7 @@
 
 use crate::session::Session;
 use bitflags::bitflags;
-use craft_anything_evidence::{Evidence, ToolError};
+use f_builder_evidence::{Evidence, ToolError};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -207,14 +207,14 @@ pub enum Caller {
     Agent,
 }
 
-/// Set in the environment of every coding agent Craft Anything starts, and inherited by what it
-/// runs, so a `craft-anything-cli` a builder starts calls tools as [`Caller::Agent`], not as the
+/// Set in the environment of every coding agent F-Builder starts, and inherited by what it
+/// runs, so a `f-builder-cli` a builder starts calls tools as [`Caller::Agent`], not as the
 /// person (it can't loosen a project's approvals that way).
-pub const AGENT_ENV: &str = "CRAFT_ANYTHING_AGENT";
+pub const AGENT_ENV: &str = "F_BUILDER_AGENT";
 
 /// Cooperative cancellation, shared with long-running work (it lives in `platform`, so the
 /// transports below the engine can take it too).
-pub use craft_anything_platform::cancel::CancelToken;
+pub use f_builder_platform::cancel::CancelToken;
 
 /// Progress reports from a running tool.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -343,7 +343,7 @@ fn parameter_pointer(path: &serde_path_to_error::Path) -> Option<String> {
 #[cfg(test)]
 mod parameter_tests {
     use super::*;
-    use craft_anything_evidence::ErrorCode;
+    use f_builder_evidence::ErrorCode;
     use serde_json::json;
 
     #[derive(Debug, Deserialize, PartialEq)]

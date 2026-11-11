@@ -1,5 +1,5 @@
 use super::*;
-use craft_anything_testkit::managed as fx;
+use f_builder_testkit::managed as fx;
 
 #[test]
 fn managed_architecture_follows_the_cli_flags() {
@@ -124,12 +124,12 @@ fn native_boundaries_of_the_sample() {
 #[test]
 fn hostile_inputs_never_panic() {
     let sample = fx::managed_assembly(1);
-    let mut inputs = craft_anything_testkit::mutations(&sample);
+    let mut inputs = f_builder_testkit::mutations(&sample);
     for len in 0..sample.len().min(4096) {
         inputs.push(sample[..len].to_vec());
     }
     for seed in 0..64 {
-        let mut n = craft_anything_testkit::noise(seed, 2048);
+        let mut n = f_builder_testkit::noise(seed, 2048);
         n[0] = b'M';
         n[1] = b'Z';
         inputs.push(n);
@@ -176,7 +176,7 @@ fn wide_heaps_and_extra_data_read_the_same() {
     let (ma, mb) = (members(&a, &MemberOptions::default()), members(&b, &MemberOptions::default()));
     assert_eq!(serde_json::to_value(&ma.types).unwrap(), serde_json::to_value(&mb.types).unwrap());
     assert_eq!(inventory(&b).target_frameworks, vec![fx::TFM]);
-    for m in craft_anything_testkit::mutations(&wide) {
+    for m in f_builder_testkit::mutations(&wide) {
         if let Ok(x) = open(&m) {
             let _ = members(&x, &MemberOptions::default());
             let _ = inventory(&x);

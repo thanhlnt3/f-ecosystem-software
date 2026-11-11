@@ -1,13 +1,13 @@
 //! Finding Ghidra and the Java it runs on, and getting both for the person once they agree:
 //! pinned releases, each checked against its publisher's SHA-256 before anything is unpacked.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::process::Cancel;
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::process::Cancel;
 use std::path::{Path, PathBuf};
 
 /// Ghidra's engine id, as the engine table, Settings and every listing name it.
 pub const ID: &str = "ghidra";
-/// The Ghidra release Craft Anything installs (it needs Java 21).
+/// The Ghidra release F-Builder installs (it needs Java 21).
 pub const VERSION: &str = "12.1.4";
 /// What the person downloads, for the question we ask first (Ghidra 543 MB + Java 196 MB).
 pub const DOWNLOAD_MB: u32 = 740;
@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn a_macos_jdk_unpacks_to_a_java_home_we_find() {
-        use craft_anything_testkit::firmware as fx;
+        use f_builder_testkit::firmware as fx;
         let pin = crate::engine("java").and_then(|e| e.pin_for("macos", "aarch64")).unwrap();
         let java = if cfg!(windows) { "java.exe" } else { "java" };
         let tar = fx::tar_entries(&[

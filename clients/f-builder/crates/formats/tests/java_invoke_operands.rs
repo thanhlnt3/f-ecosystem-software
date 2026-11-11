@@ -1,5 +1,5 @@
-use craft_anything_formats::java_class;
-use craft_anything_formats::java_ops::{decode, decode_one};
+use f_builder_formats::java_class;
+use f_builder_formats::java_ops::{decode, decode_one};
 
 #[test]
 fn invokeinterface_requires_a_count_and_zero_reserved_byte() {
@@ -38,7 +38,7 @@ fn valid_and_truncated_invocations_keep_their_boundaries() {
 }
 
 fn reference_class() -> java_class::ClassFile {
-    let mut class = java_class::parse(&craft_anything_testkit::java::hello_class()).unwrap();
+    let mut class = java_class::parse(&f_builder_testkit::java::hello_class()).unwrap();
     class.methods.retain(|method| method.name == "run");
     class
 }

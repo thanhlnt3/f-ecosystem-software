@@ -1,4 +1,4 @@
-use craft_anything_js::{Limits, ParseMode, analyze};
+use f_builder_js::{Limits, ParseMode, analyze};
 use std::fmt::Write;
 
 #[test]

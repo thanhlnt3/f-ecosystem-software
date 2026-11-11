@@ -3,15 +3,15 @@
 //! Everything here talks plain, unencrypted HTTP and WebSocket to a *loopback* address only
 //! (`127.0.0.1` or `[::1]`), either an endpoint the user started (Chrome launched with
 //! `--remote-debugging-port`) or one we launched ourselves through
-//! [`craft_anything_platform::process`]. There is no TLS because `ws:` to loopback never needs it.
+//! [`f_builder_platform::process`]. There is no TLS because `ws:` to loopback never needs it.
 //!
 //! The WebSocket framing is hand-rolled over [`std::net::TcpStream`] so that every read and write
 //! is bounded by a wall-clock deadline, cooperatively cancellable, and capped in size. This mirrors
 //! the loopback HTTP client used for the JEB bridge. We never follow redirects, never keep more than
 //! a fixed number of bytes, and poison the connection on any malformed frame.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::cancel::CancelToken;
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::cancel::CancelToken;
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 use std::io::{ErrorKind, Read, Write};
@@ -162,7 +162,7 @@ fn connect_tcp(ep: &Endpoint, dl: &Deadline) -> Result<TcpStream, ToolError> {
 pub fn http_get(ep: &Endpoint, path: &str, dl: &Deadline) -> Result<(u16, Vec<u8>), ToolError> {
     let mut stream = connect_tcp(ep, dl)?;
     let req = format!(
-        "GET {path} HTTP/1.1\r\nHost: {}:{}\r\nUser-Agent: CraftAnything-dev\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
+        "GET {path} HTTP/1.1\r\nHost: {}:{}\r\nUser-Agent: FBuilder-dev\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
         host_only(&ep.host),
         ep.port
     );
@@ -353,7 +353,7 @@ impl WsConn {
         fill_random(&mut key_bytes);
         let key = base64_encode(&key_bytes);
         let req = format!(
-            "GET {} HTTP/1.1\r\nHost: {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nUser-Agent: CraftAnything-dev\r\n\r\n",
+            "GET {} HTTP/1.1\r\nHost: {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nUser-Agent: FBuilder-dev\r\n\r\n",
             target.path, target.host_header
         );
         stream.set_write_timeout(Some(dl.remaining()?)).map_err(|e| ToolError::internal(e.to_string()))?;

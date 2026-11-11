@@ -1,9 +1,9 @@
 //! UI state. Plain serde data: everything the screens show is derived from this plus the engine.
 
-use craft_anything_engine::TargetKind;
-use craft_anything_engine::evidence::Evidence;
-use craft_anything_engine::project::Purpose;
-use craft_anything_engine::workspace::TargetRef;
+use f_builder_engine::TargetKind;
+use f_builder_engine::evidence::Evidence;
+use f_builder_engine::project::Purpose;
+use f_builder_engine::workspace::TargetRef;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -39,10 +39,10 @@ pub struct MakeDraft {
     pub pictures: Vec<PathBuf>,
     /// The engine the chosen game was made with (looked up when it's picked).
     #[serde(default)]
-    pub found: Option<craft_anything_engines::game::Found>,
+    pub found: Option<f_builder_engines::game::Found>,
     /// The engine the person picked to build with (else the original's own, or Unity).
     #[serde(default)]
-    pub builder: Option<craft_anything_engines::game::Builder>,
+    pub builder: Option<f_builder_engines::game::Builder>,
     /// The builder may generate pictures and 3D models for this game (saved with the project).
     #[serde(default)]
     pub generate_assets: bool,
@@ -66,7 +66,7 @@ pub struct MakeDraft {
     pub folder_stack: Option<String>,
     /// What those files are to the project.
     #[serde(default)]
-    pub existing: Option<craft_anything_engine::workspace::ExistingFiles>,
+    pub existing: Option<f_builder_engine::workspace::ExistingFiles>,
     /// "Don't ask again" is ticked in the question about them.
     #[serde(default)]
     pub remember_existing: bool,
@@ -104,7 +104,7 @@ impl Default for MakeDraft {
     }
 }
 
-pub use craft_anything_ai::rebuild::feed::{FeedItem, PlanStatus, PlanStep, UserItem};
+pub use f_builder_ai::rebuild::feed::{FeedItem, PlanStatus, PlanStep, UserItem};
 
 /// The first-run steps. Never more than four.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -364,7 +364,7 @@ pub enum Modal {
     Tutorial(usize),
     About,
     /// Getting a game engine (Unity, Unreal, Godot, Rust), step by step.
-    Engine(craft_anything_engines::game::Builder),
+    Engine(f_builder_engines::game::Builder),
     /// Asking for a fal.ai key when generated assets are turned on without one.
     Assets,
     /// Getting Ghidra for Deep mode.

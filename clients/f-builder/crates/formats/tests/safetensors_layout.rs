@@ -1,4 +1,4 @@
-use craft_anything_formats::ai_model::{self, ModelReport};
+use f_builder_formats::ai_model::{self, ModelReport};
 use serde_json::{Value, json};
 
 fn report(header: Value, payload_bytes: u64) -> ModelReport {

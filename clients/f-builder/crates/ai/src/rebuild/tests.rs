@@ -414,7 +414,7 @@ fn games_hear_about_generated_assets_only_when_allowed_and_with_a_key() {
 #[test]
 fn a_new_project_keeps_the_persons_asset_choice() {
     let d = tempfile::tempdir().unwrap();
-    let settings = craft_anything_engine::Settings::default();
+    let settings = f_builder_engine::Settings::default();
     for allow in [false, true] {
         let ws = project::new_project(&settings, "-", "A snake game", project::Place::In(d.path()), Some("unity"), allow, None).unwrap();
         assert_eq!(Workspace::open(&ws.root).unwrap().manifest.generate_assets, allow);
@@ -441,7 +441,7 @@ fn notes_added_while_it_works_reach_the_agent_at_its_next_step() {
     let notes: Arc<Mutex<Vec<Note>>> = Arc::default();
     let w = Worker {
         wake: Default::default(),
-        engine: Arc::new(Engine::new(craft_anything_engine::testing::session())),
+        engine: Arc::new(Engine::new(f_builder_engine::testing::session())),
         tx,
         stop: CancelToken::default(),
         preview: Arc::default(),
@@ -459,7 +459,7 @@ fn notes_added_while_it_works_reach_the_agent_at_its_next_step() {
         reset_progress_after_notes: false,
     };
     assert!(w.added(&mut ws, true, true).is_none(), "nothing added, nothing to say");
-    use craft_anything_engine::questions::{self, AskedQuestion};
+    use f_builder_engine::questions::{self, AskedQuestion};
     let asked = AskedQuestion { deep: false, ..AskedQuestion::new("where is the score kept".into(), "In src.".into(), true, "Stand-in".into(), None, 0) };
     questions::add(&ws, asked.clone()).unwrap();
     let note = |id, text: &str| Note { id, text: format!("{text} (pictures: a.png)"), shown: text.into(), pictures: Vec::new(), questions: Vec::new() };
@@ -481,7 +481,7 @@ fn notes_added_while_it_works_reach_the_agent_at_its_next_step() {
 /// the Just-ask answers are put in the note itself (only the ones this mode may show).
 #[test]
 fn a_note_carries_the_just_ask_answers_once_and_only_in_their_mode() {
-    use craft_anything_engine::questions::{self, AskedQuestion};
+    use f_builder_engine::questions::{self, AskedQuestion};
     let d = tempfile::tempdir().unwrap();
     let ws = Workspace::create(d.path(), "x", "A thing", TargetRef::None).unwrap();
     let clean =
@@ -509,7 +509,7 @@ fn a_note_carries_the_just_ask_answers_once_and_only_in_their_mode() {
 /// The app writes the enriched note for both hand-over paths, so the hook prints the answers.
 #[test]
 fn a_note_written_for_the_hook_carries_its_answers() {
-    use craft_anything_engine::questions::{self, AskedQuestion};
+    use f_builder_engine::questions::{self, AskedQuestion};
     let d = tempfile::tempdir().unwrap();
     let ws = Workspace::create(d.path(), "x", "A thing", TargetRef::None).unwrap();
     let asked =
@@ -847,7 +847,7 @@ mod typed_retries {
         let dir = tempfile::tempdir().unwrap();
         let mut ws = Workspace::create(dir.path(), "x", "Build a thing", TargetRef::None).unwrap();
         let asks = Inbox::new(self_check::asks_dir(&ws.root));
-        let id = asks.post(craft_anything_engine::inbox::RequestKind::Question, "Check the build", "", Vec::new(), false, None).unwrap();
+        let id = asks.post(f_builder_engine::inbox::RequestKind::Question, "Check the build", "", Vec::new(), false, None).unwrap();
         let mut worker = check_worker(&ws, false);
         worker.self_check = Some((Arc::new(BlockReply { answer: asks.dir().join(format!("{id}.answer.json")) }), 90.0));
         let mut agent = RateLimited { sent: 0, first_poll: false };
@@ -893,7 +893,7 @@ mod typed_retries {
             script.turns.push_back(Err(ToolError::new(ErrorCode::OverLimit, "服务限流").with_details(json!({"status":429,"retry_after_secs":3}))));
             script.turns.push_back(turn(vec![Block::Text { text: "Built the notes app".into() }], StopReason::EndTurn));
             let slot = ModelSlot { name: "Scripted".into(), model: Box::new(script), local: false, effort: None, max_turns: 10, context_tokens: 0 };
-            let enabled = std::collections::BTreeSet::from([craft_anything_engine::Toolset::Core, craft_anything_engine::Toolset::Build]);
+            let enabled = std::collections::BTreeSet::from([f_builder_engine::Toolset::Core, f_builder_engine::Toolset::Build]);
             let mut api = ApiConversation::start_with(Arc::new(EngineHost(worker.engine.clone())), vec![slot], LoopConfig::default(), enabled).unwrap();
             let mut waits = Vec::new();
             assert_eq!(
@@ -957,7 +957,7 @@ mod typed_retries {
             "claude-code",
             concat!(
                 "#!/bin/sh\ncat >/dev/null\nprintf 'attempt\\n' >> attempts\n",
-                "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cannot-build\",\"mcp_servers\":[{\"name\":\"craft-anything\",\"status\":\"failed\"}]}'\n",
+                "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cannot-build\",\"mcp_servers\":[{\"name\":\"f-builder\",\"status\":\"failed\"}]}'\n",
                 "sleep 5\nprintf 'unreachable' > continued-without-tools\n"
             ),
         );
@@ -1184,7 +1184,7 @@ fn prompts_carry_the_request_rules_and_measurements() {
 
 #[test]
 fn needs_an_agent_app() {
-    let engine = Arc::new(Engine::new(craft_anything_engine::testing::session()));
+    let engine = Arc::new(Engine::new(f_builder_engine::testing::session()));
     let d = tempfile::tempdir().unwrap();
     let hub = AiHub::with_stores(engine, d.path().join("settings.toml"), crate::KeyStore::file_only(d.path().join("keys.toml")));
     let ws = Workspace::create(d.path(), "x", "y", TargetRef::None).unwrap();
@@ -1345,7 +1345,7 @@ fn an_api_backend_builds_with_the_build_tools() {
     use crate::model::{Block, StopReason};
     let d = tempfile::tempdir().unwrap();
     let mut ws = Workspace::create(d.path(), "Notes", "A notes app", TargetRef::None).unwrap();
-    let engine = Arc::new(Engine::new(craft_anything_engine::testing::session()));
+    let engine = Arc::new(Engine::new(f_builder_engine::testing::session()));
     let (tx, _rx) = std::sync::mpsc::channel();
     let mut w = Worker {
         wake: Default::default(),
@@ -1377,7 +1377,7 @@ fn an_api_backend_builds_with_the_build_tools() {
         seen: Arc::default(),
     };
     let slot = ModelSlot { name: "Scripted".into(), model: Box::new(script), local: false, effort: None, max_turns: 10, context_tokens: 0 };
-    let enabled = std::collections::BTreeSet::from([craft_anything_engine::Toolset::Core, craft_anything_engine::Toolset::Build]);
+    let enabled = std::collections::BTreeSet::from([f_builder_engine::Toolset::Core, f_builder_engine::Toolset::Build]);
     let mut api = ApiConversation::start_with(Arc::new(EngineHost(engine)), vec![slot], LoopConfig::default(), enabled).unwrap();
     let reply = w.turn(&mut ws, &mut api, "Build it.", true, None).unwrap();
     assert_eq!(reply.trim(), "Built the notes app.");
@@ -1464,7 +1464,7 @@ impl TargetKind for SheetKind {
 fn the_mechanics_sheet_is_required_and_held_against_the_code() {
     let d = tempfile::tempdir().unwrap();
     let ws = Workspace::create(d.path(), "Arena", "Recreate this game", TargetRef::None).unwrap();
-    let engine = Arc::new(Engine::new(craft_anything_engine::testing::session()));
+    let engine = Arc::new(Engine::new(f_builder_engine::testing::session()));
     let (tx, _rx) = std::sync::mpsc::channel();
     let w = Worker {
         wake: Default::default(),
@@ -1570,7 +1570,7 @@ fn deep_mode_maps_the_javascript_beside_an_exe_target() {
     let app = d.path().join("App");
     std::fs::create_dir_all(app.join("resources")).unwrap();
     std::fs::write(app.join("App.exe"), b"MZ").unwrap();
-    std::fs::write(app.join("resources/app.asar"), craft_anything_testkit::electron::notes_app_asar()).unwrap();
+    std::fs::write(app.join("resources/app.asar"), f_builder_testkit::electron::notes_app_asar()).unwrap();
     for (name, target) in [("folder", app.clone()), ("exe", app.join("App.exe"))] {
         let mut ws = Workspace::create(&d.path().join("projects"), name, "Recreate this app", TargetRef::Local { path: target }).unwrap();
         let mut w = check_worker(&ws, true);
@@ -1643,7 +1643,7 @@ mod picking_up_a_build {
         let agent = dir.path().join("agent.sh");
         std::fs::write(&agent, format!("#!/bin/sh\nfor last; do :; done\nprintf '%s\\n===\\n' \"$last\" >> '{}'\necho Done.\n", prompts.display())).unwrap();
         std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let engine = Arc::new(Engine::new(craft_anything_engine::testing::session()));
+        let engine = Arc::new(Engine::new(f_builder_engine::testing::session()));
         let hub = AiHub::with_stores(engine, dir.path().join("settings.toml"), crate::KeyStore::file_only(dir.path().join("keys.toml")));
         let mut cfg = hub.config();
         cfg.upsert(crate::BackendEntry {
@@ -1670,7 +1670,7 @@ mod picking_up_a_build {
         b.hub.set_asset_key("fal", "k-1").unwrap();
         let ws = Workspace::create(&b.projects, "x", "Build a notes app", TargetRef::None).unwrap();
         let _ = try_it(&b, &ws);
-        let keys = b.hub.engine.session().ext.get::<craft_anything_engine::tools::asset_tools::AssetKeys>().unwrap_or_default();
+        let keys = b.hub.engine.session().ext.get::<f_builder_engine::tools::asset_tools::AssetKeys>().unwrap_or_default();
         assert_eq!(keys.get("fal"), Some("k-1"));
     }
 
@@ -1750,7 +1750,7 @@ mod picking_up_a_build {
             }
         };
         assert!(!finished.0, "{finished:?}");
-        assert!(finished.1.contains("craft-anything-cli"), "{finished:?}");
+        assert!(finished.1.contains("f-builder-cli"), "{finished:?}");
         assert_eq!(prompts_given(&b), 0, "the agent was asked anyway");
         assert!(!studied(&feed::load(&Workspace::open(&ws.root).unwrap())), "it studied first");
     }
@@ -1772,7 +1772,7 @@ mod picking_up_a_build {
 
     #[test]
     fn a_message_after_just_ask_tells_the_builder_what_was_asked_once() {
-        use craft_anything_engine::questions::{self, AskedQuestion};
+        use f_builder_engine::questions::{self, AskedQuestion};
         let b = bench();
         let ws = worked_on(&b);
         let ask = |q: &str| {
@@ -1801,7 +1801,7 @@ mod picking_up_a_build {
     /// A turn that failed may never have reached the builder, so its questions are still to tell.
     #[test]
     fn a_failed_turn_leaves_just_ask_questions_to_tell_with_the_next_message() {
-        use craft_anything_engine::questions::{self, AskedQuestion};
+        use f_builder_engine::questions::{self, AskedQuestion};
         let b = bench();
         let ws = worked_on(&b);
         questions::add(
@@ -2247,7 +2247,7 @@ mod picking_up_a_build {
 
     /// A resumable stand-in: records the session id the runner would continue.
     struct ResumingStandIn {
-        seen: Arc<craft_anything_platform::sync::Mutex<Vec<Option<String>>>>,
+        seen: Arc<f_builder_platform::sync::Mutex<Vec<Option<String>>>>,
     }
 
     impl crate::cli_agents::AgentAdapter for ResumingStandIn {
@@ -2284,7 +2284,7 @@ mod picking_up_a_build {
             ws.manifest.agent_session_deep = saved;
             ws.save().unwrap();
             b.hub.engine.session().settings.deep_mode = deep;
-            let seen = Arc::new(craft_anything_platform::sync::Mutex::new(Vec::new()));
+            let seen = Arc::new(f_builder_platform::sync::Mutex::new(Vec::new()));
             let mut adapters = crate::cli_agents::AgentAdapters::built_in();
             adapters.register(Arc::new(ResumingStandIn { seen: seen.clone() }));
             let (ok, feed) = try_with(&b, &ws, RunOptions { adapters, ..Default::default() });
@@ -2528,7 +2528,7 @@ mod picking_up_a_build {
 
 #[test]
 fn just_ask_is_told_to_the_builder_shortly_and_cut_on_a_character() {
-    use craft_anything_engine::questions::AskedQuestion;
+    use f_builder_engine::questions::AskedQuestion;
     assert_eq!(super::just_asked(&[]), "", "nothing asked, nothing added");
     let q = |n: usize, answer: String| AskedQuestion::new(format!("question {n}"), answer, true, "Claude".into(), None, 0);
     let mut asked: Vec<_> = (0..7).map(|n| q(n, "short".into())).collect();
@@ -2583,7 +2583,7 @@ fn a_saved_asset_key_gets_an_api_builders_tool_past_the_key_check() {
 }
 
 fn check_worker(ws: &Workspace, deep: bool) -> Worker {
-    let mut s = craft_anything_engine::testing::session();
+    let mut s = f_builder_engine::testing::session();
     s.settings.deep_mode = deep;
     let (tx, _rx) = std::sync::mpsc::channel();
     Worker {
@@ -2609,7 +2609,7 @@ fn check_worker(ws: &Workspace, deep: bool) -> Worker {
 
 #[test]
 fn a_check_that_worked_stands_while_nothing_it_looks_at_changes() {
-    use craft_anything_engine::workspace::progress::CheckedBuild;
+    use f_builder_engine::workspace::progress::CheckedBuild;
     use std::cell::Cell;
     let d = tempfile::tempdir().unwrap();
     let mut ws = Workspace::create(d.path(), "Arena", "Recreate this game", TargetRef::None).unwrap();
@@ -2658,7 +2658,7 @@ fn a_check_that_worked_stands_while_nothing_it_looks_at_changes() {
     assert_eq!(runs.get(), 6);
     worked.set(true);
 
-    // Kept across runs: the round saved in the progress record, while craft.json still ends with it.
+    // Kept across runs: the round saved in the progress record, while f-builder.json still ends with it.
     let round = check(&ws, 8);
     assert_eq!(runs.get(), 7);
     let saved = w.kept_checks.lock().unwrap_or_else(PoisonError::into_inner).saved_for(8);
@@ -2684,7 +2684,7 @@ fn a_check_that_worked_stands_while_nothing_it_looks_at_changes() {
         })
         .unwrap();
     assert!(copied.get(), "a copy is checked again");
-    // A record naming another round than craft.json's last one keeps nothing.
+    // A record naming another round than f-builder.json's last one keeps nothing.
     let stale = BuildProgress { checked: Some(CheckedBuild { round: 7, ..saved.unwrap() }), ..BuildProgress::default() };
     assert!(kept_check::KeptChecks::from_saved(&stale, &ws).saved_for(7).is_none());
 }
@@ -2694,7 +2694,7 @@ fn a_check_that_worked_stands_while_nothing_it_looks_at_changes() {
 #[cfg(unix)]
 #[test]
 fn new_python_projects_build_and_save_screenshots_through_their_toolchain() {
-    use craft_anything_engine::tools::web_common::{Image, encode_png};
+    use f_builder_engine::tools::web_common::{Image, encode_png};
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let ws = Workspace::create(dir.path(), "Python sample", "Make an app in Python", TargetRef::None).unwrap();
@@ -2748,12 +2748,12 @@ fn new_python_projects_build_and_save_screenshots_through_their_toolchain() {
 #[test]
 #[ignore = "requires Python 3 on PATH; runs an owned headless fixture"]
 fn real_python_new_project_build_and_screenshot() {
-    use craft_anything_engine::tools::web_common::{Image, encode_png};
+    use f_builder_engine::tools::web_common::{Image, encode_png};
     let dir = tempfile::tempdir().unwrap();
     let ws = Workspace::create(dir.path(), "Python smoke", "An app in Python", TargetRef::None).unwrap();
     let app = ws.app_dir();
     std::fs::create_dir_all(app.join(".venv/bin")).unwrap();
-    let python = craft_anything_platform::which("python3").expect("install Python 3 to run this ignored test");
+    let python = f_builder_platform::which("python3").expect("install Python 3 to run this ignored test");
     std::os::unix::fs::symlink(python, app.join(".venv/bin/python")).unwrap();
     let rgba = (0..64 * 36).flat_map(|i| if i % 2 == 0 { [255, 0, 0, 255] } else { [0, 0, 255, 255] }).collect();
     let png = encode_png(&Image { width: 64, height: 36, rgba }).unwrap();
@@ -3017,7 +3017,7 @@ fn a_resumed_game_builder_hears_the_asset_choice_as_it_is_now() {
     assert!(on[0].contains("assets_model_generate") && on[0].contains("$5.00"), "{on:?}");
     assert!(game.follow_up_sections(&cx(&ws, false)).is_empty(), "no key: not offered");
     // Turned off after some were made: say so.
-    let rec = craft_anything_engine::workspace::AssetRecord { file: "a.glb".into(), kind: "model".into(), prompt: "a crate".into(), cost_usd: 0.5, at_ms: 1 };
+    let rec = f_builder_engine::workspace::AssetRecord { file: "a.glb".into(), kind: "model".into(), prompt: "a crate".into(), cost_usd: 0.5, at_ms: 1 };
     ws.record_asset(rec).unwrap();
     ws.set_person(|m| m.generate_assets = false).unwrap();
     assert!(game.follow_up_sections(&cx(&ws, true))[0].contains("now off"));
@@ -3028,7 +3028,7 @@ fn a_resumed_game_builder_hears_the_asset_choice_as_it_is_now() {
 fn a_resumed_api_builder_waits_for_the_runs_check() {
     let app = kind("app");
     for prompt in [super::follow_up("bigger title", app.as_ref(), true), continue_prompt(app.as_ref(), true)] {
-        assert!(prompt.contains("Craft Anything checks your build after your turn"), "{prompt}");
+        assert!(prompt.contains("F-Builder checks your build after your turn"), "{prompt}");
         assert!(!prompt.contains("rebuild_check"), "{prompt}");
     }
 }
@@ -3121,7 +3121,7 @@ impl Conversation for ChecksItsWork {
     fn send(&mut self, _text: &str) {
         let asks = Inbox::new(self_check::asks_dir(&self.root));
         self.asked = Some(std::thread::spawn(move || {
-            let id = asks.post(craft_anything_engine::inbox::RequestKind::Question, "Check the build", "", Vec::new(), false, None).ok()?;
+            let id = asks.post(f_builder_engine::inbox::RequestKind::Question, "Check the build", "", Vec::new(), false, None).ok()?;
             asks.wait(&id, Duration::from_secs(20), &|| false).and_then(|a| a.text)
         }));
     }
@@ -3153,7 +3153,7 @@ fn preparing_the_builders_agent_does_not_lock_up() {
     let (tx, _rx) = std::sync::mpsc::channel();
     let w = Worker {
         wake: Default::default(),
-        engine: Arc::new(Engine::new(craft_anything_engine::testing::session())),
+        engine: Arc::new(Engine::new(f_builder_engine::testing::session())),
         tx,
         stop: CancelToken::default(),
         preview: Arc::default(),
@@ -3197,7 +3197,7 @@ fn the_run_answers_the_builders_own_check_during_its_turn() {
     let (tx, rx) = std::sync::mpsc::channel();
     let mut w = Worker {
         wake: Default::default(),
-        engine: Arc::new(Engine::new(craft_anything_engine::testing::session())),
+        engine: Arc::new(Engine::new(f_builder_engine::testing::session())),
         tx,
         stop: CancelToken::default(),
         preview: Arc::default(),
@@ -3348,7 +3348,7 @@ fn deep_mode_hands_the_builder_every_tool_and_clean_room_none_that_look_inside()
     let d = tempfile::tempdir().unwrap();
     let web = Workspace::create(d.path(), "Site", "Clone it", TargetRef::Website { url: "https://example.com".into() }).unwrap();
     let b = brief(&web, "website", true, false, None, false, None);
-    assert!(b.contains("every craft-anything tool is yours") && b.contains("capture/how-it-works.md"), "{b}");
+    assert!(b.contains("every f-builder tool is yours") && b.contains("capture/how-it-works.md"), "{b}");
     assert!(b.contains("web_listeners_list") && b.contains("web_coverage_measure") && b.contains("js_sources_restore"), "{b}");
     assert!(b.contains("never paste the original's code into app/") && !b.contains("enable_toolset with"), "{b}");
     let clean = brief(&web, "website", false, false, None, false, None);
@@ -3374,8 +3374,8 @@ fn deep_mode_hands_the_builder_every_tool_and_clean_room_none_that_look_inside()
 fn a_console_original_is_rebuilt_as_a_console_program() {
     let d = tempfile::tempdir().unwrap();
     let (tool, app) = (d.path().join("tool.exe"), d.path().join("app.exe"));
-    std::fs::write(&tool, craft_anything_testkit::pe64_subsystem(3)).unwrap();
-    std::fs::write(&app, craft_anything_testkit::pe64_subsystem(2)).unwrap();
+    std::fs::write(&tool, f_builder_testkit::pe64_subsystem(3)).unwrap();
+    std::fs::write(&app, f_builder_testkit::pe64_subsystem(2)).unwrap();
     assert_eq!(choose("Rebuild this tool", &TargetRef::Local { path: tool }), ("app", "Rust (console)"));
     assert_eq!(choose("Rebuild this tool", &TargetRef::Local { path: app }).1, "Rust + egui (eframe)", "a windowed program stays a windowed app");
     let steps = stacks::steps("Rust (console)", None);
@@ -3385,7 +3385,7 @@ fn a_console_original_is_rebuilt_as_a_console_program() {
 
 #[test]
 fn a_note_the_builder_took_at_a_step_joins_the_feed_and_isnt_sent_again() {
-    use craft_anything_engine::questions::{self, AskedQuestion};
+    use f_builder_engine::questions::{self, AskedQuestion};
     let d = tempfile::tempdir().unwrap();
     let mut ws = Workspace::create(d.path(), "Site", "Clone it", TargetRef::None).unwrap();
     let asked = AskedQuestion { deep: false, ..AskedQuestion::new("where is the score kept".into(), "In src.".into(), true, "Stand-in".into(), None, 0) };
@@ -3393,7 +3393,7 @@ fn a_note_the_builder_took_at_a_step_joins_the_feed_and_isnt_sent_again() {
     let (tx, rx) = std::sync::mpsc::channel();
     let mut w = Worker {
         wake: Default::default(),
-        engine: Arc::new(Engine::new(craft_anything_engine::testing::session())),
+        engine: Arc::new(Engine::new(f_builder_engine::testing::session())),
         tx,
         stop: CancelToken::default(),
         preview: Arc::default(),
@@ -3450,9 +3450,9 @@ fn design_notes_pair_renamed_sections_and_leave_nav_links_alone() {
 
 #[test]
 fn a_project_in_a_picked_folder_tells_the_builder_what_its_files_are() {
-    use craft_anything_engine::workspace::ExistingFiles;
+    use f_builder_engine::workspace::ExistingFiles;
     let d = tempfile::tempdir().unwrap();
-    let settings = craft_anything_engine::Settings::default();
+    let settings = f_builder_engine::Settings::default();
     let folder = |name: &str| {
         let f = d.path().join(name);
         std::fs::create_dir_all(&f).unwrap();
@@ -3467,7 +3467,7 @@ fn a_project_in_a_picked_folder_tells_the_builder_what_its_files_are() {
     assert!(refused.is_err(), "a folder with files needs to know what they are");
     let ws = project::new_project(&settings, "-", "Add a contact form", project::Place::At(&mine, Some(ExistingFiles::Edit)), None, false, None).unwrap();
     let b = brief(&ws, "website", false, false, None, false, None);
-    assert!(b.contains("already has their files (index.html)") && b.contains("use the workspace folder itself (./)") && b.contains("craft.json"), "{b}");
+    assert!(b.contains("already has their files (index.html)") && b.contains("use the workspace folder itself (./)") && b.contains("f-builder.json"), "{b}");
 
     let start = folder("start");
     let ws = project::new_project(&settings, "-", "A site like this", project::Place::At(&start, Some(ExistingFiles::StartFrom)), None, false, None).unwrap();
@@ -3478,12 +3478,12 @@ fn a_project_in_a_picked_folder_tells_the_builder_what_its_files_are() {
 
 #[test]
 fn a_project_started_in_a_picked_folder_stays_in_the_list() {
-    let mut session = craft_anything_engine::testing::session();
+    let mut session = f_builder_engine::testing::session();
     let d = tempfile::tempdir().unwrap();
     let ws = project::new_project(&session.settings, "-", "A notes app", project::Place::At(&d.path().join("mine"), None), None, false, None).unwrap();
     session.remember_project(&ws.root).unwrap();
     assert_eq!(session.settings.project_folders, std::slice::from_ref(&ws.root));
-    let saved = craft_anything_engine::Settings::load_from(&session.config_dir().join("config.toml"));
+    let saved = f_builder_engine::Settings::load_from(&session.config_dir().join("config.toml"));
     assert_eq!(saved.project_folders, std::slice::from_ref(&ws.root), "saved in the session's own settings");
     let listed = Workspace::list_in(&session.settings.project_locations());
     assert!(listed.iter().any(|w| w.root == ws.root));
@@ -3491,7 +3491,7 @@ fn a_project_started_in_a_picked_folder_stays_in_the_list() {
 
 #[test]
 fn starting_a_project_at_existing_project_folder_attaches_to_it() {
-    let session = craft_anything_engine::testing::session();
+    let session = f_builder_engine::testing::session();
     let d = tempfile::tempdir().unwrap();
     let folder = d.path().join("mine");
     let ws = project::new_project(&session.settings, "-", "Initial app", project::Place::At(&folder, None), None, false, None).unwrap();
@@ -3504,7 +3504,7 @@ fn starting_a_project_at_existing_project_folder_attaches_to_it() {
 
 #[test]
 fn a_project_edited_in_place_keeps_what_its_files_are_built_with() {
-    use craft_anything_engine::workspace::ExistingFiles::{Edit, StartFrom};
+    use f_builder_engine::workspace::ExistingFiles::{Edit, StartFrom};
     let first = |file: &str, request: &str, existing| {
         let d = tempfile::tempdir().unwrap();
         std::fs::write(d.path().join(file), "").unwrap();
@@ -3519,7 +3519,7 @@ fn a_project_edited_in_place_keeps_what_its_files_are_built_with() {
 }
 
 /// A folder of the person's own with this file in it, as a project of `existing`.
-fn own_folder(file: &str, existing: craft_anything_engine::workspace::ExistingFiles) -> (tempfile::TempDir, Workspace) {
+fn own_folder(file: &str, existing: f_builder_engine::workspace::ExistingFiles) -> (tempfile::TempDir, Workspace) {
     let d = tempfile::tempdir().unwrap();
     std::fs::write(d.path().join(file), "<p>hi</p>").unwrap();
     let ws = Workspace::create_at(d.path(), "Mine", "Add a contact form", TargetRef::None, Some(existing)).unwrap();
@@ -3528,7 +3528,7 @@ fn own_folder(file: &str, existing: craft_anything_engine::workspace::ExistingFi
 
 #[test]
 fn a_persons_own_project_is_judged_by_its_own_build_and_tests_whatever_its_kind() {
-    use craft_anything_engine::workspace::ExistingFiles::Edit;
+    use f_builder_engine::workspace::ExistingFiles::Edit;
     let (_d, ws) = own_folder("index.html", Edit);
     let r = check_worker(&ws, false).run_checks(&ws, &GameKind, 1).unwrap();
     assert_eq!(r.iter().map(|c| c.check.as_str()).collect::<Vec<_>>(), [CheckResult::BUILD, kinds::own::OwnTestsCheck::ID]);
@@ -3540,7 +3540,7 @@ fn a_persons_own_project_is_judged_by_its_own_build_and_tests_whatever_its_kind(
 /// check that couldn't start is a failed result with the reason, never a silent wait.
 #[test]
 fn a_self_check_round_stops_at_pause_and_at_its_time_limit() {
-    use craft_anything_engine::workspace::ExistingFiles::Edit;
+    use f_builder_engine::workspace::ExistingFiles::Edit;
     let (_d, ws) = own_folder("index.html", Edit);
     let round = self_check::SELF_CHECK_ROUND;
     // Past its limit before the first check: that check is reported as not run, and nothing runs.
@@ -3563,7 +3563,7 @@ fn a_self_check_round_stops_at_pause_and_at_its_time_limit() {
 /// stage); the builder's own checks belong to its Build turn.
 #[test]
 fn every_check_is_said_before_it_runs_as_its_own_step() {
-    use craft_anything_engine::workspace::ExistingFiles::Edit;
+    use f_builder_engine::workspace::ExistingFiles::Edit;
     let (_d, ws) = own_folder("index.html", Edit);
     let run_round = |round: u32| {
         let mut worker = check_worker(&ws, false);
@@ -3592,7 +3592,7 @@ fn every_check_is_said_before_it_runs_as_its_own_step() {
 
 #[test]
 fn a_persons_own_project_is_asked_for_nothing_it_would_add_for_our_sake() {
-    use craft_anything_engine::workspace::ExistingFiles::{Edit, StartFrom};
+    use f_builder_engine::workspace::ExistingFiles::{Edit, StartFrom};
     let (_d, mut own) = own_folder("main.py", Edit);
     for k in ["app", "game"] {
         let b = brief(&own, k, false, false, None, false, None);
@@ -3622,8 +3622,8 @@ fn a_site_stack_with_nothing_to_recreate_is_a_website() {
 }
 
 #[test]
-fn the_extractors_transcript_is_one_of_craft_anythings_own_files() {
-    assert!(craft_anything_engine::workspace::OWN_NAMES.contains(&brief::EXTRACT_TRANSCRIPT), "a picked folder with this name would be overwritten");
+fn the_extractors_transcript_is_one_of_f_builders_own_files() {
+    assert!(f_builder_engine::workspace::OWN_NAMES.contains(&brief::EXTRACT_TRANSCRIPT), "a picked folder with this name would be overwritten");
 }
 
 #[test]
@@ -3684,9 +3684,9 @@ fn a_question_names_a_replaced_saved_builder() {
     )
     .unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let engine = std::sync::Arc::new(Engine::new(craft_anything_engine::testing::session()));
+    let engine = std::sync::Arc::new(Engine::new(f_builder_engine::testing::session()));
     let hub = crate::AiHub::with_stores(engine, d.path().join("config.toml"), crate::KeyStore::file_only(d.path().join("keys.toml")));
-    let mut settings = craft_anything_engine::testing::session().settings;
+    let mut settings = f_builder_engine::testing::session().settings;
     settings.ai = toml::from_str(&format!(
         "[[backends]]\nname = \"Off\"\nkind = \"anthropic\"\nmodel = \"claude-test\"\nenabled = false\n\n[[backends]]\nname = \"Claude\"\nkind = \"agent_cli\"\nmodel = \"claude-code\"\ncommand = \"{}\"\nenabled = true\n",
         script.display()
@@ -3756,7 +3756,7 @@ fn a_session_left_on_another_computer_starts_a_new_one_from_the_project() {
     let (tx, rx) = std::sync::mpsc::channel();
     let mut w = Worker {
         wake: Default::default(),
-        engine: Arc::new(Engine::new(craft_anything_engine::testing::session())),
+        engine: Arc::new(Engine::new(f_builder_engine::testing::session())),
         tx,
         stop: CancelToken::default(),
         preview: Arc::default(),
@@ -3813,7 +3813,7 @@ fn a_missing_session_with_nothing_to_start_from_is_said_plainly() {
     let (tx, _rx) = std::sync::mpsc::channel();
     let mut w = Worker {
         wake: Default::default(),
-        engine: Arc::new(Engine::new(craft_anything_engine::testing::session())),
+        engine: Arc::new(Engine::new(f_builder_engine::testing::session())),
         tx,
         stop: CancelToken::default(),
         preview: Arc::default(),
@@ -3881,7 +3881,7 @@ fn the_builders_conversation_travels_with_the_project() {
     let (tx, rx) = std::sync::mpsc::channel();
     let w = Worker {
         wake: Default::default(),
-        engine: Arc::new(Engine::new(craft_anything_engine::testing::session())),
+        engine: Arc::new(Engine::new(f_builder_engine::testing::session())),
         tx,
         stop: CancelToken::default(),
         preview: Arc::default(),
@@ -3921,7 +3921,7 @@ fn the_builders_conversation_travels_with_the_project() {
     let handoff = crate::cli_agents::AgentAdapter::handoff(&adapter, &kept_session(&ws).unwrap(), HANDOFF_CHARS);
     let first = resumed_elsewhere("THE BRIEF", "Last summary.", handoff.as_deref());
     assert!(first.starts_with("THE BRIEF") && first.contains("isn't on this computer"), "{first}");
-    assert!(first.contains("Craft Anything asked you: Make a notes app.") && first.contains("You answered: Built it with a sidebar."), "{first}");
+    assert!(first.contains("F-Builder asked you: Make a notes app.") && first.contains("You answered: Built it with a sidebar."), "{first}");
     // Without a kept conversation, the last summary stands in for it.
     let bare = resumed_elsewhere("THE BRIEF", "Last summary.", None);
     assert!(bare.contains("Last summary.") && !bare.contains("as the project kept it"), "{bare}");
@@ -3952,7 +3952,7 @@ fn a_build_says_when_it_waits_for_an_analysis_started_earlier() {
     std::fs::write(&program, b"not really a program").unwrap();
     let store = d.path().join("store");
 
-    let mut s = craft_anything_engine::testing::session();
+    let mut s = f_builder_engine::testing::session();
     s.settings.deep_mode = true;
     s.settings.engines.store_dir = Some(store.clone());
     s.settings.engines.ghidra.install_dir = Some(launcher);
@@ -3979,9 +3979,9 @@ fn a_build_says_when_it_waits_for_an_analysis_started_earlier() {
     };
 
     // Another process is already analysing this program: a fresh lock beside its project.
-    let sha = craft_anything_evidence::sha256_hex(&std::fs::read(&program).unwrap());
-    let digest = craft_anything_evidence::sha256_hex(b"craft-anything-ghidra-fast-profile-v2|lang=");
-    let project = craft_anything_engines::ghidra::project_cache_dir(&store, &sha, &digest);
+    let sha = f_builder_evidence::sha256_hex(&std::fs::read(&program).unwrap());
+    let digest = f_builder_evidence::sha256_hex(b"f-builder-ghidra-fast-profile-v2|lang=");
+    let project = f_builder_engines::ghidra::project_cache_dir(&store, &sha, &digest);
     std::fs::create_dir_all(project.parent().unwrap()).unwrap();
     std::fs::write(project.with_extension("analysing"), "").unwrap();
 

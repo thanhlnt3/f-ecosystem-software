@@ -1,4 +1,4 @@
-use craft_anything_formats::fsread::{self, Limits};
+use f_builder_formats::fsread::{self, Limits};
 
 const BS: usize = 1024;
 const FILE_INODE: usize = 5120 + 10 * 128;
@@ -9,7 +9,7 @@ fn put(data: &mut [u8], at: usize, value: u32) {
 
 #[test]
 fn a_missing_single_indirect_root_keeps_the_whole_sparse_span() {
-    let mut data = craft_anything_testkit::firmware::ext_image(false);
+    let mut data = f_builder_testkit::firmware::ext_image(false);
     data.resize(14 * BS, 0);
     put(&mut data, 1024 + 4, 14);
     data[FILE_INODE + 40..FILE_INODE + 100].fill(0);
@@ -27,7 +27,7 @@ fn a_missing_single_indirect_root_keeps_the_whole_sparse_span() {
 
 #[test]
 fn an_existing_single_indirect_block_keeps_its_original_position() {
-    let mut data = craft_anything_testkit::firmware::ext_image(false);
+    let mut data = f_builder_testkit::firmware::ext_image(false);
     data.resize(12 * BS, 0);
     put(&mut data, 1024 + 4, 12);
     data[FILE_INODE + 40..FILE_INODE + 100].fill(0);

@@ -4,12 +4,12 @@
 use crate::i18n::tr;
 use crate::state::FirstRunStep;
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, icons, widgets};
-use craft_anything_ai::{BackendKind, Detected};
-use craft_anything_engine::Mode;
+use crate::{BuilderApp, icons, widgets};
 use egui::{Align2, RichText, Ui, Vec2};
+use f_builder_ai::{BackendKind, Detected};
+use f_builder_engine::Mode;
 
-pub fn show(app: &mut CraftApp, ui: &mut Ui) {
+pub fn show(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let full = ui.max_rect();
     let width = 640.0_f32.min(full.width() - 48.0);
@@ -27,7 +27,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
         });
         ui.add_space(12.0);
     });
-    // Where you are, the ArtCraft way: "02 / 04  AI", plus a progress hairline.
+    // Where you are: "02 / 04  AI", plus a progress hairline.
     let step = app.state.first_run.index();
     let y = full.bottom() - 34.0;
     let names = ["Welcome", "AI", "Purpose", "Ready"];
@@ -54,11 +54,11 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
     }
 }
 
-fn welcome(app: &mut CraftApp, ui: &mut Ui) {
+fn welcome(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     ui.add(crate::app_icon(132.0));
     ui.add_space(20.0);
-    ui.label(theme::heading(tr("Craft Anything"), theme::TITLE));
+    ui.label(theme::heading(tr("F-Builder"), theme::TITLE));
     ui.add_space(6.0);
     ui.label(RichText::new(tr("Find out how any software works, then craft your own.")).size(theme::LEAD).color(t.text_dim));
     ui.add_space(36.0);
@@ -93,7 +93,7 @@ fn header(ui: &mut Ui, title: &str, sub: &str) {
     ui.add_space(22.0);
 }
 
-fn brain(app: &mut CraftApp, ui: &mut Ui, width: f32) {
+fn brain(app: &mut BuilderApp, ui: &mut Ui, width: f32) {
     let t = Tokens::get(ui.ctx());
     header(
         ui,
@@ -186,7 +186,7 @@ fn kind_icon(k: BackendKind) -> &'static str {
     }
 }
 
-fn brain_card(app: &mut CraftApp, ui: &mut Ui, d: &Detected) {
+fn brain_card(app: &mut BuilderApp, ui: &mut Ui, d: &Detected) {
     let t = Tokens::get(ui.ctx());
     let name = d.suggestion.name.clone();
     let on = app.state.backend.as_ref() == Some(&name);
@@ -220,7 +220,7 @@ fn brain_card(app: &mut CraftApp, ui: &mut Ui, d: &Detected) {
         });
         // A subscription key is worth pasting even when the environment already has one, so a
         // different key can be used without restarting the app.
-        let pastable = d.needs_key || d.suggestion.base_url.as_deref().is_some_and(craft_anything_ai::openai::is_opencode_go);
+        let pastable = d.needs_key || d.suggestion.base_url.as_deref().is_some_and(f_builder_ai::openai::is_opencode_go);
         if pastable && !configured {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -264,7 +264,7 @@ fn option_row(ui: &mut Ui, icon: &str, title: &str, sub: &str, on: bool) -> egui
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
-fn purpose(app: &mut CraftApp, ui: &mut Ui, width: f32) {
+fn purpose(app: &mut BuilderApp, ui: &mut Ui, width: f32) {
     let t = Tokens::get(ui.ctx());
     header(ui, "What brings you here?", "One line, in plain words. It stays on this computer and is never sent anywhere.");
     ui.allocate_ui(Vec2::new(width, 400.0), |ui| {
@@ -293,8 +293,8 @@ fn purpose(app: &mut CraftApp, ui: &mut Ui, width: f32) {
     }
 }
 
-fn purpose_icon(p: craft_anything_engine::project::Purpose) -> &'static str {
-    use craft_anything_engine::project::Purpose::*;
+fn purpose_icon(p: f_builder_engine::project::Purpose) -> &'static str {
+    use f_builder_engine::project::Purpose::*;
     match p {
         OwnOrAuthorized => "user",
         Education => "graduation-cap",
@@ -304,7 +304,7 @@ fn purpose_icon(p: craft_anything_engine::project::Purpose) -> &'static str {
     }
 }
 
-fn done(app: &mut CraftApp, ui: &mut Ui) {
+fn done(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(72.0), egui::Sense::hover());
     ui.painter().rect(rect, rect.width() / 2.0, t.accent_soft, egui::Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);

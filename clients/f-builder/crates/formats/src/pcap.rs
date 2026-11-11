@@ -1562,12 +1562,12 @@ pub fn iso8601(ns: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::pcap::{dns_query, eth, ipv4_pkt, pcap, pcapng, sample_frames, udp};
+    use f_builder_testkit::pcap::{dns_query, eth, ipv4_pkt, pcap, pcapng, sample_frames, udp};
 
     #[test]
     fn rejected_simple_packets_count_toward_the_scan_limit() {
         let mut data = pcapng(&[]);
-        let rejected = craft_anything_testkit::pcap::block(3, &1u32.to_le_bytes());
+        let rejected = f_builder_testkit::pcap::block(3, &1u32.to_le_bytes());
         for _ in 0..3 {
             data.extend(&rejected);
         }
@@ -1586,7 +1586,7 @@ mod tests {
     #[test]
     fn rejected_simple_packets_at_eof_do_not_report_a_truncated_scan() {
         let mut data = pcapng(&[]);
-        let rejected = craft_anything_testkit::pcap::block(3, &1u32.to_le_bytes());
+        let rejected = f_builder_testkit::pcap::block(3, &1u32.to_le_bytes());
         for _ in 0..2 {
             data.extend(&rejected);
         }
@@ -1601,8 +1601,8 @@ mod tests {
     #[test]
     fn valid_and_rejected_simple_packets_share_the_scan_limit() {
         let mut data = pcapng(&[]);
-        data.extend(craft_anything_testkit::pcap::block(3, &1u32.to_le_bytes()));
-        let valid = craft_anything_testkit::pcap::block(3, &0u32.to_le_bytes());
+        data.extend(f_builder_testkit::pcap::block(3, &1u32.to_le_bytes()));
+        let valid = f_builder_testkit::pcap::block(3, &0u32.to_le_bytes());
         data.extend(&valid);
         data.extend(&valid);
         let mut cap = Capture::new(&data).unwrap();
@@ -1615,7 +1615,7 @@ mod tests {
 
     #[test]
     fn malformed_packet_blocks_share_the_budget_and_report_each_reason_once() {
-        use craft_anything_testkit::pcap::block;
+        use f_builder_testkit::pcap::block;
         let mut data = pcapng(&[]);
         for kind in [2, 6] {
             let mut body = [0; 20];
@@ -1658,7 +1658,7 @@ mod tests {
 
     #[test]
     fn subnanosecond_decimal_resolutions_keep_the_interface_offset() {
-        use craft_anything_testkit::pcap::block;
+        use f_builder_testkit::pcap::block;
         let mut data = pcapng(&[]);
         data.truncate(28);
         let mut idb = vec![1, 0, 0, 0, 0, 0, 0, 0, 9, 0, 1, 0, 127, 0, 0, 0, 14, 0, 8, 0];

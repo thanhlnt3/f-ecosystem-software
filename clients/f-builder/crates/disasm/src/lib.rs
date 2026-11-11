@@ -1,4 +1,4 @@
-//! Craft Anything's own native engine: decoding, functions, control flow, references, pseudo-C.
+//! F-Builder's own native engine: decoding, functions, control flow, references, pseudo-C.
 //!
 //! [`Image`] wraps a parsed container and its bytes; [`Program::analyze`] discovers functions
 //! (entry, symbols, exports, container function lists, call targets, code pointers, prologue
@@ -25,7 +25,7 @@ pub use program::{Block, CallSite, Callee, Function, JumpTable, Limits, ProgStri
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DisasmError {
     #[error("{0}")]
-    Format(craft_anything_formats::FormatError),
+    Format(f_builder_formats::FormatError),
     #[error("not supported: {0}")]
     Unsupported(String),
     #[error("cancelled")]

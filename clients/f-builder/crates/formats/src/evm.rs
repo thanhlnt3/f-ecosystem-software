@@ -697,7 +697,7 @@ fn reverts_soon(code: &[u8], ins: &[Ins], mut k: usize, index_of: &dyn Fn(usize)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::formats as fx;
+    use f_builder_testkit::formats as fx;
 
     /// A plausible trailer length alone must not remove instructions from the analyzed bytecode.
     #[test]
@@ -797,14 +797,14 @@ mod tests {
     #[test]
     fn hostile_inputs_do_not_panic() {
         let (code, _) = fx::evm_runtime();
-        for m in craft_anything_testkit::mutations(&code) {
+        for m in f_builder_testkit::mutations(&code) {
             let _ = analyze(&m);
         }
         for n in 0..code.len() {
             let _ = analyze(&code[..n]);
         }
         for seed in 0..200 {
-            let n = craft_anything_testkit::noise(seed, 300);
+            let n = f_builder_testkit::noise(seed, 300);
             let _ = analyze(&n);
             let _ = decode_input(&n, Encoding::Auto);
         }

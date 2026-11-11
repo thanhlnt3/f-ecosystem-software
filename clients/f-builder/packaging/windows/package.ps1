@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Build, sign and package Craft Anything for Windows.
+  Build, sign and package F-Builder for Windows.
 
 .DESCRIPTION
   Produces, in $env:DIST (default: dist/release):
-    craft-anything-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
-    craft-anything-<version>-windows-<arch>-portable.zip   craft-anything.exe (+ craft-anything-cli.exe), portable.txt and the licences
+    f-builder-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
+    f-builder-<version>-windows-<arch>-portable.zip   f-builder.exe (+ f-builder-cli.exe), portable.txt and the licences
 
-  craft-anything-cli.exe is built and shipped once apps/craft-anything-cli exists in the workspace.
+  f-builder-cli.exe is built and shipped once apps/f-builder-cli exists in the workspace.
 
   The binaries link the C runtime statically (+crt-static), so neither the MSI nor the portable
   zip needs the Visual C++ redistributable. Signing is delegated to sign.ps1 (skipped with a
@@ -36,7 +36,7 @@ function Invoke-Native([string] $What, [scriptblock] $Block) {
 }
 
 # The version lives in one place: [workspace.package] version in the root Cargo.toml.
-$Version = $env:CRAFT_ANYTHING_VERSION
+$Version = $env:F_BUILDER_VERSION
 if (-not $Version) {
   $inPkg = $false
   foreach ($line in Get-Content (Join-Path $Root 'Cargo.toml')) {
@@ -53,14 +53,14 @@ $Dist = if ($env:DIST) { $env:DIST } else { Join-Path $Root 'dist\release' }
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $Root 'target' }
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 
-if (-not $env:CRAFT_ANYTHING_BUILD_SHA) { $env:CRAFT_ANYTHING_BUILD_SHA = (git -C $Root rev-parse HEAD 2>$null) }
-if (-not $env:CRAFT_ANYTHING_BUILD_DATE) { $env:CRAFT_ANYTHING_BUILD_DATE = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') }
+if (-not $env:F_BUILDER_BUILD_SHA) { $env:F_BUILDER_BUILD_SHA = (git -C $Root rev-parse HEAD 2>$null) }
+if (-not $env:F_BUILDER_BUILD_DATE) { $env:F_BUILDER_BUILD_DATE = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') }
 
-# The headless CLI ships next to the app once apps/craft-anything-cli exists.
-$HasCli = Test-Path (Join-Path $Root 'apps\craft-anything-cli\Cargo.toml')
-$Bins = @('craft-anything'); if ($HasCli) { $Bins += 'craft-anything-cli' }
+# The headless CLI ships next to the app once apps/f-builder-cli exists.
+$HasCli = Test-Path (Join-Path $Root 'apps\f-builder-cli\Cargo.toml')
+$Bins = @('f-builder'); if ($HasCli) { $Bins += 'f-builder-cli' }
 
-Write-Output "Craft Anything $Version for Windows $Arch ($Target): $($Bins -join ', ')"
+Write-Output "F-Builder $Version for Windows $Arch ($Target): $($Bins -join ', ')"
 
 if (-not $SkipBuild) {
   # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
@@ -83,7 +83,7 @@ function Get-PeHeader([string] $Path) {
   return @{ Machine = [BitConverter]::ToUInt16($bytes, $pe + 4); Subsystem = [BitConverter]::ToUInt16($bytes, $pe + 0x5C) }
 }
 $Machine = switch ($Arch) { 'x64' { 0x8664 } 'x86' { 0x14C } 'arm64' { 0xAA64 } }
-$checks = @(, @('craft-anything.exe', 2)); if ($HasCli) { $checks += , @('craft-anything-cli.exe', 3) }
+$checks = @(, @('f-builder.exe', 2)); if ($HasCli) { $checks += , @('f-builder-cli.exe', 3) }
 foreach ($check in $checks) {
   $h = Get-PeHeader (Join-Path $Bin $check[0])
   if ($h.Machine -ne $Machine) { throw "$($check[0]) is for machine 0x$('{0:X}' -f $h.Machine), expected 0x$('{0:X}' -f $Machine) ($Arch)" }
@@ -99,7 +99,7 @@ foreach ($exe in $Exes) { Copy-Item (Join-Path $Bin $exe) $Stage }
 & (Join-Path $PSScriptRoot 'sign.ps1') @($Exes | ForEach-Object { Join-Path $Stage $_ })
 
 # ---- MSI ---------------------------------------------------------------------------------------
-# The setup wizard's art, drawn here from the app icon so the MSI shows Craft Anything rather than
+# The setup wizard's art, drawn here from the app icon so the MSI shows F-Builder rather than
 # WiX's stock bitmaps: a 493x58 banner across the top of the inner pages (the page title is drawn
 # over its left side, so that stays white) and a 493x312 backdrop for the Welcome and Finish pages
 # (their text sits on the right; the left 164 px are ours). Both must be 24-bit BMPs.
@@ -134,15 +134,15 @@ function New-InstallerArt([string] $IconPng, [string] $BannerOut, [string] $Dial
 }
 $Banner = Join-Path $Stage 'installer-banner.bmp'
 $Dialog = Join-Path $Stage 'installer-dialog.bmp'
-New-InstallerArt (Join-Path $Root 'assets\app-icon\hicolor\256x256\apps\ai.storyteller.craft-anything.png') $Banner $Dialog
+New-InstallerArt (Join-Path $Root 'assets\app-icon\hicolor\256x256\apps\io.github.thanhlnt3.f-builder.png') $Banner $Dialog
 
-$Msi = Join-Path $Dist "craft-anything-$Version-windows-$Arch.msi"
+$Msi = Join-Path $Dist "f-builder-$Version-windows-$Arch.msi"
 & (Join-Path $PSScriptRoot 'check-icons.ps1')
 Invoke-Native 'wix build' {
-  wix build (Join-Path $PSScriptRoot 'craft-anything.wxs') -arch $Arch `
+  wix build (Join-Path $PSScriptRoot 'f-builder.wxs') -arch $Arch `
     -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
-    -culture en-US -loc (Join-Path $PSScriptRoot 'craft-anything.en-us.wxl') `
-    -d "Version=$MsiVersion" -d "DisplayVersion=$Version" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\craft-anything.ico')" `
+    -culture en-US -loc (Join-Path $PSScriptRoot 'f-builder.en-us.wxl') `
+    -d "Version=$MsiVersion" -d "DisplayVersion=$Version" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\f-builder.ico')" `
     -d "BannerBmp=$Banner" -d "DialogBmp=$Dialog" -d "HasCli=$([int]$HasCli)" `
     -o $Msi
 }
@@ -154,7 +154,7 @@ Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Ms
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
 
 # ---- portable zip ------------------------------------------------------------------------------
-$Portable = Join-Path $TargetDir "windows-package\craft-anything-$Version-windows-$Arch-portable"
+$Portable = Join-Path $TargetDir "windows-package\f-builder-$Version-windows-$Arch-portable"
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
@@ -162,25 +162,25 @@ foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE'
   $p = Join-Path $Root $f
   if (Test-Path $p) { Copy-Item $p $Portable }
 }
-# The embedded fonts (assets/fonts, and craft-fonts' with CRAFT_FONTS_DIR as releases build) are
-# OFL-1.1: ship their licences, craft-fonts' as OFL-<font>.txt.
+# The embedded fonts (assets/fonts, and f-builder-fonts' with F_BUILDER_FONTS_DIR as releases build) are
+# OFL-1.1: ship their licences, f-builder-fonts' as OFL-<font>.txt.
 Get-ChildItem -Path (Join-Path $Root 'assets\fonts') -Filter 'OFL-*.txt' -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName $Portable }
-if ($env:CRAFT_FONTS_DIR) {
-  Get-ChildItem -Path (Join-Path $env:CRAFT_FONTS_DIR 'fonts\*\OFL.txt') -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName (Join-Path $Portable "OFL-$($_.Directory.Name).txt") }
+if ($env:F_BUILDER_FONTS_DIR) {
+  Get-ChildItem -Path (Join-Path $env:F_BUILDER_FONTS_DIR 'fonts\*\OFL.txt') -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName (Join-Path $Portable "OFL-$($_.Directory.Name).txt") }
 }
-# portable.txt beside craft-anything.exe switches on portable mode: settings, logs and the engine
-# store go to CraftAnythingData\ next to the exe instead of %APPDATA% (crates/engine/src/settings.rs).
+# portable.txt beside f-builder.exe switches on portable mode: settings, logs and the engine
+# store go to FBuilderData\ next to the exe instead of %APPDATA% (crates/engine/src/settings.rs).
 Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Portable
-$Zip = Join-Path $Dist "craft-anything-$Version-windows-$Arch-portable.zip"
+$Zip = Join-Path $Dist "f-builder-$Version-windows-$Arch-portable.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path $Portable -DestinationPath $Zip
 
 # Smoke-test the CLI when this machine can run it. An ARM64 build made on an x64 runner can't run
 # here; .github/workflows/windows-arm64.yml installs and runs it on ARM64 instead.
 $HostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
-$Smoke = if ($HasCli) { 'craft-anything-cli.exe' } else { 'craft-anything.exe' }
+$Smoke = if ($HasCli) { 'f-builder-cli.exe' } else { 'f-builder.exe' }
 if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
-  # craft-anything.exe is a GUI-subsystem exe: pipe it so PowerShell waits and shows its --version output.
+  # f-builder.exe is a GUI-subsystem exe: pipe it so PowerShell waits and shows its --version output.
   Invoke-Native "$Smoke --version" { & (Join-Path $Stage $Smoke) --version | Out-Host }
 } else {
   Write-Output "skipping $Smoke --version: an $Arch build doesn't run on this $HostArch machine"

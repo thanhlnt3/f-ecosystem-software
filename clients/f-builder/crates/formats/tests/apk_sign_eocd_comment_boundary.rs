@@ -1,5 +1,5 @@
-use craft_anything_formats::apk_sign;
-use craft_anything_testkit::android::notes_apk;
+use f_builder_formats::apk_sign;
+use f_builder_testkit::android::notes_apk;
 
 #[test]
 fn an_eocd_marker_inside_the_comment_does_not_hide_the_signature() {
@@ -132,7 +132,7 @@ fn empty_eocd(offset: usize, comment_len: usize) -> Vec<u8> {
 }
 
 fn signed_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
-    use craft_anything_testkit::{android, electron::zip_stored};
+    use f_builder_testkit::{android, electron::zip_stored};
     android::with_signing_block(&zip_stored(entries), &android::signing_block(&android::certificate_der("Craft Test", "Craft Org")))
 }
 
@@ -202,7 +202,7 @@ fn a_framed_unknown_pair_spanning_the_original_directory_does_not_hide_signers()
 
 #[test]
 fn different_readable_signing_blocks_report_ambiguous_metadata() {
-    use craft_anything_testkit::android;
+    use f_builder_testkit::android;
     let mut apk = notes_apk();
     let original = apk_sign::parse(&apk).unwrap();
     let eocd = apk.len() - 22;
@@ -221,7 +221,7 @@ fn different_readable_signing_blocks_report_ambiguous_metadata() {
 
 #[test]
 fn a_single_empty_signing_block_remains_readable() {
-    let apk = craft_anything_testkit::android::with_signing_block(&craft_anything_testkit::electron::zip_stored(&[]), &block_with_pairs(&[]));
+    let apk = f_builder_testkit::android::with_signing_block(&f_builder_testkit::electron::zip_stored(&[]), &block_with_pairs(&[]));
     let found = apk_sign::parse(&apk).unwrap();
     assert_eq!((found.offset, found.size), (0, 24));
     assert!(found.entries.is_empty());

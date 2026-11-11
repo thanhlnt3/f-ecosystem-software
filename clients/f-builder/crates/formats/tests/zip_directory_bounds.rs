@@ -1,5 +1,5 @@
-use craft_anything_formats::zip::{self, ZipError};
-use craft_anything_testkit::electron::zip_stored;
+use f_builder_formats::zip::{self, ZipError};
+use f_builder_testkit::electron::zip_stored;
 
 #[test]
 fn a_short_declared_entry_is_rejected_before_its_signature_is_checked() {

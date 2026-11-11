@@ -7,23 +7,23 @@ version = "0.6.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.97"
-repository = "https://github.com/storytold/craft-anything"
+repository = "https://github.com/thanhlnt3/f-ecosystem-software"
 
 [workspace.dependencies]
 # internal
-craft-anything-evidence = { path = "crates/evidence" }
-craft-anything-formats = { path = "crates/formats" }
-craft-anything-disasm = { path = "crates/disasm" }
-craft-anything-js = { path = "crates/js" }
-craft-anything-analysis = { path = "crates/analysis" }
-craft-anything-platform = { path = "crates/platform" }
-craft-anything-engines = { path = "crates/engines" }
-craft-anything-engine = { path = "crates/engine" }
-craft-anything-ai = { path = "crates/ai" }
-craft-anything-mcp = { path = "crates/mcp" }
-craft-anything-setup = { path = "crates/setup" }
-craft-anything-ui-egui = { path = "crates/ui-egui" }
-craft-anything-testkit = { path = "crates/testkit" }
+f-builder-evidence = { path = "crates/evidence" }
+f-builder-formats = { path = "crates/formats" }
+f-builder-disasm = { path = "crates/disasm" }
+f-builder-js = { path = "crates/js" }
+f-builder-analysis = { path = "crates/analysis" }
+f-builder-platform = { path = "crates/platform" }
+f-builder-engines = { path = "crates/engines" }
+f-builder-engine = { path = "crates/engine" }
+f-builder-ai = { path = "crates/ai" }
+f-builder-mcp = { path = "crates/mcp" }
+f-builder-setup = { path = "crates/setup" }
+f-builder-ui-egui = { path = "crates/ui-egui" }
+f-builder-testkit = { path = "crates/testkit" }
 
 # external
 thiserror = "2"
@@ -83,7 +83,7 @@ opt-level = 1
 lto = "thin"
 codegen-units = 1
 
-# The browser build (apps/craft-anything-web, `trunk build --release`): small and fast to load.
+# The browser build (apps/f-builder-web, `trunk build --release`): small and fast to load.
 [profile.web-release]
 inherits = "release"
 opt-level = "s"
@@ -93,7 +93,7 @@ debug = false
 strip = true
 panic = "abort"
 
-# wgpu-hal with a Metal shader-language probe (Craft Anything #742; upstream wgpu #10687).
-# Remove this once the upstream wgpu release picks a Metal version the compiler accepts. See vendor/wgpu-hal/CRAFT_ANYTHING.md.
+# wgpu-hal with a Metal shader-language probe (F-Builder #742; upstream wgpu #10687).
+# Remove this once the upstream wgpu release picks a Metal version the compiler accepts. See vendor/wgpu-hal/F_BUILDER.md.
 [patch.crates-io]
 wgpu-hal = { path = "vendor/wgpu-hal" }

@@ -2,16 +2,16 @@
 //! refinements.
 
 use super::*;
-use craft_anything_engines::assets::{Catalogue, Shape, about_usd};
+use f_builder_engines::assets::{Catalogue, Shape, about_usd};
 
 pub(super) const RULES: &str = "\
 Rules:
 - Their request comes first. When it says how to build (a language, framework, engine, library or platform), build with exactly that, even where these instructions name something else: the stack given here is only the default for what the request leaves open. Don't switch away from what they asked for to get past a failing build or check; fix the build instead.
 - Change files only inside app/. Everything else in the workspace is read-only evidence.
 - Rebuild the layout, styling and behaviour yourself from the evidence. Don't copy logos, photos, brand names or long passages of text unless the person confirms they own the original or have permission (ask once with core_person_ask if it matters); otherwise use neutral placeholders: simple shapes or gradients for images, short sample copy for text.
-- Use the core_person_ask tool (craft-anything MCP server) only for choices that really change the result. Give 2-4 short choices. Never ask about technical details you can decide yourself.
+- Use the core_person_ask tool (f-builder MCP server) only for choices that really change the result. Give 2-4 short choices. Never ask about technical details you can decide yourself.
 - Build what the person asked for. If part of it won't fit this version (for example online co-op, a whole game mode or another platform), ask with core_person_ask before leaving it out, with the smaller version as one of the choices; never drop it silently.
-- Never start dev servers, watchers or anything that doesn't exit (npm run dev, npm start, vite, cargo watch). Craft Anything serves and checks the build itself.
+- Never start dev servers, watchers or anything that doesn't exit (npm run dev, npm start, vite, cargo watch). F-Builder serves and checks the build itself.
 - Finish with 3-5 plain sentences for the person: what you built, what differs from the original or is still unknown, and one idea for what to ask next. No code and no file paths in that summary.";
 
 /// How the builder works, for every kind: it leads, the tools answer with evidence, it tests its
@@ -25,11 +25,11 @@ pub(super) fn steps(deep: bool) -> String {
         "capture another width or an opened state of a website into a new folder under checks/, or ask the person with core_person_ask. Clean room: nothing inside the original is looked at, so never open, read, list, fetch, run or decompile its files, its folder, its pages' code or its program, with any tool."
     };
     format!(
-        "How to work: you lead the investigation and the craft-anything tools answer your questions with evidence.
-1) Study the evidence, overview first (the README and summaries before the details). Where it leaves a gap that matters to the result, ask a focused follow-up with the craft-anything tools instead of guessing: {follow_up} Don't repeat a call that already answered. Record each question the evidence doesn't answer yet with core_unknown_add (the question, what would settle it as probes, and how much it matters as severity), and when a later look answers it, close it with core_unknown_edit (status resolved, the resolution and the evidence ids that settle it); until then say in it what you did instead (an estimate, a placeholder or a question for the person). Missing evidence is never proof, so mark what you estimated.
+        "How to work: you lead the investigation and the f-builder tools answer your questions with evidence.
+1) Study the evidence, overview first (the README and summaries before the details). Where it leaves a gap that matters to the result, ask a focused follow-up with the f-builder tools instead of guessing: {follow_up} Don't repeat a call that already answered. Record each question the evidence doesn't answer yet with core_unknown_add (the question, what would settle it as probes, and how much it matters as severity), and when a later look answers it, close it with core_unknown_edit (status resolved, the resolution and the evidence ids that settle it); until then say in it what you did instead (an estimate, a placeholder or a question for the person). Missing evidence is never proof, so mark what you estimated.
 2) Make a short checklist with TodoWrite: 3-7 steps in plain words the person can follow (no file names or jargon), each with a short activeForm such as \"Drawing the map\"; the person watches it live, so keep it updated as you go.
 3) Build it in app/ and fix errors until the build succeeds.
-4) Test it against the original with rebuild_check: it runs the same checks Craft Anything runs after your turn and lists what differs and what couldn't be compared. Fix those, build and check again until it says it would pass.
+4) Test it against the original with rebuild_check: it runs the same checks F-Builder runs after your turn and lists what differs and what couldn't be compared. Fix those, build and check again until it says it would pass.
 5) Before you reply, go through your checklist and core_unknowns_show once more: settle what one more look can settle, and say what's left in your summary."
     )
 }
@@ -42,7 +42,7 @@ pub(super) fn stack_steps(stack: &str, editor: Option<&Path>) -> String {
 /// The stack's steps, then those of each library the request asks for that works with it
 /// ("use nextjs and shadcn" adds shadcn/ui's). A stack's steps make a new project (Unity's say to
 /// write a build script into it), so a person's own project keeps to what it has.
-fn stack_and_library_steps(m: &craft_anything_engine::workspace::Manifest, editor: Option<&Path>) -> String {
+fn stack_and_library_steps(m: &f_builder_engine::workspace::Manifest, editor: Option<&Path>) -> String {
     let mut s = if m.own_project() {
         let editor = editor.map(|e| format!(" The editor is {}.", e.display())).unwrap_or_default();
         format!("keep to what the project already uses.{editor}")
@@ -75,7 +75,7 @@ const NOISE_BLIND: &str = "they aren't compared";
 fn website_from_outside(sees: bool) -> String {
     format!(
         "capture/ holds what a visitor of the live site sees, recorded in Clean room: README.md (start here: its colours, fonts, spacing and the layout at each width), capture.json (design tokens with colours in hex, spacing and content widths, the layout measured at each width (`layouts`: page width, heading and text sizes, each section's padding, gap, content column and items per row), a layout outline with positions in CSS pixels, headings, links, form outlines, picture sizes and the visible text), screenshot-<width>.png for each width (desktop, tablet and phone; {shots}), and noise-<width>.png where parts of the page change by themselves (white squares: carousels, videos, animations; {noise}). Clean room: the page's HTML, CSS and scripts weren't read and must not be: don't open or fetch the original site or its files, and don't look at its code (the tools that would are off, and fetching it is refused). {work}\n\n\
-     Match it exactly, not roughly: take colours, fonts, text sizes, padding, gaps, corner radii and content widths from capture.json as exact values (make them the project's theme tokens rather than a library's defaults), use the same font families (or the closest free ones), {switch} (sections stack, columns per row and the navigation switch), and never let the page scroll sideways on a phone. Craft Anything measures your build the same way at every width and tells you each difference.",
+     Match it exactly, not roughly: take colours, fonts, text sizes, padding, gaps, corner radii and content widths from capture.json as exact values (make them the project's theme tokens rather than a library's defaults), use the same font families (or the closest free ones), {switch} (sections stack, columns per row and the navigation switch), and never let the page scroll sideways on a phone. F-Builder measures your build the same way at every width and tells you each difference.",
         shots = sight(sees, SHOTS_SIGHTED, SHOTS_BLIND),
         noise = sight(sees, NOISE_SIGHTED, NOISE_BLIND),
         work = sight(sees, "Work from these pictures and measurements.", "Work from these measurements."),
@@ -115,22 +115,22 @@ pub(super) fn brief(kind: &dyn TargetKind, cx: &BriefCx, extra: Option<&str>) ->
         TargetRef::Local { .. } if !cx.deep => program_from_outside(sees),
         TargetRef::Website { .. } => format!(
             "capture/ holds what we recorded from the live site: README.md (start here: its colours, fonts, spacing, breakpoints and the layout at each width), capture.json (design tokens with colours in hex, spacing and content widths, the widths its CSS switches layout at (`breakpoints`), the layout measured at each width (`layouts`: page width, heading and text sizes, each section's padding, gap, content column and items per row), a layout outline with positions in CSS pixels, headings, links, form shapes, asset lists with its font files, and the visible text), screenshot-<width>.png for each width (desktop, tablet and phone; {shots}), noise-<width>.png where parts of the page change by themselves (white squares: carousels, videos, animations; {noise}), and page.html (the rendered HTML).\n\n\
-             Match it exactly, not roughly: take colours, fonts, text sizes, padding, gaps, corner radii and content widths from capture.json as exact values (make them the project's theme tokens rather than a library's defaults), load the same font families, change the layout at the same breakpoints {matches} (sections stack, columns per row and the navigation switch where the original's do), and never let the page scroll sideways on a phone. Craft Anything measures your build the same way at every width and tells you each difference.
+             Match it exactly, not roughly: take colours, fonts, text sizes, padding, gaps, corner radii and content widths from capture.json as exact values (make them the project's theme tokens rather than a library's defaults), load the same font families, change the layout at the same breakpoints {matches} (sections stack, columns per row and the navigation switch where the original's do), and never let the page scroll sideways on a phone. F-Builder measures your build the same way at every width and tells you each difference.
 
-             Deep mode: every craft-anything tool is yours, so learn how it works, not only how it looks, before you build. capture/how-it-works.md already has what its JavaScript is made of (modules, routes, the requests it makes, the libraries it uses) and ten seconds of what the start page did (requests, console, WebSocket messages). The original is open in Craft Anything's private browser (web_site_open opens another page of it); ask web_page_show (its structure, scripts, network requests and console), web_listeners_list on a control (what clicking it runs, and where that code is), web_coverage_measure while you use it (which code runs and which requests it makes) and web_walkthrough_record to click or type through a flow and record every step; web_scripts_save, js_app_map and js_sources_restore read its code as an app. Rebuild the behaviour you learn in your own code; never paste the original's code into app/.",
+             Deep mode: every f-builder tool is yours, so learn how it works, not only how it looks, before you build. capture/how-it-works.md already has what its JavaScript is made of (modules, routes, the requests it makes, the libraries it uses) and ten seconds of what the start page did (requests, console, WebSocket messages). The original is open in F-Builder's private browser (web_site_open opens another page of it); ask web_page_show (its structure, scripts, network requests and console), web_listeners_list on a control (what clicking it runs, and where that code is), web_coverage_measure while you use it (which code runs and which requests it makes) and web_walkthrough_record to click or type through a flow and record every step; web_scripts_save, js_app_map and js_sources_restore read its code as an app. Rebuild the behaviour you learn in your own code; never paste the original's code into app/.",
             shots = sight(sees, SHOTS_SIGHTED, SHOTS_BLIND),
             noise = sight(sees, NOISE_SIGHTED, NOISE_BLIND),
             matches = sight(sees, "so each width matches its screenshot and `layouts` entry", "so each width matches its `layouts` entry"),
         ),
         TargetRef::Local { .. } => format!(
-            "capture/README.md holds a first static look at the program (nothing was run) and, for a game, a list of its own files: maps, textures, models, sounds and settings. Read its settings and scripts for the real numbers (speeds, health, weapons, modes, controls){style}; never change anything in that folder. Deep mode: every craft-anything tool is yours, so learn how the parts the person cares about work before you build: core_target_open and core_target_triage first, then native_functions_list, native_strings_find and native_function_pseudocode for a program's code, managed_assembly_show and managed_members_list for .NET, java_* and android_* for Java and Android apps, js_app_map, js_sources_restore and js_electron_* for an Electron app, and game_archives_list and the other game_* tools for a game's files.",
+            "capture/README.md holds a first static look at the program (nothing was run) and, for a game, a list of its own files: maps, textures, models, sounds and settings. Read its settings and scripts for the real numbers (speeds, health, weapons, modes, controls){style}; never change anything in that folder. Deep mode: every f-builder tool is yours, so learn how the parts the person cares about work before you build: core_target_open and core_target_triage first, then native_functions_list, native_strings_find and native_function_pseudocode for a program's code, managed_assembly_show and managed_members_list for .NET, java_* and android_* for Java and Android apps, js_app_map, js_sources_restore and js_electron_* for an Electron app, and game_archives_list and the other game_* tools for a game's files.",
             style = sight(sees, " and open a few of its pictures with the Read tool to learn the style", ""),
         ),
         TargetRef::None => "There is no target to study.".into(),
     };
     let goal = if m.own_project() { "what their request asks of the project in this folder" } else { kind.goal() };
     let mut s = format!(
-        "You are the builder inside Craft Anything, rebuilding software for a person who doesn't code.\n\n\
+        "You are the builder inside F-Builder, rebuilding software for a person who doesn't code.\n\n\
          Their request: \"{}\"\nTarget: {target}\nYour working folder is the project workspace ({}).\n\n{capture}\n\n\
          What to build: {}.\n\nHow to build it, unless their request says otherwise: {}\n\n{}\n\n{RULES}",
         m.request,
@@ -156,16 +156,16 @@ pub(super) fn brief(kind: &dyn TargetKind, cx: &BriefCx, extra: Option<&str>) ->
 
 /// The person's own files, when the project started in a folder that had them: the app to edit
 /// in place, or material to start from.
-pub(super) fn start_files_note(m: &craft_anything_engine::workspace::Manifest) -> Option<String> {
+pub(super) fn start_files_note(m: &f_builder_engine::workspace::Manifest) -> Option<String> {
     if m.start_files.is_empty() && !m.app_in_root {
         return None;
     }
     let names = m.start_files.join(", ");
-    let own = craft_anything_engine::workspace::OWN_NAMES.join(", ");
+    let own = f_builder_engine::workspace::OWN_NAMES.join(", ");
     Some(if m.app_in_root {
-        let checked = if m.own_project() { " It's checked by running its own build and tests: add nothing to it for Craft Anything's sake." } else { "" };
+        let checked = if m.own_project() { " It's checked by running its own build and tests: add nothing to it for F-Builder's sake." } else { "" };
         format!(
-            "This project's app is the person's own folder, the project workspace itself, and it already has their files ({names}). Wherever these instructions say app/, use the workspace folder itself (./): work on their files in place, keep what works and change only what the request needs; never start over, delete or replace their work, and don't create an app/ folder. Craft Anything keeps its own records beside their files ({own}): leave those alone.{checked}"
+            "This project's app is the person's own folder, the project workspace itself, and it already has their files ({names}). Wherever these instructions say app/, use the workspace folder itself (./): work on their files in place, keep what works and change only what the request needs; never start over, delete or replace their work, and don't create an app/ folder. F-Builder keeps its own records beside their files ({own}): leave those alone.{checked}"
         )
     } else {
         format!(
@@ -228,7 +228,7 @@ pub(super) const EXTRACT_TRANSCRIPT: &str = "extract-transcript.json";
 /// What the extractor is asked: take the game's own files out of `folder` into app/Original/.
 pub(super) fn extract_brief(folder: &Path) -> String {
     format!(
-        "You are the asset extractor inside Craft Anything. The person owns this game and has its developer's permission to use its files in a private rebuild on this computer. Take the game's own files out of its folder ({}) into app/Original/ so the builder can use them. You don't build the game.\n\
+        "You are the asset extractor inside F-Builder. The person owns this game and has its developer's permission to use its files in a private rebuild on this computer. Take the game's own files out of its folder ({}) into app/Original/ so the builder can use them. You don't build the game.\n\
          - Call enable_toolset with \"formats\". game_archives_list finds the game's archives; game_pak_list, game_iostore_list, game_unity_list and game_unity_bundle_list show what's inside.\n\
          - game_pak_extract takes files out of an Unreal .pak and makes their folders: a `file` ending in `/` (for example Game/Content/UI/) takes that whole folder in one call into the folder `output`, keeping its layout; when it says files are left, call it again the same way to carry on.\n\
          - Pictures: game_unreal_texture_export (with permission: true) or game_unity_asset_export, saved as PNG. Sounds and models: take them out with game_pak_extract as they are; convert them only with a converter you set up inside app/Original/tools/.\n\
@@ -298,7 +298,7 @@ pub(super) fn game_steps(deep: bool, ghidra: bool, has_target: bool, generated: 
             )
         };
         s.push_str(&format!(
-            "\n{lead}, from their own installed copy. Use the originals wherever they can be read: bring {bring} from the game folder into the project (converting formats as the engine needs), for the person's own use on this computer. Craft Anything's own tools read game archives, so use them first: call enable_toolset with \"formats\", then game_archives_list finds the game's archives, game_pak_list, game_iostore_list, game_unity_list and game_unity_bundle_list show what's inside, game_pak_extract takes files out of an Unreal .pak, and game_unreal_texture_export (with permission: true, since the person asked for the originals) and game_unity_asset_export save pictures as PNG. Set up another converter only for what these can't convert yet (such as models and sounds), and keep it inside the project folder. Never decrypt, crack or bypass encryption or copy protection: files inside encrypted archives (for example encrypted .pak, .utoc or .ucas files) stay closed. Recreate those as closely as you can from the pictures, the game's readable data and how it plays, in the same role, size, palette and feel, without reproducing logos or trademarks. List every original file you used in app/CREDITS.md with its source path, and start app/README.md with this line, as written: \"{PRIVATE_USE_NOTE}\" Craft Anything checks both after each build.",
+            "\n{lead}, from their own installed copy. Use the originals wherever they can be read: bring {bring} from the game folder into the project (converting formats as the engine needs), for the person's own use on this computer. F-Builder's own tools read game archives, so use them first: call enable_toolset with \"formats\", then game_archives_list finds the game's archives, game_pak_list, game_iostore_list, game_unity_list and game_unity_bundle_list show what's inside, game_pak_extract takes files out of an Unreal .pak, and game_unreal_texture_export (with permission: true, since the person asked for the originals) and game_unity_asset_export save pictures as PNG. Set up another converter only for what these can't convert yet (such as models and sounds), and keep it inside the project folder. Never decrypt, crack or bypass encryption or copy protection: files inside encrypted archives (for example encrypted .pak, .utoc or .ucas files) stay closed. Recreate those as closely as you can from the pictures, the game's readable data and how it plays, in the same role, size, palette and feel, without reproducing logos or trademarks. List every original file you used in app/CREDITS.md with its source path, and start app/README.md with this line, as written: \"{PRIVATE_USE_NOTE}\" F-Builder checks both after each build.",
         ));
     }
     s
@@ -319,7 +319,7 @@ pub(super) fn pictures_note(ws: &Workspace, kind: &dyn TargetKind, sees: bool) -
             pics.len()
         );
         if checked {
-            s.push_str(" After each build, Craft Anything runs the program with --screenshot and its check says how alike your build looks to them.");
+            s.push_str(" After each build, F-Builder runs the program with --screenshot and its check says how alike your build looks to them.");
         }
         return Some(s);
     }
@@ -402,7 +402,7 @@ fn clipped(text: &str, max: usize) -> String {
 /// What goes before the person's message so the builder knows what they talked about in "Just ask";
 /// nothing when they asked nothing. An answer may suggest things or quote what it read, so it's
 /// offered as background: only the person's message asks for a change.
-pub(super) fn just_asked(asked: &[craft_anything_engine::questions::AskedQuestion]) -> String {
+pub(super) fn just_asked(asked: &[f_builder_engine::questions::AskedQuestion]) -> String {
     if asked.is_empty() {
         return String::new();
     }
@@ -415,7 +415,7 @@ pub(super) fn just_asked(asked: &[craft_anything_engine::questions::AskedQuestio
 }
 
 fn next_check(api_loop: bool) -> &'static str {
-    if api_loop { "Craft Anything checks your build after your turn." } else { "Check it with rebuild_check." }
+    if api_loop { "F-Builder checks your build after your turn." } else { "Check it with rebuild_check." }
 }
 
 pub(super) fn follow_up(message: &str, kind: &dyn TargetKind, api_loop: bool) -> String {

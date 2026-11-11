@@ -1,4 +1,4 @@
-use craft_anything_formats::axml::StringPool;
+use f_builder_formats::axml::StringPool;
 
 fn u32_at(data: &mut [u8], at: usize, value: u32) {
     data[at..at + 4].copy_from_slice(&value.to_le_bytes());

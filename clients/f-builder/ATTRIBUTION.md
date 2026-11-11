@@ -1,6 +1,6 @@
 # Attribution
 
-Third-party material bundled with Craft Anything, file by file. Rust crates are pulled from
+Third-party material bundled with F-Builder (based on Craft Anything), file by file. Rust crates are pulled from
 crates.io under their own licences (see `Cargo.lock`) and are not listed here.
 
 ## Fonts (`assets/fonts/`)
@@ -36,16 +36,16 @@ texts are in the crate's `fonts/` folder.
 
 ## App icon (`assets/app-icon/`)
 
-The raven, the Crafting Apps' shared icon, made by the ArtCraft team; not open source, used on the
-brand terms below. See `assets/app-icon/LICENSE.txt`.
+F-Builder's own icon (a white F and a spark on F-Eco's teal), made for F-Builder and covered
+by the repository's MIT OR Apache-2.0 licence. The raven icon of Craft Anything is not included.
 
-## Brand (`docs/brand/`)
+## Brand
 
-The ArtCraft name, wordmark and logos are trademarks of the ArtCraft Team and are not covered by
-the open-source licence; see `docs/brand/LICENSE-brand.txt`.
+The ArtCraft name, wordmark and logos (Craft Anything's `docs/brand/`) are trademarks of the
+ArtCraft Team and are not included in F-Builder.
 
 ## Optional build-time fonts
 
-Builds made with `CRAFT_FONTS_DIR` (craft-fonts), releases among them, also embed the fonts in
-that folder (all OFL-1.1). Their packages ship each one's licence as `OFL-<font>.txt`; craft-fonts'
+Builds made with `F_BUILDER_FONTS_DIR` (an optional fonts folder), releases among them, also embed the fonts in
+that folder (all OFL-1.1). Their packages ship each one's licence as `OFL-<font>.txt`; that folder's
 own `ATTRIBUTION.md` names their authors and pinned sources.

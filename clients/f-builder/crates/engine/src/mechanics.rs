@@ -72,7 +72,7 @@ pub enum SheetProblem {
     TooLarge,
     /// Not JSON, or not this shape: the parser's reason.
     Unreadable(String),
-    /// Written for a newer Craft Anything.
+    /// Written for a newer F-Builder.
     Newer(u32),
     /// No values.
     Empty,

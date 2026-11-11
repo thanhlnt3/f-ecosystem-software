@@ -4,9 +4,9 @@
 //! summary, PNG pixel diffing and base64.
 
 use crate::tool::Ctx;
-use craft_anything_engines::cdp::{self, CdpClient, Deadline, Endpoint, WsConn};
-use craft_anything_evidence::{Environment, ErrorCode, ToolError, host_triple, sha256_hex};
-use craft_anything_platform::process::{Process, RunningProcess, StdinMode};
+use f_builder_engines::cdp::{self, CdpClient, Deadline, Endpoint, WsConn};
+use f_builder_evidence::{Environment, ErrorCode, ToolError, host_triple, sha256_hex};
+use f_builder_platform::process::{Process, RunningProcess, StdinMode};
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -177,15 +177,14 @@ impl Browser {
     }
 
     pub(crate) fn launch(ctx: &Ctx<'_>, opts: &LaunchOptions, dl: &Deadline) -> Result<Browser, ToolError> {
-        let exe =
-            craft_anything_engines::locate("chromium", &ctx.session.settings.engines.tools, &ctx.session.settings.engine_store_dir()).ok_or_else(|| {
-                // Browser tools that take an endpoint come here without `Requires::Engine`'s check.
-                let (reason, fix) = ctx.session.settings.engine_not_found("chromium");
-                ToolError::new(ErrorCode::EngineMissing, reason)
-                    .with_remediation(format!("{fix} Or give a loopback CDP endpoint (start a browser with --remote-debugging-port)."))
-            })?;
+        let exe = f_builder_engines::locate("chromium", &ctx.session.settings.engines.tools, &ctx.session.settings.engine_store_dir()).ok_or_else(|| {
+            // Browser tools that take an endpoint come here without `Requires::Engine`'s check.
+            let (reason, fix) = ctx.session.settings.engine_not_found("chromium");
+            ToolError::new(ErrorCode::EngineMissing, reason)
+                .with_remediation(format!("{fix} Or give a loopback CDP endpoint (start a browser with --remote-debugging-port)."))
+        })?;
         let exe = snap_behind(&exe).unwrap_or(exe);
-        let profile = BrowserProfile(super::artifact_tools::fresh_dir_in(&profile_base(&exe, dirs::home_dir()), "craft-browser")?);
+        let profile = BrowserProfile(super::artifact_tools::fresh_dir_in(&profile_base(&exe, dirs::home_dir()), "fbuilder-browser")?);
         let mut args: Vec<String> = vec![
             format!("--user-data-dir={}", profile.0.display()),
             "--remote-debugging-port=0".into(),
@@ -240,7 +239,7 @@ impl Browser {
             return Err(ToolError::new(ErrorCode::NotFound, format!("{} is not a file", exe.display()))
                 .with_remediation("Give the absolute path of the app's executable."));
         }
-        let profile = BrowserProfile(super::artifact_tools::fresh_temp_dir("craft-electron")?);
+        let profile = BrowserProfile(super::artifact_tools::fresh_temp_dir("fbuilder-electron")?);
         let mut args: Vec<String> = vec![
             format!("--user-data-dir={}", profile.0.display()),
             "--remote-debugging-port=0".into(),
@@ -538,7 +537,7 @@ pub fn kept_text(raw: &[u8], secrets: &mut Secrets, cap: usize) -> Value {
             json!({
                 "state": "captured",
                 "bytes": raw.len(),
-                "sha256": craft_anything_evidence::sha256_hex(redacted.as_bytes()),
+                "sha256": f_builder_evidence::sha256_hex(redacted.as_bytes()),
                 "text": redacted.get(..end).unwrap_or_default(),
                 "truncated": end < redacted.len(),
             })
@@ -1425,7 +1424,7 @@ mod tests {
 
 /// The last lines a launched browser wrote to stderr, for a failure's message.
 #[derive(Clone, Default)]
-struct StderrTail(std::sync::Arc<craft_anything_platform::sync::Mutex<std::collections::VecDeque<String>>>);
+struct StderrTail(std::sync::Arc<f_builder_platform::sync::Mutex<std::collections::VecDeque<String>>>);
 
 impl StderrTail {
     fn push(&self, line: &str) {

@@ -88,6 +88,40 @@ jobs:
         working-directory: sdk/typescript
         run: node --test test/fsdk.test.ts
 
+  f-builder:
+    # tasks.md 11: F-Builder là Cargo workspace riêng trong clients/f-builder (edition 2024).
+    runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: "0"
+      # Không ghi thông tin gỡ lỗi để bản dựng vừa đĩa của máy CI.
+      CARGO_PROFILE_DEV_DEBUG: "0"
+    defaults:
+      run:
+        working-directory: clients/f-builder
+    steps:
+      - uses: actions/checkout@v4
+      - name: Giải phóng đĩa
+        working-directory: .
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - name: Thư viện hệ thống cho cửa sổ
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libgtk-3-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/f-builder
+      - name: Kiểm tra của F-Builder (fmt, clippy, test, lớp, khóa, bí mật, bản dịch, wasm)
+        run: cargo xtask ci
+      - name: License và lỗ hổng phụ thuộc của F-Builder
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: clients/f-builder/Cargo.toml
+          command: check
+
   infra:
     # tasks.md 1.4: hạ tầng dev khởi động được và các dịch vụ sẵn sàng.
     runs-on: ubuntu-latest

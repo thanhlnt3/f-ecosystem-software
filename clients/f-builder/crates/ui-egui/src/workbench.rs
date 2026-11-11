@@ -5,9 +5,9 @@ use crate::evidence_ui::{self, json_tree, truncate};
 use crate::i18n::tr;
 use crate::state::{BottomTab, CenterTab, Fill, RailKind, RightTab};
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, Pick, Route, chat, icons, widgets};
-use craft_anything_engine::Consent;
+use crate::{BuilderApp, Pick, Route, chat, icons, widgets};
 use egui::{Margin, RichText, Ui, Vec2};
+use f_builder_engine::Consent;
 use serde_json::{Value, json};
 
 /// Keys that usually hold a row's address.
@@ -93,7 +93,7 @@ fn row_text(v: &Value) -> String {
     s.to_lowercase()
 }
 
-pub fn show(app: &mut CraftApp, ui: &mut Ui) {
+pub fn show(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Panel::left("wb-rail-icons")
         .exact_size(48.0)
@@ -137,7 +137,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
         .show(ui, |ui| crate::guard_ui(ui, "centre", |ui| center(app, ui)));
 }
 
-fn rail_icons(app: &mut CraftApp, ui: &mut Ui) {
+fn rail_icons(app: &mut BuilderApp, ui: &mut Ui) {
     ui.vertical_centered(|ui| {
         for k in RailKind::ALL {
             let on = app.state.rail == k;
@@ -175,7 +175,7 @@ fn panel_title(ui: &mut Ui, title: &str, count: Option<usize>) {
     });
 }
 
-fn rail(app: &mut CraftApp, ui: &mut Ui) {
+fn rail(app: &mut BuilderApp, ui: &mut Ui) {
     let kind = app.state.rail;
     if kind == RailKind::Targets {
         targets_list(app, ui);
@@ -188,7 +188,7 @@ fn rail(app: &mut CraftApp, ui: &mut Ui) {
     app.state.lists.entry(kind).or_insert(fill);
 }
 
-fn rail_list(app: &mut CraftApp, ui: &mut Ui, kind: RailKind, fill: &Fill) {
+fn rail_list(app: &mut BuilderApp, ui: &mut Ui, kind: RailKind, fill: &Fill) {
     let t = Tokens::get(ui.ctx());
     let all: Vec<&Value> = match fill {
         Fill::Ready(e) => rows(&e.result).iter().take(MAX_ROWS).collect(),
@@ -297,7 +297,7 @@ fn list_row(ui: &mut Ui, r: &Value, selected: bool, h: f32) -> bool {
     resp.clicked()
 }
 
-fn select_row(app: &mut CraftApp, r: Value) {
+fn select_row(app: &mut BuilderApp, r: Value) {
     app.state.selection = Some(r);
     app.state.right = RightTab::Inspector;
     app.state.views.retain(|k, _| *k == CenterTab::Result);
@@ -307,7 +307,7 @@ fn select_row(app: &mut CraftApp, r: Value) {
     }
 }
 
-fn targets_list(app: &mut CraftApp, ui: &mut Ui) {
+fn targets_list(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
         panel_title(ui, "Targets", Some(app.view.targets.len()));
@@ -395,7 +395,7 @@ fn tab_strip(ui: &mut Ui, tabs: &[(&str, &str)], selected: usize) -> Option<usiz
     picked
 }
 
-fn center(app: &mut CraftApp, ui: &mut Ui) {
+fn center(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 0)).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -426,7 +426,7 @@ fn center(app: &mut CraftApp, ui: &mut Ui) {
     });
 }
 
-fn no_target(app: &mut CraftApp, ui: &mut Ui) {
+fn no_target(app: &mut BuilderApp, ui: &mut Ui) {
     ui.add_space(ui.available_height() * 0.2);
     widgets::empty_state(
         ui,
@@ -450,7 +450,7 @@ fn no_target(app: &mut CraftApp, ui: &mut Ui) {
     });
 }
 
-fn tool_view(app: &mut CraftApp, ui: &mut Ui, tab: CenterTab) {
+fn tool_view(app: &mut BuilderApp, ui: &mut Ui, tab: CenterTab) {
     let fill = app.state.views.get(&tab).cloned().unwrap_or_default();
     match fill {
         Fill::Idle => {
@@ -619,7 +619,7 @@ fn table(ui: &mut Ui, rows: &[Value], t: &Tokens) {
 }
 
 /// The built-in hex view of the active target's bytes (works with no tools at all).
-fn hex_view(app: &mut CraftApp, ui: &mut Ui) {
+fn hex_view(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(target) = app.view.active_target().cloned() else { return };
     let bytes = target.bytes.clone();
@@ -686,7 +686,7 @@ fn hex_view(app: &mut CraftApp, ui: &mut Ui) {
     });
 }
 
-fn result_view(app: &mut CraftApp, ui: &mut Ui) {
+fn result_view(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let fill = app.state.views.get(&CenterTab::Result).cloned();
     let selected = app.state.selected_evidence.as_ref().and_then(|id| app.view.ledger.iter().find(|e| &e.id == id)).cloned();
@@ -714,7 +714,7 @@ fn result_view(app: &mut CraftApp, ui: &mut Ui) {
     }
 }
 
-fn evidence_view(ui: &mut Ui, e: &craft_anything_engine::evidence::Evidence, t: &Tokens) {
+fn evidence_view(ui: &mut Ui, e: &f_builder_engine::evidence::Evidence, t: &Tokens) {
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         evidence_ui::proof_card(ui, e, true, false);
         ui.add_space(10.0);
@@ -726,7 +726,7 @@ fn evidence_view(ui: &mut Ui, e: &craft_anything_engine::evidence::Evidence, t: 
     });
 }
 
-fn right(app: &mut CraftApp, ui: &mut Ui) {
+fn right(app: &mut BuilderApp, ui: &mut Ui) {
     let tabs = [("search", "Inspector"), ("shield-check", "Evidence"), ("circle-help", "Unknowns")];
     let sel = match app.state.right {
         RightTab::Inspector => 0,
@@ -750,7 +750,7 @@ fn kv(ui: &mut Ui, k: &str, v: &str, t: &Tokens) {
     ui.end_row();
 }
 
-fn inspector(app: &mut CraftApp, ui: &mut Ui) {
+fn inspector(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         if let Some(sel) = app.state.selection.clone() {
@@ -801,7 +801,7 @@ fn inspector(app: &mut CraftApp, ui: &mut Ui) {
     });
 }
 
-fn ledger(app: &mut CraftApp, ui: &mut Ui) {
+fn ledger(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
         panel_title(ui, "Evidence ledger", Some(app.view.ledger_len));
@@ -846,7 +846,7 @@ fn ledger(app: &mut CraftApp, ui: &mut Ui) {
     }
 }
 
-fn unknowns(app: &mut CraftApp, ui: &mut Ui) {
+fn unknowns(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     panel_title(ui, "Open questions", Some(app.view.unknowns.len()));
     ui.add_space(4.0);
@@ -861,9 +861,9 @@ fn unknowns(app: &mut CraftApp, ui: &mut Ui) {
                 ui.horizontal(|ui| {
                     let sev = format!("{:?}", u.severity);
                     let col = match u.severity {
-                        craft_anything_engine::evidence::Severity::Critical | craft_anything_engine::evidence::Severity::High => t.danger,
-                        craft_anything_engine::evidence::Severity::Medium => t.warning,
-                        craft_anything_engine::evidence::Severity::Low => t.text_dim,
+                        f_builder_engine::evidence::Severity::Critical | f_builder_engine::evidence::Severity::High => t.danger,
+                        f_builder_engine::evidence::Severity::Medium => t.warning,
+                        f_builder_engine::evidence::Severity::Low => t.text_dim,
                     };
                     widgets::pill(ui, &sev, col, t.raised);
                     widgets::pill(ui, &format!("{:?}", u.status), t.text_dim, t.raised);
@@ -879,7 +879,7 @@ fn unknowns(app: &mut CraftApp, ui: &mut Ui) {
     });
 }
 
-fn status_line(app: &CraftApp, ui: &mut Ui) {
+fn status_line(app: &BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let n = app.jobs.running().filter(|j| j.visible).count();
     let text = if n > 0 { crate::i18n::trf("{n} job(s) running", &[("n", &n.to_string())]) } else { tr("Ready") };
@@ -889,7 +889,7 @@ fn status_line(app: &CraftApp, ui: &mut Ui) {
     ui.add(egui::Label::new(RichText::new(text).color(t.text_faint).size(theme::CAPTION)).truncate());
 }
 
-fn bottom(app: &mut CraftApp, ui: &mut Ui) {
+fn bottom(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
         let n_jobs = app.jobs.running().filter(|j| j.visible).count();
@@ -919,7 +919,7 @@ fn bottom(app: &mut CraftApp, ui: &mut Ui) {
     }
 }
 
-fn jobs(app: &mut CraftApp, ui: &mut Ui) {
+fn jobs(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let visible: Vec<_> = app.jobs.list.iter().filter(|j| j.visible).collect();
     if visible.is_empty() {
@@ -973,7 +973,7 @@ fn jobs(app: &mut CraftApp, ui: &mut Ui) {
     }
 }
 
-fn log_view(app: &CraftApp, ui: &mut Ui) {
+fn log_view(app: &BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let start = app.log.first().map(|l| l.at);
     egui::ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
@@ -993,12 +993,12 @@ mod tests {
 
     #[test]
     fn recorded_findings_render_even_without_evidence_rows() {
-        let mut app = crate::demo::app(crate::demo::engine(craft_anything_engine::Mode::Beginner, false));
-        app.view.findings = vec![craft_anything_engine::tools::investigation_tools::Finding {
+        let mut app = crate::demo::app(crate::demo::engine(f_builder_engine::Mode::Beginner, false));
+        app.view.findings = vec![f_builder_engine::tools::investigation_tools::Finding {
             id: "fnd_1".into(),
             statement: "A recorded answer from the shared investigation".into(),
             evidence_ids: Vec::new(),
-            confidence: craft_anything_engine::evidence::Confidence::Observed,
+            confidence: f_builder_engine::evidence::Confidence::Observed,
         }];
         app.view.ledger.clear();
         let context = egui::Context::default();

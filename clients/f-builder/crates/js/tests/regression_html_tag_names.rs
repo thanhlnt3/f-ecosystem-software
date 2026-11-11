@@ -1,4 +1,4 @@
-use craft_anything_js::html::scan_html;
+use f_builder_js::html::scan_html;
 
 #[test]
 fn regression_html_many_invalid_tag_starts_still_finds_scripts() {

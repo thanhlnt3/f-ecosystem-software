@@ -177,6 +177,6 @@ mod tests {
         let s = extract(&d, 0, 4, 10);
         assert_eq!(s.len(), 1);
         assert!(s[0].truncated);
-        assert_eq!(extract(&craft_anything_testkit::noise(3, 5000), 0, 4, 3).len().min(3), extract(&craft_anything_testkit::noise(3, 5000), 0, 4, 3).len());
+        assert_eq!(extract(&f_builder_testkit::noise(3, 5000), 0, 4, 3).len().min(3), extract(&f_builder_testkit::noise(3, 5000), 0, 4, 3).len());
     }
 }

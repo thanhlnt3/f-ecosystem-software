@@ -184,20 +184,20 @@ mod tests {
 
     #[test]
     fn reads_a_bundle_and_its_files() {
-        let file = craft_anything_testkit::games::unity_bundle();
+        let file = f_builder_testkit::games::unity_bundle();
         let h = header(&file[..HEADER_READ.min(file.len())], file.len() as u64).unwrap();
         assert_eq!((h.format_version, h.unity_revision.as_str(), h.flags & 0x3f), (8, "2022.3.62f1", 2));
         let (blocks, nodes) = table(&file[h.table_offset as usize..(h.table_offset + u64::from(h.table_size)) as usize], &h).unwrap();
         assert_eq!(blocks.len(), 1);
         assert_eq!(h.data_offset + u64::from(blocks[0].compressed_size), file.len() as u64, "the data fills the rest");
         let rows: Vec<(&str, u64, u64, u32)> = nodes.iter().map(|n| (n.path.as_str(), n.offset, n.size, n.flags)).collect();
-        let n = craft_anything_testkit::games::unity_assets().len() as u64;
+        let n = f_builder_testkit::games::unity_assets().len() as u64;
         assert_eq!(rows, [("CAB-0123456789abcdef", 0, n, 4), ("CAB-0123456789abcdef.resS", n, 5, 0)]);
     }
 
     #[test]
     fn refuses_what_it_cannot_read() {
-        let file = craft_anything_testkit::games::unity_bundle();
+        let file = f_builder_testkit::games::unity_bundle();
         assert!(header(b"UnityWeb\0", 100).is_err());
         let mut v5 = file.clone();
         v5[8..12].copy_from_slice(&5u32.to_be_bytes());

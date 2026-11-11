@@ -4,14 +4,14 @@
 use crate::i18n::{LANGUAGES, tr, trf};
 use crate::state::SettingsTab;
 use crate::theme::{self, ThemeKind, Tokens};
-use crate::{CraftApp, Pick, icons, widgets};
-use craft_anything_ai::BackendKind;
-use craft_anything_engine::Mode;
+use crate::{BuilderApp, Pick, icons, widgets};
 use egui::{RichText, Ui, Vec2};
+use f_builder_ai::BackendKind;
+use f_builder_engine::Mode;
 use std::path::PathBuf;
 
 /// Draws the Settings modal and the content for its selected tab.
-pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
+pub fn show(app: &mut BuilderApp, ctx: &egui::Context) {
     if !app.state.settings_open {
         return;
     }
@@ -133,7 +133,7 @@ fn row(ui: &mut Ui, title: &str, sub: &str, add: impl FnOnce(&mut Ui)) {
     ui.add_space(10.0);
 }
 
-fn general(app: &mut CraftApp, ui: &mut Ui) {
+fn general(app: &mut BuilderApp, ui: &mut Ui) {
     row(ui, "Mode", "Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.", |ui| {
         let sel = usize::from(app.settings.mode == Mode::Experienced);
         if let Some(i) = widgets::segmented(ui, &["Simple", "Advanced"], sel, 30.0) {
@@ -197,7 +197,7 @@ fn general(app: &mut CraftApp, ui: &mut Ui) {
     });
 }
 
-fn language(app: &mut CraftApp, ui: &mut Ui) {
+fn language(app: &mut BuilderApp, ui: &mut Ui) {
     row(ui, "Language", "", |ui| {
         let selected = (!app.settings.language.trim().is_empty()).then(|| crate::i18n::language_from_tag(&app.settings.language).unwrap_or("en"));
         let current = LANGUAGES.iter().find(|l| Some(l.code) == selected).map(|l| l.name).unwrap_or("System");
@@ -246,7 +246,7 @@ fn path_field(ui: &mut Ui, value: &mut Option<PathBuf>, name: &str, hint: &str) 
     false
 }
 
-fn engines(app: &mut CraftApp, ui: &mut Ui) {
+fn engines(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     row(
         ui,
@@ -260,7 +260,7 @@ fn engines(app: &mut CraftApp, ui: &mut Ui) {
         },
     );
     ui.add_space(12.0);
-    row(ui, "Ghidra", "Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.", |ui| {
+    row(ui, "Ghidra", "Adds its decompiler to Deep mode. F-Builder can download and set it up for you.", |ui| {
         crate::engine_ui::ghidra_status(app, ui);
     });
     row(
@@ -271,7 +271,7 @@ fn engines(app: &mut CraftApp, ui: &mut Ui) {
     );
     ui.label(RichText::new(crate::engine_ui::ghidra_memory_guide()).color(t.text_faint).size(theme::CAPTION));
     ui.add_space(8.0);
-    row(ui, "Ghidra folder", "Leave empty to use the one Craft Anything sets up.", |ui| {
+    row(ui, "Ghidra folder", "Leave empty to use the one F-Builder sets up.", |ui| {
         if path_field(ui, &mut app.settings.engines.ghidra.install_dir, "Ghidra folder", "managed") {
             app.settings_changed();
         }
@@ -294,7 +294,7 @@ fn engines(app: &mut CraftApp, ui: &mut Ui) {
     egui::Grid::new("tool-paths").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
         // Names and purposes come from the engine table; the override list matches it (tested).
         for (id, v) in app.settings.engines.tools.entries_mut() {
-            let (name, needed_for) = craft_anything_engines::engine(id).map(|e| (e.name, e.needed_for)).unwrap_or((id, ""));
+            let (name, needed_for) = f_builder_engines::engine(id).map(|e| (e.name, e.needed_for)).unwrap_or((id, ""));
             ui.label(RichText::new(tr(name)).size(theme::CAPTION)).on_hover_text(format!("{}\n{id}", tr(needed_for)));
             changed |= path_field(ui, v, name, "managed");
             ui.end_row();
@@ -317,7 +317,7 @@ fn model_options_loading(ui: &mut Ui, backend: &str) {
 }
 
 /// Draw AI settings and model pickers, preserving drafts during contention and invalidating confirmed context changes.
-fn ai(app: &mut CraftApp, ui: &mut Ui) {
+fn ai(app: &mut BuilderApp, ui: &mut Ui) {
     if app.agent_model_picker.as_ref().is_some_and(|p| app.hub.model_context(&p.context.backend.config.name).is_ok_and(|current| current != p.context)) {
         app.agent_model_picker = None;
     }
@@ -350,8 +350,8 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                 icons::show(ui, "bot", 18.0, if b.enabled { t.accent } else { t.text_faint });
                 ui.vertical(|ui| {
                     ui.add(egui::Label::new(RichText::new(&b.name).font(theme::semibold(theme::SMALL))).truncate());
-                    let model_in_use = craft_anything_ai::model_in_use(b, app.backend_options.get(&b.name));
-                    let live_catalog = b.kind == BackendKind::AgentCli && craft_anything_ai::cli_agents::adapter_for(&b.model).has_model_catalog();
+                    let model_in_use = f_builder_ai::model_in_use(b, app.backend_options.get(&b.name));
+                    let live_catalog = b.kind == BackendKind::AgentCli && f_builder_ai::cli_agents::adapter_for(&b.model).has_model_catalog();
                     // An API's model has its own line below; an agent app is named by its `model`.
                     let what = if model_in_use.is_some() && b.kind != BackendKind::AgentCli { String::new() } else { format!(" · {}", b.model) };
                     let ssh = b.ssh_host.as_ref().map(|h| format!(" · ssh {h}")).unwrap_or_default();
@@ -376,7 +376,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                     // The folder it keeps its sign-in in (Claude Code's CLAUDE_CONFIG_DIR), typed
                     // so `~/` and hidden folders work, here or over SSH: another folder is another
                     // account. Saved on Enter or when the field is left; empty is its usual one.
-                    if craft_anything_ai::folder_var(b).is_some() {
+                    if f_builder_ai::folder_var(b).is_some() {
                         let saved = app.backend_options.get(&b.name).and_then(|o| o.config_dir.clone()).unwrap_or_default();
                         let id = egui::Id::new(("agent-folder", &b.name));
                         // What was typed stays until it's saved (or refused, so it can be fixed).
@@ -409,7 +409,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                         ui.add_space(4.0);
                     }
                     // How hard it thinks: the Claude API and Claude Code take every Claude level.
-                    let effort = craft_anything_ai::effort_in_use(b, app.backend_options.get(&b.name));
+                    let effort = f_builder_ai::effort_in_use(b, app.backend_options.get(&b.name));
                     if b.kind == BackendKind::AgentCli && b.ssh_host.as_deref().is_some_and(|h| !h.trim().is_empty()) {
                         let id = egui::Id::new(("remote-agent-program", &b.name));
                         let mut program = ui
@@ -437,7 +437,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                         if let Some(picker) = app.agent_model_picker.as_mut().filter(|p| p.context.backend.config.name == b.name) {
                             let previous = picker.model.clone();
                             let apply = crate::builders::agent_model_picker(ui, picker);
-                            if picker.model != previous && craft_anything_ai::cli_agents::adapter_for(&b.model).model_catalog_depends_on_selection() {
+                            if picker.model != previous && f_builder_ai::cli_agents::adapter_for(&b.model).model_catalog_depends_on_selection() {
                                 pick_agent_model = Some(b.name.clone());
                             } else if apply {
                                 chosen_agent_model = Some((b.name.clone(), picker.model.clone(), picker.thinking));
@@ -498,7 +498,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                             if let Some(current) = effort {
                                 ui.label(RichText::new(tr("Effort:")).color(t.text_faint).size(theme::CAPTION));
                                 egui::ComboBox::from_id_salt(("effort", &b.name)).icon(widgets::combo_icon).selected_text(current.as_str()).show_ui(ui, |ui| {
-                                    for e in craft_anything_ai::Effort::ALL {
+                                    for e in f_builder_ai::Effort::ALL {
                                         if ui.selectable_label(e == current, e.as_str()).clicked() && e != current {
                                             chosen_effort = Some((b.name.clone(), e));
                                         }
@@ -507,7 +507,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                             }
                         });
                     }
-                    if craft_anything_ai::model_options::supported(b) {
+                    if f_builder_ai::model_options::supported(b) {
                         if let Some(draft) = app.model_tuning.get_mut(&b.name) {
                             if let Some(choices) = &draft.choices {
                                 let mut changed = false;
@@ -657,10 +657,10 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
         app.choose_backend(Some(p));
     }
     if let Some(b) = builds {
-        app.set_role(craft_anything_ai::Role::Builder, b);
+        app.set_role(f_builder_ai::Role::Builder, b);
     }
     if let Some(e) = extracts {
-        app.set_role(craft_anything_ai::Role::Extractor, e);
+        app.set_role(f_builder_ai::Role::Extractor, e);
     }
     ui.add_space(8.0);
     let detected = app.detected.clone().unwrap_or_default();
@@ -704,12 +704,12 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
             if configured {
                 widgets::pill(&mut right_ui, "Added", t.success, t.raised);
                 // Claude Code once more, to give it another account's folder.
-                if craft_anything_ai::folder_var(&d.suggestion).is_some()
+                if f_builder_ai::folder_var(&d.suggestion).is_some()
                     && widgets::link(&mut right_ui, "Add another").on_hover_text(tr("Add it again, to choose another account's folder for it.")).clicked()
                 {
                     let taken = |n: &String| app.backends.iter().any(|b| &b.name == n);
                     if let Some(name) = (2..100).map(|i| format!("{} {i}", d.suggestion.name)).find(|n| !taken(n)) {
-                        app.add_backend(craft_anything_ai::BackendConfig { name, ..d.suggestion.clone() }, None);
+                        app.add_backend(f_builder_ai::BackendConfig { name, ..d.suggestion.clone() }, None);
                     }
                 }
             } else if !d.needs_key && widgets::primary(&mut right_ui, "Add").clicked() {
@@ -725,7 +725,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
             ui.advance_cursor_after_rect(left_ui.min_rect().union(right));
             // A subscription key is worth pasting even when the environment already has one, so a
             // different key can be used without restarting the app.
-            let pastable = d.needs_key || d.suggestion.base_url.as_deref().is_some_and(craft_anything_ai::openai::is_opencode_go);
+            let pastable = d.needs_key || d.suggestion.base_url.as_deref().is_some_and(f_builder_ai::openai::is_opencode_go);
             if pastable && !configured {
                 ui.horizontal(|ui| {
                     let key = app.key_inputs.entry(d.suggestion.name.clone()).or_default();
@@ -753,7 +753,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
 /// An AI that "Look for AI" can't find: a server on another computer or a hosted service, added by
 /// its address (#54, #98). The server is asked for its models before it's added.
 /// The first run's AI step shows it too.
-pub(crate) fn server_form(app: &mut CraftApp, ui: &mut Ui) {
+pub(crate) fn server_form(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     ui.add_space(14.0);
     widgets::caption(ui, "Add an AI by its address");
@@ -790,7 +790,7 @@ fn number<T: egui::emath::Numeric>(ui: &mut Ui, value: &mut T, range: std::ops::
     ui.add(egui::DragValue::new(value).range(range).prefix(prefix).suffix(suffix)).changed()
 }
 
-fn builds(app: &mut CraftApp, ui: &mut Ui) {
+fn builds(app: &mut BuilderApp, ui: &mut Ui) {
     let mut changed = false;
     let b = &mut app.settings.build;
     row(ui, "Good enough", "How alike a rebuild must look to the original before refining stops.", |ui| {
@@ -800,7 +800,7 @@ fn builds(app: &mut CraftApp, ui: &mut Ui) {
         changed |= number(ui, &mut b.max_rounds, 0..=20, "", "");
     });
     row(ui, "Website pages", "Other pages of a website studied and compared besides the one you gave.", |ui| {
-        changed |= number(ui, &mut b.max_pages, 0..=craft_anything_ai::rebuild::kinds::website::MAX_ROUTES, "", "");
+        changed |= number(ui, &mut b.max_pages, 0..=f_builder_ai::rebuild::kinds::website::MAX_ROUTES, "", "");
     });
     row(ui, "Match my pictures", "Apps and games: keep refining until they look this alike to your pictures. Off, the likeness is only reported.", |ui| {
         let mut on = b.picture_good_enough.is_some();
@@ -818,7 +818,7 @@ fn builds(app: &mut CraftApp, ui: &mut Ui) {
     ui.add_space(8.0);
     if let Some(bytes) = app.pinned_copy_bytes {
         row(ui, "Pinned builds", "Size", |ui| {
-            ui.label(craft_anything_engine::evidence::human_bytes(bytes));
+            ui.label(f_builder_engine::evidence::human_bytes(bytes));
         });
     }
     widgets::caption(ui, "Generated art (games)");
@@ -831,12 +831,12 @@ fn builds(app: &mut CraftApp, ui: &mut Ui) {
             changed |= number(ui, &mut a.budget_usd, 0.0..=10_000.0, "$", "");
         },
     );
-    let table = craft_anything_engines::assets::Catalogue::built_in();
+    let table = f_builder_engines::assets::Catalogue::built_in();
     row(ui, "Picture model", "What pictures and textures are made with.", |ui| {
         let current = table.image_model(a.image_model.as_deref()).or_else(|_| table.image_model(None)).map(|m| m.name.clone()).unwrap_or_default();
         egui::ComboBox::from_id_salt("image-model").icon(widgets::combo_icon).selected_text(current).show_ui(ui, |ui| {
             for m in table.images() {
-                let price = crate::usage::asset_cost_words(m.cost(craft_anything_engines::assets::Shape::Square));
+                let price = crate::usage::asset_cost_words(m.cost(f_builder_engines::assets::Shape::Square));
                 let label = format!("{} · {} {}", m.name, price, tr("a picture"));
                 let on = a.image_model.as_deref() == Some(m.id.as_str());
                 if ui.selectable_label(on, label).on_hover_text(&m.licence).clicked() && !on {
@@ -853,12 +853,12 @@ fn builds(app: &mut CraftApp, ui: &mut Ui) {
 
 /// Plugins: external MCP servers (`[[plugins.mcp]]`) and WASM components (`[[plugins.wasm]]`),
 /// listed, turned on or off, added and removed.
-fn plugins(app: &mut CraftApp, ui: &mut Ui) {
+fn plugins(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     ui.add(
         egui::Label::new(
             RichText::new(tr(
-                "Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).",
+                "Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).",
             ))
             .color(t.text_faint)
             .size(theme::CAPTION),
@@ -957,7 +957,7 @@ fn plugins(app: &mut CraftApp, ui: &mut Ui) {
     ui.label(RichText::new(tr("Plugins added here always ask before each call.")).color(t.text_faint).size(theme::CAPTION));
 }
 
-fn safety(app: &mut CraftApp, ui: &mut Ui) {
+fn safety(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     row(
         ui,
@@ -990,7 +990,7 @@ fn safety(app: &mut CraftApp, ui: &mut Ui) {
         "The builder's questions",
         "When the builder needs a choice made: show it to you and wait, or let it decide and say what it chose. Each project can choose for itself under its prompt box.",
         |ui| {
-            use craft_anything_engine::workspace::Questions;
+            use f_builder_engine::workspace::Questions;
             let sel = usize::from(app.settings.questions() == Questions::Decide);
             if let Some(i) = widgets::segmented(ui, &["Ask me", "Decide yourself"], sel, 30.0) {
                 app.settings.questions = Some(if i == 0 { Questions::Ask } else { Questions::Decide });
@@ -1024,12 +1024,12 @@ fn safety(app: &mut CraftApp, ui: &mut Ui) {
 mod tests {
     use super::*;
     use crate::{Done, builders::AgentModelPicker, demo, jobs::Finished};
-    use craft_anything_ai::{BackendConfig, BackendKind};
+    use f_builder_ai::{BackendConfig, BackendKind};
 
     #[test]
     fn identical_model_names_are_shown_once_in_the_shared_picker() {
-        use craft_anything_ai::{AgentModel, BackendEntry, ModelContext};
         use egui_kittest::{Harness, kittest::Queryable};
+        use f_builder_ai::{AgentModel, BackendEntry, ModelContext};
         let context = ModelContext {
             backend: BackendEntry {
                 config: BackendConfig {
@@ -1067,8 +1067,8 @@ mod tests {
 
     #[test]
     fn shared_picker_warnings_name_the_configured_agent() {
-        use craft_anything_ai::{BackendEntry, ModelContext};
         use egui_kittest::{Harness, kittest::Queryable};
+        use f_builder_ai::{BackendEntry, ModelContext};
         for (agent, name) in [("copilot", "GitHub Copilot"), ("opencode", "OpenCode")] {
             let context = ModelContext {
                 backend: BackendEntry {
@@ -1100,7 +1100,7 @@ mod tests {
     /// Busy frames retain matching catalogue results, ignore older requests and defer context invalidation until readable.
     #[test]
     fn a_busy_session_keeps_the_picker_and_its_matching_result() {
-        let mut app = demo::app(demo::engine(craft_anything_engine::Mode::Experienced, true));
+        let mut app = demo::app(demo::engine(f_builder_engine::Mode::Experienced, true));
         app.hub
             .add_backend(
                 BackendConfig { name: "OpenCode".into(), kind: BackendKind::AgentCli, model: "opencode".into(), base_url: None, ssh_host: None, enabled: true },
@@ -1113,7 +1113,7 @@ mod tests {
         app.agent_model_picker = Some(AgentModelPicker { request: 2, context: context.clone(), result: None, model: None, thinking: None });
         let ctx = egui::Context::default();
         theme::install_fonts(&ctx);
-        let draw = |app: &mut CraftApp| {
+        let draw = |app: &mut BuilderApp| {
             let mut output = ctx.run_ui(Default::default(), |ui| ai(app, ui));
             output.textures_delta.clear();
         };
@@ -1136,7 +1136,7 @@ mod tests {
     /// made while it connected.
     #[test]
     fn a_late_add_does_not_undo_a_choice_made_meanwhile() {
-        let mut app = demo::app(demo::engine(craft_anything_engine::Mode::Beginner, false));
+        let mut app = demo::app(demo::engine(f_builder_engine::Mode::Beginner, false));
         let added = |choices| Ok(Done::BackendAdded { name: "Home server".into(), result: Ok(()), choices });
         let started = app.backend_choices;
         app.choose_backend(None);
@@ -1155,7 +1155,7 @@ mod tests {
     /// A chat started while an AI connects is a choice too: the add doesn't switch AI under it.
     #[test]
     fn a_late_add_does_not_stop_a_chat_started_meanwhile() {
-        let mut app = demo::app(demo::engine(craft_anything_engine::Mode::Experienced, true));
+        let mut app = demo::app(demo::engine(f_builder_engine::Mode::Experienced, true));
         // A closed local port: the chat starts, and its request fails without leaving this computer.
         let config = BackendConfig {
             name: "Box".into(),
@@ -1185,13 +1185,13 @@ mod tests {
 #[cfg(test)]
 mod model_options_tests {
     use super::*;
-    use craft_anything_ai::config::{CliContext, CliReasoningEffort};
-    use craft_anything_ai::model_options::{ModelOption, ModelTuning};
+    use f_builder_ai::config::{CliContext, CliReasoningEffort};
+    use f_builder_ai::model_options::{ModelOption, ModelTuning};
 
-    fn app_with_backend() -> CraftApp {
-        let mut app = crate::demo::app(crate::demo::engine(craft_anything_engine::Mode::Beginner, false));
+    fn app_with_backend() -> BuilderApp {
+        let mut app = crate::demo::app(crate::demo::engine(f_builder_engine::Mode::Beginner, false));
         app.engine.session().settings.ai = Default::default();
-        app.backends = vec![craft_anything_ai::BackendConfig {
+        app.backends = vec![f_builder_ai::BackendConfig {
             name: "Copilot test".into(),
             kind: BackendKind::AgentCli,
             model: "copilot".into(),
@@ -1202,7 +1202,7 @@ mod model_options_tests {
         app
     }
 
-    fn render(app: &mut CraftApp) -> String {
+    fn render(app: &mut BuilderApp) -> String {
         let context = egui::Context::default();
         crate::theme::install_fonts(&context);
         let mut output = context.run_ui(egui::RawInput::default(), |ui| ai(app, ui));
@@ -1289,11 +1289,11 @@ mod model_options_tests {
         let mut app = app_with_backend();
         app.hub
             .add_backend_with(
-                craft_anything_ai::BackendEntry {
+                f_builder_ai::BackendEntry {
                     config: app.backends[0].clone(),
-                    options: craft_anything_ai::BackendOptions {
+                    options: f_builder_ai::BackendOptions {
                         cli_model: Some("old-model".into()),
-                        command: Some("craft-anything-no-such-test-agent".into()),
+                        command: Some("f-builder-no-such-test-agent".into()),
                         ..Default::default()
                     },
                 },
@@ -1314,7 +1314,7 @@ mod model_options_tests {
         );
         let mut options = app.backend_options["Copilot test"].clone();
         options.cli_model = Some("new-model".into());
-        app.hub.add_backend_with(craft_anything_ai::BackendEntry { config: app.backends[0].clone(), options }, None).unwrap();
+        app.hub.add_backend_with(f_builder_ai::BackendEntry { config: app.backends[0].clone(), options }, None).unwrap();
         let result = crate::backends(&app.hub);
         app.handle_done(crate::jobs::Finished { job: 0, result: Ok(result) });
         assert_eq!(app.backend_options["Copilot test"].cli_model.as_deref(), Some("new-model"));

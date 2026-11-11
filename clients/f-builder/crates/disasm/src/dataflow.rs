@@ -5,7 +5,7 @@
 use crate::decode::{ArmConsts, Flow, Insn, Kind, Mode, Op};
 use crate::image::Image;
 use crate::program::{Function, Program};
-use craft_anything_formats::{Format, hex_addr};
+use f_builder_formats::{Format, hex_addr};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -274,11 +274,11 @@ mod tests {
     use super::*;
     use crate::NoControl;
     use crate::program::Limits;
-    use craft_anything_testkit as tk;
+    use f_builder_testkit as tk;
     use std::sync::Arc;
 
-    fn raw_flow(bytes: Vec<u8>, arch: craft_anything_formats::Arch, thumb: bool) -> DefUse {
-        let mut bin = craft_anything_formats::Binary::raw(arch, 0x1000, bytes.len() as u64, 0);
+    fn raw_flow(bytes: Vec<u8>, arch: f_builder_formats::Arch, thumb: bool) -> DefUse {
+        let mut bin = f_builder_formats::Binary::raw(arch, 0x1000, bytes.len() as u64, 0);
         if thumb {
             bin.entry = Some(0x1001);
         }
@@ -297,7 +297,7 @@ mod tests {
         let a32 = [0xe92d4010u32, 0xe12fff33, 0xe8bd8010].into_iter().flat_map(u32::to_le_bytes).collect();
         let thumb = vec![0x10, 0xb5, 0x98, 0x47, 0x10, 0xbd];
         for (bytes, is_thumb, call_addr, ret_addr) in [(a32, false, 0x1004, 0x1008), (thumb, true, 0x1002, 0x1004)] {
-            let flow = raw_flow(bytes, craft_anything_formats::Arch::Arm, is_thumb);
+            let flow = raw_flow(bytes, f_builder_formats::Arch::Arm, is_thumb);
             let call = flow.nodes.iter().find(|n| n.addr == Some(call_addr)).unwrap();
             let ret = flow.nodes.iter().find(|n| n.addr == Some(ret_addr)).unwrap();
             for register in ["r0", "r1", "r2", "r3", "r12"] {
@@ -313,7 +313,7 @@ mod tests {
         let a32 = [0xe3a00007u32, 0xe12fff1e].into_iter().flat_map(u32::to_le_bytes).collect();
         let thumb = vec![0x07, 0x20, 0x70, 0x47];
         for (bytes, is_thumb, ret_addr) in [(a32, false, 0x1004), (thumb, true, 0x1002)] {
-            let flow = raw_flow(bytes, craft_anything_formats::Arch::Arm, is_thumb);
+            let flow = raw_flow(bytes, f_builder_formats::Arch::Arm, is_thumb);
             let value = flow.nodes.iter().find(|n| n.addr == Some(0x1000)).unwrap();
             let ret = flow.nodes.iter().find(|n| n.addr == Some(ret_addr)).unwrap();
             assert!(flow.edges.iter().any(|e| e.from == value.id && e.to == ret.id && e.register == "r0"), "{flow:?}");
@@ -324,8 +324,7 @@ mod tests {
     fn other_architectures_keep_their_word_result_registers() {
         let a64 = [0xd28000e0u32, 0xd65f03c0].into_iter().flat_map(u32::to_le_bytes).collect();
         let x64 = vec![0xb8, 7, 0, 0, 0, 0xc3];
-        for (bytes, arch, ret_addr, register) in
-            [(a64, craft_anything_formats::Arch::Aarch64, 0x1004, "x0"), (x64, craft_anything_formats::Arch::X86_64, 0x1005, "rax")]
+        for (bytes, arch, ret_addr, register) in [(a64, f_builder_formats::Arch::Aarch64, 0x1004, "x0"), (x64, f_builder_formats::Arch::X86_64, 0x1005, "rax")]
         {
             let flow = raw_flow(bytes, arch, false);
             let value = flow.nodes.iter().find(|n| n.addr == Some(0x1000)).unwrap();

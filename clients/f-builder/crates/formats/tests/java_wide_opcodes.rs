@@ -1,4 +1,4 @@
-use craft_anything_formats::java_ops::{decode, decode_one};
+use f_builder_formats::java_ops::{decode, decode_one};
 
 #[test]
 fn only_defined_wide_opcodes_are_accepted() {

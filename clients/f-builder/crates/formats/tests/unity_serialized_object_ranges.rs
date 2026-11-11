@@ -1,4 +1,4 @@
-use craft_anything_formats::{FormatError, unity_serialized};
+use f_builder_formats::{FormatError, unity_serialized};
 
 fn metadata(version: u32, big: bool, start: u64, size: u32) -> (Vec<u8>, unity_serialized::Header) {
     let mut data = vec![0; if version >= 22 { 48 } else { 20 }];
@@ -70,7 +70,7 @@ fn object_offset_and_end_overflow_are_rejected() {
 
 #[test]
 fn existing_serialized_objects_keep_their_ranges() {
-    let data = craft_anything_testkit::games::unity_assets();
+    let data = f_builder_testkit::games::unity_assets();
     let h = unity_serialized::header(&data, data.len() as u64).unwrap();
     let m = unity_serialized::metadata(&data, &h).unwrap();
     assert_eq!(m.objects.len(), 4);

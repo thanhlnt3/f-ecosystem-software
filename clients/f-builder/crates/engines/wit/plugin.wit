@@ -1,9 +1,9 @@
 // The plugin API, versioned with semver: plugins built against any 0.1.x load in a host that
 // speaks 0.1.y; patch versions only add optional JSON fields (ignore fields you don't know).
 // Details: docs/extending.md, "Plugin API versions".
-package craft-anything:plugin@0.1.0;
+package f-builder:plugin@0.1.0;
 
-/// Tools a plugin adds to Craft Anything. The plugin imports nothing: it gets no files, network,
+/// Tools a plugin adds to F-Builder. The plugin imports nothing: it gets no files, network,
 /// environment or clock, and each call runs in a fresh instance with a work and memory limit.
 interface tools {
     /// The tools it offers, as a JSON array:

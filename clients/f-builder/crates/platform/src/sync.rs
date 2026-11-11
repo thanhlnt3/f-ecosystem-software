@@ -497,7 +497,7 @@ mod tracker {
         for (n, summary) in new {
             let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
             let path = dir.join(format!("lock-{stamp}-{n}.log"));
-            let text = format!("Craft Anything lock report\n\n{summary}\n\nEverything holding or waiting on a lock now:\n{}\n", snapshot());
+            let text = format!("F-Builder lock report\n\n{summary}\n\nEverything holding or waiting on a lock now:\n{}\n", snapshot());
             let saved = std::fs::create_dir_all(dir)
                 .map_err(|e| e.to_string())
                 .and_then(|()| crate::write_atomic_private(&path, text.as_bytes()).map_err(|e| e.message));

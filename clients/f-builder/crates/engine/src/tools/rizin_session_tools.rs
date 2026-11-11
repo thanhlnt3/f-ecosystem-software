@@ -1,13 +1,13 @@
-//! Rizin debug sessions, through [`craft_anything_engines::rizin`]: each session is one owned
+//! Rizin debug sessions, through [`f_builder_engines::rizin`]: each session is one owned
 //! `rizin -d` process that either started a program (stopped before its first instruction) or
 //! attached to a running one. Any Rizin command works in it (`dr`, `db`, `dc`, `ds`, `pd`, `px`…),
 //! so starting one and sending commands both need consent. Sessions are kept by id for this run.
 
 use super::native_common::spec;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_engines::rizin::{RizinSession, Target};
-use craft_anything_evidence::{Authority, Confidence, Coverage, Environment, ErrorCode, EvidenceBuilder, Limitation, Subject, ToolError, sha256_hex};
-use craft_anything_platform::sync::Mutex;
+use f_builder_engines::rizin::{RizinSession, Target};
+use f_builder_evidence::{Authority, Confidence, Coverage, Environment, ErrorCode, EvidenceBuilder, Limitation, Subject, ToolError, sha256_hex};
+use f_builder_platform::sync::Mutex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -168,7 +168,7 @@ fn target(p: &StartParams) -> Result<Target, ToolError> {
 
 fn locate_rizin(ctx: &Ctx<'_>) -> Result<PathBuf, ToolError> {
     let s = &ctx.session.settings;
-    craft_anything_engines::locate("rizin", &s.engines.tools, &s.engine_store_dir())
+    f_builder_engines::locate("rizin", &s.engines.tools, &s.engine_store_dir())
         .ok_or_else(|| ToolError::unavailable("Rizin is not installed.").with_remediation("Install Rizin and set its path in Settings → Engines."))
 }
 
@@ -218,7 +218,7 @@ fn native_rizin_session_begin(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOu
 
 fn native_rizin_session_command_run(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {
     let p: CommandParams = parse_params(params)?;
-    let cmd = craft_anything_engines::rizin::check_command(&p.command)?.to_string();
+    let cmd = f_builder_engines::rizin::check_command(&p.command)?.to_string();
     if cmd.len() > 4096 {
         return Err(ToolError::invalid("command must be at most 4096 characters"));
     }
@@ -316,7 +316,7 @@ mod tests {
     fn sessions_need_a_target_consent_and_an_id() {
         let mut s = crate::testing::session();
         // A stand-in path, so the checks below run without Rizin installed.
-        let stand_in = craft_anything_testkit::temp_file("rizin.exe", b"");
+        let stand_in = f_builder_testkit::temp_file("rizin.exe", b"");
         s.settings.engines.tools.rizin = Some(stand_in.clone());
         let e = Engine::new(s);
         assert!(e.call("native_rizin_session_begin", json!({"program": stand_in}), CallOptions::new(Caller::Mcp)).is_err(), "asks for consent first");
@@ -331,11 +331,11 @@ mod tests {
         assert!(e.call("native_rizin_session_end", json!({"session_id": "nope"}), CallOptions::new(Caller::Mcp)).is_err());
     }
 
-    /// A real round trip, only where `CRAFT_ANYTHING_TEST_RIZIN` names a Rizin: start this test
+    /// A real round trip, only where `F_BUILDER_TEST_RIZIN` names a Rizin: start this test
     /// program under the debugger (it never runs past its entry), read registers, close.
     #[test]
     fn live_session_with_rizin() {
-        let Some(rizin) = std::env::var_os("CRAFT_ANYTHING_TEST_RIZIN").map(PathBuf::from) else { return };
+        let Some(rizin) = std::env::var_os("F_BUILDER_TEST_RIZIN").map(PathBuf::from) else { return };
         let mut s = crate::testing::session();
         s.settings.engines.tools.rizin = Some(rizin);
         let e = Engine::new(s);

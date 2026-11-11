@@ -1,6 +1,6 @@
-use craft_anything_formats::packed::{Compression, PackedFormat};
-use craft_anything_formats::pyinstaller::PyInstaller;
-use craft_anything_testkit::packed::{code_311, marshal as m, pyinstaller};
+use f_builder_formats::packed::{Compression, PackedFormat};
+use f_builder_formats::pyinstaller::PyInstaller;
+use f_builder_testkit::packed::{code_311, marshal as m, pyinstaller};
 
 fn sample() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     let code = code_311("<module>", "<module>", "good.py", 1, &[], &[], &[]);

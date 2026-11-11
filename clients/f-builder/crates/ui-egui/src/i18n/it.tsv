@@ -109,7 +109,7 @@ Add to a running build	Aggiungi a una costruzione in corso
 Added	Aggiunto
 Added {n} picture(s). The builder uses them from your next change.	Aggiunte {n} immagini. Il costruttore le usa dalla modifica successiva.
 Address to file offset	Da indirizzo a offset nel file
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	Aggiunge il suo decompilatore alla modalità Approfondita. Craft Anything può scaricarlo e prepararlo per te.
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	Aggiunge il suo decompilatore alla modalità Approfondita. F-Builder può scaricarlo e prepararlo per te.
 Advanced	Avanzato
 After installing one, look for it again.	Dopo averne installato uno, cercalo di nuovo.
 Agent	Agente
@@ -199,7 +199,7 @@ Build with {name} instead	Costruisci invece con {name}
 Build without it	Costruisci senza
 Builder's questions:	Domande del costruttore:
 Building	In costruzione
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	Per costruire serve un agente di codice su questo computer (Claude Code, Codex o Gemini CLI: installane uno e accedi una volta nella sua finestra), oppure un'IA con una chiave API. Craft Anything non vede mai il tuo account.
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	Per costruire serve un agente di codice su questo computer (Claude Code, Codex o Gemini CLI: installane uno e accedi una volta nella sua finestra), oppure un'IA con una chiave API. F-Builder non vede mai il tuo account.
 Building needs a coding agent such as Claude Code, or an AI with an API key.	Per costruire serve un agente di codice come Claude Code, oppure un'IA con una chiave API.
 Builds	Costruzioni
 Builds and answers may use it again.	Costruzioni e risposte possono usarlo di nuovo.
@@ -250,7 +250,7 @@ Classes	Classi
 Claude Code folder (CLAUDE_CONFIG_DIR)	Cartella di Claude Code (CLAUDE_CONFIG_DIR)
 Clean room	Camera bianca
 Clean room / Deep	Camera bianca / Approfondito
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	La Camera bianca non legge mai il codice, i file o il sorgente della pagina dell'originale. La modalità Approfondita li legge con tutti gli strumenti di Craft Anything.
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	La Camera bianca non legge mai il codice, i file o il sorgente della pagina dell'originale. La modalità Approfondita li legge con tutti gli strumenti di F-Builder.
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	La Camera bianca non legge mai il codice, i file o il sorgente della pagina dell'originale: lavora da quello che puoi vedere. Approfondito li legge con tutti gli strumenti, e con Ghidra se è installato. Ogni risultato registra quale è stato usato.
 Clean room on	Camera bianca attiva
 Clean room or Deep	Camera bianca o Approfondito
@@ -307,13 +307,13 @@ Couldn't open {}: {}	Non ho potuto aprire {}: {}
 Couldn't start a worker thread: {e}	Non ho potuto avviare un thread di lavoro: {e}
 Couldn't start it.	Non ho potuto avviarlo.
 Coverage unknown	Copertura sconosciuta
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything non può costruire con {engine}, quindi Unity è la scelta più vicina.
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	Craft Anything o il computer si è chiuso mentre lavorava. Tutto quello fatto finora resta; Continua riprende da dove si era fermato.
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything legge il suo codice e i suoi file con tutti gli strumenti che ha. Per il tuo uso privato.
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything legge il codice, i file e il sorgente della pagina dell'originale con tutti gli strumenti che ha, e con Ghidra se è installato.
-Craft Anything report.md	Report di Craft Anything.md
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Le registrazioni di Craft Anything, i controlli e tutto ciò che ha costruito in app/ vengono cancellati. I tuoi file nella cartella restano com'erano.
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder non può costruire con {engine}, quindi Unity è la scelta più vicina.
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	F-Builder o il computer si è chiuso mentre lavorava. Tutto quello fatto finora resta; Continua riprende da dove si era fermato.
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder legge il suo codice e i suoi file con tutti gli strumenti che ha. Per il tuo uso privato.
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder legge il codice, i file e il sorgente della pagina dell'originale con tutti gli strumenti che ha, e con Ghidra se è installato.
+F-Builder report.md	Report di F-Builder.md
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Le registrazioni di F-Builder, i controlli e tutto ciò che ha costruito in app/ vengono cancellati. I tuoi file nella cartella restano com'erano.
 Crash dump	Dump di un crash
 Create the project	Crea il progetto
 Critical	Critico
@@ -507,7 +507,7 @@ Hide the console	Nascondi la console
 High	Alto
 Home	Inizio
 How alike a rebuild must look to the original before refining stops.	Quanto una ricostruzione deve somigliare all'originale prima che il rifinire si fermi.
-How closely may Craft Anything look at it?	Quanto da vicino Craft Anything può guardarlo?
+How closely may F-Builder look at it?	Quanto da vicino F-Builder può guardarlo?
 How complete is the rebuild	Quanto è completa la ricostruzione
 How do I open an app?	Come apro un'app?
 How do the window and the page talk to each other?	Come si parlano la finestra e la pagina?
@@ -567,7 +567,7 @@ Is there any readable text inside?	C'è del testo leggibile dentro?
 Is this file safe to open?	Questo file è sicuro da aprire?
 It closed straight away.	Si è chiuso subito.
 It closed straight away. It said:	Si è chiuso subito. Ha detto:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Non è ancora su questo computer. Craft Anything può scaricare Ghidra {version} e il runtime Java che gli serve (circa {mb} MB), confrontarli con le checksum dei loro editori e prepararli in una cartella sua. Nient'altro sul computer cambia.
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Non è ancora su questo computer. F-Builder può scaricare Ghidra {version} e il runtime Java che gli serve (circa {mb} MB), confrontarli con le checksum dei loro editori e prepararli in una cartella sua. Nient'altro sul computer cambia.
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	Non è ancora su questo computer. Installa Ghidra {version} dalla sua pagina delle release, poi scegli la sua cartella.
 It's already open.	È già aperto.
 It's already open. Right-click it to open another copy.	È già aperto. Fai clic destro per aprirne un'altra copia.
@@ -612,7 +612,7 @@ Last: {what}	Ultimo: {what}
 Launch an app	Avvia un'app
 Leave a few GB for the rest of your computer.	Lascia qualche GB per il resto del computer.
 Leave a path empty to use the managed install. We never need environment variables.	Lascia un percorso vuoto per usare l'installazione gestita. Non ci servono variabili d'ambiente.
-Leave empty to use the one Craft Anything sets up.	Lascia vuoto per usare quella che prepara Craft Anything.
+Leave empty to use the one F-Builder sets up.	Lascia vuoto per usare quella che prepara F-Builder.
 Let a project generate assets	Lascia che un progetto generi asset
 Let's go	Andiamo
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	Permette al costruttore di fare modelli 3D e texture realistici per i giochi, {model} a modello, con un budget di {budget} per progetto.
@@ -744,8 +744,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	Niente trovato
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	Ancora niente. Cerchiamo chiavi API, server di modelli locali (Ollama, LM Studio) e app di agenti che hai già. Uno su un'altra porta o un altro computer si aggiunge qui sotto dal suo indirizzo.
 Nothing inside it is read.	Dentro non si legge nulla.
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	Dentro non si legge nulla; Craft Anything lavora da quello che puoi vedere. La tua versione ha una grafica sua.
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Dentro l'originale non si legge nulla: né il codice, né i file, né il sorgente della pagina. Craft Anything lavora da quello che puoi vedere: immagini, la pagina come la vede un visitatore, e l'osservazione mentre gira.
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	Dentro non si legge nulla; F-Builder lavora da quello che puoi vedere. La tua versione ha una grafica sua.
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Dentro l'originale non si legge nulla: né il codice, né i file, né il sorgente della pagina. F-Builder lavora da quello che puoi vedere: immagini, la pagina come la vede un visitatore, e l'osservazione mentre gira.
 Nothing made yet. What you make shows up here.	Ancora niente di fatto. Quello che fai compare qui.
 Nothing matches the filter.	Niente corrisponde al filtro.
 Nothing matches.	Niente corrisponde.
@@ -869,7 +869,7 @@ Plugin command or address	Comando o indirizzo del plugin
 Plugin id	Id del plugin
 Plugin removed.	Plugin rimosso.
 Plugins	Plugin
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	I plugin aggiungono strumenti che Craft Anything offre come propri: server MCP (un comando o un indirizzo; leggi i loro strumenti dopo averli aggiunti) o componenti WebAssembly (un file .wasm, che non può toccare i tuoi file né la rete).
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	I plugin aggiungono strumenti che F-Builder offre come propri: server MCP (un comando o un indirizzo; leggi i loro strumenti dopo averli aggiunti) o componenti WebAssembly (un file .wasm, che non può toccare i tuoi file né la rete).
 Plugins added here always ask before each call.	I plugin aggiunti qui chiedono sempre prima di ogni chiamata.
 Plugins read. Their new tools are offered from the next start.	Plugin letti. I loro strumenti nuovi sono disponibili dal prossimo avvio.
 Preserving software that's no longer supported.	Conservare software che non è più supportato.
@@ -1038,7 +1038,7 @@ Sign in and add the Unity Editor	Accedi e aggiungi Unity Editor
 Sign in and install Unreal Engine	Accedi e installa Unreal Engine
 Simple	Semplice
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	Semplice: di' cosa vuoi e viene fatto per te. Avanzato: ogni strumento, le prove e i registri.
-Since Craft Anything opened.	Da quando Craft Anything è stato aperto.
+Since F-Builder opened.	Da quando F-Builder è stato aperto.
 Size	Dimensione
 Skip setup	Salta la configurazione
 Smart contract interface	Interfaccia dello smart contract
@@ -1095,14 +1095,14 @@ Take files out of an Unreal pak	Estrai file da un pak Unreal
 Take out packed files	Estrai i file impacchettati
 Target	Obiettivo
 Targets	Obiettivi
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	In quella cartella ci sono già {names}, dove Craft Anything tiene i suoi file. Scegli un'altra cartella, oppure spostali prima.
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	In quella cartella ci sono già {names}, dove F-Builder tiene i suoi file. Scegli un'altra cartella, oppure spostali prima.
 That folder is already a project, so it's open now.	Quella cartella è già un progetto, quindi ora è aperta.
 The Rust toolchain (rustup.rs).	La toolchain Rust (rustup.rs).
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	Il costruttore risponde da solo alle sue domande e dice cosa ha scelto («Ho deciso: …»), così puoi cambiarlo.
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	Il costruttore fa i modelli 3D e le texture del gioco da descrizioni di progetti originali, pagati dal tuo account fal.ai. I modelli sono low-poly così il gioco resta veloce. Un modello con texture costa {model} e un'immagine {picture}. Ogni progetto ha un budget di {budget}, e ti viene chiesto prima di superarlo. La chiave resta nel portachiavi di sistema.
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	Il costruttore li legge (codice, note, immagini) e costruisce l'app in una cartella app nuova accanto a loro. I tuoi file restano com'erano.
 The builder will decide its questions and tell you what it chose.	Il costruttore deciderà le sue domande e ti dirà cosa ha scelto.
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	Il costruttore lavora direttamente su questi file e tiene ciò che funziona. Craft Anything aggiunge accanto qualche registrazione sua.
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	Il costruttore lavora direttamente su questi file e tiene ciò che funziona. F-Builder aggiunge accanto qualche registrazione sua.
 The builder's questions	Le domande del costruttore
 The builder's questions come to you as cards, and it waits for your answer.	Le domande del costruttore ti arrivano come schede, e lui aspetta la tua risposta.
 The builder's questions will come to you.	Le domande del costruttore arriveranno a te.
@@ -1215,7 +1215,7 @@ What a program exports	Cosa esporta un programma
 What a program imports	Cosa importa un programma
 What are its main parts?	Quali sono le sue parti principali?
 What brings you here?	Cosa ti porta qui?
-What can Craft Anything do?	Cosa può fare Craft Anything?
+What can F-Builder do?	Cosa può fare F-Builder?
 What data was sent?	Quali dati sono stati inviati?
 What do you want to look inside?	Dentro cosa vuoi guardare?
 What do you want to make?	Cosa vuoi fare?
@@ -1270,7 +1270,7 @@ Why we ask	Perché lo chiediamo
 Window / focus info	Informazioni su finestra e fuoco
 Windows resources	Risorse di Windows
 Wireshark tools check	Controllo degli strumenti Wireshark
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	Senza, la modalità Approfondita usa il decompilatore di Craft Anything, che è più grezzo.
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	Senza, la modalità Approfondita usa il decompilatore di F-Builder, che è più grezzo.
 Work out a copy's size	Calcola lo spazio di una copia
 Work out what an installed app is built on	Capisci su cosa è costruita un'app installata
 Workbench	Banco di lavoro
@@ -1432,12 +1432,12 @@ View	Vista
 Window	Finestra
 Help	Aiuto
 Command palette	Tavolozza dei comandi
-Craft Anything on GitHub	Craft Anything su GitHub
+F-Builder on GitHub	F-Builder su GitHub
 Report a problem…	Segnala un problema…
-Quit Craft Anything	Esci da Craft Anything
-About Craft Anything	Informazioni su Craft Anything
+Quit F-Builder	Esci da F-Builder
+About F-Builder	Informazioni su F-Builder
 Services	Servizi
-Hide Craft Anything	Nascondi Craft Anything
+Hide F-Builder	Nascondi F-Builder
 Hide others	Nascondi le altre
 Show all	Mostra tutto
 Close window	Chiudi la finestra

@@ -1,22 +1,22 @@
 //! Who builds: the AIs that can build, the one that builds by default, the choice on Make
 //! ("Built by"), and the dialog when nothing can build yet. One rule decides "can it build?"
-//! ([`craft_anything_ai::default_builder`]), so the Make screen's warning and Start agree.
+//! ([`f_builder_ai::default_builder`]), so the Make screen's warning and Start agree.
 
 use crate::i18n::{tr, trf};
 use crate::state::Modal;
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, icons, widgets};
-use craft_anything_ai::rebuild::replaced_builder_notice;
-use craft_anything_ai::{BackendConfig, BackendKind};
+use crate::{BuilderApp, icons, widgets};
 use egui::{RichText, Ui, Vec2};
+use f_builder_ai::rebuild::replaced_builder_notice;
+use f_builder_ai::{BackendConfig, BackendKind};
 
 /// A live agent catalogue and a draft selection, tied to the settings that were queried.
 pub struct AgentModelPicker {
     pub request: u64,
-    pub context: craft_anything_ai::ModelContext,
-    pub result: Option<Result<Vec<craft_anything_ai::AgentModel>, String>>,
+    pub context: f_builder_ai::ModelContext,
+    pub result: Option<Result<Vec<f_builder_ai::AgentModel>, String>>,
     pub model: Option<String>,
-    pub thinking: Option<craft_anything_ai::Effort>,
+    pub thinking: Option<f_builder_ai::Effort>,
 }
 
 /// The UI keeps the draft; discovery, validation and persistence live in the AI layer.
@@ -34,7 +34,7 @@ pub fn agent_model_picker(ui: &mut Ui, picker: &mut AgentModelPicker) -> bool {
             return false;
         }
     };
-    let agent = craft_anything_ai::cli_agents::display_for(&picker.context.backend.config.model);
+    let agent = f_builder_ai::cli_agents::display_for(&picker.context.backend.config.model);
     if models.is_empty() {
         ui.label(trf("No chat models are visible in {agent}. Check its setup, then reload.", &[("agent", &agent)]));
     }
@@ -106,7 +106,7 @@ fn detail(b: &BackendConfig) -> String {
     }
 }
 
-impl CraftApp {
+impl BuilderApp {
     /// Agent apps found on this computer that aren't set up yet (they need no key).
     fn found_agents(&self) -> impl Iterator<Item = &BackendConfig> {
         self.detected
@@ -114,7 +114,7 @@ impl CraftApp {
             .flatten()
             .filter(|d| d.suggestion.kind == BackendKind::AgentCli && !d.needs_key)
             .map(|d| &d.suggestion)
-            .filter(|s| !craft_anything_ai::is_on(&self.backends, &s.name))
+            .filter(|s| !f_builder_ai::is_on(&self.backends, &s.name))
     }
 
     /// Every AI that can build: the ones set up and on, then agent apps found here.
@@ -127,7 +127,7 @@ impl CraftApp {
     /// What builds when the person doesn't choose: the default from Settings → AI, else an agent
     /// app found on this computer.
     pub fn default_builder(&self) -> Option<String> {
-        craft_anything_ai::default_builder(&self.backends, self.builder.as_deref()).or_else(|| self.found_agents().next()).map(|b| b.name.clone())
+        f_builder_ai::default_builder(&self.backends, self.builder.as_deref()).or_else(|| self.found_agents().next()).map(|b| b.name.clone())
     }
 
     /// Something can build.
@@ -206,7 +206,7 @@ impl CraftApp {
             .backend
             .options
             .cli_thinking
-            .or_else(|| context.backend.options.cli_reasoning_effort.and_then(|value| craft_anything_ai::Effort::parse(value.as_str())));
+            .or_else(|| context.backend.options.cli_reasoning_effort.and_then(|value| f_builder_ai::Effort::parse(value.as_str())));
         self.load_agent_model_catalog(context, model, thinking);
     }
 
@@ -218,7 +218,7 @@ impl CraftApp {
         }
     }
 
-    fn load_agent_model_catalog(&mut self, context: craft_anything_ai::ModelContext, model: Option<String>, thinking: Option<craft_anything_ai::Effort>) {
+    fn load_agent_model_catalog(&mut self, context: f_builder_ai::ModelContext, model: Option<String>, thinking: Option<f_builder_ai::Effort>) {
         self.model_request = self.model_request.wrapping_add(1);
         let request = self.model_request;
         self.agent_model_picker = Some(AgentModelPicker { request, model: model.clone(), thinking, context: context.clone(), result: None });
@@ -232,7 +232,7 @@ impl CraftApp {
     }
 
     /// Submit the matching picker's selection for background validation and persistence against its captured context.
-    pub fn set_agent_model(&mut self, name: &str, model: Option<String>, thinking: Option<craft_anything_ai::Effort>) {
+    pub fn set_agent_model(&mut self, name: &str, model: Option<String>, thinking: Option<f_builder_ai::Effort>) {
         let Some(picker) = self.agent_model_picker.take().filter(|p| p.context.backend.config.name == name) else { return };
         let hub = self.hub.clone();
         self.jobs.spawn(tr("Change an AI's model"), false, move |_| {
@@ -249,9 +249,9 @@ impl CraftApp {
         }
         let (hub, name, model) = (self.hub.clone(), name.to_string(), model.to_string());
         self.jobs.spawn(tr("Change an AI's model"), false, move |_| {
-            let result = hub.set_model(&name, &model).and_then(|_| {
-                hub.options().get(&name).cloned().ok_or_else(|| craft_anything_engine::evidence::ToolError::invalid("The AI backend was removed."))
-            });
+            let result = hub
+                .set_model(&name, &model)
+                .and_then(|_| hub.options().get(&name).cloned().ok_or_else(|| f_builder_engine::evidence::ToolError::invalid("The AI backend was removed.")));
             Ok(crate::Done::ModelChanged { name, model, result })
         });
     }
@@ -277,7 +277,7 @@ impl CraftApp {
         });
     }
 
-    pub fn set_model_options(&mut self, params: craft_anything_ai::model_options::SetModelOptions) {
+    pub fn set_model_options(&mut self, params: f_builder_ai::model_options::SetModelOptions) {
         if let Some(state) = self.model_tuning.get_mut(&params.backend) {
             state.saving = true;
         }
@@ -289,7 +289,7 @@ impl CraftApp {
     }
 
     /// How hard a Claude AI thinks from now on.
-    pub fn set_effort(&mut self, name: &str, effort: craft_anything_ai::Effort) {
+    pub fn set_effort(&mut self, name: &str, effort: f_builder_ai::Effort) {
         let (hub, name) = (self.hub.clone(), name.to_string());
         self.jobs.spawn(tr("Change how hard an AI thinks"), false, move |_| {
             hub.set_effort(&name, Some(effort)).map_err(|e| e.message)?;
@@ -350,7 +350,7 @@ impl CraftApp {
 /// "Built by" on Make: the AI that builds this project. Automatic follows Settings → AI; picking
 /// one is remembered by the project (its later changes are built by it too). With nothing that
 /// can build, a warning and the way to set one up instead.
-pub fn built_by(app: &mut CraftApp, ui: &mut Ui) {
+pub fn built_by(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(default) = app.default_builder() else {
         icons::show(ui, "triangle-alert", 16.0, t.warning);
@@ -391,7 +391,7 @@ pub fn built_by(app: &mut CraftApp, ui: &mut Ui) {
 
 /// Nothing can build yet: what was found on this computer (one click to use it), a way to look
 /// again, and Settings for API keys. Never a dead end.
-pub fn need_builder_modal(app: &mut CraftApp, ui: &mut Ui, start: bool, close: &mut bool) {
+pub fn need_builder_modal(app: &mut BuilderApp, ui: &mut Ui, start: bool, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.set_width(520.0);
     ui.horizontal(|ui| {
@@ -403,7 +403,7 @@ pub fn need_builder_modal(app: &mut CraftApp, ui: &mut Ui, start: bool, close: &
             ui.add(
                 egui::Label::new(
                     RichText::new(tr(
-                        "Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.",
+                        "Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.",
                     ))
                     .color(t.text_dim),
                 )
@@ -427,7 +427,7 @@ pub fn need_builder_modal(app: &mut CraftApp, ui: &mut Ui, start: bool, close: &
         let hints = if found.iter().all(|b| b.ssh_host.as_deref().is_some_and(|h| !h.trim().is_empty())) { &app.detect_hints[..] } else { &[] };
         for hint in hints {
             match hint {
-                craft_anything_ai::detect::DetectHint::ClaudeDesktopWithoutCli { .. } => ui.add(
+                f_builder_ai::detect::DetectHint::ClaudeDesktopWithoutCli { .. } => ui.add(
                     egui::Label::new(
                         RichText::new(tr("The Claude desktop app is installed, but building needs Claude Code, its separate command-line tool. Install Claude Code, sign in to it once in a terminal, then look again.")).color(t.text_dim),
                     )

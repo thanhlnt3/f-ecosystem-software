@@ -109,7 +109,7 @@ Add to a running build	เพิ่มในบิลด์ที่กำลั
 Added	เพิ่มแล้ว
 Added {n} picture(s). The builder uses them from your next change.	เพิ่มรูป {n} รูป ตัวสร้างจะใช้ตั้งแต่การแก้ไขครั้งถัดไป
 Address to file offset	ที่อยู่ไปยังออฟเซตในไฟล์
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	เพิ่มตัวดีคอมไพล์ในโหมด Deep Craft Anything ดาวน์โหลดและตั้งค่าให้ได้
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	เพิ่มตัวดีคอมไพล์ในโหมด Deep F-Builder ดาวน์โหลดและตั้งค่าให้ได้
 Advanced	ขั้นสูง
 After installing one, look for it again.	หลังติดตั้งแล้ว ให้ค้นหาอีกครั้ง
 Agent	เอเจนต์
@@ -199,7 +199,7 @@ Build with {name} instead	สร้างด้วย {name} แทน
 Build without it	สร้างโดยไม่มีมัน
 Builder's questions:	คำถามของผู้สร้าง:
 Building	กำลังสร้าง
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	การสร้างต้องมีเอเจนต์เขียนโค้ดบนเครื่องนี้ (Claude Code, Codex หรือ Gemini CLI: ติดตั้งและล็อกอินหนึ่งครั้งในหน้าต่างของมัน) หรือ AI ที่มี API key Craft Anything ไม่เห็นบัญชีของคุณ
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	การสร้างต้องมีเอเจนต์เขียนโค้ดบนเครื่องนี้ (Claude Code, Codex หรือ Gemini CLI: ติดตั้งและล็อกอินหนึ่งครั้งในหน้าต่างของมัน) หรือ AI ที่มี API key F-Builder ไม่เห็นบัญชีของคุณ
 Building needs a coding agent such as Claude Code, or an AI with an API key.	การสร้างต้องมีเอเจนต์เขียนโค้ด เช่น Claude Code หรือ AI ที่มี API key
 Builds	บิลด์
 Builds and answers may use it again.	บิลด์และคำตอบอาจใช้มันอีก
@@ -250,7 +250,7 @@ Classes	คลาส
 Claude Code folder (CLAUDE_CONFIG_DIR)	โฟลเดอร์ Claude Code (CLAUDE_CONFIG_DIR)
 Clean room	Clean room
 Clean room / Deep	Clean room / Deep
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	Clean room ไม่อ่านโค้ด ไฟล์ หรือซอร์สหน้าเว็บของต้นฉบับ โหมด Deep อ่านด้วยทุกเครื่องมือที่ Craft Anything มี
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	Clean room ไม่อ่านโค้ด ไฟล์ หรือซอร์สหน้าเว็บของต้นฉบับ โหมด Deep อ่านด้วยทุกเครื่องมือที่ F-Builder มี
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	Clean room ไม่อ่านโค้ด ไฟล์ หรือซอร์สหน้าเว็บของต้นฉบับ: ทำงานจากสิ่งที่มองเห็น Deep อ่านด้วยทุกเครื่องมือ และด้วย Ghidra เมื่อติดตั้งไว้ ทุกสิ่งที่พบจะบันทึกว่าใช้วิธีใด
 Clean room on	เปิด Clean room
 Clean room or Deep	Clean room หรือ Deep
@@ -307,13 +307,13 @@ Couldn't open {}: {}	เปิด {} ไม่ได้: {}
 Couldn't start a worker thread: {e}	เริ่ม worker thread ไม่ได้: {e}
 Couldn't start it.	เริ่มไม่ได้
 Coverage unknown	ไม่ทราบความครอบคลุม
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything สร้างด้วย {engine} ไม่ได้ Unity จึงใกล้เคียงที่สุด
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	Craft Anything หรือเครื่องปิดขณะทำงาน ทุกอย่างถึงตอนนี้ถูกเก็บไว้ กดทำต่อเพื่อไปจากจุดที่หยุด
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything อ่านโค้ดและไฟล์ด้วยทุกเครื่องมือที่มันมี สำหรับใช้ส่วนตัวของคุณ
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything อ่านโค้ด ไฟล์ และซอร์สหน้าเว็บของต้นฉบับด้วยทุกเครื่องมือ และด้วย Ghidra เมื่อติดตั้งไว้
-Craft Anything report.md	report.md ของ Craft Anything
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	บันทึก การตรวจ และสิ่งที่สร้างใน app/ จะถูกลบ ไฟล์ของคุณในโฟลเดอร์ยังอยู่เหมือนเดิม
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder สร้างด้วย {engine} ไม่ได้ Unity จึงใกล้เคียงที่สุด
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	F-Builder หรือเครื่องปิดขณะทำงาน ทุกอย่างถึงตอนนี้ถูกเก็บไว้ กดทำต่อเพื่อไปจากจุดที่หยุด
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder อ่านโค้ดและไฟล์ด้วยทุกเครื่องมือที่มันมี สำหรับใช้ส่วนตัวของคุณ
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder อ่านโค้ด ไฟล์ และซอร์สหน้าเว็บของต้นฉบับด้วยทุกเครื่องมือ และด้วย Ghidra เมื่อติดตั้งไว้
+F-Builder report.md	report.md ของ F-Builder
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	บันทึก การตรวจ และสิ่งที่สร้างใน app/ จะถูกลบ ไฟล์ของคุณในโฟลเดอร์ยังอยู่เหมือนเดิม
 Crash dump	ดัมป์จากการแครช
 Create the project	สร้างโปรเจกต์
 Critical	วิกฤต
@@ -506,7 +506,7 @@ Hide the console	ซ่อนคอนโซล
 High	สูง
 Home	หน้าหลัก
 How alike a rebuild must look to the original before refining stops.	บิลด์ต้องคล้ายต้นฉบับแค่ไหนก่อนหยุดปรับ
-How closely may Craft Anything look at it?	Craft Anything ดูมันได้ละเอียดแค่ไหน?
+How closely may F-Builder look at it?	F-Builder ดูมันได้ละเอียดแค่ไหน?
 How complete is the rebuild	บิลด์สมบูรณ์แค่ไหน
 How do I open an app?	เปิดแอปอย่างไร?
 How do the window and the page talk to each other?	หน้าต่างกับหน้าเว็บคุยกันอย่างไร?
@@ -566,7 +566,7 @@ Is there any readable text inside?	มีข้อความที่อ่า
 Is this file safe to open?	ไฟล์นี้ปลอดภัยที่จะเปิดไหม?
 It closed straight away.	มันปิดทันที
 It closed straight away. It said:	มันปิดทันที มันแจ้งว่า:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	มันยังไม่อยู่ในเครื่องนี้ Craft Anything ดาวน์โหลด Ghidra {version} และ Java runtime ที่ต้องใช้ (ประมาณ {mb} MB) ตรวจทั้งคู่กับเช็กซัมของผู้เผยแพร่ และตั้งค่าในโฟลเดอร์ของตัวเอง ไม่มีสิ่งอื่นในเครื่องเปลี่ยน
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	มันยังไม่อยู่ในเครื่องนี้ F-Builder ดาวน์โหลด Ghidra {version} และ Java runtime ที่ต้องใช้ (ประมาณ {mb} MB) ตรวจทั้งคู่กับเช็กซัมของผู้เผยแพร่ และตั้งค่าในโฟลเดอร์ของตัวเอง ไม่มีสิ่งอื่นในเครื่องเปลี่ยน
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	มันยังไม่อยู่ในเครื่องนี้ ติดตั้ง Ghidra {version} จากหน้าดาวน์โหลด แล้วเลือกโฟลเดอร์ของมัน
 It's already open.	มันเปิดอยู่แล้ว
 It's already open. Right-click it to open another copy.	มันเปิดอยู่แล้ว คลิกขวาเพื่อเปิดสำเนาอีกชุด
@@ -611,7 +611,7 @@ Last: {what}	ล่าสุด: {what}
 Launch an app	เปิดแอป
 Leave a few GB for the rest of your computer.	เว้นหน่วยความจำไว้ 2-3 GB ให้ส่วนอื่นของเครื่อง
 Leave a path empty to use the managed install. We never need environment variables.	เว้นพาธว่างเพื่อใช้การติดตั้งที่จัดการให้ เราไม่ต้องใช้ตัวแปรสภาพแวดล้อม
-Leave empty to use the one Craft Anything sets up.	เว้นว่างเพื่อใช้ตัวที่ Craft Anything ตั้งให้
+Leave empty to use the one F-Builder sets up.	เว้นว่างเพื่อใช้ตัวที่ F-Builder ตั้งให้
 Let a project generate assets	ให้โปรเจกต์สร้างแอสเซ็ต
 Let's go	เริ่มกันเลย
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	ให้ตัวสร้างทำโมเดล 3D และพื้นผิวสมจริงสำหรับเกม {model} เป็นโมเดล ด้วยงบ {budget} ต่อโปรเจกต์
@@ -743,8 +743,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	ไม่พบสิ่งใด
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	ยังไม่พบสิ่งใด เราค้นหา API key เซิร์ฟเวอร์โมเดลในเครื่อง (Ollama, LM Studio) และแอปเอเจนต์ที่มีอยู่ ตัวที่อยู่อีกพอร์ตหรืออีกเครื่องเพิ่มได้ด้วยที่อยู่ด้านล่าง
 Nothing inside it is read.	ไม่มีการอ่านสิ่งใดข้างใน
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	ไม่มีการอ่านสิ่งใดข้างใน Craft Anything ทำงานจากสิ่งที่มองเห็น เวอร์ชันของคุณได้อาร์ตของตัวเอง
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	ไม่อ่านสิ่งใดภายในต้นฉบับ: ไม่ใช่โค้ด ไฟล์ หรือซอร์สหน้าเว็บ Craft Anything ทำงานจากสิ่งที่มองเห็น: รูป หน้าเว็บอย่างที่ผู้เยี่ยมชมเห็น และการเฝ้าดูขณะรัน
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	ไม่มีการอ่านสิ่งใดข้างใน F-Builder ทำงานจากสิ่งที่มองเห็น เวอร์ชันของคุณได้อาร์ตของตัวเอง
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	ไม่อ่านสิ่งใดภายในต้นฉบับ: ไม่ใช่โค้ด ไฟล์ หรือซอร์สหน้าเว็บ F-Builder ทำงานจากสิ่งที่มองเห็น: รูป หน้าเว็บอย่างที่ผู้เยี่ยมชมเห็น และการเฝ้าดูขณะรัน
 Nothing made yet. What you make shows up here.	ยังไม่ได้สร้างอะไร สิ่งที่คุณสร้างจะแสดงที่นี่
 Nothing matches the filter.	ไม่มีอะไรตรงกับตัวกรอง
 Nothing matches.	ไม่ตรงกัน
@@ -867,7 +867,7 @@ Plugin command or address	คำสั่งหรือที่อยู่ป
 Plugin id	id ปลั๊กอิน
 Plugin removed.	ลบปลั๊กอินแล้ว
 Plugins	ปลั๊กอิน
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	ปลั๊กอินเพิ่มเครื่องมือที่ Craft Anything ใช้เป็นของตัวเอง: เซิร์ฟเวอร์ MCP (คำสั่งหรือที่อยู่ อ่านเครื่องมือหลังเพิ่ม) หรือคอมโพเนนต์ WebAssembly (ไฟล์ .wasm ซึ่งแตะไฟล์หรือเครือข่ายของคุณไม่ได้)
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	ปลั๊กอินเพิ่มเครื่องมือที่ F-Builder ใช้เป็นของตัวเอง: เซิร์ฟเวอร์ MCP (คำสั่งหรือที่อยู่ อ่านเครื่องมือหลังเพิ่ม) หรือคอมโพเนนต์ WebAssembly (ไฟล์ .wasm ซึ่งแตะไฟล์หรือเครือข่ายของคุณไม่ได้)
 Plugins added here always ask before each call.	ปลั๊กอินที่เพิ่มที่นี่ถามก่อนทุกครั้งที่เรียก
 Plugins read. Their new tools are offered from the next start.	อ่านปลั๊กอินแล้ว เครื่องมือใหม่จะพร้อมใช้ตั้งแต่เริ่มครั้งถัดไป
 Preserving software that's no longer supported.	ดูแลซอฟต์แวร์ที่เลิกสนับสนุนแล้ว
@@ -1036,7 +1036,7 @@ Sign in and add the Unity Editor	ล็อกอินและเพิ่ม U
 Sign in and install Unreal Engine	ล็อกอินและติดตั้ง Unreal Engine
 Simple	ง่าย
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	ง่าย: บอกสิ่งที่ต้องการแล้วจัดการให้ ขั้นสูง: ทุกเครื่องมือ หลักฐาน และบันทึก
-Since Craft Anything opened.	ตั้งแต่เปิด Craft Anything
+Since F-Builder opened.	ตั้งแต่เปิด F-Builder
 Size	ขนาด
 Skip setup	ข้ามการตั้งค่า
 Smart contract interface	อินเทอร์เฟซสมาร์ตคอนแทรกต์
@@ -1093,14 +1093,14 @@ Take files out of an Unreal pak	ดึงไฟล์ออกจาก Unreal p
 Take out packed files	ดึงไฟล์ที่บรรจุออก
 Target	เป้าหมาย
 Targets	เป้าหมาย
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	โฟลเดอร์นั้นมี {names} อยู่แล้ว ซึ่งเป็นที่ที่ Craft Anything เก็บไฟล์ของตัวเอง เลือกโฟลเดอร์อื่น หรือย้ายออกก่อน
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	โฟลเดอร์นั้นมี {names} อยู่แล้ว ซึ่งเป็นที่ที่ F-Builder เก็บไฟล์ของตัวเอง เลือกโฟลเดอร์อื่น หรือย้ายออกก่อน
 That folder is already a project, so it's open now.	โฟลเดอร์นั้นเป็นโปรเจกต์อยู่แล้ว จึงเปิดให้ตอนนี้
 The Rust toolchain (rustup.rs).	ชุดเครื่องมือ Rust (rustup.rs)
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	ตัวสร้างตอบคำถามเองและบอกสิ่งที่เลือก ("ฉันตัดสินใจ: …") จึงเปลี่ยนได้
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	ตัวสร้างทำโมเดล 3D และพื้นผิวของเกมจากคำอธิบายดีไซน์ต้นฉบับ จ่ายจากบัญชี fal.ai ของคุณ โมเดลเป็น low-poly เกมจึงเร็ว โมเดลมีพื้นผิวราคา {model} รูปละ {picture} แต่ละโปรเจกต์มีงบ {budget} และจะถามก่อนเกิน คีย์เก็บใน keychain ของระบบ
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	ตัวสร้างอ่านไฟล์เหล่านี้ (โค้ด โน้ต รูป) และสร้างแอปในโฟลเดอร์ใหม่ข้าง ๆ ไฟล์ของคุณยังอยู่เหมือนเดิม
 The builder will decide its questions and tell you what it chose.	ตัวสร้างจะตัดสินใจคำถามเองและบอกสิ่งที่เลือก
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	ตัวสร้างทำงานกับไฟล์เหล่านี้โดยตรงและเก็บส่วนที่ใช้ได้ Craft Anything เพิ่มบันทึกของตัวเองเล็กน้อยไว้ข้าง ๆ
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	ตัวสร้างทำงานกับไฟล์เหล่านี้โดยตรงและเก็บส่วนที่ใช้ได้ F-Builder เพิ่มบันทึกของตัวเองเล็กน้อยไว้ข้าง ๆ
 The builder's questions	คำถามของผู้สร้าง
 The builder's questions come to you as cards, and it waits for your answer.	คำถามของผู้สร้างมาเป็นการ์ด และมันจะรอคำตอบ
 The builder's questions will come to you.	คำถามของผู้สร้างจะส่งมาถึงคุณ
@@ -1213,7 +1213,7 @@ What a program exports	สิ่งที่โปรแกรมส่งออ
 What a program imports	สิ่งที่โปรแกรมนำเข้า
 What are its main parts?	ส่วนหลักของมันคืออะไร?
 What brings you here?	อะไรทำให้คุณมาที่นี่?
-What can Craft Anything do?	Craft Anything ทำอะไรได้?
+What can F-Builder do?	F-Builder ทำอะไรได้?
 What data was sent?	ส่งข้อมูลอะไรไป?
 What do you want to look inside?	อยากดูข้างในอะไร?
 What do you want to make?	อยากสร้างอะไร?
@@ -1268,7 +1268,7 @@ Why we ask	ทำไมเราถาม
 Window / focus info	ข้อมูลหน้าต่าง / โฟกัส
 Windows resources	ทรัพยากร Windows
 Wireshark tools check	ตรวจเครื่องมือ Wireshark
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	หากไม่มี โหมด Deep จะใช้ตัวดีคอมไพล์ของ Craft Anything เอง ซึ่งหยาบกว่า
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	หากไม่มี โหมด Deep จะใช้ตัวดีคอมไพล์ของ F-Builder เอง ซึ่งหยาบกว่า
 Work out a copy's size	คำนวณขนาดสำเนา
 Work out what an installed app is built on	ดูว่าแอปที่ติดตั้งสร้างจากอะไร
 Workbench	เวิร์กเบนช์
@@ -1430,12 +1430,12 @@ View	มุมมอง
 Window	หน้าต่าง
 Help	ช่วยเหลือ
 Command palette	พาเลตต์คำสั่ง
-Craft Anything on GitHub	Craft Anything บน GitHub
+F-Builder on GitHub	F-Builder บน GitHub
 Report a problem…	รายงานปัญหา…
-Quit Craft Anything	ออกจาก Craft Anything
-About Craft Anything	เกี่ยวกับ Craft Anything
+Quit F-Builder	ออกจาก F-Builder
+About F-Builder	เกี่ยวกับ F-Builder
 Services	บริการ
-Hide Craft Anything	ซ่อน Craft Anything
+Hide F-Builder	ซ่อน F-Builder
 Hide others	ซ่อนอื่น ๆ
 Show all	แสดงทั้งหมด
 Close window	ปิดหน้าต่าง

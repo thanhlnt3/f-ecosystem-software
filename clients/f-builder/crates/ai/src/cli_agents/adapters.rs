@@ -335,7 +335,7 @@ impl AgentAdapter for Plain {
 }
 
 /// Claude Code settings with one PostToolUse hook, run after every tool call: our CLI hands over
-/// the notes waiting in `dir` (`craft-anything-cli builder-notes <dir>`). Paths use forward
+/// the notes waiting in `dir` (`f-builder-cli builder-notes <dir>`). Paths use forward
 /// slashes and quotes so the hook's shell reads them the same on every platform.
 pub fn notes_hook_settings(cli: &str, dir: &std::path::Path) -> String {
     let fwd = |s: &str| s.replace('\\', "/");
@@ -418,7 +418,7 @@ impl AgentAdapter for ClaudeCode {
     }
 
     fn check_tool_server(&self, stop: &CancelToken) -> Result<(), ToolError> {
-        cli_can_start(craft_anything_platform::self_cli_path().as_deref(), stop)
+        cli_can_start(f_builder_platform::self_cli_path().as_deref(), stop)
     }
 
     fn check_remote_tool_server(&self, host: &str, stop: &CancelToken) -> Result<(), ToolError> {
@@ -491,9 +491,9 @@ impl AgentAdapter for ClaudeCode {
                     p.failure = Some(TurnFailure::new(FailureKind::ToolsUnavailable));
                     let status = server.get("status").and_then(Value::as_str).unwrap_or_default();
                     out.push(AgentEvent::Error {
-                        message: format!("Craft Anything's tools did not start in Claude Code (server status: {status})."),
+                        message: format!("F-Builder's tools did not start in Claude Code (server status: {status})."),
                         remediation: Some(
-                            "Check the Craft Anything CLI and the agent failure log, then start a new build attempt after fixing the tool connection.".into(),
+                            "Check the F-Builder CLI and the agent failure log, then start a new build attempt after fixing the tool connection.".into(),
                         ),
                         log: None,
                     });
@@ -647,7 +647,7 @@ fn claude_config_dir() -> Option<std::path::PathBuf> {
     set.or_else(flatpak_claude_dir).or_else(|| dirs::home_dir().map(|h| h.join(".claude")))
 }
 
-pub use craft_anything_platform::in_flatpak;
+pub use f_builder_platform::in_flatpak;
 
 /// Where Claude Code keeps its conversations when we start it under a Flatpak and the person
 /// hasn't chosen a folder: its own is `~/.claude`, which the sandbox only lets us read, so a
@@ -660,7 +660,7 @@ pub fn flatpak_claude_dir() -> Option<std::path::PathBuf> {
 }
 
 pub fn flatpak_claude_dir_in(flatpak: bool, chosen: bool, data: Option<std::path::PathBuf>) -> Option<std::path::PathBuf> {
-    (flatpak && !chosen).then_some(data?.join("craft-anything").join("claude"))
+    (flatpak && !chosen).then_some(data?.join("f-builder").join("claude"))
 }
 
 /// Claude Code's name for the folder a session ran in: the path with everything but letters and
@@ -685,7 +685,7 @@ pub fn claude_restore(config: &std::path::Path, id: &str, saved: &[u8], cwd: &st
         return Err(ToolError::invalid("The conversation kept in the project is of another session."));
     }
     let path = config.join("projects").join(claude_project_folder(cwd)).join(format!("{id}.jsonl"));
-    craft_anything_platform::fs::write_atomic_private(&path, saved)?;
+    f_builder_platform::fs::write_atomic_private(&path, saved)?;
     Ok(true)
 }
 
@@ -719,7 +719,7 @@ pub fn claude_names_account(file: &std::path::Path) -> bool {
 /// Longest single request or reply in a handoff; a first brief runs to many thousands.
 const HANDOFF_ENTRY: usize = 1500;
 
-/// A Claude Code session read back as a handoff: the messages Craft Anything sent and the text
+/// A Claude Code session read back as a handoff: the messages F-Builder sent and the text
 /// the builder answered with, oldest first, leaving out tool calls, their results, thinking and
 /// side tasks. The newest are kept when it's longer than `max` characters.
 pub fn claude_handoff(saved: &str, max: usize) -> Option<String> {
@@ -736,7 +736,7 @@ pub fn claude_handoff(saved: &str, max: usize) -> Option<String> {
         match v.get("type").and_then(Value::as_str) {
             Some("user") => {
                 if let Some(t) = content.and_then(Value::as_str).filter(|t| !t.trim().is_empty()) {
-                    entries.push(format!("Craft Anything asked you: {}", clip(t)));
+                    entries.push(format!("F-Builder asked you: {}", clip(t)));
                 }
             }
             Some("assistant") => {
@@ -788,7 +788,7 @@ impl AgentAdapter for Codex {
     }
 
     fn check_tool_server(&self, stop: &CancelToken) -> Result<(), ToolError> {
-        cli_can_start(craft_anything_platform::self_cli_path().as_deref(), stop)
+        cli_can_start(f_builder_platform::self_cli_path().as_deref(), stop)
     }
 
     fn check_remote_tool_server(&self, host: &str, stop: &CancelToken) -> Result<(), ToolError> {
@@ -818,7 +818,7 @@ impl AgentAdapter for Codex {
         // `codex exec` can't ask, so without this it refuses a tool not marked read-only, such as
         // rebuild_start, before our server sees the call (#540). Only tools that ask the person
         // themselves are approved; every other tool keeps the person's own Codex policy.
-        for tool in craft_anything_engine::AGENT_APP_PREAPPROVED_TOOLS {
+        for tool in f_builder_engine::AGENT_APP_PREAPPROVED_TOOLS {
             v.extend(["-c".into(), format!("mcp_servers.{MCP_NAME}.tools.{tool}.approval_mode=\"approve\"")]);
         }
         if let Some(m) = &cx.options.cli_model {
@@ -903,7 +903,7 @@ fn codex_tool_text(item: &Value, tool: &str, ours: bool) -> String {
     if ours && text.contains(CODEX_NEEDS_APPROVAL) {
         // The feed keeps 200 characters of a result, so the fix comes first and fits.
         return format!(
-            "Codex blocked {tool}: it can't ask for approval here. Fix: run `craft-anything-cli setup --client codex --yes`, then retry. See docs/codex.md."
+            "Codex blocked {tool}: it can't ask for approval here. Fix: run `f-builder-cli setup --client codex --yes`, then retry. See docs/codex.md."
         );
     }
     text
@@ -976,9 +976,9 @@ impl AgentAdapter for GeminiCli {
 }
 
 /// One `ssh` run for a remote set-up step. Never interactive (`BatchMode`, stdin closed).
-fn ssh_run(host: &str, line: &str, timeout: std::time::Duration, stop: Option<&CancelToken>) -> Result<craft_anything_platform::Output, ToolError> {
+fn ssh_run(host: &str, line: &str, timeout: std::time::Duration, stop: Option<&CancelToken>) -> Result<f_builder_platform::Output, ToolError> {
     let argv = crate::ssh::ssh_line_args(host, line.to_string());
-    let mut proc = craft_anything_platform::process::Process::new("ssh").args(&argv).timeout(timeout).stdout_cap(64 * 1024);
+    let mut proc = f_builder_platform::process::Process::new("ssh").args(&argv).timeout(timeout).stdout_cap(64 * 1024);
     if let Some(stop) = stop {
         let stop = stop.clone();
         proc = proc.cancel_when(move || stop.is_cancelled());
@@ -988,7 +988,7 @@ fn ssh_run(host: &str, line: &str, timeout: std::time::Duration, stop: Option<&C
 
 /// `command -v` only promises a nonzero status for a missing program: 127 is the shell's own "not
 /// found", which [`crate::ssh::diagnose`] turns into how to install it or put it on the PATH.
-pub(super) const REMOTE_CHECK_LINE: &str = "command -v craft-anything-cli >/dev/null || exit 127";
+pub(super) const REMOTE_CHECK_LINE: &str = "command -v f-builder-cli >/dev/null || exit 127";
 
 /// The remote helper is on PATH, checked before a build starts (the remote server runs it). For
 /// every agent that's handed our tool server over SSH, as the local check is for one here.
@@ -1001,17 +1001,17 @@ fn remote_check(host: &str, stop: Option<&CancelToken>) -> Result<(), ToolError>
 }
 
 /// Map the remote failure onto the fix, reusing the ssh failure wording other remote runs use.
-pub(super) fn remote_failure(host: &str, out: &craft_anything_platform::Output) -> ToolError {
-    if let Some(failure) = crate::ssh::diagnose(host, "craft-anything-cli", crate::ssh::is_git_server(host), out.code, out.stderr_text().as_str()) {
-        return ToolError::new(ErrorCode::EngineMissing, format!("Craft Anything can't set up its tools on {host}: {}.", failure.what))
+pub(super) fn remote_failure(host: &str, out: &f_builder_platform::Output) -> ToolError {
+    if let Some(failure) = crate::ssh::diagnose(host, "f-builder-cli", crate::ssh::is_git_server(host), out.code, out.stderr_text().as_str()) {
+        return ToolError::new(ErrorCode::EngineMissing, format!("F-Builder can't set up its tools on {host}: {}.", failure.what))
             .with_remediation(failure.fix);
     }
     let stderr = out.stderr_text();
     let snippet: String = stderr.trim().chars().take(200).collect();
     let exit = out.code.map_or_else(|| "it was stopped".to_string(), |code| format!("exit {code}"));
-    ToolError::new(ErrorCode::EngineMissing, format!("Craft Anything couldn't set up its tools on {host}: ssh didn't come back as expected ({exit})."))
+    ToolError::new(ErrorCode::EngineMissing, format!("F-Builder couldn't set up its tools on {host}: ssh didn't come back as expected ({exit})."))
         .with_remediation(if snippet.is_empty() {
-            "Check that craft-anything-cli is on the PATH this ssh session uses, and that the host lets you run programs over ssh.".to_string()
+            "Check that f-builder-cli is on the PATH this ssh session uses, and that the host lets you run programs over ssh.".to_string()
         } else {
             format!("ssh said: {snippet}")
         })

@@ -10,8 +10,8 @@
 use super::native_common::spec;
 use super::web_common::{self, Browser, LaunchOptions, Secrets};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_engines::cdp::{self, CdpClient, Deadline, PAGE_MAX_MESSAGE};
-use craft_anything_evidence::{Authority, Confidence, Coverage, CoverageStatus, EvidenceBuilder, Limitation, Location, Subject, ToolError};
+use f_builder_engines::cdp::{self, CdpClient, Deadline, PAGE_MAX_MESSAGE};
+use f_builder_evidence::{Authority, Confidence, Coverage, CoverageStatus, EvidenceBuilder, Limitation, Location, Subject, ToolError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -23,7 +23,7 @@ pub fn specs() -> Vec<ToolSpec> {
             "web_browser_connect",
             "Connect to a browser",
             "Attach to a loopback CDP endpoint (a browser started with --remote-debugging-port) or launch a located Chromium headless, and report the product, protocol version and debuggable target count. A quick connectivity check before the other browser tools.",
-            "Check Craft Anything can talk to a web browser for live inspection.",
+            "Check F-Builder can talk to a web browser for live inspection.",
             Toolset::Browser,
             Effects::NETWORK_EVIDENCE.union(Effects::LAUNCHES_PROCESS),
             Requires::Nothing,
@@ -170,7 +170,7 @@ pub(crate) fn deadline(ctx: &Ctx<'_>, timeout_secs: u64) -> Result<Deadline, Too
     Ok(Deadline::new(Duration::from_secs(timeout_secs), ctx.cancel.clone()))
 }
 
-pub(crate) fn browser_env(clean_room: bool, b: &Browser) -> craft_anything_evidence::Environment {
+pub(crate) fn browser_env(clean_room: bool, b: &Browser) -> f_builder_evidence::Environment {
     web_common::cdp_env(clean_room, Some(b.version.clone()))
 }
 
@@ -499,7 +499,7 @@ fn collect_scripts(client: &mut CdpClient, events: &[cdp::CdpEvent], want_source
             row["media_type"] = json!("application/javascript");
             row["charset"] = json!("utf-8");
             row["bytes"] = json!(t.len());
-            row["sha256"] = json!(craft_anything_evidence::sha256_hex(t.as_bytes()));
+            row["sha256"] = json!(f_builder_evidence::sha256_hex(t.as_bytes()));
             row["text"] = json!(t);
         }
         json_rows.push(row);
@@ -834,7 +834,7 @@ fn passive_evidence(
     dropped: u64,
     declared_secrets: usize,
     redactions: u64,
-) -> Result<craft_anything_evidence::Evidence, ToolError> {
+) -> Result<f_builder_evidence::Evidence, ToolError> {
     let mut b = EvidenceBuilder::new(op, Subject { kind: "website".into(), sha256: None, name: Some(origin.to_string()) }, browser_env(clean_room, browser))
         .params(json!({"endpoint": browser.endpoint.origin, "sensitive_value_declarations": declared_secrets}))
         .result(result)
@@ -909,7 +909,7 @@ fn web_page_js_analyze(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, T
     let cap = cap?;
 
     // Build an AppInput from the fetched script sources and reuse the built-in JS analyser.
-    use craft_anything_analysis::js_app::{AppFile, AppInput, AppOptions, analyze_application};
+    use f_builder_analysis::js_app::{AppFile, AppInput, AppOptions, analyze_application};
     let mut input = AppInput { label: page_url.clone(), format: "web".into(), ..Default::default() };
     let mut source_maps: Vec<Value> = Vec::new();
     for s in &cap.scripts {
@@ -927,7 +927,7 @@ fn web_page_js_analyze(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, T
         }
     }
     if input.files.is_empty() {
-        return Err(ToolError::new(craft_anything_evidence::ErrorCode::FeatureMissing, "the page exposed no readable script sources over CDP")
+        return Err(ToolError::new(f_builder_evidence::ErrorCode::FeatureMissing, "the page exposed no readable script sources over CDP")
             .with_remediation("Some pages block source access; try web_page_show, or export and analyse the scripts offline."));
     }
     let cancel = ctx.cancel.clone();
@@ -992,7 +992,7 @@ fn script_path(url: &str) -> String {
 /// loopback origin (literal 127.0.0.1 or [::1] with a port); record others unfetched.
 fn resolve_source_map(_browser: &Browser, declared: &str, script_url: &str, dl: &Deadline) -> Value {
     if declared.starts_with("data:") {
-        match craft_anything_formats::sourcemap::decode_data_url(declared) {
+        match f_builder_formats::sourcemap::decode_data_url(declared) {
             Some(bytes) => {
                 json!({"declared_url": "inline data: URL", "effective_url": "inline", "fetched": true, "bytes": bytes.len(), "script": web_common::sanitize_url(script_url)})
             }
@@ -1169,7 +1169,7 @@ fn web_mcp_tools_list(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, To
             }
             (true, tools, "tools are advertised only; none were invoked")
         }
-        Err(e) if e.code == craft_anything_evidence::ErrorCode::FeatureMissing => {
+        Err(e) if e.code == f_builder_evidence::ErrorCode::FeatureMissing => {
             (false, Vec::new(), "this browser does not implement the experimental WebMCP CDP domain")
         }
         Err(e) => return cleanup_then_err(&mut client, &dl, e),
@@ -1237,7 +1237,7 @@ fn web_page_screenshot_take(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutp
     let data = shot
         .get("data")
         .and_then(Value::as_str)
-        .ok_or_else(|| ToolError::new(craft_anything_evidence::ErrorCode::GarbledOutput, "the browser returned no screenshot data"))?;
+        .ok_or_else(|| ToolError::new(f_builder_evidence::ErrorCode::GarbledOutput, "the browser returned no screenshot data"))?;
     let bytes = web_common::b64_decode(data)?;
     let artifact = web_common::png_artifact(&bytes)?;
     let summary = format!("Captured a {}×{} PNG of {page_url} ({} bytes).", artifact["width"], artifact["height"], bytes.len());
@@ -1572,7 +1572,7 @@ fn web_pixels_compare(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, To
         format!("{} of {} pixel(s) differ (max channel delta {}).", diff["differing_pixels"], diff["total_pixels"], diff["max_channel_delta"])
     };
     let ev = EvidenceBuilder::new("web_pixels_compare", Subject { kind: "comparison".into(), sha256: None, name: Some("screenshots".into()) }, super::artifact_tools::env(ctx))
-        .params(json!({"tolerance": p.tolerance, "common_area": p.common_area, "before_sha256": craft_anything_evidence::sha256_hex(&a), "after_sha256": craft_anything_evidence::sha256_hex(&b)}))
+        .params(json!({"tolerance": p.tolerance, "common_area": p.common_area, "before_sha256": f_builder_evidence::sha256_hex(&a), "after_sha256": f_builder_evidence::sha256_hex(&b)}))
         .result(diff)
         .summary(summary)
         .confidence(Confidence::Derived)
@@ -1664,13 +1664,11 @@ impl Locator {
 /// The first element in the accessibility tree with this role and exact accessible name.
 fn role_node(client: &mut CdpClient, role: &str, name: &str, dl: &Deadline) -> Result<u64, ToolError> {
     let doc = client.call("DOM.getDocument", json!({"depth": 0}), None, dl)?;
-    let root = doc
-        .pointer("/root/nodeId")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| ToolError::new(craft_anything_evidence::ErrorCode::ProgramFailed, "no document root"))?;
+    let root =
+        doc.pointer("/root/nodeId").and_then(Value::as_u64).ok_or_else(|| ToolError::new(f_builder_evidence::ErrorCode::ProgramFailed, "no document root"))?;
     let _ = client.call("Accessibility.enable", json!({}), None, dl);
     let found = client.call("Accessibility.queryAXTree", json!({"nodeId": root, "accessibleName": name, "role": role}), None, dl)?;
-    let missing = || ToolError::new(craft_anything_evidence::ErrorCode::NotFound, format!("no {role} named {name:?} on the page"));
+    let missing = || ToolError::new(f_builder_evidence::ErrorCode::NotFound, format!("no {role} named {name:?} on the page"));
     let backend = found
         .get("nodes")
         .and_then(Value::as_array)
@@ -2294,7 +2292,7 @@ fn web_walkthrough_record(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput
     let summary =
         format!("Ran {} of {} scripted step(s) on {start_url}{}.", ok_steps, p.actions.len(), aborted.as_ref().map(|a| format!(" ({a})")).unwrap_or_default());
     let result = json!({
-        "browser": {"product": browser.product, "started_by": if browser.launched { "craft-anything" } else { "external" }, "cleanup": if browser.launched { "closed" } else { "disconnected" }},
+        "browser": {"product": browser.product, "started_by": if browser.launched { "f-builder" } else { "external" }, "cleanup": if browser.launched { "closed" } else { "disconnected" }},
         "start_url": start_url,
         "action_count": p.actions.len(),
         "keep_bodies": p.keep_bodies,
@@ -2346,7 +2344,7 @@ fn run_action(client: &mut CdpClient, action: &WalkthroughAction, secrets: &mut 
             let _ = secrets.text(url);
             let r = client.call("Page.navigate", json!({"url": url}), None, dl)?;
             if let Some(err) = r.get("errorText").and_then(Value::as_str).filter(|s| !s.is_empty()) {
-                return Err(ToolError::new(craft_anything_evidence::ErrorCode::ProgramFailed, format!("navigation failed: {err}")));
+                return Err(ToolError::new(f_builder_evidence::ErrorCode::ProgramFailed, format!("navigation failed: {err}")));
             }
             let settle = Deadline::new(Duration::from_millis(wait_ms.unwrap_or(1000).min(script_check::MAX_GOTO_WAIT_MS)), crate::tool::CancelToken::default());
             let _ = client.pump_until(&settle);
@@ -2385,7 +2383,7 @@ fn run_action(client: &mut CdpClient, action: &WalkthroughAction, secrets: &mut 
             let object_id = obj
                 .pointer("/object/objectId")
                 .and_then(Value::as_str)
-                .ok_or_else(|| ToolError::new(craft_anything_evidence::ErrorCode::ProgramFailed, "could not resolve the select element"))?;
+                .ok_or_else(|| ToolError::new(f_builder_evidence::ErrorCode::ProgramFailed, "could not resolve the select element"))?;
             client
                 .call(
                     "Runtime.callFunctionOn",
@@ -2400,16 +2398,14 @@ fn run_action(client: &mut CdpClient, action: &WalkthroughAction, secrets: &mut 
 
 pub(crate) fn query_node(client: &mut CdpClient, selector: &str, dl: &Deadline) -> Result<u64, ToolError> {
     let doc = client.call("DOM.getDocument", json!({"depth": 0}), None, dl)?;
-    let root = doc
-        .pointer("/root/nodeId")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| ToolError::new(craft_anything_evidence::ErrorCode::ProgramFailed, "no document root"))?;
+    let root =
+        doc.pointer("/root/nodeId").and_then(Value::as_u64).ok_or_else(|| ToolError::new(f_builder_evidence::ErrorCode::ProgramFailed, "no document root"))?;
     let found = client.call("DOM.querySelector", json!({"nodeId": root, "selector": selector}), None, dl)?;
     let node = found
         .get("nodeId")
         .and_then(Value::as_u64)
         .filter(|n| *n != 0)
-        .ok_or_else(|| ToolError::new(craft_anything_evidence::ErrorCode::NotFound, format!("no element matches {selector:?}")))?;
+        .ok_or_else(|| ToolError::new(f_builder_evidence::ErrorCode::NotFound, format!("no element matches {selector:?}")))?;
     Ok(node)
 }
 
@@ -2423,10 +2419,10 @@ fn node_center(client: &mut CdpClient, node: u64, dl: &Deadline) -> Result<(f64,
     let content = box_model
         .pointer("/model/content")
         .and_then(Value::as_array)
-        .ok_or_else(|| ToolError::new(craft_anything_evidence::ErrorCode::ProgramFailed, "element has no box"))?;
+        .ok_or_else(|| ToolError::new(f_builder_evidence::ErrorCode::ProgramFailed, "element has no box"))?;
     let nums: Vec<f64> = content.iter().filter_map(Value::as_f64).collect();
     if nums.len() < 8 {
-        return Err(ToolError::new(craft_anything_evidence::ErrorCode::ProgramFailed, "element box is malformed"));
+        return Err(ToolError::new(f_builder_evidence::ErrorCode::ProgramFailed, "element box is malformed"));
     }
     let x = (nums[0] + nums[2] + nums[4] + nums[6]) / 4.0;
     let y = (nums[1] + nums[3] + nums[5] + nums[7]) / 4.0;

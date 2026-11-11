@@ -7,8 +7,8 @@ use crate::target::MAX_TARGET_BYTES;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
 use crate::tools::native_common::{page, spec};
 use crate::tools::static_input::{Input, builder, format_err, load};
-use craft_anything_evidence::{Authority, Confidence, Coverage, ErrorCode, Limitation, Location, ToolError, sha256_hex};
-use craft_anything_formats::{dart, zip};
+use f_builder_evidence::{Authority, Confidence, Coverage, ErrorCode, Limitation, Location, ToolError, sha256_hex};
+use f_builder_formats::{dart, zip};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -333,13 +333,13 @@ fn android_dart_snapshot_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOu
 mod tests {
     use crate::Engine;
     use crate::tools::native_common::test_support::{call, call_err};
-    use craft_anything_testkit::flutter as fx;
+    use f_builder_testkit::flutter as fx;
     use serde_json::json;
 
     #[test]
     fn identifies_a_flutter_apk() {
         let e = Engine::new(crate::testing::session());
-        let apk = craft_anything_testkit::temp_file("app.apk", &fx::flutter_apk());
+        let apk = f_builder_testkit::temp_file("app.apk", &fx::flutter_apk());
         let v = call(&e, "android_flutter_identify", json!({"path": apk}));
         let r = &v["result"];
         assert_eq!(r["flutter_detected"], true);
@@ -349,7 +349,7 @@ mod tests {
         assert_eq!(r["abis"].as_array().unwrap().len(), 2);
         assert_eq!(r["abis"][0]["libflutter"]["build_id"], fx::BUILD_ID_HEX);
         assert_eq!(r["abis"][0]["libflutter"]["sha256"].as_str().unwrap().len(), 64);
-        let plain = craft_anything_testkit::temp_file("plain.apk", &fx::plain_apk());
+        let plain = f_builder_testkit::temp_file("plain.apk", &fx::plain_apk());
         let v = call(&e, "android_flutter_identify", json!({"path": plain}));
         assert_eq!(v["result"]["flutter_detected"], false);
         assert!(v["result"]["snapshot_hash"].is_null());
@@ -358,7 +358,7 @@ mod tests {
     #[test]
     fn inspects_dart_aot_from_apk_and_elf() {
         let e = Engine::new(crate::testing::session());
-        let apk = craft_anything_testkit::temp_file("app.apk", &fx::flutter_apk());
+        let apk = f_builder_testkit::temp_file("app.apk", &fx::flutter_apk());
         let v = call(&e, "android_dart_snapshot_show", json!({"path": apk}));
         let r = &v["result"];
         assert_eq!(r["abi"], "arm64-v8a");
@@ -369,12 +369,12 @@ mod tests {
         assert_eq!(v["result"]["elf"]["symbol_source"], "dynamic-segment");
         assert_eq!(v["result"]["tokens"].as_array().unwrap().len(), 1);
         assert_eq!(v["coverage"]["status"], "partial");
-        let so = craft_anything_testkit::temp_file("libapp.so", &fx::libapp_so(fx::SymbolTable::DynamicHash));
+        let so = f_builder_testkit::temp_file("libapp.so", &fx::libapp_so(fx::SymbolTable::DynamicHash));
         let v = call(&e, "android_dart_snapshot_show", json!({"path": so}));
         assert_eq!(v["result"]["snapshot_hash"], fx::SNAPSHOT_HASH);
         assert!(call_err(&e, "android_dart_snapshot_show", json!({"path": apk, "abi": "mips"})).message.contains("no lib/mips"));
         assert!(call_err(&e, "android_dart_snapshot_show", json!({"path": apk, "abi": "BAD!"})).message.contains("abi"));
-        let plain = craft_anything_testkit::temp_file("plain.apk", &fx::plain_apk());
+        let plain = f_builder_testkit::temp_file("plain.apk", &fx::plain_apk());
         call_err(&e, "android_dart_snapshot_show", json!({"path": plain}));
     }
 
@@ -382,8 +382,8 @@ mod tests {
     fn damaged_packages_never_panic() {
         let e = Engine::new(crate::testing::session());
         let apk = fx::flutter_apk();
-        for (i, m) in craft_anything_testkit::mutations(&apk).into_iter().enumerate().step_by(7) {
-            let p = craft_anything_testkit::temp_file(&format!("m{i}.apk"), &m);
+        for (i, m) in f_builder_testkit::mutations(&apk).into_iter().enumerate().step_by(7) {
+            let p = f_builder_testkit::temp_file(&format!("m{i}.apk"), &m);
             let _ = e.call("android_flutter_identify", json!({"path": p}), crate::CallOptions::new(crate::Caller::Cli));
             let _ = e.call("android_dart_snapshot_show", json!({"path": p}), crate::CallOptions::new(crate::Caller::Cli));
         }

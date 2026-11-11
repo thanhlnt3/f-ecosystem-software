@@ -3,7 +3,7 @@
 
 use super::{OWN_NAMES, Workspace, rebuilt};
 use crate::CancelToken;
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -57,7 +57,7 @@ pub struct BuildProgress {
 pub struct CheckedBuild {
     /// A digest of what the round's checks look at, taken after they ran.
     pub key: String,
-    /// The round in `craft.json`'s `checks` whose results stand.
+    /// The round in `f-builder.json`'s `checks` whose results stand.
     pub round: u32,
 }
 
@@ -90,8 +90,8 @@ impl BuildProgress {
             }
         };
         if found > BUILD_PROGRESS_VERSION {
-            return Err(ToolError::unsupported(format!("{BUILD_PROGRESS_FILE} was written by a newer Craft Anything, so this build is left alone."))
-                .with_remediation("Update Craft Anything to continue this build."));
+            return Err(ToolError::unsupported(format!("{BUILD_PROGRESS_FILE} was written by a newer F-Builder, so this build is left alone."))
+                .with_remediation("Update F-Builder to continue this build."));
         }
         let version = crate::versioned::upgrade(&mut doc, found, 0, STEPS)
             .map_err(|e| ToolError::invalid(format!("Couldn't bring {BUILD_PROGRESS_FILE} up to date: {e}")))?;

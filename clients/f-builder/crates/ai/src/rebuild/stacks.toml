@@ -1,4 +1,4 @@
-# The stacks Craft Anything builds with: what the builder is told for each, and the phrases that
+# The stacks F-Builder builds with: what the builder is told for each, and the phrases that
 # ask for one by name. Placeholders in `steps`: {editor} (the game engine's editor), {player} and
 # {ext} (Unity's player target and file extension on this computer). A stack without `steps` gets
 # the generic instruction. Add a stack here; kinds name their default stack by `name`.
@@ -42,7 +42,7 @@ steps = "Use Bevy for the game. Put Cargo.toml and src/main.rs directly in app/,
 name = "Electron"
 asked_by = [" electron "]
 uses = ["electron"]
-steps = "Use Electron, with TypeScript or JavaScript (a bundler such as Vite is fine). Create the project in app/: package.json with electron as a devDependency, \"main\" set to the main-process file and a \"build\" script that compiles or bundles everything and exits without opening a window (for plain JavaScript, `node --check` on the main file is enough). Keep contextIsolation on and nodeIntegration off, and give the page what it needs through a preload script and IPC. For --screenshot, set backgroundThrottling to false, wait for the page to finish loading and about two seconds rather than counting requestAnimationFrame frames (a window that opens behind others may get none), then save win.webContents.capturePage(). Craft Anything starts the app with the Electron that `npm install` puts in node_modules, with app/ as its argument, so run `npm install` and `npm run build` from app/ until both succeed."
+steps = "Use Electron, with TypeScript or JavaScript (a bundler such as Vite is fine). Create the project in app/: package.json with electron as a devDependency, \"main\" set to the main-process file and a \"build\" script that compiles or bundles everything and exits without opening a window (for plain JavaScript, `node --check` on the main file is enough). Keep contextIsolation on and nodeIntegration off, and give the page what it needs through a preload script and IPC. For --screenshot, set backgroundThrottling to false, wait for the page to finish loading and about two seconds rather than counting requestAnimationFrame frames (a window that opens behind others may get none), then save win.webContents.capturePage(). F-Builder starts the app with the Electron that `npm install` puts in node_modules, with app/ as its argument, so run `npm install` and `npm run build` from app/ until both succeed."
 
 [[stack]]
 name = "Next.js + TypeScript"
@@ -97,7 +97,7 @@ steps = "Use Unity (the editor is {editor}). Create the project in app/: Assets/
 name = "Unreal Engine"
 engine = "unreal"
 found_by = ["*.uproject"]
-steps = "Use Unreal Engine (the editor is {editor}) with C++: Blueprint and level files are binary and can't be written by hand. Create app/Game.uproject (its EngineAssociation set to the installed version, one C++ module) and Source/Game/ with the module, its Build.cs and the Target.cs files. Make levels from code (a GameMode that spawns the geometry, lights and actors at start, with a small empty default map) rather than editing .umap files. Craft Anything packages it with Unreal's BuildCookRun into app/Build after each round; the first package takes a long time, so compile your C++ with the engine's build tool first and fix errors there."
+steps = "Use Unreal Engine (the editor is {editor}) with C++: Blueprint and level files are binary and can't be written by hand. Create app/Game.uproject (its EngineAssociation set to the installed version, one C++ module) and Source/Game/ with the module, its Build.cs and the Target.cs files. Make levels from code (a GameMode that spawns the geometry, lights and actors at start, with a small empty default map) rather than editing .umap files. F-Builder packages it with Unreal's BuildCookRun into app/Build after each round; the first package takes a long time, so compile your C++ with the engine's build tool first and fix errors there."
 
 [[stack]]
 name = "Godot"

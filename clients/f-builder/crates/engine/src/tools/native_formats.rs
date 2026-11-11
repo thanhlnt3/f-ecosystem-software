@@ -5,9 +5,9 @@
 use super::native_common::{hex, image, select_document, spec};
 use crate::target::{Target, TargetKind};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_analysis::native as an;
-use craft_anything_evidence::{Confidence, Coverage, Environment, ErrorCode, Evidence, EvidenceBuilder, Limitation, Location, Subject, ToolError, sha256_hex};
-use craft_anything_formats::Format;
+use f_builder_analysis::native as an;
+use f_builder_evidence::{Confidence, Coverage, Environment, ErrorCode, Evidence, EvidenceBuilder, Limitation, Location, Subject, ToolError, sha256_hex};
+use f_builder_formats::Format;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -264,7 +264,7 @@ fn native_pe_resources_list(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutp
         return Err(ToolError::invalid("max_entries must be 1..=65536"));
     }
     let (data, subject) = input(ctx, &p.path, p.max_file_bytes)?;
-    let res = craft_anything_formats::pe::parse_resources(&data, p.max_entries).map_err(|e| ToolError::unsupported(format!("Not a readable PE file: {e}")))?;
+    let res = f_builder_formats::pe::parse_resources(&data, p.max_entries).map_err(|e| ToolError::unsupported(format!("Not a readable PE file: {e}")))?;
     let entries: Vec<Value> = res
         .entries
         .iter()
@@ -283,7 +283,7 @@ fn native_pe_resources_list(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutp
         .result(json!({"entries": entries, "icon_groups": res.icon_groups, "version": res.version, "manifest": res.manifest, "truncated": res.truncated}))
         .summary(summary)
         .coverage(if res.truncated {
-            Coverage { status: craft_anything_evidence::CoverageStatus::Partial, examined: Some(n as u64), total: None, next_offset: None }
+            Coverage { status: f_builder_evidence::CoverageStatus::Partial, examined: Some(n as u64), total: None, next_offset: None }
         } else {
             Coverage::complete(n as u64)
         });
@@ -297,7 +297,7 @@ fn native_pe_resources_list(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutp
 fn native_layout_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {
     let p: LayoutParams = parse_params(params)?;
     let (data, subject) = input(ctx, &p.path, 2 << 30)?;
-    let bin = craft_anything_formats::parse_binary(&data).map_err(|e| ToolError::unsupported(format!("Not a readable ELF, PE or Mach-O file: {e}")))?;
+    let bin = f_builder_formats::parse_binary(&data).map_err(|e| ToolError::unsupported(format!("Not a readable ELF, PE or Mach-O file: {e}")))?;
     const CAP: usize = 20_000;
     let syms: Vec<Value> = bin.symbols.iter().take(CAP).map(|s| json!({"name": s.name, "demangled": s.demangled, "address": hex(s.addr), "size": s.size, "kind": s.kind, "global": s.global, "weak": s.weak, "defined": s.defined, "dynamic": s.dynamic})).collect();
     let relocs: Vec<Value> =
@@ -377,7 +377,7 @@ fn yn(b: Option<bool>) -> &'static str {
 fn native_crash_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {
     let p: CrashParams = parse_params(params)?;
     let (data, subject) = input(ctx, &p.path, 2 << 30)?;
-    let core = craft_anything_formats::elf::parse_core(&data).map_err(|e| {
+    let core = f_builder_formats::elf::parse_core(&data).map_err(|e| {
         ToolError::unsupported(format!("Not a readable ELF core dump: {e}"))
             .with_remediation("Pass a Linux core file (from a crash, `gcore`, or systemd-coredump after extraction).")
     })?;
@@ -416,7 +416,7 @@ fn native_crash_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Too
             "architecture": core.arch.name(),
         }))
         .summary(summary)
-        .authority(craft_anything_evidence::Authority::EarlierRecord)
+        .authority(f_builder_evidence::Authority::EarlierRecord)
         .limitations(lims)
         .coverage(Coverage::complete(core.notes.len() as u64));
     if let Some(pc) = pc {
@@ -442,7 +442,7 @@ fn native_dos_image_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
             ok,
         )
     } else if data.starts_with(b"MZ") || data.starts_with(b"ZM") {
-        let mz = craft_anything_formats::dos::parse_mz(&data).map_err(|e| ToolError::unsupported(format!("Not a readable DOS MZ header: {e}")))?;
+        let mz = f_builder_formats::dos::parse_mz(&data).map_err(|e| ToolError::unsupported(format!("Not a readable DOS MZ header: {e}")))?;
         let hdr = data.get(..(mz.header_bytes as usize).min(data.len())).unwrap_or(&[]);
         let start = mz.load_module_offset as usize;
         let module = data.get(start.min(data.len())..start.saturating_add(mz.load_module_size as usize).min(data.len())).unwrap_or(&[]);
@@ -577,7 +577,7 @@ fn core_target_triage(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, To
                 builder = builder.limitation(Limitation::new("native_parse_failed", error.message));
             }
             // A game's folder: what it's made with, its libraries and its size.
-            let game = (t.kind == TargetKind::Directory).then(|| craft_anything_engines::game::profile(&t.path));
+            let game = (t.kind == TargetKind::Directory).then(|| f_builder_engines::game::profile(&t.path));
             let game = game.and_then(|g| g.summary(&t.name).map(|s| (g, s)));
             if let Some((_, summary)) = &game {
                 plain.clone_from(summary);
@@ -679,13 +679,11 @@ fn core_evidence_browse(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
         Show::FunctionPart { name, offset, limit } => page_of(r, name, *offset, *limit, &BTreeMap::new(), &[], false)?,
     };
     let status = match coverage.status {
-        craft_anything_evidence::CoverageStatus::Complete
-            if matches!(p.show, Show::Rows { .. } | Show::FunctionPart { .. }) && coverage.examined == Some(0) =>
-        {
+        f_builder_evidence::CoverageStatus::Complete if matches!(p.show, Show::Rows { .. } | Show::FunctionPart { .. }) && coverage.examined == Some(0) => {
             "empty"
         }
-        craft_anything_evidence::CoverageStatus::Complete if matches!(p.show, Show::Rows { .. } | Show::FunctionPart { .. }) => "page",
-        craft_anything_evidence::CoverageStatus::Partial => "page",
+        f_builder_evidence::CoverageStatus::Complete if matches!(p.show, Show::Rows { .. } | Show::FunctionPart { .. }) => "page",
+        f_builder_evidence::CoverageStatus::Partial => "page",
         _ => "all-in-view",
     };
     let at_end = coverage.next_offset.is_none();
@@ -764,7 +762,7 @@ fn page_of(
         Value::String(s) => {
             let (text, total, next) = page_text(s, offset, limit.saturating_mul(64));
             let cov = Coverage {
-                status: if next.is_some() { craft_anything_evidence::CoverageStatus::Partial } else { craft_anything_evidence::CoverageStatus::Complete },
+                status: if next.is_some() { f_builder_evidence::CoverageStatus::Partial } else { f_builder_evidence::CoverageStatus::Complete },
                 examined: Some(text.encode_utf16().count() as u64),
                 total: Some(total as u64),
                 next_offset: next.map(|n| n as u64),
@@ -782,7 +780,7 @@ fn keys(v: &Value) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::super::native_common::test_support::*;
-    use craft_anything_testkit as tk;
+    use f_builder_testkit as tk;
     use serde_json::json;
 
     #[test]
@@ -796,7 +794,7 @@ mod tests {
         header[58] = 64;
         let e = engine_with("truncated.elf", &header[..16]);
         let path = tk::temp_file("truncated.elf", &header[..16]);
-        let parse_error = craft_anything_formats::parse_binary(&header[..16]).unwrap_err().to_string();
+        let parse_error = f_builder_formats::parse_binary(&header[..16]).unwrap_err().to_string();
         for params in [json!({}), json!({"path": path.to_string_lossy()})] {
             let r = call(&e, "core_target_triage", params.clone());
             assert_eq!(r["result"]["kind"], "elf");
@@ -884,7 +882,7 @@ mod tests {
         tampered["result"]["pseudocode"] = json!("evil");
         assert_eq!(
             call_err(&e, "core_evidence_browse", json!({"source": {"kind": "inline", "evidence": tampered}, "show": {"kind": "summary"}})).code,
-            craft_anything_evidence::ErrorCode::EvidenceHashMismatch
+            f_builder_evidence::ErrorCode::EvidenceHashMismatch
         );
         assert!(
             call_err(&e, "core_evidence_browse", json!({"source": {"kind": "saved", "evidence_id": "ev_missing"}, "show": {"kind": "summary"}}))
@@ -946,7 +944,7 @@ mod tests {
         assert!(r["limitations"].as_array().unwrap().iter().any(|l| l["code"] == "debugger_context_unavailable"));
         let (elf, _) = tk::elf64(tk::ElfArch::X86_64, true);
         let e = engine_with("prog", &elf);
-        assert_eq!(call_err(&e, "native_crash_show", json!({})).code, craft_anything_evidence::ErrorCode::NotSupported);
+        assert_eq!(call_err(&e, "native_crash_show", json!({})).code, f_builder_evidence::ErrorCode::NotSupported);
     }
 
     #[test]
@@ -968,7 +966,7 @@ mod tests {
         let e = engine_with("notes.txt", b"plain text");
         let r = call(&e, "core_target_triage", json!({}));
         assert!(r["result"]["plain_english"].as_str().unwrap().contains("recognise"));
-        assert_eq!(call_err(&e, "native_dos_image_show", json!({})).code, craft_anything_evidence::ErrorCode::NotSupported);
+        assert_eq!(call_err(&e, "native_dos_image_show", json!({})).code, f_builder_evidence::ErrorCode::NotSupported);
         let e = engine_with("app.asar", b"\x04\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0{\"files\":{}}");
         let r = call(&e, "core_target_triage", json!({}));
         assert!(r["result"]["recommended_toolsets"].as_array().unwrap().iter().any(|t| t == "javascript"));

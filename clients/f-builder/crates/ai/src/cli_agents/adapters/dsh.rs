@@ -19,11 +19,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 /// The tool server's id inside the overlay. Distinct from the one a person may have added to their
 /// own profile by hand, so the two never replace each other.
-const OVERLAY_ID: &str = "mcp-craft-anything-run";
+const OVERLAY_ID: &str = "mcp-f-builder-run";
 
-/// The run's server name: not `craft-anything`, which the person's own registration uses, as the
+/// The run's server name: not `f-builder`, which the person's own registration uses, as the
 /// harness refuses to start two clients with one name.
-const OVERLAY_SERVER: &str = "craft-anything-run";
+const OVERLAY_SERVER: &str = "f-builder-run";
 
 /// DeepSeek Harness run as a coding agent: one task in, its last message out.
 pub struct DeepSeekHarness;
@@ -71,11 +71,11 @@ impl AgentAdapter for DeepSeekHarness {
     }
 
     fn check_tool_server(&self, stop: &CancelToken) -> Result<(), ToolError> {
-        cli_can_start(craft_anything_platform::self_cli_path().as_deref(), stop)?;
+        cli_can_start(f_builder_platform::self_cli_path().as_deref(), stop)?;
         // The folder and the write a run uses, once, before the build starts: a temporary folder
         // that can't take the overlay stops the build here with a fix, not part-way through one.
         let dir = overlay_dir()?;
-        let written = craft_anything_platform::write_atomic_private(&dir.join(PROBE_FILE), b"[]\n");
+        let written = f_builder_platform::write_atomic_private(&dir.join(PROBE_FILE), b"[]\n");
         let _ = std::fs::remove_dir_all(&dir);
         written
     }
@@ -93,7 +93,7 @@ const PROBE_FILE: &str = "probe.yml";
 fn overlay_dir() -> Result<std::path::PathBuf, ToolError> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("craft-anything-dsh-{}-{n}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("f-builder-dsh-{}-{n}", std::process::id()));
     // `create_dir` refuses a path that is already there, so a folder prepared beforehand is never
     // used (`create_dir_all` would accept one).
     private_dir().create(&dir).map_err(|e| {
@@ -127,7 +127,7 @@ fn private_dir() -> std::fs::DirBuilder {
 fn tool_server_patch(mcp: &McpCommand) -> String {
     let Ok(dir) = overlay_dir() else { return missing_overlay() };
     let path = dir.join(OVERLAY_FILE);
-    match craft_anything_platform::write_atomic_private(&path, overlay_yaml(mcp).as_bytes()) {
+    match f_builder_platform::write_atomic_private(&path, overlay_yaml(mcp).as_bytes()) {
         Ok(()) => path.display().to_string(),
         Err(e) => {
             log::warn!("the DeepSeek Harness tool-server overlay couldn't be written: {}", e.message);
@@ -138,7 +138,7 @@ fn tool_server_patch(mcp: &McpCommand) -> String {
 
 /// A path no run wrote anything to.
 fn missing_overlay() -> String {
-    std::env::temp_dir().join(format!("craft-anything-dsh-{}-missing.yml", std::process::id())).display().to_string()
+    std::env::temp_dir().join(format!("f-builder-dsh-{}-missing.yml", std::process::id())).display().to_string()
 }
 
 /// The overlay in the harness's patch format: a list of loader entries, one server inserted.
@@ -146,7 +146,7 @@ fn overlay_yaml(mcp: &McpCommand) -> String {
     let q = |s: &str| format!("'{}'", s.replace('\'', "''"));
     let args: String = mcp.args.iter().map(|a| format!("\n          - {}", q(a))).collect();
     format!(
-        "# Craft Anything's tool server for this run. Generated; safe to delete.\n\
+        "# F-Builder's tool server for this run. Generated; safe to delete.\n\
          - insert:\n    \
            - id: {OVERLAY_ID}\n      \
              name: '@deepseek-ai/dsh-mcp-client'\n      \
@@ -167,8 +167,8 @@ mod tests {
     /// A tool server command for a run's project.
     fn mcp() -> McpCommand {
         McpCommand {
-            command: r"C:\Program Files\Craft Anything\craft-anything-cli.exe".into(),
-            args: vec!["mcp".into(), "--project".into(), r"C:\w\p\investigation.cany".into()],
+            command: r"C:\Program Files\F-Builder\f-builder-cli.exe".into(),
+            args: vec!["mcp".into(), "--project".into(), r"C:\w\p\investigation.fbproj".into()],
             notes: None,
         }
     }
@@ -202,14 +202,14 @@ mod tests {
         let written = std::fs::read_to_string(&path).expect("read the overlay");
         assert!(written.contains("- insert:"), "{written}");
         assert!(written.contains(OVERLAY_ID), "{written}");
-        assert!(written.contains("serverName: craft-anything-run\n"), "the person's own registration keeps its name: {written}");
+        assert!(written.contains("serverName: f-builder-run\n"), "the person's own registration keeps its name: {written}");
         // The server's own arguments, including the run's project, quoted for YAML.
         assert!(written.contains("- 'mcp'"), "{written}");
         assert!(written.contains(&format!("- '{}'", mcp.args[2])), "{written}");
         // A folder of the run's own, so nothing another user prepared in a shared temporary folder
         // is written through.
         let folder = path.parent().expect("a folder of its own").to_path_buf();
-        let own = format!("craft-anything-dsh-{}-", std::process::id());
+        let own = format!("f-builder-dsh-{}-", std::process::id());
         assert!(folder.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(&own)), "{folder:?}");
         #[cfg(unix)]
         {

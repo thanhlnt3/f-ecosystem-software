@@ -1,31 +1,31 @@
 ---
-name: craft-anything
-description: Investigate how shipped software works (programs, apps, packages, firmware, web bundles) with evidence-backed answers through the Craft Anything MCP tools, keeping a durable brief, plan, hypotheses, findings and handoff in the project.
+name: f-builder
+description: Investigate how shipped software works (programs, apps, packages, firmware, web bundles) with evidence-backed answers through the F-Builder MCP tools, keeping a durable brief, plan, hypotheses, findings and handoff in the project.
 metadata:
   version: "2"
 ---
 
-# Craft Anything: evidence-first investigation
+# F-Builder: evidence-first investigation
 
-Use Craft Anything when an answer depends on something that was *built and shipped*: an executable, a
+Use F-Builder when an answer depends on something that was *built and shipped*: an executable, a
 library, an app bundle, an APK, an Electron app, a WebAssembly module, firmware, a crash dump or a
 network capture. If you have the source code and the question is about the source, read the source
 instead; that is faster and more direct.
 
 ## Connect only when you need it
 
-- If the `craft-anything` tools are already in your tool list, go straight to work. Don't run setup or
+- If the `f-builder` tools are already in your tool list, go straight to work. Don't run setup or
   doctor first.
 - Trust the live tool list and its schemas over this file; the server may be newer or older.
-- If the tools are missing or failing to start, run `craft-anything-cli doctor` and then
-  `craft-anything-cli setup --dry-run` and show the user the plan before applying anything. After a
+- If the tools are missing or failing to start, run `f-builder-cli doctor` and then
+  `f-builder-cli setup --dry-run` and show the user the plan before applying anything. After a
   successful setup the user must restart or reconnect their app.
 - **Never run `setup --yes` (or `setup --client …`) on an entry that already lists every tool.**
   `setup` writes the plain `mcp` command, so it drops an `--all-tools` that is already in the entry
   and the server falls back to the small core toolset instead of the whole list. `doctor` calls such
   an entry "a different copy or shape of the command" and then suggests exactly that command, so
   the warning is not a reason to run it. Read the client's config file first: if the `args` of
-  `craft-anything` end in `--all-tools`, leave the entry alone. `setup --dry-run` only prints the
+  `f-builder` end in `--all-tools`, leave the entry alone. `setup --dry-run` only prints the
   plan and changes nothing, so that one is safe to run. To add a client, write the entry by hand
   with `--all-tools`.
 - Only a small core toolset is listed at first. Call `list_toolsets` to see the others and

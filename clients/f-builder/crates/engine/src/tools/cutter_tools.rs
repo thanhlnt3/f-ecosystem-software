@@ -1,5 +1,5 @@
 //! Cutter sessions the person shares with us (`=h& 9090` in Cutter's console), through
-//! [`craft_anything_engines::cutter`]: find which ports answer, and run read-only Rizin commands
+//! [`f_builder_engines::cutter`]: find which ports answer, and run read-only Rizin commands
 //! (the same allow-list as native_rizin_command_run) in what they have open. Only this computer is
 //! contacted; nothing is sent unless the person opened the session to us.
 
@@ -7,8 +7,8 @@ use super::external_disasm_tools::check_rizin_command;
 use super::native_common::{params_json, spec};
 use super::static_input::builder;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_engines::cutter::{self, DEFAULT_PORT, HOW_TO_OPEN};
-use craft_anything_evidence::{Authority, Confidence, Coverage, Limitation, Subject, ToolError};
+use f_builder_engines::cutter::{self, DEFAULT_PORT, HOW_TO_OPEN};
+use f_builder_evidence::{Authority, Confidence, Coverage, Limitation, Subject, ToolError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};

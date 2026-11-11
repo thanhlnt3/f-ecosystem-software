@@ -1247,7 +1247,7 @@ mod tests {
     #[test]
     fn a_thumb_bl_discovers_the_callee_instead_of_padding() {
         use crate::{Image, Limits, NoControl, Program};
-        use craft_anything_formats::{Arch, Binary};
+        use f_builder_formats::{Arch, Binary};
         use std::sync::Arc;
 
         let bytes = [0x10, 0xb5, 0x00, 0xf0, 0x05, 0xf8, 0x10, 0xbd, 0, 0, 0, 0, 0, 0, 0, 0, 0x70, 0x47];
@@ -1292,7 +1292,7 @@ mod tests {
     #[test]
     fn junk_never_panics() {
         for seed in 0..64u64 {
-            let bytes = craft_anything_testkit::noise(seed, 64);
+            let bytes = f_builder_testkit::noise(seed, 64);
             for mode in [Mode::X16, Mode::X32, Mode::X64, Mode::A32, Mode::T32, Mode::A64] {
                 for off in 0..bytes.len() {
                     let _ = decode(mode, &bytes[off..], 0x1000 + off as u64, true);

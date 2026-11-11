@@ -1,4 +1,4 @@
-use craft_anything_analysis::web_har::path_template;
+use f_builder_analysis::web_har::path_template;
 
 #[test]
 fn regression_only_calendar_dates_share_a_date_template() {

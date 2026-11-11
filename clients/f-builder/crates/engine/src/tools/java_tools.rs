@@ -7,10 +7,10 @@
 use super::native_common::page;
 use super::static_input::{self, Input, builder};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_analysis::java_decompile;
-use craft_anything_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, EvidenceBuilder, Limitation, Location, ToolError};
-use craft_anything_formats::java_class::{self, ClassFile};
-use craft_anything_formats::{java_ops, zip};
+use f_builder_analysis::java_decompile;
+use f_builder_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, EvidenceBuilder, Limitation, Location, ToolError};
+use f_builder_formats::java_class::{self, ClassFile};
+use f_builder_formats::{java_ops, zip};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -375,7 +375,7 @@ fn java_archive_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Too
             *packages.entry(if pkg.is_empty() { "(default)".into() } else { pkg }).or_default() += 1;
             if sampled < 512
                 && let Ok(b) = self_header(&src, e)
-                && let Some(major) = craft_anything_formats::bytes::Reader::new(&b).u16_be(6)
+                && let Some(major) = f_builder_formats::bytes::Reader::new(&b).u16_be(6)
             {
                 *versions.entry(java_class::Version { major, minor: 0 }.java_label()).or_default() += 1;
                 sampled += 1;
@@ -767,14 +767,14 @@ fn java_class_users_find(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
 mod tests {
     use super::super::native_common::test_support::{call, call_err};
     use crate::Engine;
-    use craft_anything_testkit::java as fx;
+    use f_builder_testkit::java as fx;
     use serde_json::json;
 
     fn jar() -> String {
-        craft_anything_testkit::temp_file("notes.jar", &fx::notes_jar()).to_string_lossy().into_owned()
+        f_builder_testkit::temp_file("notes.jar", &fx::notes_jar()).to_string_lossy().into_owned()
     }
     fn class_file() -> String {
-        craft_anything_testkit::temp_file("Hello.class", &fx::hello_class()).to_string_lossy().into_owned()
+        f_builder_testkit::temp_file("Hello.class", &fx::hello_class()).to_string_lossy().into_owned()
     }
 
     #[test]
@@ -833,15 +833,15 @@ mod tests {
         assert!(c["result"]["pseudo_java"].as_str().unwrap().contains("class com.example.Hello"), "{}", c["result"]["pseudo_java"]);
         // archive tool rejects a bare class
         let err = call_err(&e, "java_archive_show", json!({"path": path}));
-        assert_eq!(err.code, craft_anything_evidence::ErrorCode::NotSupported);
+        assert_eq!(err.code, f_builder_evidence::ErrorCode::NotSupported);
     }
 
     #[test]
     fn hostile_inputs_do_not_panic() {
         let e = Engine::new(crate::testing::session());
         let jar_bytes = fx::notes_jar();
-        for (i, m) in craft_anything_testkit::mutations(&jar_bytes).into_iter().enumerate().step_by(3) {
-            let p = craft_anything_testkit::temp_file(&format!("m{i}.jar"), &m);
+        for (i, m) in f_builder_testkit::mutations(&jar_bytes).into_iter().enumerate().step_by(3) {
+            let p = f_builder_testkit::temp_file(&format!("m{i}.jar"), &m);
             for (tool, params) in [
                 ("java_archive_show", json!({"path": p})),
                 ("java_classes_find", json!({"path": p, "include_methods": true})),
@@ -854,8 +854,8 @@ mod tests {
         }
         // hostile bare class files
         let cls = fx::hello_class();
-        for m in craft_anything_testkit::mutations(&cls).into_iter().step_by(2) {
-            let p = craft_anything_testkit::temp_file("m.class", &m);
+        for m in f_builder_testkit::mutations(&cls).into_iter().step_by(2) {
+            let p = f_builder_testkit::temp_file("m.class", &m);
             let _ = e.call("java_class_show", json!({"path": p, "decompile": true}), crate::CallOptions::new(crate::Caller::Mcp));
         }
     }

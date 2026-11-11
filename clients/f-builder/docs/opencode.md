@@ -1,15 +1,15 @@
 # OpenCode as an AI backend
 
-Craft Anything can run OpenCode V2 locally or on an SSH host. OpenCode owns its provider
+F-Builder can run OpenCode V2 locally or on an SSH host. OpenCode owns its provider
 connections and sign-in. Set these up in OpenCode on the computer where it will run.
 
 Model and thinking choices can be discovered, validated and saved. A run with an explicit
 selection goes through the native adapter (`opencode run --standalone`), which hands the run
-the Craft Anything MCP server in a config file named by `OPENCODE_CONFIG`; the person's own
-settings stay unchanged. Over SSH one `ssh` run checks that `craft-anything-cli` is on the
-remote PATH and writes the file on the host itself (`~/.cache/craft-anything/`, named by its
+the F-Builder MCP server in a config file named by `OPENCODE_CONFIG`; the person's own
+settings stay unchanged. Over SSH one `ssh` run checks that `f-builder-cli` is on the
+remote PATH and writes the file on the host itself (`~/.cache/f-builder/`, named by its
 content, kept private), so the remote run gets the same tools. The host needs
-`craft-anything-cli` on its PATH — install Craft Anything there (the app keeps the helper
+`f-builder-cli` on its PATH — install F-Builder there (the app keeps the helper
 next to it). If the check fails, the turn stops before any work with the fix.
 
 **Which OpenCode.** Runs need OpenCode 2.x, whose `run` has `--standalone`. OpenCode's install
@@ -18,7 +18,7 @@ doesn't have it. 2.x comes from npm's `@opencode/cli` package (`npm install -g @
 with the OpenCode desktop app, whose CLI is `opencode-cli` in the app's resources folder
 (`/opt/OpenCode/resources/opencode-cli` from the Linux package), and from OpenCode's GitHub
 releases. When the `opencode` on your PATH is 1.x, install `@opencode/cli`, or point the backend
-at a 2.x CLI: step 2 below, or `craft-anything-cli ai program OpenCode <path>`.
+at a 2.x CLI: step 2 below, or `f-builder-cli ai program OpenCode <path>`.
 
 **Don't start OpenCode during a build.** OpenCode's shared service resumes every session it finds
 running, including the one a build's private server is driving: started mid-build (opening the
@@ -59,15 +59,15 @@ by a terminal turn event, so headless chat finishes without waiting for an agent
 ## CLI
 
 ```sh
-craft-anything-cli ai add OpenCode --kind agent_cli --model opencode
-craft-anything-cli ai model OpenCode
-craft-anything-cli ai model OpenCode my-provider/my-model --thinking high
-craft-anything-cli ai model OpenCode --thinking max
-craft-anything-cli ai model OpenCode --default
+f-builder-cli ai add OpenCode --kind agent_cli --model opencode
+f-builder-cli ai model OpenCode
+f-builder-cli ai model OpenCode my-provider/my-model --thinking high
+f-builder-cli ai model OpenCode --thinking max
+f-builder-cli ai model OpenCode --default
 
-craft-anything-cli ai add "OpenCode on studio" --kind agent_cli --model opencode --ssh-host studio
-craft-anything-cli ai program "OpenCode on studio" /opt/opencode/bin/opencode
-craft-anything-cli ai model "OpenCode on studio"
+f-builder-cli ai add "OpenCode on studio" --kind agent_cli --model opencode --ssh-host studio
+f-builder-cli ai program "OpenCode on studio" /opt/opencode/bin/opencode
+f-builder-cli ai model "OpenCode on studio"
 ```
 
 Replace `my-provider/my-model` with an id from the listing. Listing an OpenCode backend also
@@ -124,8 +124,8 @@ So a local turn that doesn't finish (stopped, failed or timed out) deletes its s
 `opencode session delete --standalone <id>`, which removes it without resuming it (over SSH, on
 the host). A turn that finishes keeps its session. While a turn runs, its session is recorded in
 `logs/unfinished-sessions/` in the config folder, under a lock the system drops when Craft
-Anything ends; if Craft Anything is killed mid-turn, the next agent turn, or
-`craft-anything-cli uninstall`, deletes the session of any record nobody holds. A delete that
+Anything ends; if F-Builder is killed mid-turn, the next agent turn, or
+`f-builder-cli uninstall`, deletes the session of any record nobody holds. A delete that
 keeps failing is given up after three tries, with the command to run by hand.
 
 Model discovery uses `opencode api model.list --param location[directory]=...` (the V2

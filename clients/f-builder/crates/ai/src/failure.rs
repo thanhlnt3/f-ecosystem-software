@@ -1,7 +1,7 @@
 //! A failed turn's retry policy, kept apart from the words shown to the person. Protocol and
 //! process boundaries supply these facts; display text never decides whether to retry.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 
 /// Why a conversation's last turn failed. Unknown failures need attention: repeating an
 /// unclassified setup error can spend quota without doing any work.

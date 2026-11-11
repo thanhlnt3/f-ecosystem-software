@@ -4,9 +4,9 @@
 use crate::i18n::tr;
 use crate::state::Screen;
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, Pick, Route, icons, schema_form, widgets};
-use craft_anything_engine::{Consent, Mode};
+use crate::{BuilderApp, Pick, Route, icons, schema_form, widgets};
 use egui::{Margin, RichText, Vec2};
+use f_builder_engine::{Consent, Mode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AppCommand {
@@ -62,7 +62,7 @@ pub fn score(hay: &str, query: &str) -> Option<i32> {
     Some(score - (hay.len() as i32 / 16))
 }
 
-pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
+pub fn show(app: &mut BuilderApp, ctx: &egui::Context) {
     if !app.state.palette.open {
         return;
     }
@@ -208,7 +208,7 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
 }
 
 /// Opens or closes the palette (Ctrl/⌘ K), once first run is done.
-pub(crate) fn toggle(app: &mut CraftApp) {
+pub(crate) fn toggle(app: &mut BuilderApp) {
     if app.settings.first_run_done {
         app.state.palette.open = !app.state.palette.open;
         app.state.palette.query.clear();
@@ -218,7 +218,7 @@ pub(crate) fn toggle(app: &mut CraftApp) {
 }
 
 /// Runs one of the app's own commands, from the palette or the macOS menu bar.
-pub(crate) fn run_app_command(app: &mut CraftApp, c: AppCommand) {
+pub(crate) fn run_app_command(app: &mut BuilderApp, c: AppCommand) {
     match c {
         AppCommand::OpenFile => app.pick(Pick::OpenFile),
         AppCommand::OpenFolder => app.pick(Pick::OpenFolder),
@@ -244,7 +244,7 @@ pub(crate) fn run_app_command(app: &mut CraftApp, c: AppCommand) {
     }
 }
 
-fn form(app: &mut CraftApp, ctx: &egui::Context, tool: &str) {
+fn form(app: &mut BuilderApp, ctx: &egui::Context, tool: &str) {
     let t = Tokens::get(ctx);
     let Some(spec) = app.engine.registry().get(tool).copied() else {
         app.state.palette.form_tool = None;

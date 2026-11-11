@@ -1806,7 +1806,7 @@ mod tests {
     }
 
     fn payload_cap_case(case: u8) {
-        use craft_anything_testkit::sqlite::{Val, overflow_row_db};
+        use f_builder_testkit::sqlite::{Val, overflow_row_db};
         use sha2::Digest as _;
         let values = match case {
             1 => vec![Val::Text("x".repeat(8_000_000))],
@@ -1872,7 +1872,7 @@ mod tests {
 
     #[test]
     fn payload_cap_d7_without_rowid() {
-        use craft_anything_testkit::sqlite::{Val, without_rowid_db};
+        use f_builder_testkit::sqlite::{Val, without_rowid_db};
         let bytes = without_rowid_db(
             "CREATE TABLE t(v BLOB, k INT PRIMARY KEY, tail INT) WITHOUT ROWID",
             &[vec![Val::Int(42), Val::Blob(vec![0x5a; 8_400_000]), Val::Int(73)]],
@@ -1890,7 +1890,7 @@ mod tests {
     }
 
     fn short_record_case(declarations: &str, defaults: Vec<CellValue>, note: bool) {
-        use craft_anything_testkit::sqlite::{Val, table_db};
+        use f_builder_testkit::sqlite::{Val, table_db};
         let mut full = vec![Val::Int(2)];
         full.extend(defaults.iter().map(|v| match v {
             CellValue::Int(n) => Val::Int(*n),
@@ -1933,7 +1933,7 @@ mod tests {
     }
     #[test]
     fn added_columns_c5_rewritten_control() {
-        use craft_anything_testkit::sqlite::{Val, table_db};
+        use f_builder_testkit::sqlite::{Val, table_db};
         let bytes = table_db("CREATE TABLE t(n INT, x INT DEFAULT 42)", &[(1, vec![Val::Int(1), Val::Int(42)])]);
         let page = SqliteDb::parse(&bytes).expect("fixture").read_rows(2, 0, 10);
         assert_eq!(page.rows[0].values, vec![CellValue::Int(1), CellValue::Int(42)]);
@@ -1986,7 +1986,7 @@ mod tests {
 
     #[test]
     fn added_columns_preserve_stored_nulls_and_long_records() {
-        use craft_anything_testkit::sqlite::{Val, table_db};
+        use f_builder_testkit::sqlite::{Val, table_db};
         let bytes = table_db("CREATE TABLE t(n INT, x INT DEFAULT 42)", &[(1, vec![Val::Int(1), Val::Null]), (2, vec![Val::Int(2), Val::Int(7), Val::Int(9)])]);
         let page = SqliteDb::parse(&bytes).expect("fixture").read_rows(2, 0, 10);
         assert_eq!(page.rows[0].values, vec![CellValue::Int(1), CellValue::Null]);
@@ -1996,7 +1996,7 @@ mod tests {
 
     #[test]
     fn added_columns_c6_short_rowid_alias() {
-        use craft_anything_testkit::sqlite::{Val, table_db};
+        use f_builder_testkit::sqlite::{Val, table_db};
         for stored in [vec![Val::Null, Val::Int(10)], vec![]] {
             let bytes = table_db("CREATE TABLE t(id INTEGER PRIMARY KEY, n INT DEFAULT 10, x INT DEFAULT 42)", &[(7, stored)]);
             let page = SqliteDb::parse(&bytes).expect("fixture").read_rows(2, 0, 10);
@@ -2071,7 +2071,7 @@ mod tests {
 
     #[test]
     fn reads_fixture_overview_schema_and_rows() {
-        let db = craft_anything_testkit::sqlite::simple_db();
+        let db = f_builder_testkit::sqlite::simple_db();
         let parsed = SqliteDb::parse(&db).expect("fixture parses");
         let ov = parsed.overview();
         assert_eq!(ov.header.page_size, 4096);
@@ -2116,14 +2116,14 @@ mod tests {
 
     #[test]
     fn wal_mode_is_reported() {
-        let db = craft_anything_testkit::sqlite::wal_mode_db();
+        let db = f_builder_testkit::sqlite::wal_mode_db();
         let parsed = SqliteDb::parse(&db).expect("parses");
         assert!(parsed.header().wal_mode);
         assert!(parsed.overview().integrity_notes.iter().any(|n| n.contains("WAL")));
     }
 
     fn check_rowid_alias(declaration: &str, column: usize, alias: bool) {
-        use craft_anything_testkit::sqlite::{Val, table_db};
+        use f_builder_testkit::sqlite::{Val, table_db};
         let sql = format!("CREATE TABLE t({declaration})");
         let columns = parse_create_columns(&sql);
         let rows: Vec<_> = [-3, 7]
@@ -2182,7 +2182,7 @@ mod tests {
 
     #[test]
     fn truncation_never_panics() {
-        let db = craft_anything_testkit::sqlite::simple_db();
+        let db = f_builder_testkit::sqlite::simple_db();
         for cut in 0..db.len() {
             let slice = &db[..cut];
             if let Ok(parsed) = SqliteDb::parse(slice) {
@@ -2200,7 +2200,7 @@ mod tests {
 
     #[test]
     fn mutation_fuzz_never_panics() {
-        let base = craft_anything_testkit::sqlite::simple_db();
+        let base = f_builder_testkit::sqlite::simple_db();
         // Deterministic LCG so the test is reproducible.
         let mut state: u64 = 0x1234_5678_9abc_def0;
         let mut next = || {
@@ -2227,7 +2227,7 @@ mod tests {
 
     #[test]
     fn without_rowid_damaged_pages_never_panic() {
-        use craft_anything_testkit::sqlite::{Val, without_rowid_db};
+        use f_builder_testkit::sqlite::{Val, without_rowid_db};
         let rows = (0..9).map(|i| vec![Val::Int(i), Val::Text("x".repeat(2000))]).collect::<Vec<_>>();
         let base = without_rowid_db("CREATE TABLE t(k INT PRIMARY KEY, v TEXT) WITHOUT ROWID", &rows);
         for cut in (100..base.len()).step_by(31) {
@@ -2271,7 +2271,7 @@ mod tests {
     /// field. Each VIRTUAL column is shown as not read and named in a note.
     #[test]
     fn virtual_generated_columns_take_no_record_field() {
-        use craft_anything_testkit::sqlite::{Val, table_db};
+        use f_builder_testkit::sqlite::{Val, table_db};
         let sql = "CREATE TABLE t(a TEXT, b TEXT GENERATED ALWAYS AS (upper(a)) VIRTUAL, c INTEGER, \
                    s INT AS (c * 2) STORED, d TEXT, e AS (a || d))";
         let record = vec![Val::Text("x".into()), Val::Int(7), Val::Int(14), Val::Text("dee".into())];
@@ -2287,7 +2287,7 @@ mod tests {
     /// when a VIRTUAL column comes before them.
     #[test]
     fn virtual_generated_columns_keep_aliases_and_added_defaults_in_place() {
-        use craft_anything_testkit::sqlite::{Val, table_db};
+        use f_builder_testkit::sqlite::{Val, table_db};
         let bytes = table_db("CREATE TABLE t(v INT AS (1), id INTEGER PRIMARY KEY, x TEXT)", &[(10, vec![Val::Null, Val::Text("ten".into())])]);
         let page = SqliteDb::parse(&bytes).expect("fixture parses").read_rows(2, 0, 10);
         assert_eq!(page.rows[0].values, vec![CellValue::NotRead, CellValue::Int(10), text("ten")]);
@@ -2304,7 +2304,7 @@ mod tests {
     /// are not among them.
     #[test]
     fn without_rowid_virtual_generated_columns_take_no_record_field() {
-        use craft_anything_testkit::sqlite::{Val, without_rowid_db};
+        use f_builder_testkit::sqlite::{Val, without_rowid_db};
         let bytes =
             without_rowid_db("CREATE TABLE t(k TEXT PRIMARY KEY, b TEXT AS (upper(k)), c INTEGER) WITHOUT ROWID", &[vec![Val::Text("x".into()), Val::Int(7)]]);
         let page = SqliteDb::parse(&bytes).expect("fixture parses").read_rows(2, 0, 10);
@@ -2336,7 +2336,7 @@ mod tests {
     /// is an INTEGER column, and NUMERIC and untyped columns keep their integers too.
     #[test]
     fn whole_numbers_in_real_columns_read_as_real() {
-        use craft_anything_testkit::sqlite::{Val, table_db};
+        use f_builder_testkit::sqlite::{Val, table_db};
         let sql = "CREATE TABLE t(a REAL, b FLOAT, c DOUBLE PRECISION, d \"real\" NOT NULL, e FLOATING POINT, f NUMERIC, g, h REAL, i REAL)";
         let record = vec![
             Val::Int(1),
@@ -2370,7 +2370,7 @@ mod tests {
     /// The same holds for a WITHOUT ROWID key and for the default of a REAL column added later.
     #[test]
     fn real_keys_and_added_real_defaults_read_as_real() {
-        use craft_anything_testkit::sqlite::{Val, table_db, without_rowid_db};
+        use f_builder_testkit::sqlite::{Val, table_db, without_rowid_db};
         let sql = "CREATE TABLE t(k REAL, n INT, v DOUBLE, PRIMARY KEY (k, n)) WITHOUT ROWID";
         let bytes = without_rowid_db(sql, &[vec![Val::Int(3), Val::Int(1), Val::Int(4)]]);
         let page = SqliteDb::parse(&bytes).expect("fixture parses").read_rows(2, 0, 10);
@@ -2531,7 +2531,7 @@ mod tests {
     /// number, while an ANY column elsewhere is NUMERIC. WITHOUT ROWID rows fill the same way.
     #[test]
     fn strict_any_and_without_rowid_defaults_take_the_column_affinity() {
-        use craft_anything_testkit::sqlite::{Val, table_db, without_rowid_db};
+        use f_builder_testkit::sqlite::{Val, table_db, without_rowid_db};
         let read = |bytes: Vec<u8>| SqliteDb::parse(&bytes).expect("fixture parses").read_rows(2, 0, 10).rows[0].values.clone();
         let strict = "CREATE TABLE t(n INT, a ANY DEFAULT '5', b ANY DEFAULT 5.0, i INTEGER DEFAULT '7', s TEXT DEFAULT 5) STRICT";
         assert_eq!(read(table_db(strict, &[(1, vec![Val::Int(1)])])), vec![CellValue::Int(1), text("5"), CellValue::Real(5.0), CellValue::Int(7), text("5")]);

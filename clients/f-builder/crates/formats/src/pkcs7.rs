@@ -179,10 +179,10 @@ mod tests {
     fn empty_and_garbage() {
         assert!(parse_signed_data(&[]).is_none());
         for seed in 0..64 {
-            let n = craft_anything_testkit::noise(seed, 300);
+            let n = f_builder_testkit::noise(seed, 300);
             let _ = parse_signed_data(&n);
         }
-        let p7 = craft_anything_testkit::android::pkcs7_der(&craft_anything_testkit::android::certificate_der("A", "B"));
+        let p7 = f_builder_testkit::android::pkcs7_der(&f_builder_testkit::android::certificate_der("A", "B"));
         let _ = parse_signed_data(&p7);
     }
 }

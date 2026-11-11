@@ -4,7 +4,7 @@
 
 use crate::http::{self, SseEvent};
 use crate::model::{Block, ChatModel, Delta, Msg, Speaker, Stop, StopReason, ToolDef, TurnRequest, TurnResult, Usage};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -22,8 +22,8 @@ pub const OPENROUTER_MODELS: &[&str] = &[OPENROUTER_DEFAULT_MODEL, KIMI_K3_1];
 pub const GEMINI_DEFAULT_MODEL: &str = "gemini-3.8-flash";
 pub const GEMINI_MODELS: &[&str] = &[GEMINI_DEFAULT_MODEL, "gemini-4-argon"];
 /// Generic app identification for OpenRouter (no personal data).
-pub const APP_REFERER: &str = "https://github.com/storytold/craft-anything";
-pub const APP_TITLE: &str = "Craft Anything";
+pub const APP_REFERER: &str = "https://github.com/thanhlnt3/f-ecosystem-software";
+pub const APP_TITLE: &str = "F-Builder";
 /// OpenCode Go (a subscription): an OpenAI-compatible base, the key from its console, and a session
 /// header the service asks every client to send so routing and prompt caching follow a conversation.
 pub const OPENCODE_GO_BASE: &str = "https://opencode.ai/inference/go/openai/v1";

@@ -510,11 +510,11 @@ pub fn parse(data: &[u8]) -> Option<SigningBlock> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::android as fx;
+    use f_builder_testkit::android as fx;
 
     #[test]
     fn directory_candidates_reuse_scanned_headers() {
-        let mut zip = craft_anything_testkit::electron::zip_stored(&[("a", b"a"), ("b", b"b")]);
+        let mut zip = f_builder_testkit::electron::zip_stored(&[("a", b"a"), ("b", b"b")]);
         let eocd = zip.len() - 22;
         let cd = Reader::new(&zip).u32_le(eocd + 16).unwrap() as usize;
         zip.extend_from_slice(&[0; CD_HEADER_LEN]);
@@ -534,7 +534,7 @@ mod tests {
 
     #[test]
     fn directory_cache_keeps_sizes_and_offsets_separate() {
-        let zip = craft_anything_testkit::electron::zip_stored(&[("a", b"a"), ("b", b"b")]);
+        let zip = f_builder_testkit::electron::zip_stored(&[("a", b"a"), ("b", b"b")]);
         let r = Reader::new(&zip);
         let cd = r.u32_le(zip.len() - 6).unwrap() as usize;
         let record_len = CD_HEADER_LEN + 1;
@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn directory_cache_rechecks_optional_signature_tails() {
-        let zip = craft_anything_testkit::electron::zip_stored(&[("a", b"a"), ("b", b"b")]);
+        let zip = f_builder_testkit::electron::zip_stored(&[("a", b"a"), ("b", b"b")]);
         let eocd = zip.len() - 22;
         let cd = Reader::new(&zip).u32_le(eocd + 16).unwrap() as usize;
         let mut directory = zip[cd..eocd].to_vec();
@@ -614,7 +614,7 @@ mod tests {
         block.extend_from_slice(&body);
         block.extend_from_slice(&size.to_le_bytes());
         block.extend_from_slice(MAGIC);
-        fx::with_signing_block(&craft_anything_testkit::electron::zip_stored(&[]), &block)
+        fx::with_signing_block(&f_builder_testkit::electron::zip_stored(&[]), &block)
     }
 
     fn assert_probe_matches_parser(pairs: &[(u32, Vec<u8>)], expected: bool) {
@@ -728,20 +728,20 @@ mod tests {
         assert_eq!(v2.digests[0].digest, "aa".repeat(32));
         let v3 = &b.signers[1];
         assert_eq!((v3.min_sdk, v3.max_sdk), (Some(24), Some(0x7fff_ffff)));
-        assert!(parse(&craft_anything_testkit::electron::zip_stored(&[("a", b"b")])).is_none());
+        assert!(parse(&f_builder_testkit::electron::zip_stored(&[("a", b"b")])).is_none());
     }
 
     #[test]
     fn hostile() {
         let apk = fx::notes_apk();
-        for m in craft_anything_testkit::mutations(&apk) {
+        for m in f_builder_testkit::mutations(&apk) {
             let _ = parse(&m);
         }
         for len in 0..apk.len() {
             let _ = parse(&apk[..len]);
         }
         for seed in 0..32 {
-            let mut n = craft_anything_testkit::noise(seed, 400);
+            let mut n = f_builder_testkit::noise(seed, 400);
             n.extend_from_slice(b"APK Sig Block 42PK\x05\x06");
             n.extend_from_slice(&[0; 18]);
             let _ = parse(&n);

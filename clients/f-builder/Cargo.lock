@@ -1121,304 +1121,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "craft-anything"
-version = "0.6.0"
-dependencies = [
- "craft-anything-ai",
- "craft-anything-engine",
- "craft-anything-platform",
- "craft-anything-setup",
- "craft-anything-ui-egui",
- "eframe",
- "log",
- "rfd",
- "tempfile",
- "winresource",
-]
-
-[[package]]
-name = "craft-anything-ai"
-version = "0.6.0"
-dependencies = [
- "craft-anything-engine",
- "craft-anything-engines",
- "craft-anything-evidence",
- "craft-anything-formats",
- "craft-anything-platform",
- "craft-anything-testkit",
- "dirs",
- "keyring",
- "log",
- "schemars",
- "serde",
- "serde_json",
- "tempfile",
- "toml 0.9.12+spec-1.1.0",
- "ureq",
-]
-
-[[package]]
-name = "craft-anything-analysis"
-version = "0.6.0"
-dependencies = [
- "craft-anything-disasm",
- "craft-anything-evidence",
- "craft-anything-formats",
- "craft-anything-js",
- "craft-anything-testkit",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "craft-anything-cli"
-version = "0.6.0"
-dependencies = [
- "clap",
- "craft-anything-ai",
- "craft-anything-engine",
- "craft-anything-engines",
- "craft-anything-evidence",
- "craft-anything-mcp",
- "craft-anything-platform",
- "craft-anything-setup",
- "ctrlc",
- "log",
- "serde",
- "serde_json",
- "tempfile",
- "winresource",
-]
-
-[[package]]
-name = "craft-anything-disasm"
-version = "0.6.0"
-dependencies = [
- "craft-anything-formats",
- "craft-anything-testkit",
- "iced-x86",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "yaxpeax-arch",
- "yaxpeax-arm",
-]
-
-[[package]]
-name = "craft-anything-engine"
-version = "0.6.0"
-dependencies = [
- "base64 0.22.1",
- "bitflags 2.13.2",
- "craft-anything-analysis",
- "craft-anything-disasm",
- "craft-anything-engines",
- "craft-anything-evidence",
- "craft-anything-formats",
- "craft-anything-js",
- "craft-anything-platform",
- "craft-anything-testkit",
- "dirs",
- "hex",
- "image",
- "log",
- "png 0.17.16",
- "regex",
- "schemars",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "sha1",
- "sha2",
- "tempfile",
- "thiserror 2.0.21",
- "toml 0.9.12+spec-1.1.0",
-]
-
-[[package]]
-name = "craft-anything-engines"
-version = "0.6.0"
-dependencies = [
- "base64 0.22.1",
- "craft-anything-evidence",
- "craft-anything-formats",
- "craft-anything-platform",
- "craft-anything-testkit",
- "hex",
- "log",
- "serde",
- "serde_json",
- "sha1",
- "sha2",
- "tempfile",
- "thiserror 2.0.21",
- "toml 0.9.12+spec-1.1.0",
- "ureq",
- "wasmtime",
-]
-
-[[package]]
-name = "craft-anything-evidence"
-version = "0.6.0"
-dependencies = [
- "hex",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "craft-anything-formats"
-version = "0.6.0"
-dependencies = [
- "bzip2-rs",
- "craft-anything-testkit",
- "lzma-rs",
- "miniz_oxide 0.8.9",
- "object 0.36.7",
- "p256",
- "p384",
- "rsa",
- "rustc-demangle",
- "ruzstd",
- "serde",
- "serde_json",
- "sha1",
- "sha2",
- "thiserror 2.0.21",
- "wasmparser 0.261.0",
- "wasmprinter 0.261.0",
-]
-
-[[package]]
-name = "craft-anything-js"
-version = "0.6.0"
-dependencies = [
- "craft-anything-testkit",
- "hex",
- "oxc_allocator",
- "oxc_ast",
- "oxc_ast_visit",
- "oxc_codegen",
- "oxc_parser",
- "oxc_semantic",
- "oxc_span",
- "oxc_syntax",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "craft-anything-mcp"
-version = "0.6.0"
-dependencies = [
- "craft-anything-engine",
- "craft-anything-evidence",
- "craft-anything-platform",
- "log",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "craft-anything-platform"
-version = "0.6.0"
-dependencies = [
- "craft-anything-evidence",
- "hex",
- "log",
- "nix 0.31.3",
- "objc2-core-graphics",
- "portable-pty",
- "process-wrap",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "vt100",
- "windows",
- "xcap",
-]
-
-[[package]]
-name = "craft-anything-setup"
-version = "0.6.0"
-dependencies = [
- "craft-anything-engine",
- "craft-anything-engines",
- "craft-anything-evidence",
- "craft-anything-formats",
- "craft-anything-platform",
- "log",
- "schemars",
- "serde",
- "serde_json",
- "tempfile",
- "toml 0.9.12+spec-1.1.0",
- "toml_edit",
- "yaml-rust2",
-]
-
-[[package]]
-name = "craft-anything-testkit"
-version = "0.6.0"
-dependencies = [
- "miniz_oxide 0.8.9",
- "p256",
- "rand 0.8.8",
- "rsa",
- "serde_json",
- "sha1",
- "sha2",
-]
-
-[[package]]
-name = "craft-anything-ui-egui"
-version = "0.6.0"
-dependencies = [
- "arboard",
- "craft-anything-ai",
- "craft-anything-engine",
- "craft-anything-engines",
- "craft-anything-platform",
- "craft-anything-setup",
- "craft-anything-testkit",
- "eframe",
- "egui",
- "egui_extras",
- "egui_kittest",
- "log",
- "muda",
- "pollster 0.4.0",
- "rfd",
- "serde",
- "serde_json",
- "sys-locale",
- "tempfile",
-]
-
-[[package]]
-name = "craft-anything-web"
-version = "0.6.0"
-dependencies = [
- "craft-anything-analysis",
- "craft-anything-evidence",
- "craft-anything-formats",
- "eframe",
- "egui",
- "log",
- "rfd",
- "serde_json",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
 name = "cranelift-assembler-x64"
 version = "0.136.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2269,6 +1971,304 @@ checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener",
  "pin-project-lite",
+]
+
+[[package]]
+name = "f-builder"
+version = "0.6.0"
+dependencies = [
+ "eframe",
+ "f-builder-ai",
+ "f-builder-engine",
+ "f-builder-platform",
+ "f-builder-setup",
+ "f-builder-ui-egui",
+ "log",
+ "rfd",
+ "tempfile",
+ "winresource",
+]
+
+[[package]]
+name = "f-builder-ai"
+version = "0.6.0"
+dependencies = [
+ "dirs",
+ "f-builder-engine",
+ "f-builder-engines",
+ "f-builder-evidence",
+ "f-builder-formats",
+ "f-builder-platform",
+ "f-builder-testkit",
+ "keyring",
+ "log",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+ "ureq",
+]
+
+[[package]]
+name = "f-builder-analysis"
+version = "0.6.0"
+dependencies = [
+ "f-builder-disasm",
+ "f-builder-evidence",
+ "f-builder-formats",
+ "f-builder-js",
+ "f-builder-testkit",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "f-builder-cli"
+version = "0.6.0"
+dependencies = [
+ "clap",
+ "ctrlc",
+ "f-builder-ai",
+ "f-builder-engine",
+ "f-builder-engines",
+ "f-builder-evidence",
+ "f-builder-mcp",
+ "f-builder-platform",
+ "f-builder-setup",
+ "log",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "winresource",
+]
+
+[[package]]
+name = "f-builder-disasm"
+version = "0.6.0"
+dependencies = [
+ "f-builder-formats",
+ "f-builder-testkit",
+ "iced-x86",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "yaxpeax-arch",
+ "yaxpeax-arm",
+]
+
+[[package]]
+name = "f-builder-engine"
+version = "0.6.0"
+dependencies = [
+ "base64 0.22.1",
+ "bitflags 2.13.2",
+ "dirs",
+ "f-builder-analysis",
+ "f-builder-disasm",
+ "f-builder-engines",
+ "f-builder-evidence",
+ "f-builder-formats",
+ "f-builder-js",
+ "f-builder-platform",
+ "f-builder-testkit",
+ "hex",
+ "image",
+ "log",
+ "png 0.17.16",
+ "regex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serde_path_to_error",
+ "sha1",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "f-builder-engines"
+version = "0.6.0"
+dependencies = [
+ "base64 0.22.1",
+ "f-builder-evidence",
+ "f-builder-formats",
+ "f-builder-platform",
+ "f-builder-testkit",
+ "hex",
+ "log",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml 0.9.12+spec-1.1.0",
+ "ureq",
+ "wasmtime",
+]
+
+[[package]]
+name = "f-builder-evidence"
+version = "0.6.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "f-builder-formats"
+version = "0.6.0"
+dependencies = [
+ "bzip2-rs",
+ "f-builder-testkit",
+ "lzma-rs",
+ "miniz_oxide 0.8.9",
+ "object 0.36.7",
+ "p256",
+ "p384",
+ "rsa",
+ "rustc-demangle",
+ "ruzstd",
+ "serde",
+ "serde_json",
+ "sha1",
+ "sha2",
+ "thiserror 2.0.21",
+ "wasmparser 0.261.0",
+ "wasmprinter 0.261.0",
+]
+
+[[package]]
+name = "f-builder-js"
+version = "0.6.0"
+dependencies = [
+ "f-builder-testkit",
+ "hex",
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
+ "oxc_codegen",
+ "oxc_parser",
+ "oxc_semantic",
+ "oxc_span",
+ "oxc_syntax",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "f-builder-mcp"
+version = "0.6.0"
+dependencies = [
+ "f-builder-engine",
+ "f-builder-evidence",
+ "f-builder-platform",
+ "log",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "f-builder-platform"
+version = "0.6.0"
+dependencies = [
+ "f-builder-evidence",
+ "hex",
+ "log",
+ "nix 0.31.3",
+ "objc2-core-graphics",
+ "portable-pty",
+ "process-wrap",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "vt100",
+ "windows",
+ "xcap",
+]
+
+[[package]]
+name = "f-builder-setup"
+version = "0.6.0"
+dependencies = [
+ "f-builder-engine",
+ "f-builder-engines",
+ "f-builder-evidence",
+ "f-builder-formats",
+ "f-builder-platform",
+ "log",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml 0.9.12+spec-1.1.0",
+ "toml_edit",
+ "yaml-rust2",
+]
+
+[[package]]
+name = "f-builder-testkit"
+version = "0.6.0"
+dependencies = [
+ "miniz_oxide 0.8.9",
+ "p256",
+ "rand 0.8.8",
+ "rsa",
+ "serde_json",
+ "sha1",
+ "sha2",
+]
+
+[[package]]
+name = "f-builder-ui-egui"
+version = "0.6.0"
+dependencies = [
+ "arboard",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "egui_kittest",
+ "f-builder-ai",
+ "f-builder-engine",
+ "f-builder-engines",
+ "f-builder-platform",
+ "f-builder-setup",
+ "f-builder-testkit",
+ "log",
+ "muda",
+ "pollster 0.4.0",
+ "rfd",
+ "serde",
+ "serde_json",
+ "sys-locale",
+ "tempfile",
+]
+
+[[package]]
+name = "f-builder-web"
+version = "0.6.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "f-builder-analysis",
+ "f-builder-evidence",
+ "f-builder-formats",
+ "log",
+ "rfd",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -4370,6 +4370,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "openssl-probe"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
+
+[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5575,6 +5581,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustls-native-certs"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a073f5dc7469f984c52ad2752b63b0807745133b6de880b7b64c1ac4c48aec4"
+dependencies = [
+ "openssl-probe",
+ "rustls-pki-types",
+ "schannel",
+ "security-framework 3.7.0",
+]
+
+[[package]]
 name = "rustls-pki-types"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5582,6 +5600,33 @@ checksum = "2f4925028c7eb5d1fcdaf196971378ed9d2c1c4efc7dc5d011256f76c99c0a96"
 dependencies = [
  "zeroize",
 ]
+
+[[package]]
+name = "rustls-platform-verifier"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1167586491e2b18b8bfbb293e8180ec17c201c4f076d7cb3070ca964e7598f98"
+dependencies = [
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "jni",
+ "log",
+ "once_cell",
+ "rustls",
+ "rustls-native-certs",
+ "rustls-platform-verifier-android",
+ "rustls-webpki",
+ "security-framework 3.7.0",
+ "security-framework-sys",
+ "webpki-root-certs",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rustls-platform-verifier-android"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eec689c0bc40ff2458a5977b6619cb718087084a18e02a131c599b62d05e1a5f"
 
 [[package]]
 name = "rustls-webpki"
@@ -5613,6 +5658,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "schannel"
+version = "0.1.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cb23c424d8ee841bb4d813677ca237e2a610067d594fec130f87d6093495ab5"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6520,9 +6574,9 @@ dependencies = [
  "percent-encoding",
  "rustls",
  "rustls-pki-types",
+ "rustls-platform-verifier",
  "ureq-proto",
  "utf8-zero",
- "webpki-roots",
 ]
 
 [[package]]
@@ -7248,10 +7302,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "webpki-roots"
-version = "1.0.9"
+name = "webpki-root-certs"
+version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+checksum = "293198dcebfb821155b5092ab94b5a82ff180eddd7241df3bd6e66a4ffd1a585"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -8024,7 +8078,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 name = "xtask"
 version = "0.6.0"
 dependencies = [
- "craft-anything-engine",
+ "f-builder-engine",
  "proc-macro2",
  "syn 2.0.119",
  "toml 0.9.12+spec-1.1.0",

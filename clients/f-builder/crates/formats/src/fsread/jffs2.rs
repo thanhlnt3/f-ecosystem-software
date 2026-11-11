@@ -247,22 +247,22 @@ mod tests {
 
     #[test]
     fn reads_a_small_image() {
-        let img = read(&craft_anything_testkit::firmware::jffs2_image(), &Limits::default());
+        let img = read(&f_builder_testkit::firmware::jffs2_image(), &Limits::default());
         assert!(img.entries.iter().any(|e| e.path == "config" && e.kind == FsKind::Dir), "{:?}", img.entries);
         assert_eq!(img.entries.iter().find(|e| e.path == "config/settings").unwrap().data.as_deref(), Some(b"key=value\n".as_slice()));
     }
 
     #[test]
     fn hostile_never_panics() {
-        let base = craft_anything_testkit::firmware::jffs2_image();
-        for m in craft_anything_testkit::mutations(&base) {
+        let base = f_builder_testkit::firmware::jffs2_image();
+        for m in f_builder_testkit::mutations(&base) {
             let _ = read(&m, &Limits::default());
         }
         for len in 0..base.len() {
             let _ = read(&base[..len], &Limits::default());
         }
         for seed in 0..16 {
-            let _ = read(&craft_anything_testkit::noise(seed, 400), &Limits::default());
+            let _ = read(&f_builder_testkit::noise(seed, 400), &Limits::default());
         }
     }
 }

@@ -85,14 +85,14 @@ fn build_start_request_show_stop_through_the_engine() {
         // An exact path, a path by template, and answers in recorded order.
         let one = get(&url, "/users/1");
         assert!(one.starts_with("HTTP/1.1 200") && one.contains("Pat") && one.contains("application/json") && one.contains("X-Total-Count: 2"), "{one}");
-        assert!(one.contains("X-Craft-Anything-Stand-In: recorded") && !one.contains("sk-test"), "{one}");
+        assert!(one.contains("X-F-Builder-Stand-In: recorded") && !one.contains("sk-test"), "{one}");
         assert!(get(&url, "/users/77").contains("Pat"), "the template's first answer");
         assert!(get(&url, "/poll").contains(r#"{"n":1}"#));
         assert!(get(&url, "/poll").contains(r#"{"n":2}"#));
         assert!(get(&url, "/poll").contains(r#"{"n":1}"#), "and round again");
         // A recorded 404 is the original's answer.
         let gone = get(&url, "/gone");
-        assert!(gone.starts_with("HTTP/1.1 404") && gone.contains("X-Craft-Anything-Stand-In: recorded") && gone.contains("not found"), "{gone}");
+        assert!(gone.starts_with("HTTP/1.1 404") && gone.contains("X-F-Builder-Stand-In: recorded") && gone.contains("not found"), "{gone}");
         // A write replays and changes nothing.
         let post = http(&url, "POST /users HTTP/1.1\r\nHost: {HOST}\r\nContent-Length: 2\r\n\r\n{}");
         assert!(post.starts_with("HTTP/1.1 201") && post.contains(r#"{"id":3}"#), "{post}");
@@ -100,7 +100,7 @@ fn build_start_request_show_stop_through_the_engine() {
 
         // Nothing recorded: a structured 404 with the nearest routes.
         let no = get(&url, "/users/1/orders?token=sk-test-asked&page=1");
-        assert!(no.starts_with("HTTP/1.1 404") && no.contains("X-Craft-Anything-Stand-In: no-recorded-answer"), "{no}");
+        assert!(no.starts_with("HTTP/1.1 404") && no.contains("X-F-Builder-Stand-In: no-recorded-answer"), "{no}");
         let body: Value = serde_json::from_str(no.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(body["error"], "no_recorded_answer");
         assert_eq!(body["reason"], "path_not_recorded");
@@ -152,7 +152,7 @@ fn a_fresh_client_gets_a_missing_cache_reason_instead_of_a_bare_304() {
         let url = started["result"]["url"].as_str().unwrap();
         let response = get(url, "/cached");
         assert!(response.starts_with("HTTP/1.1 404"), "{response}");
-        assert!(response.contains("X-Craft-Anything-Stand-In: no-recorded-answer"), "{response}");
+        assert!(response.contains("X-F-Builder-Stand-In: no-recorded-answer"), "{response}");
         let body: Value = serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap();
         assert_eq!(body["reason"], "cached_body_unavailable");
         assert_eq!(body["nearest"][0]["template"], "/cached");
@@ -345,7 +345,7 @@ fn file_versions() {
     }
     let newer = parse_standin(br#"{"version": 2, "routes": [], "from_the_future": true}"#).unwrap_err();
     assert_eq!(newer.code, ErrorCode::NotSupported);
-    assert!(newer.remediation.as_deref().unwrap_or_default().contains("Update Craft Anything"), "{newer:?}");
+    assert!(newer.remediation.as_deref().unwrap_or_default().contains("Update F-Builder"), "{newer:?}");
 }
 
 #[test]

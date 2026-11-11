@@ -1,9 +1,9 @@
-use craft_anything_setup::Host;
+use f_builder_setup::Host;
 use std::path::PathBuf;
 
 const TEST: &str = "the_home_folder_is_the_one_the_apps_use";
 /// Set when this test runs itself again with chosen HOME and USERPROFILE.
-const INNER: &str = "CRAFT_ANYTHING_TEST_HOST_HOME";
+const INNER: &str = "F_BUILDER_TEST_HOST_HOME";
 
 /// The home folder `Host::current` finds in a copy of this test started with these variables.
 fn current_home(home: Option<&str>, profile: Option<&str>) -> PathBuf {

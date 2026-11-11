@@ -6,10 +6,10 @@ use super::artifact_tools::{create_absent_dir, safe_components, write_new_file};
 use super::native_common::{page, spec};
 use super::static_input::{builder, load};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, ToolError, sha256_hex};
-use craft_anything_formats::firmware::{self as fw, Region, ScanOptions, Unpack};
-use craft_anything_formats::fsread::{self, FsKind, Limits};
-use craft_anything_formats::{decompress, tarcpio, zip};
+use f_builder_evidence::{Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, ToolError, sha256_hex};
+use f_builder_formats::firmware::{self as fw, Region, ScanOptions, Unpack};
+use f_builder_formats::fsread::{self, FsKind, Limits};
+use f_builder_formats::{decompress, tarcpio, zip};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -683,7 +683,7 @@ fn boot_parts(r: &Region, slice: &[u8]) -> Vec<(&'static str, usize, usize)> {
 mod tests {
     use super::super::native_common::test_support::{call, call_err};
     use crate::Engine;
-    use craft_anything_testkit::firmware as fx;
+    use f_builder_testkit::firmware as fx;
     use serde_json::json;
     use std::path::PathBuf;
 
@@ -695,7 +695,7 @@ mod tests {
     #[test]
     fn inspects_regions_with_paging_and_range() {
         let (img, l) = fx::image();
-        let p = craft_anything_testkit::temp_file("fw.bin", &img);
+        let p = f_builder_testkit::temp_file("fw.bin", &img);
         let e = Engine::new(crate::testing::session());
         let v = call(&e, "firmware_regions_list", json!({"path": p}));
         let res = &v["result"];
@@ -727,7 +727,7 @@ mod tests {
             ("bzip2", fx::BZIP2_FIXTURE, fx::BZIP2_PLAIN),
             ("zstd", fx::ZSTD_FIXTURE, fx::ZSTD_PLAIN),
         ] {
-            let p = craft_anything_testkit::temp_file(&format!("{name}.bin"), fixture);
+            let p = f_builder_testkit::temp_file(&format!("{name}.bin"), fixture);
             let out = fresh_out(name);
             let v = call(&e, "firmware_image_extract", json!({"path": p, "output_directory": out}));
             let got = std::fs::read(out.join(format!("0-{name}.extracted/decompressed.bin")))
@@ -741,14 +741,14 @@ mod tests {
     fn extracts_filesystems() {
         let e = Engine::new(crate::testing::session());
         let cases: Vec<(&str, Vec<u8>, &str, &[u8])> = vec![
-            ("romfs", fx::romfs_image(), "etc/hostname", b"craft-router\n"),
+            ("romfs", fx::romfs_image(), "etc/hostname", b"build-router\n"),
             ("cramfs", fx::cramfs_image(), "dir/inner", b"nested"),
             ("ext2", fx::ext_image(false), "sub/note", b"nested note"),
             ("ext4", fx::ext_image(true), "hello.txt", b"Hello ext filesystem!\n"),
             ("squashfs", fx::squashfs_image(), "etc/motd", b"welcome\n"),
         ];
         for (kind, img, path, content) in cases {
-            let p = craft_anything_testkit::temp_file(&format!("{kind}.bin"), &img);
+            let p = f_builder_testkit::temp_file(&format!("{kind}.bin"), &img);
             let out = fresh_out(&format!("fs-{kind}"));
             let v = call(&e, "firmware_image_extract", json!({"path": p, "output_directory": out}));
             // The region lands at offset 0; ext images report as ext2/ext4 by their feature bits.
@@ -766,7 +766,7 @@ mod tests {
     #[test]
     fn extracts_recursively_and_never_overwrites() {
         let (img, l) = fx::image();
-        let p = craft_anything_testkit::temp_file("fw.bin", &img);
+        let p = f_builder_testkit::temp_file("fw.bin", &img);
         let e = Engine::new(crate::testing::session());
         let out = fresh_out("a");
         let v = call(&e, "firmware_image_extract", json!({"path": p, "output_directory": out}));
@@ -775,7 +775,7 @@ mod tests {
         let kernel = out.join("0-uimage.extracted/vmlinux");
         let k = std::fs::read(&kernel).unwrap_or_else(|_| panic!("{}", serde_json::to_string_pretty(&res["outputs"]).unwrap()));
         assert!(k.starts_with(fx::KERNEL_TEXT));
-        assert_eq!(std::fs::read(out.join(format!("{:x}-tar.extracted/etc/hostname", l.tar.0))).unwrap(), b"craft-router\n");
+        assert_eq!(std::fs::read(out.join(format!("{:x}-tar.extracted/etc/hostname", l.tar.0))).unwrap(), b"build-router\n");
         assert_eq!(std::fs::read(out.join(format!("{:x}-cpio-newc.extracted/init", l.cpio.0))).unwrap(), b"#!/bin/sh\nexec /sbin/init\n");
         assert_eq!(std::fs::read(out.join(format!("{:x}-zip.extracted/config/settings.json", l.zip.0))).unwrap(), b"{\"wifi\":true}");
         assert_eq!(std::fs::metadata(out.join(format!("{:x}-ext2.bin", l.ext2.0))).unwrap().len(), l.ext2.1 as u64);
@@ -842,7 +842,7 @@ mod tests {
     #[test]
     fn depth_and_caps_are_honoured() {
         let (img, _) = fx::image();
-        let p = craft_anything_testkit::temp_file("fw.bin", &img);
+        let p = f_builder_testkit::temp_file("fw.bin", &img);
         let e = Engine::new(crate::testing::session());
         let out = fresh_out("depth");
         let v = call(&e, "firmware_image_extract", json!({"path": p, "output_directory": out, "max_depth": 1}));
@@ -871,7 +871,7 @@ mod tests {
             ("link", b'2', b"", "/etc/passwd"),
             ("ok/fine.txt", b'0', b"fine", ""),
         ]);
-        let z = craft_anything_testkit::electron::zip_stored(&[("../zip-escape", b"z"), ("good.txt", b"g")]);
+        let z = f_builder_testkit::electron::zip_stored(&[("../zip-escape", b"z"), ("good.txt", b"g")]);
         let c = fx::cpio_newc(&[("../cpio-escape", b"c", 0o100644), ("sym", b"/bin/sh", 0o120777), ("keep", b"k", 0o100644)]);
         let mut img = t.clone();
         while !img.len().is_multiple_of(512) {
@@ -882,7 +882,7 @@ mod tests {
         img.extend(vec![0u8; 512 - img.len() % 512]);
         let c_off = img.len();
         img.extend_from_slice(&c);
-        let p = craft_anything_testkit::temp_file("evil.bin", &img);
+        let p = f_builder_testkit::temp_file("evil.bin", &img);
         let e = Engine::new(crate::testing::session());
         let out = fresh_out("slip");
         let v = call(&e, "firmware_image_extract", json!({"path": p, "output_directory": out}));
@@ -917,8 +917,8 @@ mod tests {
     fn damaged_images_never_panic() {
         let (img, _) = fx::image();
         let e = Engine::new(crate::testing::session());
-        for (k, m) in craft_anything_testkit::mutations(&img).into_iter().enumerate().step_by(9) {
-            let p = craft_anything_testkit::temp_file("m.bin", &m);
+        for (k, m) in f_builder_testkit::mutations(&img).into_iter().enumerate().step_by(9) {
+            let p = f_builder_testkit::temp_file("m.bin", &m);
             let _ = e.call("firmware_regions_list", json!({"path": p}), crate::CallOptions::new(crate::Caller::Mcp));
             let out = fresh_out(&format!("m{k}"));
             let _ = e.call(

@@ -18,12 +18,12 @@ use crate::metal::QueueShared;
 
 use super::{OsFeatures, TimestampQuerySupport};
 
-/// The Metal language version to compile shaders with, as Craft Anything needs it.
+/// The Metal language version to compile shaders with, as F-Builder needs it.
 ///
 /// wgpu takes the version from the macOS version alone, but the system's Metal compiler may not
 /// accept it: on some Macs with older GPUs (OpenCore Legacy Patcher) macOS 15 expects Metal 3.2
 /// and the compiler stops at 3.1, so every shader fails and the device is lost (wgpu #10687,
-/// Craft Anything #742). This compiles a tiny kernel with each version up to the OS's, highest
+/// F-Builder #742). This compiles a tiny kernel with each version up to the OS's, highest
 /// first, and keeps the first one the compiler accepts. If none is accepted, the OS's version is
 /// kept, as before.
 fn accepted_msl_version(

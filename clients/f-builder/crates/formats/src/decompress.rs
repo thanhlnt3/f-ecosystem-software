@@ -223,7 +223,7 @@ pub fn lz4_block(input: &[u8], out_len: usize) -> Result<Vec<u8>, DecompressErro
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::firmware as fx;
+    use f_builder_testkit::firmware as fx;
 
     #[test]
     fn lz4_blocks_with_literals_and_overlapping_matches() {
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn garbage_never_panics() {
         for seed in 0..64u64 {
-            let n = craft_anything_testkit::noise(seed, 400);
+            let n = f_builder_testkit::noise(seed, 400);
             let _ = xz(&n, 1 << 20);
             let _ = lzma(&n, 1 << 20);
             let _ = bzip2(&n, 1 << 20);

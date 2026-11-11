@@ -1,6 +1,6 @@
-use craft_anything_formats::binary::{Arch, Binary};
-use craft_anything_formats::{macho, macho_deps};
-use craft_anything_testkit::apple;
+use f_builder_formats::binary::{Arch, Binary};
+use f_builder_formats::{macho, macho_deps};
+use f_builder_testkit::apple;
 
 fn enriched(data: &[u8]) -> Binary {
     let mut binary = Binary::raw(Arch::X86_64, 0, 0, 0);

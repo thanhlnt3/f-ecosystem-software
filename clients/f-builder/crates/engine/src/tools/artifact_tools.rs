@@ -3,11 +3,11 @@
 //! application tool modules share.
 
 use crate::tool::{CancelToken, Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_analysis::js_inventory::{InvLimits, Inventorier, Inventory, compare_inventories};
-use craft_anything_evidence::{
+use f_builder_analysis::js_inventory::{InvLimits, Inventorier, Inventory, compare_inventories};
+use f_builder_evidence::{
     Authority, Confidence, Coverage, Environment, ErrorCode, Evidence, EvidenceBuilder, Limitation, Location, Subject, ToolError, sha256_hex,
 };
-use craft_anything_formats::{asar, zip};
+use f_builder_formats::{asar, zip};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -30,7 +30,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ToolSpec {
             id: "core_archive_extract",
             title: "Extract an archive",
-            summary: "Extract every regular file of a ZIP/APK/IPA/JAR or ASAR (plus its .asar.unpacked files) into a fresh private temporary folder chosen by Craft Anything, and return its path. Bounded size and count; entries that would escape the folder are refused.",
+            summary: "Extract every regular file of a ZIP/APK/IPA/JAR or ASAR (plus its .asar.unpacked files) into a fresh private temporary folder chosen by F-Builder, and return its path. Bounded size and count; entries that would escape the folder are refused.",
             beginner: "Unpack an app or archive into a new folder so you can look at the files.",
             toolset: Toolset::Core,
             effects: Effects::MUTATES_SESSION.union(Effects::WRITES_FILESYSTEM),
@@ -135,7 +135,7 @@ pub(crate) struct WalkOptions<'a> {
 /// A root that can't be listed is an error; a folder below it that can't be is in `unlisted`.
 pub(crate) fn walk_dir(root: &Path, opts: &WalkOptions<'_>, cancel: &CancelToken) -> Result<Walked, ToolError> {
     let mut out = Walked::default();
-    let mut ignore = craft_anything_analysis::js_source::Ignore::default();
+    let mut ignore = f_builder_analysis::js_source::Ignore::default();
     let mut stack: Vec<(PathBuf, String, usize)> = vec![(root.to_path_buf(), String::new(), 0)];
     let mut visited = 0usize;
     while let Some((dir, rel, depth)) = stack.pop() {
@@ -225,7 +225,7 @@ pub(crate) fn resolve_evidence_input(ctx: &Ctx<'_>, v: &Value, expected: &[&str]
 
 /// True when a value names a path rather than evidence.
 pub(crate) fn is_path_input(v: &Value) -> Option<&str> {
-    v.as_str().filter(|s| !craft_anything_evidence::is_evidence_id(s))
+    v.as_str().filter(|s| !f_builder_evidence::is_evidence_id(s))
 }
 
 /// A unique id for a fresh folder name.
@@ -460,7 +460,7 @@ fn inventory_path_unlisted(path: &Path, limits: InvLimits, cancel: &CancelToken)
         return Ok((out, subject, walked.unlisted));
     }
     let bytes = read_capped(path, limits.max_total_bytes.min(crate::target::MAX_TARGET_BYTES))?;
-    let kind = craft_anything_analysis::js_inventory::sniff_kind(&bytes, &name);
+    let kind = f_builder_analysis::js_inventory::sniff_kind(&bytes, &name);
     let mut inv = Inventorier::new(&name, kind, limits, &check);
     let mut unlisted = Vec::new();
     match kind {
@@ -553,7 +553,7 @@ fn core_archive_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Too
     }
     let total = inv.entries.len();
     let limit = p.limit.clamp(1, 20_000);
-    let page: Vec<&craft_anything_analysis::js_inventory::InvEntry> = inv.entries.iter().skip(p.offset).take(limit).collect();
+    let page: Vec<&f_builder_analysis::js_inventory::InvEntry> = inv.entries.iter().skip(p.offset).take(limit).collect();
     let files = inv.entries.iter().filter(|e| e.sha256.is_some()).count();
     let summary = format!(
         "{} ({}) holds {} files in {} entries{}; {} nested container(s){}.",
@@ -585,7 +585,7 @@ fn core_archive_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Too
     lims.push(Limitation::new("no_disk_images", "Disk images (DMG), installers (PKG/MSI) and compressed tarballs are listed as single files, not opened."));
     let mut coverage = Coverage::page(page.len() as u64, total as u64, p.offset as u64);
     if !unlisted.is_empty() || inv.unopened_nested > 0 {
-        coverage.status = craft_anything_evidence::CoverageStatus::Partial;
+        coverage.status = f_builder_evidence::CoverageStatus::Partial;
     }
     let ev = EvidenceBuilder::new("core_archive_show", subject, env(ctx))
         .params(json!({"path": path, "if_tampered": p.if_tampered == IntegrityPolicy::Fail, "offset": p.offset, "limit": limit, "max_depth": limits.max_depth, "max_entries": limits.max_entries, "max_total_bytes": limits.max_total_bytes}))
@@ -641,7 +641,7 @@ fn core_archive_extract(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
     }
     let bytes = read_capped(&path, crate::target::MAX_TARGET_BYTES)?;
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let kind = craft_anything_analysis::js_inventory::sniff_kind(&bytes, &name);
+    let kind = f_builder_analysis::js_inventory::sniff_kind(&bytes, &name);
     // Collect (name, bytes-or-error) without touching the disk first.
     enum Member<'a> {
         Data(&'a [u8]),
@@ -723,7 +723,7 @@ fn core_archive_extract(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
             .with_remediation("Pass if_tampered=continue to extract anyway.")
             .with_details(json!({"contradictions": contradictions})));
     }
-    let out = fresh_temp_dir("craft-anything-extract")?;
+    let out = fresh_temp_dir("f-builder-extract")?;
     let mut written = 0usize;
     let mut total = 0u64;
     let mut skipped = Vec::new();
@@ -769,7 +769,7 @@ fn core_archive_extract(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
         .summary(summary)
         .confidence(Confidence::Observed)
         .limitation(Limitation::new("nested_not_extracted", "Archives inside the archive are written as files, not unpacked; run core_archive_extract on them."))
-        .coverage(Coverage { status: if skipped.is_empty() { craft_anything_evidence::CoverageStatus::Complete } else { craft_anything_evidence::CoverageStatus::Partial }, examined: Some(written as u64), total: Some(members.len() as u64), next_offset: None })
+        .coverage(Coverage { status: if skipped.is_empty() { f_builder_evidence::CoverageStatus::Complete } else { f_builder_evidence::CoverageStatus::Partial }, examined: Some(written as u64), total: Some(members.len() as u64), next_offset: None })
         .location(Location::new("path", out.display().to_string()).with_label("output folder"))
         .build()?;
     Ok(ToolOutput::evidence(ev))
@@ -838,7 +838,7 @@ fn core_archives_compare(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
 mod tests {
     use super::*;
     use crate::{CallOptions, Caller, Engine};
-    use craft_anything_testkit::electron as fx;
+    use f_builder_testkit::electron as fx;
 
     fn call(e: &Engine, id: &str, p: Value) -> Result<Value, ToolError> {
         e.call(id, p, CallOptions::new(Caller::Cli)).map(|o| o.to_json())

@@ -149,7 +149,7 @@ pub(crate) fn pe_resources(data: &[u8], name: &str) -> Vec<Span> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::packed as kit;
+    use f_builder_testkit::packed as kit;
 
     /// A 64-bit ELF whose headers all point at one segment of `notes` empty notes owned by `OWN`.
     fn elf_of_repeated_notes(phentsize: u16, phnum: u16, notes: usize) -> Vec<u8> {

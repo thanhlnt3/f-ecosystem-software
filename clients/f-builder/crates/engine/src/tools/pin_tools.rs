@@ -5,8 +5,8 @@
 use crate::pins::{self, Opened, PinMode, Runs};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
 use crate::workspace::Workspace;
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::Launch;
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::Launch;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -156,16 +156,14 @@ pub struct DeleteParams {
 fn open_project(project: &Path) -> Result<Workspace, ToolError> {
     Workspace::open(project).map_err(|e| {
         ToolError::new(ErrorCode::NotFound, format!("{} isn't a project folder: {}", project.display(), e.message))
-            .with_remediation("Pass a folder from project_list (it holds craft.json).")
+            .with_remediation("Pass a folder from project_list (it holds f-builder.json).")
     })
 }
 
 /// The Godot a Godot project opens in.
 pub(crate) fn godot(ctx: &Ctx<'_>) -> Option<PathBuf> {
     let store = ctx.session.settings.engine_store_dir();
-    craft_anything_engines::game::inventory(&craft_anything_engines::game::Places::here(store))
-        .best(craft_anything_engines::game::Builder::Godot)
-        .map(|i| i.program.clone())
+    f_builder_engines::game::inventory(&f_builder_engines::game::Places::here(store)).best(f_builder_engines::game::Builder::Godot).map(|i| i.program.clone())
 }
 
 /// This session's run list (made on first use).

@@ -123,7 +123,7 @@ mod tests {
     use super::*;
 
     fn args(builder: bool, resume: Option<&str>, options: &BackendOptions) -> Vec<String> {
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec!["mcp".into()], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec!["mcp".into()], notes: None };
         Antigravity.args(&ArgsCx { options, prompt: "analyse repo", preamble: "PRE ", mcp: &mcp, resume, builder, reads_checked: false, question: false })
     }
 

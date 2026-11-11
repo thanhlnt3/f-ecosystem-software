@@ -8,8 +8,8 @@ use super::browser_tools::{self, CaptureFlags};
 use super::native_common::spec;
 use super::web_common::{self, Browser};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_engines::cdp::{self, CdpClient, Deadline, INSPECTOR_MAX_MESSAGE, PAGE_MAX_MESSAGE, WsConn};
-use craft_anything_evidence::{Authority, Confidence, Coverage, CoverageStatus, EvidenceBuilder, Limitation, Location, Subject, ToolError};
+use f_builder_engines::cdp::{self, CdpClient, Deadline, INSPECTOR_MAX_MESSAGE, PAGE_MAX_MESSAGE, WsConn};
+use f_builder_evidence::{Authority, Confidence, Coverage, CoverageStatus, EvidenceBuilder, Limitation, Location, Subject, ToolError};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -198,14 +198,14 @@ fn js_electron_page_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
             .iter()
             .find(|t| t.get("type").and_then(Value::as_str) == Some("page") && is_electron_renderer(t.get("url").and_then(Value::as_str).unwrap_or_default()))
             .ok_or_else(|| {
-                ToolError::new(craft_anything_evidence::ErrorCode::NotFound, "no Electron renderer page (file://) was found")
+                ToolError::new(f_builder_evidence::ErrorCode::NotFound, "no Electron renderer page (file://) was found")
                     .with_remediation("Open a window in the app, or pass an explicit target_id.")
             })?,
     };
     let url = target.get("url").and_then(Value::as_str).unwrap_or_default();
     if !is_electron_renderer(url) {
         return Err(ToolError::new(
-            craft_anything_evidence::ErrorCode::NotSupported,
+            f_builder_evidence::ErrorCode::NotSupported,
             format!("target {} is not a local renderer page", web_common::sanitize_url(url)),
         )
         .with_remediation("js_electron_page_show only inspects hostless file:// / app:// renderer pages."));
@@ -298,7 +298,7 @@ fn js_electron_walkthrough_record(ctx: &mut Ctx<'_>, params: Value) -> Result<To
     let target = targets
         .iter()
         .find(|t| t.get("type").and_then(Value::as_str) == Some("page"))
-        .ok_or_else(|| ToolError::new(craft_anything_evidence::ErrorCode::NotFound, "the launched app exposed no renderer page"))?;
+        .ok_or_else(|| ToolError::new(f_builder_evidence::ErrorCode::NotFound, "the launched app exposed no renderer page"))?;
     let start_url = web_common::sanitize_url(target.get("url").and_then(Value::as_str).unwrap_or_default());
     let mut client = web_common::connect_target(&browser, target, PAGE_MAX_MESSAGE, &dl)?;
     let mut secrets = web_common::Secrets::new(&p.hidden_values);
@@ -345,7 +345,7 @@ fn js_electron_walkthrough_record(ctx: &mut Ctx<'_>, params: Value) -> Result<To
     )
     .params(json!({"application_executable": p.application_executable, "action_count": p.actions.len(), "sensitive_value_declarations": p.hidden_values.len()}))
     .result(json!({
-        "browser": {"started_by": "craft-anything", "cleanup": "closed", "product": browser.product},
+        "browser": {"started_by": "f-builder", "cleanup": "closed", "product": browser.product},
         "start_url": start_url,
         "steps": steps,
         "network": network,
@@ -493,13 +493,13 @@ fn js_runtime_watch(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Tool
     let targets = cdp::json_list(&endpoint, &dl)?;
     let target = web_common::pick_target(&targets, p.target_id.as_deref(), None)?;
     if target.get("attached").and_then(Value::as_bool) == Some(true) {
-        return Err(ToolError::new(craft_anything_evidence::ErrorCode::EngineMissing, "another debugger is already attached to this target")
+        return Err(ToolError::new(f_builder_evidence::ErrorCode::EngineMissing, "another debugger is already attached to this target")
             .with_remediation("Detach the other client, or pick a target with attached:false."));
     }
     let ws_url = target
         .get("webSocketDebuggerUrl")
         .and_then(Value::as_str)
-        .ok_or_else(|| ToolError::new(craft_anything_evidence::ErrorCode::EngineMissing, "the target has no inspector WebSocket URL"))?;
+        .ok_or_else(|| ToolError::new(f_builder_evidence::ErrorCode::EngineMissing, "the target has no inspector WebSocket URL"))?;
     let wt = cdp::ws_target(ws_url, &endpoint)?;
     let conn = WsConn::connect(&wt, INSPECTOR_MAX_MESSAGE, &dl)?;
     let mut client = CdpClient::new(conn);

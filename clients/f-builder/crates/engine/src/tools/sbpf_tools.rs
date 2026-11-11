@@ -6,9 +6,9 @@
 use super::native_common::{page, spec};
 use super::static_input::{self, builder, format_err};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_disasm::sbpf;
-use craft_anything_evidence::{Authority, Confidence, Coverage, CoverageStatus, Limitation, Location, ToolError};
-use craft_anything_formats::solana;
+use f_builder_disasm::sbpf;
+use f_builder_evidence::{Authority, Confidence, Coverage, CoverageStatus, Limitation, Location, ToolError};
+use f_builder_formats::solana;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -476,8 +476,8 @@ fn formats_sbpf_disassemble(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutp
 mod tests {
     use super::super::native_common::test_support::{call, call_err, engine_with};
     use crate::Engine;
-    use craft_anything_testkit::sbpf as fx;
-    use craft_anything_testkit::temp_file;
+    use f_builder_testkit::sbpf as fx;
+    use f_builder_testkit::temp_file;
     use serde_json::json;
 
     #[test]
@@ -545,9 +545,9 @@ mod tests {
 
     #[test]
     fn non_bpf_elf_is_a_clean_error() {
-        let e = engine_with("plain", &craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::X86_64, true).0);
+        let e = engine_with("plain", &f_builder_testkit::elf64(f_builder_testkit::ElfArch::X86_64, true).0);
         let err = call_err(&e, "formats_sbpf_show", json!({}));
-        assert_eq!(err.code, craft_anything_evidence::ErrorCode::NotSupported);
+        assert_eq!(err.code, f_builder_evidence::ErrorCode::NotSupported);
         assert!(err.message.contains("not") && err.message.contains("EM_BPF"));
         // But raw mode will still decode the bytes without complaint.
         let _ = call(&e, "formats_sbpf_show", json!({"encoding": "raw"}));

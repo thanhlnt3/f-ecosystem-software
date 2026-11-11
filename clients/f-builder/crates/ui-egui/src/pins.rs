@@ -6,10 +6,10 @@
 use crate::i18n::{tr, trf};
 use crate::state::Modal;
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, icons, widgets};
-use craft_anything_engine::evidence::ToolError;
-use craft_anything_engine::pins::{Pin, PinMode};
+use crate::{BuilderApp, icons, widgets};
 use egui::{RichText, Ui, Vec2};
+use f_builder_engine::evidence::ToolError;
+use f_builder_engine::pins::{Pin, PinMode};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -38,7 +38,7 @@ pub struct PinDraft {
     pub size: Option<Result<(u64, u64), String>>,
 }
 
-impl CraftApp {
+impl BuilderApp {
     /// Read every project's pins (and what's running) on a worker.
     pub fn refresh_pins(&mut self) {
         self.pins_read_at = Some(std::time::Instant::now());
@@ -136,7 +136,7 @@ pub(crate) fn quit_at_once(v: &Value) -> String {
 }
 
 /// The sidebar's Pinned section: nothing until something is pinned.
-pub fn section(app: &mut CraftApp, ui: &mut Ui, fold: bool) {
+pub fn section(app: &mut BuilderApp, ui: &mut Ui, fold: bool) {
     if app.pins.is_empty() {
         return;
     }
@@ -193,7 +193,7 @@ pub fn section(app: &mut CraftApp, ui: &mut Ui, fold: bool) {
 }
 
 /// The right-click menu on a pin.
-fn menu(app: &mut CraftApp, ui: &mut Ui, row: &PinRow) {
+fn menu(app: &mut BuilderApp, ui: &mut Ui, row: &PinRow) {
     if row.running {
         if ui.button(tr("Open another copy")).on_hover_text(tr("Copies share the files it saves beside itself.")).clicked() {
             app.open_pin(row, true);
@@ -236,7 +236,7 @@ fn megabytes(bytes: u64) -> String {
 }
 
 /// Pin this build: a frozen copy (the default) or a light one, and a name.
-pub fn pin_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
+pub fn pin_modal(app: &mut BuilderApp, ui: &mut Ui, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.set_width(560.0);
     ui.label(theme::heading(tr("Pin this build"), theme::SECTION));
@@ -309,7 +309,7 @@ pub fn pin_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
     });
 }
 
-pub fn rename_modal(app: &mut CraftApp, ui: &mut Ui, project: &Path, id: u32, close: &mut bool) {
+pub fn rename_modal(app: &mut BuilderApp, ui: &mut Ui, project: &Path, id: u32, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.label(theme::heading(tr("Rename the pin"), theme::SECTION));
     ui.add_space(8.0);
@@ -333,7 +333,7 @@ pub fn rename_modal(app: &mut CraftApp, ui: &mut Ui, project: &Path, id: u32, cl
     });
 }
 
-pub fn delete_modal(app: &mut CraftApp, ui: &mut Ui, project: &Path, id: u32, close: &mut bool) {
+pub fn delete_modal(app: &mut BuilderApp, ui: &mut Ui, project: &Path, id: u32, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     let Some(row) = app.pins.iter().find(|p| p.project == project && p.pin.id == id).cloned() else {
         *close = true;

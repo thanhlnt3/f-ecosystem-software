@@ -5,8 +5,8 @@ use super::native_common::{params_json, spec};
 use super::static_input::{self, builder};
 use super::{Detail, detailed};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, Limitation, Location, ToolError};
-use craft_anything_formats::{Format, rust_bin};
+use f_builder_evidence::{Authority, Confidence, Coverage, Limitation, Location, ToolError};
+use f_builder_formats::{Format, rust_bin};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -40,7 +40,7 @@ fn native_rust_binary_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutpu
     let p: RustParams = parse_params(params)?;
     let input = static_input::load(ctx, p.path.as_deref(), static_input::DEFAULT_MAX_BYTES)?;
     ctx.report(None, format!("Looking for Rust fingerprints in {}", input.name));
-    let bin = craft_anything_formats::parse_binary(&input.bytes).ok();
+    let bin = f_builder_formats::parse_binary(&input.bytes).ok();
     ctx.cancel.check()?;
     let r = rust_bin::inspect(&input.bytes, bin.as_ref());
 
@@ -117,7 +117,7 @@ fn native_rust_binary_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutpu
 mod tests {
     use super::super::native_common::test_support::call;
     use crate::Engine;
-    use craft_anything_testkit::temp_file;
+    use f_builder_testkit::temp_file;
     use serde_json::json;
 
     #[test]

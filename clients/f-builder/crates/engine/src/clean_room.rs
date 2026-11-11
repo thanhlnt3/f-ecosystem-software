@@ -8,7 +8,7 @@
 //! plugin's included, needs Deep mode, so a new tool is Deep-only until it's added here.
 
 use crate::Availability;
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 
 /// The tools that run in Clean room, by id. Tools of the AI and setup layers are listed here too.
 pub const TOOLS: &[&str] = &[

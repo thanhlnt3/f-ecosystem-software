@@ -1036,7 +1036,7 @@ pub fn parse_core(data: &[u8]) -> Result<CoreDump, FormatError> {
 mod tests {
     #[test]
     fn needed_names_must_fit_the_dynamic_string_table() {
-        let (mut data, _) = craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::X86_64, true);
+        let (mut data, _) = f_builder_testkit::elf64(f_builder_testkit::ElfArch::X86_64, true);
         let header = program_headers(&data).unwrap().into_iter().find(|ph| ph.p_type == 2).unwrap();
         let start = header.offset as usize;
         let end = start + header.file_size as usize;
@@ -1064,7 +1064,7 @@ mod tests {
 
     #[test]
     fn core_notes_round_trip() {
-        let core = craft_anything_testkit::elf64_core(0x401234, 0xdead);
+        let core = f_builder_testkit::elf64_core(0x401234, 0xdead);
         let c = parse_core(&core).unwrap();
         assert_eq!(c.arch, Arch::X86_64);
         assert_eq!(c.pc(), Some(0x401234));
@@ -1081,15 +1081,15 @@ mod tests {
 
     #[test]
     fn damaged_cores_never_panic() {
-        let core = craft_anything_testkit::elf64_core(0x401234, 0xdead);
-        for m in craft_anything_testkit::mutations(&core) {
+        let core = f_builder_testkit::elf64_core(0x401234, 0xdead);
+        for m in f_builder_testkit::mutations(&core) {
             let _ = parse_core(&m);
         }
     }
 
     #[test]
     fn program_headers_and_mitigations() {
-        let (elf, _) = craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::X86_64, true);
+        let (elf, _) = f_builder_testkit::elf64(f_builder_testkit::ElfArch::X86_64, true);
         let ph = program_headers(&elf).unwrap();
         assert!(ph.iter().any(|p| p.kind == "GNU_STACK"));
         let b = crate::parse_binary(&elf).unwrap();
@@ -1148,8 +1148,8 @@ mod tests {
 mod sectionless_tests {
     use super::*;
     use crate::binary::SymbolKind;
-    use craft_anything_testkit::flutter::SymbolTable;
-    use craft_anything_testkit::sectionless::sectionless_elf;
+    use f_builder_testkit::flutter::SymbolTable;
+    use f_builder_testkit::sectionless::sectionless_elf;
 
     const NAMES: [&str; 3] = ["inflate", "deflate", "adler32"];
     const TABLES: [(SymbolTable, &str); 2] = [(SymbolTable::DynamicHash, "DT_HASH"), (SymbolTable::DynamicGnuHash, "DT_GNU_HASH")];
@@ -1180,7 +1180,7 @@ mod sectionless_tests {
     #[test]
     fn the_section_stripped_flutter_libraries_name_their_symbols() {
         for (table, source) in TABLES {
-            let d = craft_anything_testkit::flutter::libapp_so(table);
+            let d = f_builder_testkit::flutter::libapp_so(table);
             let b = crate::parse_binary(&d).unwrap();
             assert!(b.sections.is_empty());
             assert_eq!(dynamic_table(&d).table.unwrap().count_source, source);
@@ -1196,7 +1196,7 @@ mod sectionless_tests {
         for (is64, big) in [(true, false), (false, true)] {
             for (table, _) in TABLES {
                 let d = sectionless_elf(is64, big, &NAMES, table);
-                for sample in craft_anything_testkit::mutations(&d) {
+                for sample in f_builder_testkit::mutations(&d) {
                     let _ = dynamic_table(&sample);
                     if let Ok(b) = crate::parse_binary(&sample) {
                         let _ = dynamic_symbols(&sample, &b);

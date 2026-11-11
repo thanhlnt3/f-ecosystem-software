@@ -7,13 +7,13 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>Craft Anything</string>
+  <string>F-Builder</string>
   <key>CFBundleName</key>
-  <string>Craft Anything</string>
+  <string>F-Builder</string>
   <key>CFBundleExecutable</key>
-  <string>craft-anything</string>
+  <string>f-builder</string>
   <key>CFBundleIdentifier</key>
-  <string>ai.storyteller.craft-anything</string>
+  <string>io.github.thanhlnt3.f-builder</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundlePackageType</key>
@@ -24,12 +24,12 @@
   <string>@SHORT_VERSION@</string>
   <key>CFBundleVersion</key>
   <string>@SHORT_VERSION@</string>
-  <key>CraftAnythingVersion</key>
+  <key>FBuilderVersion</key>
   <string>@VERSION@</string>
-  <key>CraftAnythingBuildCommit</key>
+  <key>FBuilderBuildCommit</key>
   <string>@BUILD_SHA@</string>
   <key>CFBundleIconFile</key>
-  <string>craft-anything</string>
+  <string>f-builder</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.developer-tools</string>
   <!-- Must match MACOSX_DEPLOYMENT_TARGET in package.sh. Big Sur is the first release on
@@ -43,7 +43,7 @@
   <key>NSRequiresAquaSystemAppearance</key>
   <false/>
   <key>NSHumanReadableCopyright</key>
-  <string>Copyright © the ArtCraft Team and the Craft Anything contributors. MIT OR Apache-2.0.</string>
+  <string>Copyright (c) 2026 F-Eco contributors. Based on F-Builder by the ArtCraft team. MIT OR Apache-2.0.</string>
 
 </dict>
 </plist>

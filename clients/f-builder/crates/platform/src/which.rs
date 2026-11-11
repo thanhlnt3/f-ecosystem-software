@@ -277,12 +277,12 @@ pub fn which_in(name: &str, path: Option<OsString>) -> Vec<PathBuf> {
     out
 }
 
-/// File name of the command-line binary (`craft-anything-cli`, plus `.exe` on Windows).
+/// File name of the command-line binary (`f-builder-cli`, plus `.exe` on Windows).
 pub fn cli_file_name() -> String {
-    format!("craft-anything-cli{}", std::env::consts::EXE_SUFFIX)
+    format!("f-builder-cli{}", std::env::consts::EXE_SUFFIX)
 }
 
-/// Absolute path of the installed `craft-anything-cli`: this executable when it is the CLI, else
+/// Absolute path of the installed `f-builder-cli`: this executable when it is the CLI, else
 /// a sibling of this executable (the desktop app ships next to it), else the first one on `PATH`.
 pub fn self_cli_path() -> Option<PathBuf> {
     // The prefix is dropped from the path found, not from this executable's: a sibling is longer,
@@ -309,7 +309,7 @@ fn find_cli() -> Option<PathBuf> {
             }
         }
     }
-    which("craft-anything-cli")
+    which("f-builder-cli")
 }
 
 /// `path` without the `\\?\` prefix `canonicalize` adds on Windows, so clients that can't start
@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn plain_form_drops_the_extended_length_prefix_only_when_it_names_the_same_file() {
-        assert_eq!(plain_form(r"\\?\C:\Apps\craft-anything-cli.exe").as_deref(), Some(r"C:\Apps\craft-anything-cli.exe"));
+        assert_eq!(plain_form(r"\\?\C:\Apps\f-builder-cli.exe").as_deref(), Some(r"C:\Apps\f-builder-cli.exe"));
         assert_eq!(plain_form(r"\\?\UNC\server\share\bin\cli.exe").as_deref(), Some(r"\\server\share\bin\cli.exe"));
         // Not extended-length, or not a drive or UNC path behind the prefix: left alone.
         for p in [

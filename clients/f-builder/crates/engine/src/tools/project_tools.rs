@@ -6,8 +6,8 @@ use crate::feed;
 use crate::inbox::{Answer, Inbox};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
 use crate::workspace::{ACTION_KINDS, ActionKind, Approval, Workspace};
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::sync::Mutex;
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::sync::Mutex;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -122,7 +122,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ToolSpec {
             id: "project_delete",
             title: "Delete a project",
-            summary: "Delete a project: everything Craft Anything made in its folder (its records, checks, and what was built in app/). The person's own files stay (an app edited in place, the files a project started from). Can't be undone, so `confirm` must be true; stop a build first.",
+            summary: "Delete a project: everything F-Builder made in its folder (its records, checks, and what was built in app/). The person's own files stay (an app edited in place, the files a project started from). Can't be undone, so `confirm` must be true; stop a build first.",
             beginner: "Deletes something you made. Your own files are kept.",
             toolset: Toolset::Projects,
             effects: Effects::WRITES_FILESYSTEM,
@@ -144,7 +144,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ToolSpec {
             id: "project_approvals_set",
             title: "Choose what the builder's approvals get",
-            summary: "Choose, for one kind of builder action in a project, whether it goes ahead (`allow`), waits for the person's OK on a card (`ask`) or is refused (`refuse`); `default` follows Auto mode. Kinds: `web` (reading websites, searching), `commands` (outside the usual build commands), `outside_files` (changing files outside the project), `publish` (git push, npm publish, gh pr create…), `delete_outside`, `system` (system changes and files, Craft Anything's own records), `other_tools`. With no kind, says what every kind gets now. Takes effect from the builder's next action, also mid-build. Only the person changes these: an agent's call may only make a kind stricter.",
+            summary: "Choose, for one kind of builder action in a project, whether it goes ahead (`allow`), waits for the person's OK on a card (`ask`) or is refused (`refuse`); `default` follows Auto mode. Kinds: `web` (reading websites, searching), `commands` (outside the usual build commands), `outside_files` (changing files outside the project), `publish` (git push, npm publish, gh pr create…), `delete_outside`, `system` (system changes and files, F-Builder's own records), `other_tools`. With no kind, says what every kind gets now. Takes effect from the builder's next action, also mid-build. Only the person changes these: an agent's call may only make a kind stricter.",
             beginner: "Chooses what the builder may do without asking you.",
             toolset: Toolset::Projects,
             effects: Effects::WRITES_FILESYSTEM,
@@ -331,7 +331,7 @@ pub struct FolderParams {
 
 /// Websites being previewed in this session, by project folder (kept serving until it ends).
 #[derive(Default)]
-struct Previews(Mutex<HashMap<PathBuf, craft_anything_platform::serve::StaticServer>>);
+struct Previews(Mutex<HashMap<PathBuf, f_builder_platform::serve::StaticServer>>);
 
 /// What a project's questions should get.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
@@ -531,7 +531,7 @@ fn open(project: &std::path::Path) -> Result<Workspace, ToolError> {
     Workspace::open(project).map_err(|e| {
         let why = e.message.clone();
         ToolError::new(ErrorCode::NotFound, format!("{} isn't a project folder: {why}", project.display()))
-            .with_remediation("Pass a folder from project_list (it holds craft.json).")
+            .with_remediation("Pass a folder from project_list (it holds f-builder.json).")
     })
 }
 
@@ -639,7 +639,7 @@ fn project_preview(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolE
         if let Some(server) = map.get(&ws.root) {
             server.url()
         } else {
-            let server = craft_anything_platform::serve::serve_dir(&site).map_err(|e| ToolError::io(site.display(), e))?;
+            let server = f_builder_platform::serve::serve_dir(&site).map_err(|e| ToolError::io(site.display(), e))?;
             let url = server.url();
             map.insert(ws.root.clone(), server);
             url
@@ -659,7 +659,7 @@ fn project_open_folder(_ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
     let p: FolderParams = parse_params(params)?;
     let ws = open(&p.project)?;
     let dir = folder_to_open(&ws, p.app, p.pin)?;
-    craft_anything_platform::open_path(&dir)?;
+    f_builder_platform::open_path(&dir)?;
     Ok(ToolOutput::Value(json!({"opened": dir.display().to_string()})))
 }
 

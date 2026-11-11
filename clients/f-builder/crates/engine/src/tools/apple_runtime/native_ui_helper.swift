@@ -1,4 +1,4 @@
-// Craft Anything accessibility helper.
+// F-Builder accessibility helper.
 //
 // Reads a JSON request on stdin and writes a JSON result on stdout. It walks the macOS
 // accessibility (AX) tree of a running application and, for walkthroughs, performs AX actions

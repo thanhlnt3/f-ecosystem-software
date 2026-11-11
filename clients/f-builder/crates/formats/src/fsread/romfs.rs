@@ -144,25 +144,25 @@ mod tests {
 
     #[test]
     fn reads_a_small_image() {
-        let img = read(&craft_anything_testkit::firmware::romfs_image(), &Limits::default());
+        let img = read(&f_builder_testkit::firmware::romfs_image(), &Limits::default());
         assert!(img.complete, "{:?}", img.warnings);
         let f = img.entries.iter().find(|e| e.path == "etc/hostname").expect("etc/hostname");
-        assert_eq!(f.data.as_deref(), Some(b"craft-router\n".as_slice()));
+        assert_eq!(f.data.as_deref(), Some(b"build-router\n".as_slice()));
         assert!(img.entries.iter().any(|e| e.path == "etc" && e.kind == super::super::FsKind::Dir));
         assert_eq!(img.entries.iter().find(|e| e.path == "readme.txt").unwrap().data.as_deref(), Some(b"hello romfs".as_slice()));
     }
 
     #[test]
     fn hostile_never_panics() {
-        let base = craft_anything_testkit::firmware::romfs_image();
-        for m in craft_anything_testkit::mutations(&base) {
+        let base = f_builder_testkit::firmware::romfs_image();
+        for m in f_builder_testkit::mutations(&base) {
             let _ = read(&m, &Limits::default());
         }
         for len in 0..base.len().min(400) {
             let _ = read(&base[..len], &Limits::default());
         }
         for seed in 0..32 {
-            let _ = read(&craft_anything_testkit::noise(seed, 300), &Limits::default());
+            let _ = read(&f_builder_testkit::noise(seed, 300), &Limits::default());
         }
     }
 }

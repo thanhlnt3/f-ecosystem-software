@@ -19,17 +19,17 @@
 
 use crate::cli_agents::{Builder, CliSpec};
 use crate::{AgentEvent, AiHub, BackendKind, Conversation, Role};
-use craft_anything_engine::inbox::{Answer, Inbox, InboxDir, Request};
-use craft_anything_engine::project::{Project, Purpose};
-use craft_anything_engine::questions::AskedQuestion;
-use craft_anything_engine::workspace::progress::{AppFingerprintCache, BuildProgress};
-use craft_anything_engine::workspace::{CheckResult, ProjectUsage, Status, TargetRef, Workspace};
-use craft_anything_engine::{CallOptions, Caller, CancelToken, Engine, ToolOutput};
-use craft_anything_engines::game;
-use craft_anything_evidence::{ErrorCode, ToolError};
-pub use craft_anything_platform::serve::StaticServer;
-use craft_anything_platform::serve::serve_dir;
-use craft_anything_platform::sync::Mutex;
+use f_builder_engine::inbox::{Answer, Inbox, InboxDir, Request};
+use f_builder_engine::project::{Project, Purpose};
+use f_builder_engine::questions::AskedQuestion;
+use f_builder_engine::workspace::progress::{AppFingerprintCache, BuildProgress};
+use f_builder_engine::workspace::{CheckResult, ProjectUsage, Status, TargetRef, Workspace};
+use f_builder_engine::{CallOptions, Caller, CancelToken, Engine, ToolOutput};
+use f_builder_engines::game;
+use f_builder_evidence::{ErrorCode, ToolError};
+pub use f_builder_platform::serve::StaticServer;
+use f_builder_platform::serve::serve_dir;
+use f_builder_platform::sync::Mutex;
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -70,7 +70,7 @@ pub use output::{built_program, launch, site_dir};
 pub use runs::{RunSet, Started, Stopped, keep_queue_moving};
 pub use stand_in::StandIns;
 
-pub use craft_anything_engine::workspace::Step;
+pub use f_builder_engine::workspace::Step;
 
 /// What the UI shows, in order.
 #[derive(Debug, Clone, PartialEq)]
@@ -194,7 +194,7 @@ pub struct Note {
 /// earlier waiting note already carries, so two notes don't repeat the same ones.
 fn note_with_just_asked(text: String, ws: &Workspace, clean_room: bool, skip: &[AskedQuestion]) -> (String, Vec<AskedQuestion>) {
     let asked: Vec<AskedQuestion> =
-        craft_anything_engine::questions::untold(ws, !clean_room).into_iter().filter(|q| !skip.iter().any(|s| same_question(s, q))).collect();
+        f_builder_engine::questions::untold(ws, !clean_room).into_iter().filter(|q| !skip.iter().any(|s| same_question(s, q))).collect();
     if asked.is_empty() {
         return (text, asked);
     }
@@ -243,7 +243,7 @@ impl RebuildRun {
             .try_session()
             .map(|s| s.clean_room())
             .or(opts.clean_room)
-            .unwrap_or_else(|| !craft_anything_engine::Settings::load_from(&hub.settings_path()).deep_mode);
+            .unwrap_or_else(|| !f_builder_engine::Settings::load_from(&hub.settings_path()).deep_mode);
         // An API backend builds with our own agent loop and the Build tools; its conversation is
         // kept in the project and continued by follow-ups (a fresh build starts a new one).
         let api = match entry.config.kind {
@@ -311,7 +311,7 @@ impl RebuildRun {
                 let mut ctx = ctx;
                 let mut ws = ws;
                 // A clone can run for hours: keep the computer from sleeping until it ends.
-                let awake = craft_anything_platform::keep_awake();
+                let awake = f_builder_platform::keep_awake();
                 let _here = self_check::BuildingHere::new(&ws.root);
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     ctx.load_asset_keys(&key_store);
@@ -450,7 +450,7 @@ impl RebuildRun {
 
     /// The file with all of it.
     pub fn activity_log(&self) -> PathBuf {
-        self.root.join(craft_anything_engine::workspace::ACTIVITY_LOG)
+        self.root.join(f_builder_engine::workspace::ACTIVITY_LOG)
     }
 
     pub fn preview_url(&self) -> Option<String> {
@@ -602,7 +602,7 @@ impl Worker {
     fn call(&self, tool: &str, params: Value) -> Result<ToolOutput, ToolError> {
         self.stop.check()?;
         // The person started this run for this target, which is the consent for opening it.
-        let opts = CallOptions::new(Caller::Ui).with_consent(craft_anything_engine::Consent::Granted).with_cancel(self.stop.clone());
+        let opts = CallOptions::new(Caller::Ui).with_consent(f_builder_engine::Consent::Granted).with_cancel(self.stop.clone());
         // Said as it happens, so a long step shows what it's doing and the feed counts it.
         let call_id = format!("run-{tool}");
         self.emit(RunEvent::Agent(AgentEvent::ToolStarted { call_id: call_id.clone(), tool: tool.to_string(), input: Value::Null }));
@@ -619,10 +619,10 @@ impl Worker {
     fn load_asset_keys(&mut self, store: &crate::KeyStore) {
         let mut session = self.engine.session();
         session.label("Load the asset keys");
-        let providers = session.ext.get::<craft_anything_engines::assets::AssetProviders>().map(|p| p.as_ref().clone()).unwrap_or_default();
+        let providers = session.ext.get::<f_builder_engines::assets::AssetProviders>().map(|p| p.as_ref().clone()).unwrap_or_default();
         let keys = crate::keys::asset_keys(store, &providers);
         // The brief offers the built-in models, so a key for another provider doesn't count.
-        self.assets = craft_anything_engines::assets::AssetProviders::built_in().ids().into_iter().any(|id| keys.get(id).is_some());
+        self.assets = f_builder_engines::assets::AssetProviders::built_in().ids().into_iter().any(|id| keys.get(id).is_some());
         session.ext.insert(Arc::new(keys));
     }
 
@@ -661,7 +661,7 @@ impl Worker {
         // A note taken before the person asked something carries no answer for it; put the
         // remaining ones before the notes so the builder has both in this turn.
         let extra: Vec<AskedQuestion> =
-            craft_anything_engine::questions::untold(ws, deep).into_iter().filter(|q| !attached.iter().any(|a| same_question(a, q))).collect();
+            f_builder_engine::questions::untold(ws, deep).into_iter().filter(|q| !attached.iter().any(|a| same_question(a, q))).collect();
         let mut questions = attached;
         questions.extend(extra);
         let context = just_asked(&questions);
@@ -679,7 +679,7 @@ impl Worker {
         };
         let stop = self.stop.clone();
         Arc::new(move |tool: &str, input: &Value| {
-            let r = craft_anything_engine::tools::interaction_tools::approve_with(
+            let r = f_builder_engine::tools::interaction_tools::approve_with(
                 Some(Inbox::new(inbox.clone())),
                 auto_mode,
                 clean_room,
@@ -724,7 +724,7 @@ impl Worker {
             cost_totals: Some(crate::cli_agents::claude_cost::path_in(&config_dir)),
             resume: ws.manifest.agent_session_for_mode(&entry.config.model, deep).map(str::to_string),
             preamble: Some(
-                "You work inside Craft Anything for a person who doesn't code. The message below is your task.
+                "You work inside F-Builder for a person who doesn't code. The message below is your task.
 
 "
                 .into(),
@@ -868,7 +868,7 @@ impl Worker {
         });
         // "Just ask" runs apart from the builder's session, and the person's message may follow on from it (#857).
         let new_request = opts.message.as_deref().is_some_and(|m| !m.trim().is_empty());
-        let mut asked = if new_request { craft_anything_engine::questions::untold(ws, deep) } else { Vec::new() };
+        let mut asked = if new_request { f_builder_engine::questions::untold(ws, deep) } else { Vec::new() };
         let just_asked = just_asked(&asked);
         prompt.insert_str(0, &just_asked);
         fresh = fresh.map(|f| format!("{just_asked}{f}"));
@@ -933,7 +933,7 @@ impl Worker {
                 // failed may not have told it at all.
                 let told = std::mem::take(&mut asked);
                 if !told.is_empty()
-                    && let Err(e) = craft_anything_engine::questions::mark_told(ws, &told)
+                    && let Err(e) = f_builder_engine::questions::mark_told(ws, &told)
                 {
                     log::warn!("couldn't record which questions the builder was told: {}", e.message);
                 }
@@ -984,7 +984,7 @@ impl Worker {
             // round adds to it, across runs, until the limit stops the build.
             ws.manifest.not_working_checks = if checks.iter().all(|c| c.passed) { 0 } else { ws.manifest.not_working_checks.saturating_add(1) };
             ws.save()?;
-            // Kept for the next prompt when every check worked; saved after craft.json has the round.
+            // Kept for the next prompt when every check worked; saved after f-builder.json has the round.
             progress.checked = self.kept_checks.lock().unwrap_or_else(PoisonError::into_inner).saved_for(round);
             progress.save(&ws.root)?;
             for c in &checks {
@@ -1147,7 +1147,7 @@ impl Worker {
             Ok(m) if m.len() > MAX_KEPT_SESSION => Err(format!("it's over {} MB", MAX_KEPT_SESSION / 1_000_000)),
             Ok(_) => std::fs::read(&from)
                 .map_err(|e| e.to_string())
-                .and_then(|b| craft_anything_platform::fs::write_atomic_private(&ws.agent_session_path(), &b).map_err(|e| e.message)),
+                .and_then(|b| f_builder_platform::fs::write_atomic_private(&ws.agent_session_path(), &b).map_err(|e| e.message)),
             Err(e) => Err(e.to_string()),
         };
         if let Err(why) = kept {
@@ -1285,12 +1285,12 @@ impl Worker {
                     // Our own loop asks before tools that need consent. The Build tools are the
                     // builder's job (they apply the approval policy themselves); nothing else runs.
                     AgentEvent::ConsentNeeded { call_id, tool, .. } => {
-                        let build = self.engine.registry().get(tool).is_some_and(|s| s.toolset == craft_anything_engine::Toolset::Build);
+                        let build = self.engine.registry().get(tool).is_some_and(|s| s.toolset == f_builder_engine::Toolset::Build);
                         agent.answer_consent(call_id, build);
                     }
                     // Decided on the tool's own id (its CLI and `mcp__…__` names included).
                     AgentEvent::ToolStarted { tool, .. }
-                        if self.engine.registry().canonical(tool) == Some(craft_anything_engine::tools::native_function::PSEUDOCODE_TOOL) =>
+                        if self.engine.registry().canonical(tool) == Some(f_builder_engine::tools::native_function::PSEUDOCODE_TOOL) =>
                     {
                         self.decompiled = true
                     }
@@ -1341,7 +1341,7 @@ impl Worker {
         for n in read {
             // The agent's hook took the note, so the Just-ask answers in its text were told.
             if !n.questions.is_empty()
-                && let Err(e) = craft_anything_engine::questions::mark_told(ws, &n.questions)
+                && let Err(e) = f_builder_engine::questions::mark_told(ws, &n.questions)
             {
                 log::warn!("couldn't record which questions the builder was told: {}", e.message);
             }
@@ -1453,7 +1453,7 @@ fn kept_session(ws: &Workspace) -> Option<String> {
 }
 
 /// What an API-backend builder is told first: its tools differ from an agent app's.
-const API_BUILDER: &str = "Your tools: build_files_list, build_file_read, build_file_write and build_file_edit for the project's files (paths relative to the project folder, e.g. app/src/main.rs), and build_command_run for commands, which run in app/ (never start dev servers or watchers). Where the steps below mention Read, Write, Edit or Bash, use these. For the checklist step use build_checklist (the same shape as TodoWrite: todos with content, activeForm and status) and call it again as you go. Ask the person with core_person_ask only when a choice really changes the result. Other Craft Anything tools are available too; enable a toolset with enable_toolset when you need it. rebuild_check isn't available in this loop: Craft Anything checks your build after each turn instead.";
+const API_BUILDER: &str = "Your tools: build_files_list, build_file_read, build_file_write and build_file_edit for the project's files (paths relative to the project folder, e.g. app/src/main.rs), and build_command_run for commands, which run in app/ (never start dev servers or watchers). Where the steps below mention Read, Write, Edit or Bash, use these. For the checklist step use build_checklist (the same shape as TodoWrite: todos with content, activeForm and status) and call it again as you go. Ask the person with core_person_ask only when a choice really changes the result. Other F-Builder tools are available too; enable a toolset with enable_toolset when you need it. rebuild_check isn't available in this loop: F-Builder checks your build after each turn instead.";
 
 /// Added to the API loop's note for a builder that can't look at pictures.
 const BLIND_BUILDER: &str = " You can't look at pictures: use capture/README.md, capture/capture.json and the evidence instead.";
@@ -1502,9 +1502,7 @@ pub fn replaced_builder_notice(saved: &str, used: &str) -> String {
 pub fn builder_backend(cfg: &crate::AiConfig, named: Option<&str>) -> Result<crate::BackendEntry, ToolError> {
     if let Some(n) = named {
         let Some(entry) = cfg.get(n) else {
-            return Err(
-                ToolError::invalid(format!("No AI backend named {n:?}")).with_remediation("See `craft-anything-cli ai list`, or add one in Settings → AI.")
-            );
+            return Err(ToolError::invalid(format!("No AI backend named {n:?}")).with_remediation("See `f-builder-cli ai list`, or add one in Settings → AI."));
         };
         if !entry.config.enabled {
             return Err(ToolError::new(ErrorCode::BadSettings, format!("{} is turned off.", entry.config.name))

@@ -2,7 +2,7 @@
 
 use crate::TargetInfo;
 use crate::state::{ChatItem, ConsentAnswer};
-use craft_anything_engine::evidence::Evidence;
+use f_builder_engine::evidence::Evidence;
 use std::fmt::Write as _;
 
 fn evidence_md(out: &mut String, e: &Evidence) {
@@ -31,7 +31,7 @@ pub fn markdown(chat: &[ChatItem], target: Option<&TargetInfo>, clean_room: bool
         let _ = writeln!(out, "- **SHA-256:** `{}`", t.sha256);
         let _ = writeln!(out, "- **Size:** {}", crate::human_bytes(t.bytes.len()));
     }
-    let _ = writeln!(out, "- **Mode:** {}", craft_anything_engine::clean_room::mode_words(clean_room));
+    let _ = writeln!(out, "- **Mode:** {}", f_builder_engine::clean_room::mode_words(clean_room));
     let _ = writeln!(
         out,
         "\nConfidence: *Seen it* = read directly; *Worked it out* = computed from what we saw; *Best guess* = a reasonable reading, not proven.\n"
@@ -88,7 +88,7 @@ pub fn markdown(chat: &[ChatItem], target: Option<&TargetInfo>, clean_room: bool
             evidence_md(&mut out, e);
         }
     }
-    let _ = writeln!(out, "\n---\nMade with Craft Anything {}.", env!("CARGO_PKG_VERSION"));
+    let _ = writeln!(out, "\n---\nMade with F-Builder {}.", env!("CARGO_PKG_VERSION"));
     out
 }
 

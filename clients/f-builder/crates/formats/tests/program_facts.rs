@@ -2,11 +2,11 @@
 //! and from every damaged form of them.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
-use craft_anything_formats::authenticode::{self, HashStatus};
-use craft_anything_formats::pe::{self, ImportKind};
-use craft_anything_formats::verify::Verified;
-use craft_anything_formats::{ai_model, elf, parse_binary};
-use craft_anything_testkit::program_facts as pf;
+use f_builder_formats::authenticode::{self, HashStatus};
+use f_builder_formats::pe::{self, ImportKind};
+use f_builder_formats::verify::Verified;
+use f_builder_formats::{ai_model, elf, parse_binary};
+use f_builder_testkit::program_facts as pf;
 
 const OPT: usize = 0x84 + 20;
 const DIRS: usize = OPT + 112;
@@ -169,7 +169,7 @@ fn every_prefix_of_every_pe_is_safe() {
         }
         let _ = parse_binary(cut);
     }
-    for sample in craft_anything_testkit::mutations(&pf::pe_facts()) {
+    for sample in f_builder_testkit::mutations(&pf::pe_facts()) {
         if let Ok(h) = pe::headers(&sample) {
             let _ = pe::import_table(&sample, &h);
             let _ = pe::export_table(&sample, &h);
@@ -290,7 +290,7 @@ fn a_table_overlapping_the_headers_is_not_hashed() {
     let mut d = good.clone();
     set_dir(&mut d, 4, 8, size);
     let h = pe::headers(&d).unwrap();
-    assert!(authenticode::file_hash(&d, &h, craft_anything_formats::verify::Digest::Sha256).is_err());
+    assert!(authenticode::file_hash(&d, &h, f_builder_formats::verify::Digest::Sha256).is_err());
 }
 
 #[test]
@@ -325,7 +325,7 @@ fn damaged_elf_symbols_do_not_panic() {
         }
     }
     let b = parse_binary(&d).unwrap();
-    for sample in craft_anything_testkit::mutations(&d) {
+    for sample in f_builder_testkit::mutations(&d) {
         let _ = elf::dynamic_symbols(&sample, &b);
     }
     // A version chain that loops or walks off the end.
@@ -369,7 +369,7 @@ fn gguf_header_reads_in_both_versions() {
 fn gguf_refuses_what_it_does_not_read() {
     let mut d = pf::gguf_header(3);
     d[4] = 1;
-    assert!(matches!(ai_model::parse(&d, d.len() as u64), Err(craft_anything_formats::FormatError::Unsupported(_))));
+    assert!(matches!(ai_model::parse(&d, d.len() as u64), Err(f_builder_formats::FormatError::Unsupported(_))));
     d[4] = 99;
     assert!(ai_model::parse(&d, d.len() as u64).is_err());
     assert!(ai_model::parse(b"nonsense data here", 18).is_err());
@@ -414,7 +414,7 @@ fn every_prefix_of_a_gguf_is_safe_and_honest() {
     let cut = &d[..d.len() / 2];
     assert!(ai_model::parse(cut, d.len() as u64).unwrap().warnings[0].contains("first"));
     assert!(ai_model::parse(cut, cut.len() as u64).unwrap().warnings[0].contains("cut short"));
-    for sample in craft_anything_testkit::mutations(&d) {
+    for sample in f_builder_testkit::mutations(&d) {
         let _ = ai_model::parse(&sample, sample.len() as u64);
     }
 }
@@ -513,7 +513,7 @@ fn safetensors_bad_headers() {
     let size = |d: &[u8]| d.len() as u64;
     // Not JSON, and JSON that isn't an object.
     let d = pf::safetensors_file("{not json", 0);
-    assert!(matches!(ai_model::parse(&d, size(&d)), Err(craft_anything_formats::FormatError::Malformed(_))));
+    assert!(matches!(ai_model::parse(&d, size(&d)), Err(f_builder_formats::FormatError::Malformed(_))));
     let d = pf::safetensors_file("{\"a\":", 0);
     assert!(ai_model::parse(&d, size(&d)).is_err());
     // A length past the file, and one that overflows.
@@ -524,7 +524,7 @@ fn safetensors_bad_headers() {
     }
     // A header longer than what was read.
     let d = pf::safetensors_file(pf::SAFETENSORS_HEADER, 32);
-    assert!(matches!(ai_model::parse(&d[..20], size(&d)), Err(craft_anything_formats::FormatError::TooLarge(_))));
+    assert!(matches!(ai_model::parse(&d[..20], size(&d)), Err(f_builder_formats::FormatError::TooLarge(_))));
     // Entries that aren't tensors, or that don't add up.
     let d = pf::safetensors_file(
         r#"{"x":{"dtype":"F32"},"y":7,"z":{"dtype":"F32","shape":[4],"data_offsets":[8,4]},"w":{"dtype":"F32","shape":[4],"data_offsets":[0,4]},"v":{"dtype":"U8","shape":[1],"data_offsets":[0,9999]}}"#,
@@ -551,7 +551,7 @@ fn every_prefix_of_a_safetensors_is_safe() {
         let _ = ai_model::parse(&d[..n], d.len() as u64);
         let _ = ai_model::parse(&d[..n], n as u64);
     }
-    for sample in craft_anything_testkit::mutations(&d) {
+    for sample in f_builder_testkit::mutations(&d) {
         let _ = ai_model::parse(&sample, sample.len() as u64);
     }
 }
@@ -567,8 +567,8 @@ fn plain_counts() {
 
 #[test]
 fn providers_follow_their_own_export_rule() {
-    use craft_anything_formats::axml;
-    use craft_anything_testkit::android::{AxAttr, AxNode, AxVal, a, axml as build};
+    use f_builder_formats::axml;
+    use f_builder_testkit::android::{AxAttr, AxNode, AxVal, a, axml as build};
     let doc = |target: i32| {
         let name = |v| a("name", 0x0101_0003, AxVal::Str(v));
         build(&[

@@ -10,7 +10,7 @@
 use super::investigation_tools::{self, Finding, HypothesisStatus, Investigation};
 use crate::project::write_atomic;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Confidence, Evidence, ToolError, Unknown};
+use f_builder_evidence::{Confidence, Evidence, ToolError, Unknown};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -201,7 +201,7 @@ impl ReportData<'_> {
 }
 
 fn is_resolved(u: &Unknown) -> bool {
-    matches!(u.status, craft_anything_evidence::UnknownStatus::Resolved)
+    matches!(u.status, f_builder_evidence::UnknownStatus::Resolved)
 }
 
 fn confidence_label(c: Confidence) -> &'static str {
@@ -551,10 +551,10 @@ th { color: var(--muted); font-weight: 600; }\n\
 mod tests {
     use crate::project::{Project, Purpose};
     use crate::{CallOptions, Caller, Engine};
-    use craft_anything_evidence::{Confidence, Environment, EvidenceBuilder, Location, Subject};
+    use f_builder_evidence::{Confidence, Environment, EvidenceBuilder, Location, Subject};
     use serde_json::json;
 
-    fn call(e: &Engine, id: &str, p: serde_json::Value) -> Result<serde_json::Value, craft_anything_evidence::ToolError> {
+    fn call(e: &Engine, id: &str, p: serde_json::Value) -> Result<serde_json::Value, f_builder_evidence::ToolError> {
         e.call(id, p, CallOptions::new(Caller::Agent)).map(|o| o.to_json())
     }
 
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn report_writes_a_file_when_given_a_path() {
         let dir = tempfile::tempdir().unwrap();
-        let project = Project::create(&dir.path().join("p.cany"), "p", Purpose::Education).unwrap();
+        let project = Project::create(&dir.path().join("p.fbproj"), "p", Purpose::Education).unwrap();
         let mut s = crate::testing::session();
         s.open_project(project).unwrap();
         let e = Engine::new(s);
@@ -652,7 +652,7 @@ mod tests {
     #[test]
     fn report_cites_project_evidence_in_a_new_session() {
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("p.cany");
+        let root = dir.path().join("p.fbproj");
         let mut s = crate::testing::session();
         s.open_project(Project::create(&root, "p", Purpose::Education).unwrap()).unwrap();
         let e = Engine::new(s);

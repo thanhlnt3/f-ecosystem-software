@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-evidence"
-description = "Evidence records, canonical ids, confidence, unknowns and the error contract for Craft Anything"
+name = "f-builder-evidence"
+description = "Evidence records, canonical ids, confidence, unknowns and the error contract for F-Builder"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

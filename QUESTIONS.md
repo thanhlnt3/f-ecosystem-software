@@ -150,3 +150,14 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 45. **Ngừng hỗ trợ phiên bản API**: chính sách giữ ít nhất 12 tháng đã ghi trong tài liệu, nhưng chưa
     có phiên bản nào bị ngừng nên header `Deprecation`/`Sunset` chưa được gắn. Ai quyết định và
     thông báo ngừng hỗ trợ (email cho nhà phát triển có app đang gọi phiên bản đó)?
+
+## Nhóm 11: F-Builder
+
+46. **F-Builder là Cargo workspace riêng** trong `clients/f-builder` (repo vẫn là một, nhưng có hai
+    `Cargo.lock`): giữ nguyên edition 2024, `[patch]` wgpu-hal, profile và `xtask` của bản gốc để còn
+    lấy bản sửa từ Craft Anything (`git subtree pull`). Có chấp nhận hai lockfile không?
+47. **Định danh ứng dụng** `io.github.thanhlnt3.f-builder` (bundle id macOS, mã Windows, thư mục dữ
+    liệu) dựa trên tài khoản GitHub vì F-Eco chưa có tên miền. Khi có tên miền chính thức, đổi trước
+    lần phát hành đầu (đổi sau sẽ mất cài đặt cũ của người dùng).
+48. **Cửa sổ DMG trên macOS**: `packaging/macos/dmg/DS_Store` của bản gốc mang tên ổ đĩa cũ nên đã
+    gỡ; cần dựng lại bằng `generate.py` (cần resvg, `ds_store`, `mac_alias`) khi làm đóng gói macOS.

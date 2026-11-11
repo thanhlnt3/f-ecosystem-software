@@ -1,5 +1,5 @@
 //! Agent sessions a turn has started, kept on disk while the turn runs (#1115). A turn that ends
-//! deletes its own unfinished session; this covers the turns that never got to: Craft Anything
+//! deletes its own unfinished session; this covers the turns that never got to: F-Builder
 //! killed, crashed or uninstalled mid-turn. Each turn holds an OS lock on its record, which the
 //! system releases when the process ends, so a record nobody holds belongs to a turn that's gone,
 //! and [`sweep`] deletes its session. One file per turn, so turns never write each other's.
@@ -117,7 +117,7 @@ fn sweep_one(path: &Path, mut file: File, adapters: &AgentAdapters) -> Option<St
     match adapter.discard_unfinished(&entry.program, &entry.id, entry.host.as_deref()) {
         Ok(()) => {
             retire(&file, path);
-            Some(format!("Removed session {}{on}, left unfinished by a build Craft Anything didn't get to stop.", entry.id))
+            Some(format!("Removed session {}{on}, left unfinished by a build F-Builder didn't get to stop.", entry.id))
         }
         Err(e) => {
             entry.tries += 1;
@@ -138,11 +138,11 @@ fn sweep_one(path: &Path, mut file: File, adapters: &AgentAdapters) -> Option<St
 mod tests {
     use super::*;
     use crate::cli_agents::adapters::AgentAdapter;
-    use craft_anything_evidence::{ErrorCode, ToolError};
-    use craft_anything_platform::sync::Mutex;
+    use f_builder_evidence::{ErrorCode, ToolError};
+    use f_builder_platform::sync::Mutex;
     use std::sync::{Arc, PoisonError};
 
-    const OWNER_ENV: &str = "CRAFT_ANYTHING_TEST_UNFINISHED_OWNER";
+    const OWNER_ENV: &str = "F_BUILDER_TEST_UNFINISHED_OWNER";
     /// What the stub was asked to delete: program, session, host.
     type Asked = Arc<Mutex<Vec<(String, String, Option<String>)>>>;
 
@@ -196,7 +196,7 @@ mod tests {
     fn a_killed_turns_session_is_deleted_by_the_next_sweep() {
         let d = tempfile::tempdir().unwrap();
         let dir = dir_in(d.path());
-        let run = craft_anything_platform::process::Process::new(std::env::current_exe().unwrap().as_os_str())
+        let run = f_builder_platform::process::Process::new(std::env::current_exe().unwrap().as_os_str())
             .args(["--exact", "--test-threads=1", "cli_agents::unfinished::tests::killed_owner_child"])
             .env(OWNER_ENV, dir.as_os_str())
             .timeout(std::time::Duration::from_secs(60))

@@ -5,9 +5,9 @@
 use crate::i18n::tr;
 use crate::state::MakeDraft;
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, Pick, icons, widgets};
-use craft_anything_engine::workspace::{ExistingFiles, Status, TargetRef};
+use crate::{BuilderApp, Pick, icons, widgets};
 use egui::{Margin, RichText, Sense, Ui, Vec2};
+use f_builder_engine::workspace::{ExistingFiles, Status, TargetRef};
 
 const SUGGESTIONS_WEB: &[&str] = &["Recreate this website", "Recreate it with darker colours"];
 const SUGGESTIONS_APP: &[&str] = &["Make my own version of this app", "Recreate just its main feature"];
@@ -59,10 +59,10 @@ pub fn resolve_target(d: &MakeDraft) -> TargetRef {
 }
 
 /// A game is being copied or made, so it's built with a game engine ("Build with").
-pub fn is_game(kinds: &craft_anything_ai::rebuild::KindRegistry, d: &MakeDraft) -> bool {
-    use craft_anything_ai::rebuild::GameKind;
+pub fn is_game(kinds: &f_builder_ai::rebuild::KindRegistry, d: &MakeDraft) -> bool {
+    use f_builder_ai::rebuild::GameKind;
     if let Some(stack) = own_stack(kinds, d) {
-        return craft_anything_engines::game::Builder::from_stack(stack).is_some();
+        return f_builder_engines::game::Builder::from_stack(stack).is_some();
     }
     d.found.is_some()
         || (d.game && matches!(d.target, TargetRef::Local { .. }))
@@ -71,14 +71,14 @@ pub fn is_game(kinds: &craft_anything_ai::rebuild::KindRegistry, d: &MakeDraft) 
 
 /// What the person's own files are built with, when they're the app and the request names no
 /// other stack (the run decides the same way: `project::first_stack`).
-pub fn own_stack<'a>(kinds: &craft_anything_ai::rebuild::KindRegistry, d: &'a MakeDraft) -> Option<&'a str> {
+pub fn own_stack<'a>(kinds: &f_builder_ai::rebuild::KindRegistry, d: &'a MakeDraft) -> Option<&'a str> {
     let own = d.existing == Some(ExistingFiles::Edit) && kinds.named(&d.request, &resolve_target(d)).is_none();
     d.folder_stack.as_deref().filter(|_| own)
 }
 
 /// The front door: make your own version of something, work on a project you already have, or
 /// just look inside something.
-pub fn hero(app: &mut CraftApp, ui: &mut Ui, w: f32) {
+pub fn hero(app: &mut BuilderApp, ui: &mut Ui, w: f32) {
     let t = Tokens::get(ui.ctx());
     let d = &mut app.state.make;
     let door = if d.look { 2 } else { usize::from(d.mine) };
@@ -160,7 +160,7 @@ pub fn hero(app: &mut CraftApp, ui: &mut Ui, w: f32) {
 
 /// "Work on my project": the folder of a project the person already has, whose files the builder
 /// edits in place, and what to change. There's no original to pick, so no Clean room / Deep choice.
-fn mine(app: &mut CraftApp, ui: &mut Ui, w: f32) {
+fn mine(app: &mut BuilderApp, ui: &mut Ui, w: f32) {
     let t = Tokens::get(ui.ctx());
     ui.label(theme::heading(tr("Work on a project you already have"), theme::TITLE));
     ui.add_space(6.0);
@@ -223,7 +223,7 @@ fn mine(app: &mut CraftApp, ui: &mut Ui, w: f32) {
 
 /// "Say what you want": the request, and the pictures that go with it (`attach` names the
 /// paperclip; `None` takes none). True when it was sent from the keyboard.
-fn request_box(app: &mut CraftApp, ui: &mut Ui, hint: &str, attach: Option<&str>) -> bool {
+fn request_box(app: &mut BuilderApp, ui: &mut Ui, hint: &str, attach: Option<&str>) -> bool {
     let previews = app.previews(ui.ctx(), &app.state.make.pictures.clone());
     let out = crate::prompt_box::show(
         ui,
@@ -256,7 +256,7 @@ fn request_box(app: &mut CraftApp, ui: &mut Ui, hint: &str, attach: Option<&str>
 }
 
 /// For a game: the engine it's built with, and whether the builder may generate its assets.
-fn engine_choices(app: &mut CraftApp, ui: &mut Ui) {
+fn engine_choices(app: &mut BuilderApp, ui: &mut Ui) {
     if is_game(&app.kinds, &app.state.make) {
         ui.add_space(22.0);
         crate::engine_ui::build_with(app, ui);
@@ -267,7 +267,7 @@ fn engine_choices(app: &mut CraftApp, ui: &mut Ui) {
 }
 
 /// "Just look inside": what to look at, each opening straight away. Nothing is built or run.
-fn look(app: &mut CraftApp, ui: &mut Ui, w: f32) {
+fn look(app: &mut BuilderApp, ui: &mut Ui, w: f32) {
     let t = Tokens::get(ui.ctx());
     ui.label(theme::heading(tr("What do you want to look inside?"), theme::TITLE));
     ui.add_space(6.0);
@@ -311,7 +311,7 @@ fn step_title(ui: &mut Ui, n: u32, text: &str) {
     });
 }
 
-fn choose_target(app: &mut CraftApp, ui: &mut Ui) {
+fn choose_target(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let d = &app.state.make;
     let local = matches!(d.target, TargetRef::Local { .. }).then_some(d.game);
@@ -396,11 +396,11 @@ fn choose_target(app: &mut CraftApp, ui: &mut Ui) {
 }
 
 /// Clean room or Deep for what is recreated: the title bar's switch, as a plain choice.
-fn look_inside(app: &mut CraftApp, ui: &mut Ui) {
+fn look_inside(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     // The app's one setting (the title bar's switch), not this project's: said where it's chosen.
     ui.horizontal_wrapped(|ui| {
-        ui.label(RichText::new(tr("How closely may Craft Anything look at it?")).size(theme::BODY).color(t.text_dim));
+        ui.label(RichText::new(tr("How closely may F-Builder look at it?")).size(theme::BODY).color(t.text_dim));
         ui.label(RichText::new(tr("For everything you make, like the switch in the title bar.")).size(theme::SMALL).color(t.text_faint));
     });
     ui.add_space(6.0);
@@ -411,8 +411,8 @@ fn look_inside(app: &mut CraftApp, ui: &mut Ui) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = gap;
         for (on, icon, label, blurb) in [
-            (false, "shield-check", "Clean room", "Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art."),
-            (true, "microscope", "Deep", "Craft Anything reads its code and files with every tool it has. For your private use."),
+            (false, "shield-check", "Clean room", "Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art."),
+            (true, "microscope", "Deep", "F-Builder reads its code and files with every tool it has. For your private use."),
         ] {
             if widgets::choice_tile(ui, size, icon, label, blurb, deep == on).clicked() {
                 pick = Some(on);
@@ -450,7 +450,7 @@ fn look_inside(app: &mut CraftApp, ui: &mut Ui) {
     }
 }
 
-fn suggestions(app: &mut CraftApp, ui: &mut Ui) {
+fn suggestions(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let list = match resolve_target(&app.state.make) {
         TargetRef::Website { .. } => SUGGESTIONS_WEB,
@@ -471,7 +471,7 @@ fn suggestions(app: &mut CraftApp, ui: &mut Ui) {
 
 /// Time since `ms` in plain words.
 pub fn ago(ms: u64) -> String {
-    let now = craft_anything_engine::inbox::now_ms();
+    let now = f_builder_engine::inbox::now_ms();
     let s = now.saturating_sub(ms) / 1000;
     match s {
         0..=59 => tr("just now"),
@@ -484,7 +484,7 @@ pub fn ago(ms: u64) -> String {
 
 /// A project's status as the app shows it: waiting its turn, interrupted (its run stopped
 /// part-way: the app or the computer closed), or the one it saved. (label, text, fill).
-pub fn status_shown(app: &CraftApp, ws: &craft_anything_engine::workspace::Workspace, t: &Tokens) -> (&'static str, egui::Color32, egui::Color32) {
+pub fn status_shown(app: &BuilderApp, ws: &f_builder_engine::workspace::Workspace, t: &Tokens) -> (&'static str, egui::Color32, egui::Color32) {
     let s = ws.manifest.status;
     let (label, look) = if app.asking.contains(&ws.root) {
         ("Needs you", Status::NeedsYou)
@@ -509,8 +509,8 @@ pub fn status_colors(t: &Tokens, s: Status) -> (egui::Color32, egui::Color32) {
 }
 
 /// A project's icon: a game (built with a game engine), a website, an app, or something new.
-pub fn project_icon(m: &craft_anything_engine::workspace::Manifest) -> &'static str {
-    if craft_anything_engines::game::Builder::from_stack(&m.stack).is_some() {
+pub fn project_icon(m: &f_builder_engine::workspace::Manifest) -> &'static str {
+    if f_builder_engines::game::Builder::from_stack(&m.stack).is_some() {
         return "puzzle";
     }
     match m.target {
@@ -537,8 +537,8 @@ mod tests {
     #[test]
     fn the_persons_own_files_say_whether_it_is_a_game() {
         use crate::engine_ui::chosen;
-        use craft_anything_engines::game::Builder;
-        let kinds = craft_anything_ai::rebuild::KindRegistry::built_in();
+        use f_builder_engines::game::Builder;
+        let kinds = f_builder_ai::rebuild::KindRegistry::built_in();
         let own = |stack: Option<&str>, request: &str| MakeDraft {
             folder_stack: stack.map(str::to_string),
             existing: Some(ExistingFiles::Edit),

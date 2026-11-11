@@ -1,4 +1,4 @@
-//! JavaScript, Electron and web-bundle analysis for Craft Anything.
+//! JavaScript, Electron and web-bundle analysis for F-Builder.
 //!
 //! Everything here is static and runs nothing: sources are parsed (with oxc, a pure-Rust
 //! parser) or, when parsing is refused or fails, tokenized; facts are read from the result.
@@ -65,7 +65,7 @@ pub enum JsError {
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn guarded<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, JsError> {
     let handle = std::thread::Builder::new()
-        .name("craft-js-parse".into())
+        .name("fbuilder-js-parse".into())
         .stack_size(PARSE_STACK)
         .spawn(f)
         .map_err(|e| JsError::Parser(format!("could not start a parser thread: {e}")))?;

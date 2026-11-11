@@ -10,7 +10,7 @@
 use super::artifact_tools::resolve_evidence_input;
 use super::native_common::{name_of, native};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Confidence, Coverage, Environment, EvidenceBuilder, Location, Subject, ToolError};
+use f_builder_evidence::{Confidence, Coverage, Environment, EvidenceBuilder, Location, Subject, ToolError};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -387,12 +387,12 @@ fn load_bundle(path: &str) -> Result<Vec<Rec>, ToolError> {
     let pb = super::artifact_tools::abs_path(path, "bundle path")?;
     let meta = std::fs::metadata(&pb).map_err(|e| ToolError::io(pb.display(), e))?;
     if meta.len() > 512 * 1024 * 1024 {
-        return Err(ToolError::new(craft_anything_evidence::ErrorCode::OverLimit, "bundle is too large"));
+        return Err(ToolError::new(f_builder_evidence::ErrorCode::OverLimit, "bundle is too large"));
     }
     let bytes = std::fs::read(&pb).map_err(|e| ToolError::io(pb.display(), e))?;
     let v: Value = serde_json::from_slice(&bytes).map_err(|e| ToolError::invalid(format!("not a bundle: {e}")))?;
     if v.get("format").and_then(Value::as_str) != Some(super::session_tools::BUNDLE_FORMAT) {
-        return Err(ToolError::invalid(format!("{path} is not a Craft Anything evidence bundle")));
+        return Err(ToolError::invalid(format!("{path} is not a F-Builder evidence bundle")));
     }
     let mut out = Vec::new();
     for r in v.get("records").and_then(Value::as_array).into_iter().flatten() {
@@ -400,7 +400,7 @@ fn load_bundle(path: &str) -> Result<Vec<Rec>, ToolError> {
         let id = r.get("id").cloned().unwrap_or(Value::Null);
         let subject = r.get("subject").cloned().unwrap_or(Value::Null);
         // The id is the content hash: a record whose content no longer matches it was edited.
-        let integrity = match serde_json::from_value::<craft_anything_evidence::Evidence>(r.clone()) {
+        let integrity = match serde_json::from_value::<f_builder_evidence::Evidence>(r.clone()) {
             Ok(ev) if ev.verify() => "verified",
             Ok(_) => "tampered",
             Err(_) => "unverifiable",
@@ -780,7 +780,7 @@ fn app_rebuild_claim_check(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutpu
 mod tests {
     use crate::tools::native_common::test_support::{call, engine_with};
     use crate::{CallOptions, Caller, Engine};
-    use craft_anything_testkit as tk;
+    use f_builder_testkit as tk;
     use serde_json::{Value, json};
 
     /// #286: an archive comparison where a file only moved was summarised as unchanged.
@@ -792,7 +792,7 @@ mod tests {
         assert!(!super::comparison_is_changed(&json!({"identical": true, "counts": {"unchanged": 3}})));
     }
 
-    fn call_val(e: &Engine, id: &str, p: Value) -> Result<Value, craft_anything_evidence::ToolError> {
+    fn call_val(e: &Engine, id: &str, p: Value) -> Result<Value, f_builder_evidence::ToolError> {
         e.call(id, p, CallOptions::new(Caller::Cli)).map(|o| o.to_json())
     }
 
@@ -903,8 +903,8 @@ mod tests {
         let e = Engine::new(crate::testing::session());
         // Build two folders and compare them to get a real comparison record.
         let dir = tempfile::tempdir().unwrap();
-        let a = craft_anything_testkit::electron::write_files(&dir.path().join("v1"), &craft_anything_testkit::electron::notes_app_files()).unwrap();
-        let b = craft_anything_testkit::electron::write_files(&dir.path().join("v2"), &craft_anything_testkit::electron::notes_app_v2_files()).unwrap();
+        let a = f_builder_testkit::electron::write_files(&dir.path().join("v1"), &f_builder_testkit::electron::notes_app_files()).unwrap();
+        let b = f_builder_testkit::electron::write_files(&dir.path().join("v2"), &f_builder_testkit::electron::notes_app_v2_files()).unwrap();
         let cmp = call_val(&e, "core_archives_compare", json!({"left": a, "right": b})).unwrap();
         let out = call_val(&e, "app_changes_summarize", json!({"comparisons": [cmp]})).unwrap();
         assert_eq!(out["result"]["total"], 1);

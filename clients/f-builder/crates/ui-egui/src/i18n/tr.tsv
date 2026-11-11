@@ -109,7 +109,7 @@ Add to a running build	Çalışan bir derlemeye ekle
 Added	Eklendi
 Added {n} picture(s). The builder uses them from your next change.	{n} resim eklendi. Oluşturucu bunları bir sonraki değişikliğinizden itibaren kullanır.
 Address to file offset	Adresten dosya konumuna
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	Derin moda kendi decompiler'ını ekler. Craft Anything bunu sizin için indirip kurabilir.
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	Derin moda kendi decompiler'ını ekler. F-Builder bunu sizin için indirip kurabilir.
 Advanced	Gelişmiş
 After installing one, look for it again.	Birini kurduktan sonra tekrar arayın.
 Agent	Ajan
@@ -199,7 +199,7 @@ Build with {name} instead	Bunun yerine {name} ile derle
 Build without it	Onsuz derle
 Builder's questions:	Oluşturucunun soruları:
 Building	Derleniyor
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	Derlemek için bu bilgisayarda bir kodlama ajanı (Claude Code, Codex veya Gemini CLI: birini kurun ve kendi penceresinde bir kez oturum açın) ya da API anahtarı olan bir AI gerekir. Craft Anything hesabınızı hiçbir zaman görmez.
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	Derlemek için bu bilgisayarda bir kodlama ajanı (Claude Code, Codex veya Gemini CLI: birini kurun ve kendi penceresinde bir kez oturum açın) ya da API anahtarı olan bir AI gerekir. F-Builder hesabınızı hiçbir zaman görmez.
 Building needs a coding agent such as Claude Code, or an AI with an API key.	Derlemek için Claude Code gibi bir kodlama ajanı ya da API anahtarı olan bir AI gerekir.
 Builds	Derlemeler
 Builds and answers may use it again.	Derlemeler ve yanıtlar bunu yeniden kullanabilir.
@@ -250,7 +250,7 @@ Classes	Sınıflar
 Claude Code folder (CLAUDE_CONFIG_DIR)	Claude Code klasörü (CLAUDE_CONFIG_DIR)
 Clean room	Temiz oda
 Clean room / Deep	Temiz oda / Derin
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	Temiz oda orijinalin kodunu, dosyalarını veya sayfa kaynağını asla okumaz. Derin mod bunları Craft Anything'in sahip olduğu her araçla okur.
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	Temiz oda orijinalin kodunu, dosyalarını veya sayfa kaynağını asla okumaz. Derin mod bunları F-Builder'in sahip olduğu her araçla okur.
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	Temiz oda orijinalin kodunu, dosyalarını veya sayfa kaynağını asla okumaz: görebildiklerinizden çalışır. Derin mod bunları her araçla, Ghidra kuruluysa onunla da okur. Her bulgu hangisinin kullanıldığını kaydeder.
 Clean room on	Temiz oda açık
 Clean room or Deep	Temiz oda veya Derin
@@ -307,13 +307,13 @@ Couldn't open {}: {}	{} açılamadı: {}
 Couldn't start a worker thread: {e}	İşçi iş parçacığı başlatılamadı: {e}
 Couldn't start it.	Başlatılamadı.
 Coverage unknown	Kapsam bilinmiyor
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything {engine} ile derleyemez, bu yüzden Unity en yakın eşleşme.
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	Craft Anything çalışırken kendisi ya da bilgisayar kapandı. Şimdiye kadarki her şey korundu; Devam et kaldığı yerden sürdürür.
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything kodunu ve dosyalarını sahip olduğu her araçla okur. Kişisel kullanımınız için.
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything orijinalin kodunu, dosyalarını ve sayfa kaynağını sahip olduğu her araçla, Ghidra kuruluysa onunla da okur.
-Craft Anything report.md	Craft Anything report.md
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Craft Anything'in kayıtları, denetimleri ve app/ içinde derledikleri silinir. Klasördeki kendi dosyalarınız olduğu gibi kalır.
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder {engine} ile derleyemez, bu yüzden Unity en yakın eşleşme.
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	F-Builder çalışırken kendisi ya da bilgisayar kapandı. Şimdiye kadarki her şey korundu; Devam et kaldığı yerden sürdürür.
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder kodunu ve dosyalarını sahip olduğu her araçla okur. Kişisel kullanımınız için.
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder orijinalin kodunu, dosyalarını ve sayfa kaynağını sahip olduğu her araçla, Ghidra kuruluysa onunla da okur.
+F-Builder report.md	F-Builder report.md
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	F-Builder'in kayıtları, denetimleri ve app/ içinde derledikleri silinir. Klasördeki kendi dosyalarınız olduğu gibi kalır.
 Crash dump	Çökme dökümü
 Create the project	Projeyi oluştur
 Critical	Kritik
@@ -506,7 +506,7 @@ Hide the console	Konsolu gizle
 High	Yüksek
 Home	Ana sayfa
 How alike a rebuild must look to the original before refining stops.	İyileştirme durmadan önce bir yeniden derlemenin orijinale ne kadar benzemesi gerektiği.
-How closely may Craft Anything look at it?	Craft Anything ona ne kadar yakından bakabilir?
+How closely may F-Builder look at it?	F-Builder ona ne kadar yakından bakabilir?
 How complete is the rebuild	Yeniden derleme ne kadar tamam
 How do I open an app?	Bir uygulamayı nasıl açarım?
 How do the window and the page talk to each other?	Pencere ile sayfa birbiriyle nasıl konuşuyor?
@@ -566,7 +566,7 @@ Is there any readable text inside?	İçinde okunabilir metin var mı?
 Is this file safe to open?	Bu dosyayı açmak güvenli mi?
 It closed straight away.	Hemen kapandı.
 It closed straight away. It said:	Hemen kapandı. Şunu söyledi:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Bu bilgisayarda henüz yok. Craft Anything, Ghidra {version} ve ihtiyaç duyduğu Java çalışma zamanını (yaklaşık {mb} MB) indirebilir, ikisini de yayıncılarının sağlama toplamlarıyla doğrulayabilir ve kendi klasörüne kurabilir. Bilgisayarınızda başka hiçbir şey değişmez.
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Bu bilgisayarda henüz yok. F-Builder, Ghidra {version} ve ihtiyaç duyduğu Java çalışma zamanını (yaklaşık {mb} MB) indirebilir, ikisini de yayıncılarının sağlama toplamlarıyla doğrulayabilir ve kendi klasörüne kurabilir. Bilgisayarınızda başka hiçbir şey değişmez.
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	Bu bilgisayarda henüz yok. Ghidra {version} sürümünü yayın sayfasından kurun, sonra klasörünü seçin.
 It's already open.	Zaten açık.
 It's already open. Right-click it to open another copy.	Zaten açık. Başka bir kopya açmak için sağ tıklayın.
@@ -611,7 +611,7 @@ Last: {what}	Son: {what}
 Launch an app	Bir uygulama başlat
 Leave a few GB for the rest of your computer.	Bilgisayarınızın geri kalanı için birkaç GB bırakın.
 Leave a path empty to use the managed install. We never need environment variables.	Yönetilen kurulumu kullanmak için yolu boş bırakın. Ortam değişkenlerine hiç ihtiyacımız yok.
-Leave empty to use the one Craft Anything sets up.	Craft Anything'in kurduğunu kullanmak için boş bırakın.
+Leave empty to use the one F-Builder sets up.	F-Builder'in kurduğunu kullanmak için boş bırakın.
 Let a project generate assets	Bir projenin varlık üretmesine izin ver
 Let's go	Başlayalım
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	Oluşturucunun oyunlar için gerçekçi 3B modeller ve dokular yapmasını sağlar; {model} bir model, proje başına {budget} bütçeyle.
@@ -743,8 +743,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	Hiçbir şey bulunamadı
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	Henüz bir şey bulunamadı. API anahtarlarını, yerel model sunucularını (Ollama, LM Studio) ve hâlihazırda sahip olduğunuz ajan uygulamalarını ararız. Başka bir bağlantı noktasında veya bilgisayarda olan biri aşağıda adresiyle eklenebilir.
 Nothing inside it is read.	İçindeki hiçbir şey okunmaz.
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	İçindeki hiçbir şey okunmaz; Craft Anything görebildiklerinizden çalışır. Sizin sürümünüz kendi görsellerini alır.
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Orijinalin içinden hiçbir şey okunmaz: kodu, dosyaları veya sayfa kaynağı. Craft Anything görebildiklerinizden çalışır: resimler, sayfanın ziyaretçinin gördüğü hâli ve çalışırken izlenmesi.
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	İçindeki hiçbir şey okunmaz; F-Builder görebildiklerinizden çalışır. Sizin sürümünüz kendi görsellerini alır.
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Orijinalin içinden hiçbir şey okunmaz: kodu, dosyaları veya sayfa kaynağı. F-Builder görebildiklerinizden çalışır: resimler, sayfanın ziyaretçinin gördüğü hâli ve çalışırken izlenmesi.
 Nothing made yet. What you make shows up here.	Henüz bir şey yapılmadı. Yaptıklarınız burada görünür.
 Nothing matches the filter.	Filtreyle eşleşen yok.
 Nothing matches.	Eşleşen yok.
@@ -867,7 +867,7 @@ Plugin command or address	Eklenti komutu veya adresi
 Plugin id	Eklenti kimliği
 Plugin removed.	Eklenti kaldırıldı.
 Plugins	Eklentiler
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Eklentiler, Craft Anything'in kendi araçlarıyla sunduğu araçları ekler: MCP sunucuları (bir komut veya adres; ekledikten sonra araçlarını okuyun) ya da WebAssembly bileşenleri (bir .wasm dosyası; dosyalarınıza veya ağa dokunamaz).
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Eklentiler, F-Builder'in kendi araçlarıyla sunduğu araçları ekler: MCP sunucuları (bir komut veya adres; ekledikten sonra araçlarını okuyun) ya da WebAssembly bileşenleri (bir .wasm dosyası; dosyalarınıza veya ağa dokunamaz).
 Plugins added here always ask before each call.	Buradan eklenen eklentiler her çağrıdan önce sorar.
 Plugins read. Their new tools are offered from the next start.	Eklentiler okundu. Yeni araçları bir sonraki açılıştan itibaren sunulur.
 Preserving software that's no longer supported.	Artık desteklenmeyen yazılımları korumak.
@@ -1036,7 +1036,7 @@ Sign in and add the Unity Editor	Oturum aç ve Unity Editor'ü ekle
 Sign in and install Unreal Engine	Oturum aç ve Unreal Engine'i kur
 Simple	Basit
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	Basit: ne istediğinizi yazın, gerisi halledilir. Gelişmiş: tüm araçlar, kanıtlar ve günlükler.
-Since Craft Anything opened.	Craft Anything açıldığından beri.
+Since F-Builder opened.	F-Builder açıldığından beri.
 Size	Boyut
 Skip setup	Kurulumu atla
 Smart contract interface	Akıllı sözleşme arayüzü
@@ -1093,14 +1093,14 @@ Take files out of an Unreal pak	Bir Unreal pak dosyasından dosya çıkar
 Take out packed files	Paketlenmiş dosyaları çıkar
 Target	Hedef
 Targets	Hedefler
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	O klasörde zaten {names} var; Craft Anything kendi dosyalarını orada tutar. Başka bir klasör seçin ya da önce onları taşıyın.
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	O klasörde zaten {names} var; F-Builder kendi dosyalarını orada tutar. Başka bir klasör seçin ya da önce onları taşıyın.
 That folder is already a project, so it's open now.	O klasör zaten bir proje, bu yüzden şimdi açık.
 The Rust toolchain (rustup.rs).	Rust araç zinciri (rustup.rs).
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	Oluşturucu kendi sorularını yanıtlar ve neyi seçtiğini söyler ("Şuna karar verdim: …"), böylece değiştirebilirsiniz.
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	Oluşturucu, oyunun 3B modellerini ve dokularını özgün tasarım açıklamalarından üretir; ödeme fal.ai hesabınızdan yapılır. Modeller düşük poligonludur, böylece oyun hızlı çalışır. Dokulu bir model {model}, bir resim {picture} tutar. Her projenin {budget} bütçesi vardır ve aşılmadan önce size sorulur. Anahtar sistem anahtarlığınızda saklanır.
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	Oluşturucu bunları (kod, notlar, resimler) okur ve uygulamayı yanlarında yeni bir uygulama klasöründe derler. Dosyalarınız olduğu gibi kalır.
 The builder will decide its questions and tell you what it chose.	Oluşturucu sorularına karar verip neyi seçtiğini size söyleyecek.
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	Oluşturucu bu dosyalar üzerinde doğrudan çalışır ve işleyeni korur. Craft Anything yanlarına kendi birkaç kaydını ekler.
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	Oluşturucu bu dosyalar üzerinde doğrudan çalışır ve işleyeni korur. F-Builder yanlarına kendi birkaç kaydını ekler.
 The builder's questions	Oluşturucunun soruları
 The builder's questions come to you as cards, and it waits for your answer.	Oluşturucunun soruları size kart olarak gelir ve yanıtınızı bekler.
 The builder's questions will come to you.	Oluşturucunun soruları size gelecek.
@@ -1213,7 +1213,7 @@ What a program exports	Bir programın dışa aktardıkları
 What a program imports	Bir programın içe aktardıkları
 What are its main parts?	Ana parçaları neler?
 What brings you here?	Sizi buraya ne getirdi?
-What can Craft Anything do?	Craft Anything neler yapabilir?
+What can F-Builder do?	F-Builder neler yapabilir?
 What data was sent?	Hangi veriler gönderildi?
 What do you want to look inside?	Neyin içine bakmak istiyorsunuz?
 What do you want to make?	Ne yapmak istiyorsunuz?
@@ -1268,7 +1268,7 @@ Why we ask	Neden soruyoruz
 Window / focus info	Pencere / odak bilgisi
 Windows resources	Windows kaynakları
 Wireshark tools check	Wireshark araç denetimi
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	O olmadan Derin mod, Craft Anything'in daha kaba olan kendi ters derleyicisini kullanır.
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	O olmadan Derin mod, F-Builder'in daha kaba olan kendi ters derleyicisini kullanır.
 Work out a copy's size	Bir kopyanın boyutunu hesapla
 Work out what an installed app is built on	Kurulu bir uygulamanın ne üzerine kurulu olduğunu çıkar
 Workbench	Çalışma tezgâhı
@@ -1430,12 +1430,12 @@ View	Görünüm
 Window	Pencere
 Help	Yardım
 Command palette	Komut paleti
-Craft Anything on GitHub	GitHub'da Craft Anything
+F-Builder on GitHub	GitHub'da F-Builder
 Report a problem…	Bir sorun bildir…
-Quit Craft Anything	Craft Anything'den çık
-About Craft Anything	Craft Anything hakkında
+Quit F-Builder	F-Builder'den çık
+About F-Builder	F-Builder hakkında
 Services	Hizmetler
-Hide Craft Anything	Craft Anything'i gizle
+Hide F-Builder	F-Builder'i gizle
 Hide others	Diğerlerini gizle
 Show all	Tümünü göster
 Close window	Pencereyi kapat

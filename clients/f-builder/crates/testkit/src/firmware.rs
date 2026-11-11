@@ -279,7 +279,7 @@ pub fn romfs_image() -> Vec<u8> {
     be(&mut v, 0);
     v.extend_from_slice(b"hostname\0");
     pad16(&mut v); // → 144
-    v.extend_from_slice(b"craft-router\n");
+    v.extend_from_slice(b"build-router\n");
     pad16(&mut v); // → 160
     // Checksum: the first min(size,512) bytes sum to zero as big-endian words.
     let sum = v.as_chunks::<4>().0.iter().fold(0u32, |a, w| a.wrapping_add(u32::from_be_bytes(*w)));
@@ -678,7 +678,7 @@ pub fn image() -> (Vec<u8>, FirmwareLayout) {
     let sq = squashfs(0x1000);
     let squashfs_r = (v.len(), sq.len());
     v.extend_from_slice(&sq);
-    let t = tar(&[("etc/", b""), ("etc/hostname", b"craft-router\n"), ("etc/init.d/rcS", b"#!/bin/sh\nmount -a\n")]);
+    let t = tar(&[("etc/", b""), ("etc/hostname", b"build-router\n"), ("etc/init.d/rcS", b"#!/bin/sh\nmount -a\n")]);
     let tar_r = (v.len(), t.len());
     v.extend_from_slice(&t);
     align_ff(&mut v, 0x200);

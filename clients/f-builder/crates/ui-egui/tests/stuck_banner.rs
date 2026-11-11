@@ -1,16 +1,16 @@
 //! The stuck-lock banner. In a test program of its own: what it shows is the whole process's, and
 //! a banner appearing moves everything under it, which makes clicks in tests running beside it miss.
 
-use craft_anything_engine::Mode;
-use craft_anything_platform::sync;
-use craft_anything_ui_egui::demo;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
+use f_builder_engine::Mode;
+use f_builder_platform::sync;
+use f_builder_ui_egui::demo;
 
 #[test]
 fn a_stuck_lock_is_shown_with_a_way_out() {
     let mut h = Harness::builder().with_size(egui::vec2(1280.0, 820.0)).with_max_steps(32).build_eframe(move |cc| {
-        craft_anything_ui_egui::CraftApp::setup_context(&cc.egui_ctx);
+        f_builder_ui_egui::BuilderApp::setup_context(&cc.egui_ctx);
         demo::app(demo::engine(Mode::Beginner, true))
     });
     let summary = "a lock taken at x.rs:1 is stuck";

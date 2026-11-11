@@ -1,6 +1,6 @@
 //! Provider-neutral chat types the agent loop speaks; each backend maps them to its wire format.
 
-use craft_anything_evidence::ToolError;
+use f_builder_evidence::ToolError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -238,12 +238,12 @@ pub enum Delta {
 #[derive(Debug, Clone, Default)]
 pub struct Stop {
     stopped: Arc<AtomicBool>,
-    tool: Option<craft_anything_engine::CancelToken>,
+    tool: Option<f_builder_engine::CancelToken>,
 }
 
 impl Stop {
     /// Link discovery to cancellation of the engine tool that owns it.
-    pub fn for_tool(cancel: craft_anything_engine::CancelToken) -> Self {
+    pub fn for_tool(cancel: f_builder_engine::CancelToken) -> Self {
         Self { tool: Some(cancel), ..Default::default() }
     }
 

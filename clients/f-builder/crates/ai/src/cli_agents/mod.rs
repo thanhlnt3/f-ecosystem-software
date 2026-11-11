@@ -23,10 +23,10 @@ pub use adapters::{AgentAdapter, AgentAdapters, ArgsCx};
 use crate::config::BackendOptions;
 use crate::model::Stop;
 use crate::{AgentEvent, BackendConfig, Conversation, FailureKind, TurnFailure};
-use craft_anything_engine::CancelToken;
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::process::Process;
-use craft_anything_platform::sync::Mutex;
+use f_builder_engine::CancelToken;
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::process::Process;
+use f_builder_platform::sync::Mutex;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -37,7 +37,7 @@ use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
 /// Name our MCP server is registered under.
-pub const MCP_NAME: &str = "craft-anything";
+pub const MCP_NAME: &str = "f-builder";
 
 /// Known agent CLIs: (agent id, program, display name).
 pub const KNOWN: &[(&str, &str, &str)] = &[
@@ -68,7 +68,7 @@ pub fn program_for(agent: &str) -> String {
 /// computer (ssh) the chosen command is used as it is. Fails when the usual name would start only
 /// the Claude desktop app, which can't build.
 pub fn program_of(config: &BackendConfig, options: &BackendOptions) -> Result<String, ToolError> {
-    program_in(config, options, craft_anything_platform::which::search_path())
+    program_in(config, options, f_builder_platform::which::search_path())
 }
 
 /// The saved program path `program` stands in for, when [`program_of`] chose another one (#721).
@@ -97,7 +97,7 @@ fn program_in(config: &BackendConfig, options: &BackendOptions, search: Option<s
     if local && usual == "claude" && (named_claude || leads_to_claude_desktop(path)) {
         // A name saved on purpose (`claude.cmd`, a wrapper) is kept when it starts Claude Code itself.
         if named_claude
-            && let Some(found) = craft_anything_platform::which::which_in(chosen, search.clone()).into_iter().next()
+            && let Some(found) = f_builder_platform::which::which_in(chosen, search.clone()).into_iter().next()
             && !leads_to_claude_desktop(&found)
         {
             return Ok(chosen.to_string());
@@ -120,7 +120,7 @@ fn program_in(config: &BackendConfig, options: &BackendOptions, search: Option<s
 /// start something else that comes first on the search path (the Claude desktop app's
 /// `claude.exe`). `None` when nothing has that name; an error when only the desktop app does.
 fn usual_program(usual: &str, search: Option<std::ffi::OsString>) -> Result<Option<String>, ToolError> {
-    let first = craft_anything_platform::which::which_in(usual, search.clone()).into_iter().next();
+    let first = f_builder_platform::which::which_in(usual, search.clone()).into_iter().next();
     match (first, find_program_in(usual, search)) {
         (None, _) => Ok(desktop_cli(usual, local_app_data().as_deref()).map(|cli| cli.display().to_string())),
         (Some(first), Some(real)) => Ok(Some(if first == real { usual.to_string() } else { real.display().to_string() })),
@@ -140,7 +140,7 @@ fn desktop_app_error(app: &Path) -> ToolError {
 /// really it. Detection, the desktop app hint and starting a run all look through this, so what's
 /// offered is what runs.
 pub fn find_program(program: &str) -> Option<PathBuf> {
-    find_program_in(program, craft_anything_platform::which::search_path()).or_else(|| desktop_cli(program, local_app_data().as_deref()))
+    find_program_in(program, f_builder_platform::which::search_path()).or_else(|| desktop_cli(program, local_app_data().as_deref()))
 }
 
 /// Agents whose Windows desktop app keeps the command-line program in its own folder, under
@@ -158,7 +158,7 @@ fn desktop_cli(program: &str, local_data: Option<&Path>) -> Option<PathBuf> {
 }
 
 fn find_program_in(program: &str, path: Option<std::ffi::OsString>) -> Option<PathBuf> {
-    craft_anything_platform::which::which_in(program, path).into_iter().find(|p| program != "claude" || !leads_to_claude_desktop(p))
+    f_builder_platform::which::which_in(program, path).into_iter().find(|p| program != "claude" || !leads_to_claude_desktop(p))
 }
 
 /// [`is_claude_desktop`] for the file itself or, when it's a link, the file it leads to.
@@ -212,13 +212,13 @@ pub struct McpCommand {
 }
 
 impl McpCommand {
-    /// Our installed CLI (`craft-anything-cli mcp [--project <dir>] [--inbox <dir>]`). Remote runs
+    /// Our installed CLI (`f-builder-cli mcp [--project <dir>] [--inbox <dir>]`). Remote runs
     /// use the name on the remote PATH and have no local project or inbox.
     pub fn local_or_remote(remote: bool, project: Option<PathBuf>, inbox: Option<PathBuf>) -> McpCommand {
         let command = if remote {
-            "craft-anything-cli".to_string()
+            "f-builder-cli".to_string()
         } else {
-            craft_anything_platform::self_cli_path().map(|p| p.display().to_string()).unwrap_or_else(|| "craft-anything-cli".to_string())
+            f_builder_platform::self_cli_path().map(|p| p.display().to_string()).unwrap_or_else(|| "f-builder-cli".to_string())
         };
         let mut args = vec!["mcp".to_string()];
         if let Some(p) = project.filter(|_| !remote) {
@@ -234,19 +234,19 @@ impl McpCommand {
     }
 }
 
-/// Whether the `craft-anything-cli` a builder's tool server runs from (None: there isn't one) can
+/// Whether the `f-builder-cli` a builder's tool server runs from (None: there isn't one) can
 /// start. Without it Claude Code stops at its first approval with a stack trace (#91). A check
 /// that ran out of time says nothing about the program, so the build goes ahead. Stopping the
 /// build ends the check, as `ErrorCode::Cancelled`.
 pub fn cli_can_start(cli: Option<&Path>, stop: &CancelToken) -> Result<(), ToolError> {
-    const REINSTALL: &str = "Install the latest Craft Anything again: it keeps this helper next to the app. If you built the app yourself, run `cargo build -p craft-anything-cli` too.";
+    const REINSTALL: &str =
+        "Install the latest F-Builder again: it keeps this helper next to the app. If you built the app yourself, run `cargo build -p f-builder-cli` too.";
     let Some(cli) = cli else {
-        return Err(ToolError::new(ErrorCode::EngineMissing, "Craft Anything's helper program (craft-anything-cli) is missing, so the builder can't start.")
+        return Err(ToolError::new(ErrorCode::EngineMissing, "F-Builder's helper program (f-builder-cli) is missing, so the builder can't start.")
             .with_remediation(REINSTALL));
     };
     let failed = |why: String| {
-        ToolError::new(ErrorCode::EngineMissing, format!("Craft Anything's helper program at {} wouldn't start: {why}", cli.display()))
-            .with_remediation(REINSTALL)
+        ToolError::new(ErrorCode::EngineMissing, format!("F-Builder's helper program at {} wouldn't start: {why}", cli.display())).with_remediation(REINSTALL)
     };
     let stop = stop.clone();
     match Process::new(cli.as_os_str()).arg("--version").timeout(Duration::from_secs(30)).stdout_cap(64 * 1024).cancel_when(move || stop.is_cancelled()).run() {
@@ -262,7 +262,7 @@ pub fn cli_can_start(cli: Option<&Path>, stop: &CancelToken) -> Result<(), ToolE
 /// handed it, else its adapter says.
 pub fn check_builder_tools(adapter: &dyn AgentAdapter, agent: &str, options: &BackendOptions, cwd: &Path, stop: &CancelToken) -> Result<(), ToolError> {
     if selected_acp_args(adapter, agent, options).is_some() {
-        return cli_can_start(craft_anything_platform::self_cli_path().as_deref(), stop);
+        return cli_can_start(f_builder_platform::self_cli_path().as_deref(), stop);
     }
     adapter.check_native_options(options, Some(cwd))?;
     adapter.check_tool_server(stop)
@@ -282,7 +282,7 @@ fn toml_string(s: &str) -> String {
 }
 
 /// The permission-prompt tool a builder run routes its approvals through.
-pub const APPROVAL_TOOL: &str = craft_anything_engine::tools::interaction_tools::APPROVE_TOOL;
+pub const APPROVAL_TOOL: &str = f_builder_engine::tools::interaction_tools::APPROVE_TOOL;
 
 /// What an agent run may do with files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -386,12 +386,13 @@ pub(crate) fn sign_in_hint_in(message: &str, flatpak: bool, folder: Option<&Path
 }
 
 /// Signing in for the Claude Code that a Flatpak build starts: the same folder it will use.
-const FLATPAK_SIGN_IN: &str = "flatpak run --command=sh ai.storyteller.craft-anything -c 'CLAUDE_CONFIG_DIR=\"$XDG_DATA_HOME/craft-anything/claude\" \"$HOME/.local/bin/claude\" auth login'";
+const FLATPAK_SIGN_IN: &str =
+    "flatpak run --command=sh io.github.thanhlnt3.f-builder -c 'CLAUDE_CONFIG_DIR=\"$XDG_DATA_HOME/f-builder/claude\" \"$HOME/.local/bin/claude\" auth login'";
 
 /// [`FLATPAK_SIGN_IN`] for a chosen folder, already quoted for the sandbox's shell.
 fn flatpak_sign_in(quoted: &str) -> String {
     let inner = format!("CLAUDE_CONFIG_DIR={quoted} \"$HOME/.local/bin/claude\" auth login");
-    format!("flatpak run --command=sh ai.storyteller.craft-anything -c {}", crate::ssh::shell_quote(&inner))
+    format!("flatpak run --command=sh io.github.thanhlnt3.f-builder -c {}", crate::ssh::shell_quote(&inner))
 }
 
 /// Words in an API's answer when the installed Claude Code is older than the model it was asked
@@ -419,7 +420,7 @@ pub(crate) fn claude_code_failure_in(why: &str, folder: Option<&Path>) -> (Strin
     (format!("Claude Code stopped: {why}"), sign_in_hint_in(why, adapters::in_flatpak(), folder))
 }
 
-/// Variables a Claude Code session sets for its own child processes. When Craft Anything itself
+/// Variables a Claude Code session sets for its own child processes. When F-Builder itself
 /// runs inside such a session, they'd make the person's `claude` act as part of that session
 /// instead of as their own install, so they're removed. The person's own settings (provider
 /// choice `CLAUDE_CODE_USE_*`, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_*`) are kept.
@@ -473,7 +474,7 @@ fn find_evidence_id(text: &str) -> Option<String> {
     let mut rest = text;
     while let Some(pos) = rest.find("ev_") {
         let cand = rest.get(pos..pos + 67).unwrap_or_default();
-        if craft_anything_evidence::is_evidence_id(cand) {
+        if f_builder_evidence::is_evidence_id(cand) {
             return Some(cand.to_string());
         }
         rest = rest.get(pos + 3..).unwrap_or_default();
@@ -549,7 +550,7 @@ pub struct CliSpec {
     /// The working folder (and, without `builder`, the investigation handed to our MCP server).
     pub project: Option<PathBuf>,
     /// The desktop's open targets, active last; the MCP child restores them before serving.
-    pub targets: Vec<craft_anything_engine::target::TargetContext>,
+    pub targets: Vec<f_builder_engine::target::TargetContext>,
     /// Build mode: the agent may edit files in the working folder.
     pub builder: Option<Builder>,
     /// A saved agent session to continue.
@@ -820,7 +821,7 @@ fn agent_env(builder: bool, effort: Option<crate::model::Effort>) -> Vec<(&'stat
         // `--effort`: it ranks highest, and an older Claude Code that doesn't know it ignores it.
         ("CLAUDE_CODE_EFFORT_LEVEL", crate::prompt::choose_effort(effort).as_str().into()),
         // Our own CLI, started from inside the agent, calls tools as an agent (not the person).
-        (craft_anything_engine::AGENT_ENV, "1".into()),
+        (f_builder_engine::AGENT_ENV, "1".into()),
     ]
 }
 
@@ -974,7 +975,7 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
     };
     let _ =
         tx.send(AgentEvent::Status { text: format!("Asking {}{}…", display_for(&agent), remote.as_ref().map(|h| format!(" on {h}")).unwrap_or_default()) });
-    // Sessions earlier turns left behind when Craft Anything was killed mid-turn (#1115). Off this
+    // Sessions earlier turns left behind when F-Builder was killed mid-turn (#1115). Off this
     // thread: a delete over SSH may wait on a host that's away.
     let records = spec.logs.as_deref().map(unfinished::dir_in);
     if let Some(dir) = records.clone() {
@@ -1071,7 +1072,7 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
                 Ok(out) => (Some(out), None),
                 Err(e) => (None, Some(e.message.as_str())),
             };
-            if let Some(path) = shown.save_with(&agent, out, Some("Craft Anything's tools did not start."), error).0 {
+            if let Some(path) = shown.save_with(&agent, out, Some("F-Builder's tools did not start."), error).0 {
                 let _ = tx.send(AgentEvent::Status { text: format!("The details are in {}", path.display()) });
             }
         }
@@ -1087,7 +1088,7 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
             }
         }
         Ok(_) => {}
-        Err(e) if e.code == craft_anything_evidence::ErrorCode::Cancelled => {
+        Err(e) if e.code == f_builder_evidence::ErrorCode::Cancelled => {
             let _ = tx.send(AgentEvent::Status { text: "Stopped.".into() });
         }
         Err(e) => {
@@ -1136,7 +1137,7 @@ struct FailureContext {
 
 impl FailureContext {
     fn new(program: &str, args: &[String], message: &str, host: Option<&str>, spec: &CliSpec) -> Self {
-        use craft_anything_platform::process::printable_command;
+        use f_builder_platform::process::printable_command;
         let message = message.trim();
         let args: Vec<String> = args
             .iter()
@@ -1162,20 +1163,20 @@ impl FailureContext {
     }
 
     /// Why this run failed, when it was ssh (or the remote computer) that says so.
-    fn ssh_failure(&self, out: &craft_anything_platform::Output) -> Option<crate::ssh::SshFailure> {
+    fn ssh_failure(&self, out: &f_builder_platform::Output) -> Option<crate::ssh::SshFailure> {
         let host = self.host.as_deref()?;
         crate::ssh::diagnose(host, &self.program, crate::ssh::is_git_server(host), out.code, &out.stderr_text())
     }
 
     /// Write the log. Returns its path, or what to tell the person when it couldn't be written.
-    fn save(&self, agent: &str, out: Option<&craft_anything_platform::Output>, diagnosis: Option<&str>) -> (Option<PathBuf>, Option<String>) {
+    fn save(&self, agent: &str, out: Option<&f_builder_platform::Output>, diagnosis: Option<&str>) -> (Option<PathBuf>, Option<String>) {
         self.save_with(agent, out, diagnosis, None)
     }
 
     fn save_with(
         &self,
         agent: &str,
-        out: Option<&craft_anything_platform::Output>,
+        out: Option<&f_builder_platform::Output>,
         diagnosis: Option<&str>,
         error: Option<&str>,
     ) -> (Option<PathBuf>, Option<String>) {
@@ -1204,10 +1205,10 @@ impl FailureContext {
         }
     }
 
-    fn exit_event(&self, agent: &str, out: &craft_anything_platform::Output) -> AgentEvent {
+    fn exit_event(&self, agent: &str, out: &f_builder_platform::Output) -> AgentEvent {
         let name = display_for(agent);
-        let plain = craft_anything_platform::process::nonzero_error_with(&name, out, Some(&self.command));
-        let excerpt = craft_anything_platform::process::output_excerpt(&String::from_utf8_lossy(if out.stderr.is_empty() { &out.stdout } else { &out.stderr }));
+        let plain = f_builder_platform::process::nonzero_error_with(&name, out, Some(&self.command));
+        let excerpt = f_builder_platform::process::output_excerpt(&String::from_utf8_lossy(if out.stderr.is_empty() { &out.stdout } else { &out.stderr }));
         let (message, mut remediation) = match self.ssh_failure(out) {
             Some(f) => {
                 let host = self.host.as_deref().unwrap_or_default();
@@ -1432,7 +1433,7 @@ mod tests {
     #[test]
     fn failed_craft_tool_server_is_reported_from_its_init_status() {
         let mut p = StreamParser::new(adapter_for("claude-code"));
-        let events = p.line(r#"{"type":"system","subtype":"init","session_id":"cannot-build","mcp_servers":[{"name":"craft-anything","status":"failed"}]}"#);
+        let events = p.line(r#"{"type":"system","subtype":"init","session_id":"cannot-build","mcp_servers":[{"name":"f-builder","status":"failed"}]}"#);
         assert!(
             events.iter().any(|e| matches!(e, AgentEvent::Error { message, .. } if message.contains("tools") && message.contains("start"))),
             "a failed required tool server must end the turn with an actionable error: {events:?}"
@@ -1444,12 +1445,13 @@ mod tests {
     fn optional_or_pending_mcp_servers_do_not_block_the_builder() {
         for status in ["connected", "pending"] {
             let mut p = StreamParser::new(adapter_for("claude-code"));
-            let init = json!({"type":"system","subtype":"init","mcp_servers":[{"name":"craft-anything","status":status},{"name":"optional-service","status":"failed"}]});
+            let init =
+                json!({"type":"system","subtype":"init","mcp_servers":[{"name":"f-builder","status":status},{"name":"optional-service","status":"failed"}]});
             assert!(p.line(&init.to_string()).is_empty());
             assert!(p.failure.is_none());
         }
         let mut p = StreamParser::new(adapter_for("claude-code"));
-        assert!(!p.line(r#"{"type":"system","subtype":"init","mcp_servers":[{"name":"craft-anything","status":"needs-auth"}]}"#).is_empty());
+        assert!(!p.line(r#"{"type":"system","subtype":"init","mcp_servers":[{"name":"f-builder","status":"needs-auth"}]}"#).is_empty());
         assert_eq!(p.failure, Some(TurnFailure::new(FailureKind::ToolsUnavailable)));
     }
 
@@ -1475,9 +1477,9 @@ mod tests {
     /// normal install are left as they are, and the sign-in hint says how to sign in there.
     #[test]
     fn under_a_flatpak_claude_code_keeps_its_conversations_in_a_folder_it_can_write() {
-        let data = || Some(std::path::PathBuf::from("/home/u/.var/app/ai.storyteller.craft-anything/data"));
+        let data = || Some(std::path::PathBuf::from("/home/u/.var/app/io.github.thanhlnt3.f-builder/data"));
         let dir = adapters::flatpak_claude_dir_in(true, false, data()).unwrap();
-        assert!(dir.ends_with("craft-anything/claude") && dir.starts_with("/home/u/.var/app/ai.storyteller.craft-anything/data"), "{dir:?}");
+        assert!(dir.ends_with("f-builder/claude") && dir.starts_with("/home/u/.var/app/io.github.thanhlnt3.f-builder/data"), "{dir:?}");
         assert_eq!(adapters::flatpak_claude_dir_in(true, true, data()), None, "their own choice stays");
         assert_eq!(adapters::flatpak_claude_dir_in(false, false, data()), None, "a normal install keeps ~/.claude");
         assert_eq!(adapters::flatpak_claude_dir_in(true, false, None), None);
@@ -1586,7 +1588,7 @@ mod tests {
                 assert!(adapter.check_native_options(&options, None).is_ok());
             }
         }
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec![], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec![], notes: None };
         assert!(adapter.mcp_env(&mcp).unwrap().is_some());
     }
 
@@ -1603,7 +1605,7 @@ mod tests {
         assert_eq!(desktop_cli("codex", Some(d.path())), None, "only the agents listed");
     }
 
-    const UNFINISHED_CHILD_ENV: &str = "CRAFT_ANYTHING_TEST_UNFINISHED_CHILD";
+    const UNFINISHED_CHILD_ENV: &str = "F_BUILDER_TEST_UNFINISHED_CHILD";
 
     /// The stand-in agent of `a_stopped_turn_discards_its_session`: it names its session in
     /// OpenCode's format, then finishes or hangs as told. Run as an ordinary test, it does nothing.
@@ -1746,7 +1748,7 @@ mod tests {
     }
 
     fn mcp() -> McpCommand {
-        McpCommand { command: "/opt/ca/craft-anything-cli".into(), args: vec!["mcp".into(), "--project".into(), "/p/x.cany".into()], notes: None }
+        McpCommand { command: "/opt/ca/f-builder-cli".into(), args: vec!["mcp".into(), "--project".into(), "/p/x.fbproj".into()], notes: None }
     }
 
     #[test]
@@ -1767,13 +1769,13 @@ mod tests {
             assert!(tools.split(',').any(|tool| tool == "Write"), "{access:?}: {tools}");
         }
         assert_eq!(a[pos("--resume") + 1], "sess-1");
-        assert_eq!(a[pos("--allowedTools") + 1], "mcp__craft-anything__*");
+        assert_eq!(a[pos("--allowedTools") + 1], "mcp__f-builder__*");
         assert_eq!(a[pos("--model") + 1], "claude-opus-5-5", "Opus 5.5 unless configured otherwise");
         let o = BackendOptions { cli_model: Some("opus".into()), ..Default::default() };
         let b = build_args(adapter_for("claude-code").as_ref(), &o, "q", "PRE", &mcp(), None, Access::Analyse);
         assert_eq!(b[b.iter().position(|x| x == "--model").unwrap() + 1], "opus");
         let cfg: Value = serde_json::from_str(&a[pos("--mcp-config") + 1]).unwrap();
-        assert_eq!(cfg["mcpServers"]["craft-anything"]["args"][0], "mcp");
+        assert_eq!(cfg["mcpServers"]["f-builder"]["args"][0], "mcp");
         // variadic flags come last: nothing after them is read as one of their values
         assert!(pos("--mcp-config") > pos("--resume"));
     }
@@ -1781,8 +1783,8 @@ mod tests {
     /// #540: only tools that ask the person themselves are approved on Codex's side.
     #[test]
     fn every_tool_approved_for_codex_is_registered_and_asks_for_consent() {
-        let e = craft_anything_engine::Engine::shared(craft_anything_engine::testing::session(), crate::rebuild::tools::specs());
-        for id in craft_anything_engine::AGENT_APP_PREAPPROVED_TOOLS {
+        let e = f_builder_engine::Engine::shared(f_builder_engine::testing::session(), crate::rebuild::tools::specs());
+        for id in f_builder_engine::AGENT_APP_PREAPPROVED_TOOLS {
             let spec = e.registry().get(id).unwrap_or_else(|| panic!("{id} isn't registered"));
             assert!(spec.effects.needs_consent(), "{id} must ask for consent itself");
         }
@@ -1792,14 +1794,14 @@ mod tests {
     #[test]
     fn a_codex_tool_refused_for_approval_explains_the_way_out() {
         let mut p = StreamParser::new(adapter_for("codex"));
-        let line = r#"{"type":"item.completed","item":{"id":"i1","type":"mcp_tool_call","server":"craft-anything","tool":"rebuild_start","status":"failed","result":null,"error":{"message":"tool rebuild_start requires approval, but approval policy is never"}}}"#;
+        let line = r#"{"type":"item.completed","item":{"id":"i1","type":"mcp_tool_call","server":"f-builder","tool":"rebuild_start","status":"failed","result":null,"error":{"message":"tool rebuild_start requires approval, but approval policy is never"}}}"#;
         let v: Value = serde_json::from_str(line).unwrap();
         let events = adapter_for("codex").parse(&mut p, &v);
         let text = format!("{events:?}");
         assert!(text.contains("setup --client codex --yes"), "{text}");
         // Another server's refusal keeps Codex's words: our setup can't fix it.
         let mut p = StreamParser::new(adapter_for("codex"));
-        let theirs = line.replace("craft-anything", "other-server");
+        let theirs = line.replace("f-builder", "other-server");
         let text = format!("{:?}", adapter_for("codex").parse(&mut p, &serde_json::from_str::<Value>(&theirs).unwrap()));
         assert!(text.contains("approval policy is never") && !text.contains("setup --client codex"), "{text}");
         let mut p = StreamParser::new(adapter_for("codex"));
@@ -1825,20 +1827,20 @@ mod tests {
         assert_eq!(skip(&a), 1);
         let o = BackendOptions { args: vec!["--skip-git-repo-check".into()], ..Default::default() };
         assert_eq!(skip(&build_args(adapter_for("codex").as_ref(), &o, "q", "P:", &mcp(), None, Access::Build)), 1);
-        assert!(a.contains(&"mcp_servers.craft-anything.command=\"/opt/ca/craft-anything-cli\"".to_string()));
+        assert!(a.contains(&"mcp_servers.f-builder.command=\"/opt/ca/f-builder-cli\"".to_string()));
         // #538: Codex doesn't refresh its callable tools after enable_toolset, so list all permitted
         // tools from startup. Clean room still filters what the server lists and allows.
-        assert!(a.contains(&"mcp_servers.craft-anything.args=[\"mcp\", \"--project\", \"/p/x.cany\", \"--all-tools\"]".to_string()));
+        assert!(a.contains(&"mcp_servers.f-builder.args=[\"mcp\", \"--project\", \"/p/x.fbproj\", \"--all-tools\"]".to_string()));
         let mut already_all = mcp();
         already_all.args.push("--all-tools".into());
         let deep = build_args(adapter_for("codex").as_ref(), &BackendOptions::default(), "q", "P:", &already_all, None, Access::Build);
-        let args = deep.iter().find(|a| a.starts_with("mcp_servers.craft-anything.args=")).unwrap();
+        let args = deep.iter().find(|a| a.starts_with("mcp_servers.f-builder.args=")).unwrap();
         assert_eq!(args.matches("--all-tools").count(), 1, "a Deep build already lists every tool");
         // #528: the message goes in on stdin; `-` tells `codex exec` to read it there.
         assert_eq!(a.last().unwrap(), "-");
         // #540: `codex exec` can't ask, so the tools that ask for themselves are approved in the
         // same -c list, and nothing wider.
-        assert!(a.contains(&"mcp_servers.craft-anything.tools.rebuild_start.approval_mode=\"approve\"".to_string()));
+        assert!(a.contains(&"mcp_servers.f-builder.tools.rebuild_start.approval_mode=\"approve\"".to_string()));
         assert!(!a.iter().any(|x| x.contains("default_tools_approval_mode")));
         let g = build_args(adapter_for("gemini-cli").as_ref(), &BackendOptions::default(), "q", "", &mcp(), None, Access::Analyse);
         assert!(g.windows(2).any(|w| w[0] == "--output-format" && w[1] == "stream-json"));
@@ -1859,8 +1861,8 @@ mod tests {
         assert_eq!(&a[..2], &["exec".to_string(), "--json".to_string()]);
         assert!(a.contains(&"--skip-git-repo-check".to_string()));
         assert!(a.windows(2).any(|w| w[0] == "--sandbox" && w[1] == "workspace-write"));
-        assert!(a.contains(&"mcp_servers.craft-anything.command=\"/opt/ca/craft-anything-cli\"".to_string()));
-        assert!(a.contains(&"mcp_servers.craft-anything.args=[\"mcp\", \"--project\", \"/p/x.cany\", \"--all-tools\"]".to_string()));
+        assert!(a.contains(&"mcp_servers.f-builder.command=\"/opt/ca/f-builder-cli\"".to_string()));
+        assert!(a.contains(&"mcp_servers.f-builder.args=[\"mcp\", \"--project\", \"/p/x.fbproj\", \"--all-tools\"]".to_string()));
     }
 
     #[test]
@@ -1898,8 +1900,8 @@ mod tests {
         assert_eq!(dropped, ["CLAUDECODE", "CLAUDE_AGENT_SDK_VERSION", "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH", "CLAUDE_CODE_SESSION_ID"]);
     }
 
-    fn failed(code: i32, stderr: &str) -> craft_anything_platform::Output {
-        craft_anything_platform::Output {
+    fn failed(code: i32, stderr: &str) -> f_builder_platform::Output {
+        f_builder_platform::Output {
             code: Some(code),
             success: false,
             stdout: Vec::new(),
@@ -1989,7 +1991,7 @@ mod tests {
     fn builder_args_route_permissions_and_questions_to_us() {
         let a = build_args(adapter_for("claude-code").as_ref(), &BackendOptions::default(), "build it", "PRE", &mcp(), None, Access::Build);
         let pos = |f: &str| a.iter().position(|x| x == f).unwrap();
-        assert_eq!(a[pos("--permission-prompt-tool") + 1], "mcp__craft-anything__core_action_approve");
+        assert_eq!(a[pos("--permission-prompt-tool") + 1], "mcp__f-builder__core_action_approve");
         assert_eq!(a[pos("--disallowedTools") + 1], "AskUserQuestion");
         assert!(a[pos("--allowedTools")..].contains(&"Read".to_string()));
         assert!(!a.iter().any(|x| x == "Write" || x == "Bash"), "writes and commands always go through the approval tool");
@@ -2002,11 +2004,11 @@ mod tests {
         let settings: serde_json::Value = serde_json::from_str(&b[b.iter().position(|x| x == "--settings").unwrap() + 1]).unwrap();
         let hook = &settings["hooks"]["PostToolUse"][0];
         assert_eq!(hook["matcher"], "*");
-        assert_eq!(hook["hooks"][0]["command"], "\"/opt/ca/craft-anything-cli\" builder-notes \"C:/p/inbox/notes\"");
+        assert_eq!(hook["hooks"][0]["command"], "\"/opt/ca/f-builder-cli\" builder-notes \"C:/p/inbox/notes\"");
         let no_hook = build_args(adapter_for("claude-code").as_ref(), &BackendOptions::default(), "q", "PRE", &local, None, Access::Analyse);
         assert!(!no_hook.contains(&"--settings".to_string()));
         assert!(McpCommand::local_or_remote(true, None, Some(PathBuf::from("/p/inbox"))).notes.is_none(), "a remote builder can't reach this computer's files");
-        let m = McpCommand::local_or_remote(false, Some("/p/inv.cany".into()), Some("/p/inbox".into()));
+        let m = McpCommand::local_or_remote(false, Some("/p/inv.fbproj".into()), Some("/p/inbox".into()));
         assert!(m.args.windows(2).any(|w| w[0] == "--inbox" && w[1] == "/p/inbox"));
         assert!(!McpCommand::local_or_remote(true, None, Some("/p/inbox".into())).args.contains(&"--inbox".to_string()));
     }
@@ -2023,7 +2025,7 @@ mod tests {
             assert!(denied.contains(&t.to_string()), "{t} is refused: {denied:?}");
         }
         let allowed = &clean[clean.iter().position(|x| x == "--allowedTools").unwrap() + 1..clean.iter().position(|x| x == "--disallowedTools").unwrap()];
-        assert_eq!(allowed, ["mcp__craft-anything__*"], "only our tools are allowed");
+        assert_eq!(allowed, ["mcp__f-builder__*"], "only our tools are allowed");
         let deep = args(Access::Analyse);
         assert!(!deep.contains(&"--disallowedTools".to_string()), "Deep mode keeps its defaults: {deep:?}");
         // A Clean room question refuses reading too (it used to leave that to the default).
@@ -2115,7 +2117,7 @@ mod tests {
         let ev = format!("ev_{}", "a".repeat(64));
         let lines = [
             json!({"type":"system","subtype":"init","session_id":"s1"}).to_string(),
-            json!({"type":"assistant","message":{"content":[{"type":"text","text":"Looking"},{"type":"tool_use","id":"t1","name":"mcp__craft-anything__core_session_show","input":{}}]}}).to_string(),
+            json!({"type":"assistant","message":{"content":[{"type":"text","text":"Looking"},{"type":"tool_use","id":"t1","name":"mcp__f-builder__core_session_show","input":{}}]}}).to_string(),
             json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":format!("{{\"evidence_id\":\"{ev}\"}}")}]}]}}).to_string(),
             json!({"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.12,"usage":{"input_tokens":5,"cache_read_input_tokens":5,"output_tokens":7}}).to_string(),
             "not json warning".to_string(),
@@ -2152,7 +2154,7 @@ mod tests {
     #[test]
     fn a_claude_code_session_is_found_by_its_id_alone() {
         let config = tempfile::tempdir().unwrap();
-        let folder = config.path().join("projects").join("-Users-someone-Documents-Craft-Anything-notes");
+        let folder = config.path().join("projects").join("-Users-someone-Documents-F-Builder-notes");
         std::fs::create_dir_all(&folder).unwrap();
         std::fs::write(folder.join("0e4a6b1c-1111-4222-8333-944455556666.jsonl"), "{}\n").unwrap();
         std::fs::write(config.path().join("projects").join("stray.jsonl"), "{}\n").unwrap();
@@ -2172,9 +2174,9 @@ mod tests {
         let config = tempfile::tempdir().unwrap();
         let id = "0e4a6b1c-1111-4222-8333-944455556666";
         let saved = format!("{{\"type\":\"user\",\"sessionId\":\"{id}\",\"message\":{{\"content\":\"Make a notes app.\"}}}}\n");
-        let cwd = Path::new("/home/someone/Craft Anything/notes.app");
+        let cwd = Path::new("/home/someone/F-Builder/notes.app");
         assert!(adapters::claude_restore(config.path(), id, saved.as_bytes(), cwd).unwrap());
-        let put = config.path().join("projects").join("-home-someone-Craft-Anything-notes-app").join(format!("{id}.jsonl"));
+        let put = config.path().join("projects").join("-home-someone-F-Builder-notes-app").join(format!("{id}.jsonl"));
         assert_eq!(std::fs::read_to_string(&put).unwrap(), saved);
         assert_eq!(adapters::claude_session_file(config.path(), id), Some(put.clone()), "Claude Code finds it by its id");
         // There already: left as it is (it may have moved on since the copy was kept).
@@ -2209,7 +2211,7 @@ mod tests {
         let all = adapters::claude_handoff(&saved, 10_000).unwrap();
         assert_eq!(
             all,
-            "Craft Anything asked you: Make a notes app.\n\nYou answered: Built a notes app with a sidebar.\n\nCraft Anything asked you: The person asks: \"make it blue\"\n\nYou answered: Made it blue."
+            "F-Builder asked you: Make a notes app.\n\nYou answered: Built a notes app with a sidebar.\n\nF-Builder asked you: The person asks: \"make it blue\"\n\nYou answered: Made it blue."
         );
         // Short of room, the newest is kept.
         let short = adapters::claude_handoff(&saved, 80).unwrap();
@@ -2228,7 +2230,7 @@ mod tests {
         let mut ev = Vec::new();
         for l in [
             json!({"type":"thread.started","thread_id":"th"}),
-            json!({"type":"item.started","item":{"id":"i1","type":"mcp_tool_call","server":"craft-anything","tool":"core_target_open","arguments":{"path":"/bin/ls"}}}),
+            json!({"type":"item.started","item":{"id":"i1","type":"mcp_tool_call","server":"f-builder","tool":"core_target_open","arguments":{"path":"/bin/ls"}}}),
             json!({"type":"item.completed","item":{"id":"i1","type":"mcp_tool_call","tool":"core_target_open","status":"completed","result":{"ok":true}}}),
             json!({"type":"item.completed","item":{"id":"i2","type":"agent_message","text":"It lists files."}}),
             json!({"type":"turn.completed","usage":{"input_tokens":3,"output_tokens":4}}),
@@ -2242,7 +2244,7 @@ mod tests {
         let mut g = StreamParser::new(adapter_for("gemini-cli"));
         let ev: Vec<_> = [
             json!({"type":"message","role":"assistant","content":"Hi","delta":true}),
-            json!({"type":"tool_use","tool_name":"craft-anything__core_targets_list","tool_id":"x","parameters":{}}),
+            json!({"type":"tool_use","tool_name":"f-builder__core_targets_list","tool_id":"x","parameters":{}}),
             json!({"type":"tool_result","tool_id":"x","status":"error","output":"boom"}),
         ]
         .iter()
@@ -2522,7 +2524,7 @@ echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
         }
     }
 
-    const STDIN_ECHO_ENV: &str = "CRAFT_ANYTHING_TEST_STDIN_ECHO";
+    const STDIN_ECHO_ENV: &str = "F_BUILDER_TEST_STDIN_ECHO";
 
     /// Not a test on its own: when run as the child of the test above, writes its stdin to the
     /// file it's told to.
@@ -2589,11 +2591,11 @@ echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
     fn a_missing_or_broken_helper_is_said_plainly() {
         let stop = CancelToken::default();
         let none = cli_can_start(None, &stop).unwrap_err();
-        assert!(none.message.contains("craft-anything-cli") && none.message.contains("missing"), "{none:?}");
+        assert!(none.message.contains("f-builder-cli") && none.message.contains("missing"), "{none:?}");
         assert!(none.remediation.as_deref().is_some_and(|r| r.contains("Install the latest")), "{none:?}");
 
         let dir = tempfile::tempdir().unwrap();
-        let gone = cli_can_start(Some(&dir.path().join("craft-anything-cli")), &stop).unwrap_err();
+        let gone = cli_can_start(Some(&dir.path().join("f-builder-cli")), &stop).unwrap_err();
         assert!(gone.message.contains("wouldn't start"), "{gone:?}");
         assert!(gone.remediation.is_some());
     }
@@ -2750,15 +2752,15 @@ echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
         assert!(acp_for(&spec).is_some());
     }
 
-    /// A remote host runs whichever craft-anything-cli it has, of any release. Every release, from
+    /// A remote host runs whichever f-builder-cli it has, of any release. Every release, from
     /// 0.1.0 on, knows the global `--deep` and `--clean-room` and applies them in `mcp`, and has
     /// `mcp --all-tools`, so a remote tool server gets only those (adapters add nothing else, Codex
     /// only `--all-tools`). A flag outside them needs the remote CLI checked first, or an older one
     /// stops the build at its first tool. Of our own variables the remote side gets only
-    /// `CRAFT_ANYTHING_AGENT`, which no release up to 0.5.0 reads (R2.8 keeps that open).
+    /// `F_BUILDER_AGENT`, which no release up to 0.5.0 reads (R2.8 keeps that open).
     #[test]
     fn a_remote_tool_server_gets_only_flags_every_release_knows() {
-        use craft_anything_engine::{TargetKind, target::TargetContext};
+        use f_builder_engine::{TargetKind, target::TargetContext};
         for deep in [false, true] {
             for builder in [false, true] {
                 let config = BackendConfig {
@@ -2774,14 +2776,14 @@ echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
                 spec.builder = builder.then(|| Builder { investigation: Some(PathBuf::from("/p/investigation")), inbox: PathBuf::from("/p/inbox") });
                 spec.targets = vec![TargetContext { path: PathBuf::from("/p/original.bin"), sha256: "0".repeat(64), kind: TargetKind::Elf, raw: None }];
                 let mcp = mcp_for(&spec, true);
-                assert_eq!(mcp.command, "craft-anything-cli", "the remote PATH's");
+                assert_eq!(mcp.command, "f-builder-cli", "the remote PATH's");
                 assert!(mcp.args.iter().all(|a| ["mcp", "--deep", "--clean-room", "--all-tools"].contains(&a.as_str())), "{deep} {builder}: {:?}", mcp.args);
                 assert!(mcp.args.contains(&if deep { "--deep" } else { "--clean-room" }.to_string()), "the run's mode, whatever the remote settings say");
             }
         }
         for builder in [false, true] {
-            let ours: Vec<&str> = agent_env(builder, None).iter().map(|(name, _)| *name).filter(|name| name.starts_with("CRAFT_")).collect();
-            assert_eq!(ours, [craft_anything_engine::AGENT_ENV]);
+            let ours: Vec<&str> = agent_env(builder, None).iter().map(|(name, _)| *name).filter(|name| name.starts_with("F_BUILDER_")).collect();
+            assert_eq!(ours, [f_builder_engine::AGENT_ENV]);
         }
     }
 
@@ -2791,7 +2793,7 @@ echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
     #[test]
     fn a_host_without_the_helper_is_told_to_install_it() {
         let empty = tempfile::tempdir().unwrap();
-        let out = craft_anything_platform::Process::new("/bin/sh")
+        let out = f_builder_platform::Process::new("/bin/sh")
             .args(["-c", adapters::REMOTE_CHECK_LINE])
             .env_clear()
             .env("PATH", empty.path())
@@ -2800,11 +2802,11 @@ echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
             .unwrap();
         assert_eq!(out.code, Some(127));
         let err = adapters::remote_failure("build-box", &out);
-        assert!(err.message.contains("craft-anything-cli wasn't found on build-box"), "{}", err.message);
+        assert!(err.message.contains("f-builder-cli wasn't found on build-box"), "{}", err.message);
         assert!(err.remediation.unwrap_or_default().contains("PATH"));
     }
 
-    /// Claude Code and Codex hand a remote host's own craft-anything-cli the tool server, so a build
+    /// Claude Code and Codex hand a remote host's own f-builder-cli the tool server, so a build
     /// over SSH asks the host for it first, as one here checks this computer's.
     #[cfg(unix)]
     #[test]
@@ -2817,7 +2819,7 @@ echo '{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}'
 
     #[test]
     fn mcp_target_handoff_is_bounded_and_keeps_the_active_target_last() {
-        use craft_anything_engine::{TargetKind, target::TargetContext};
+        use f_builder_engine::{TargetKind, target::TargetContext};
         let directory = tempfile::tempdir().unwrap();
         for count in [0, 128, 129, 130] {
             let config =

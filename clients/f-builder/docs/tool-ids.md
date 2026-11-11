@@ -18,7 +18,7 @@ Examples: `native_functions_list`, `native_function_pseudocode`, `web_page_captu
 `project_feed_show`, `rebuild_start`, `engines_ghidra_install`.
 
 Ids can't contain dots or spaces: MCP clients and model APIs accept only letters, digits, `_` and
-`-` in tool names. The CLI spelling swaps `_` for `-` (`craft-anything-cli web-page-capture`).
+`-` in tool names. The CLI spelling swaps `_` for `-` (`f-builder-cli web-page-capture`).
 
 ## Rules
 

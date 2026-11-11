@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-analysis"
-description = "Analyzers that turn parsed targets into evidence for Craft Anything"
+name = "f-builder-analysis"
+description = "Analyzers that turn parsed targets into evidence for F-Builder"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,12 +10,12 @@ publish = false
 workspace = true
 
 [dependencies]
-craft-anything-evidence = { workspace = true }
-craft-anything-formats = { workspace = true }
-craft-anything-disasm = { workspace = true }
-craft-anything-js = { workspace = true }
+f-builder-evidence = { workspace = true }
+f-builder-formats = { workspace = true }
+f-builder-disasm = { workspace = true }
+f-builder-js = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-craft-anything-testkit = { workspace = true }
+f-builder-testkit = { workspace = true }

@@ -4,9 +4,9 @@
 //! and its output is every line before the marker. The engine's rizin session tools keep sessions
 //! by id and turn results into evidence.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::sync::Mutex;
-use craft_anything_platform::{Process, RunningProcess, StdinMode};
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::sync::Mutex;
+use f_builder_platform::{Process, RunningProcess, StdinMode};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::VecDeque;
@@ -193,7 +193,7 @@ impl RizinSession {
     /// Send `cmd` (if any) and a marker, then collect lines until the marker.
     fn run_marked(&mut self, cmd: Option<&str>, timeout: Duration, cancelled: &dyn Fn() -> bool) -> Result<(Collected, bool), ToolError> {
         self.next_token += 1;
-        let marker = format!("__craft_anything_{}_{:x}__", self.next_token, self.started.elapsed().as_nanos());
+        let marker = format!("__f_builder_{}_{:x}__", self.next_token, self.started.elapsed().as_nanos());
         let stdin = self.stdin.as_mut().ok_or_else(|| ToolError::new(ErrorCode::NotFound, "this Rizin session has ended"))?;
         let mut text = String::new();
         if let Some(c) = cmd {

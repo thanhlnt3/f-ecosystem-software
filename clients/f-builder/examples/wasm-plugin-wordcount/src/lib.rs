@@ -1,5 +1,5 @@
-//! An example Craft Anything plugin: one tool, `count_words`, that counts the words, lines and
-//! characters of a text. It implements `craft-anything:plugin/tools` from
+//! An example F-Builder plugin: one tool, `count_words`, that counts the words, lines and
+//! characters of a text. It implements `f-builder:plugin/tools` from
 //! `crates/engines/wit/plugin.wit` and imports nothing.
 
 use serde_json::{Value, json};
@@ -11,7 +11,7 @@ wit_bindgen::generate!({
 
 struct Plugin;
 
-impl exports::craft_anything::plugin::tools::Guest for Plugin {
+impl exports::f_builder::plugin::tools::Guest for Plugin {
     fn describe() -> String {
         json!([{
             "name": "count_words",

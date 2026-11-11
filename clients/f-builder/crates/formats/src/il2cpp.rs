@@ -419,7 +419,7 @@ fn looks_like_name(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::games::{Il2cppSample, il2cpp_metadata};
+    use f_builder_testkit::games::{Il2cppSample, il2cpp_metadata};
 
     fn sample(version: i32, method_size: usize) -> Vec<u8> {
         il2cpp_metadata(&Il2cppSample {

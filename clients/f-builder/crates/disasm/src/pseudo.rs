@@ -7,7 +7,7 @@
 use crate::decode::{ArmConsts, Cond, Flow, Insn, Kind, MemOp, Mode, Op, canonical_reg};
 use crate::image::Image;
 use crate::program::{Function, Program};
-use craft_anything_formats::Format;
+use f_builder_formats::Format;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1195,7 +1195,7 @@ mod tests {
     use super::*;
     use crate::NoControl;
     use crate::program::Limits;
-    use craft_anything_testkit as tk;
+    use f_builder_testkit as tk;
     use std::sync::Arc;
 
     fn setup(bytes: Vec<u8>) -> (Image, Program) {
@@ -1290,7 +1290,7 @@ mod tests {
             }
         }
         for seed in 0..12 {
-            let raw = Image::raw(Arc::from(tk::noise(seed, 2048)), craft_anything_formats::Arch::X86_64, 0x1000);
+            let raw = Image::raw(Arc::from(tk::noise(seed, 2048)), f_builder_formats::Arch::X86_64, 0x1000);
             if let Ok(p) = Program::analyze(&raw, &Limits::default(), &NoControl) {
                 for f in p.functions.values().take(50) {
                     let _ = lift(&raw, &p, f, &|_| None);
@@ -1301,7 +1301,7 @@ mod tests {
 
     #[test]
     fn arm32_calls_keep_their_return_value_in_r0() {
-        use craft_anything_formats::Arch;
+        use f_builder_formats::Arch;
         fn words(ws: &[u32]) -> Vec<u8> {
             ws.iter().flat_map(|w| w.to_le_bytes()).collect()
         }
@@ -1347,7 +1347,7 @@ mod tests {
     /// #277: ARM32 loads and stores came out as `r0 = 0;` and `0 = r0;`.
     #[test]
     fn arm32_loads_and_stores_keep_their_addresses() {
-        use craft_anything_formats::Arch;
+        use f_builder_formats::Arch;
         let lift_words = |ws: &[u32]| {
             let bytes: Vec<u8> = ws.iter().flat_map(|w| w.to_le_bytes()).collect();
             let image = Image::raw(Arc::from(bytes), Arch::Arm, 0x1000);

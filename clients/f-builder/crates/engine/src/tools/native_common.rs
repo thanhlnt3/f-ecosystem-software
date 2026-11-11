@@ -5,10 +5,10 @@
 use crate::session::{OpenTarget, Session};
 use crate::target::{Target, TargetKind};
 use crate::tool::{CancelToken, Ctx, Progress, ProgressFn, ToolOutput};
-use craft_anything_analysis::native::Report;
-use craft_anything_disasm::{Control, DisasmError, Function, Image, Limits, Program};
-use craft_anything_evidence::{Coverage, ErrorCode, EvidenceBuilder, ToolError};
-use craft_anything_formats::Arch;
+use f_builder_analysis::native::Report;
+use f_builder_disasm::{Control, DisasmError, Function, Image, Limits, Program};
+use f_builder_evidence::{Coverage, ErrorCode, EvidenceBuilder, ToolError};
+use f_builder_formats::Arch;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -171,19 +171,19 @@ pub fn ev(ctx: &Ctx<'_>, op: &str, params: Value) -> Result<EvidenceBuilder, Too
 }
 
 /// Build evidence from an analysis report (without wrapping it), for the summary-first helper.
-pub fn report_evidence(ctx: &Ctx<'_>, op: &str, params: Value, r: Report) -> Result<craft_anything_evidence::Evidence, ToolError> {
+pub fn report_evidence(ctx: &Ctx<'_>, op: &str, params: Value, r: Report) -> Result<f_builder_evidence::Evidence, ToolError> {
     report_evidence_with(ctx, op, params, r, Coverage::complete(1))
 }
 
 /// [`report_evidence`] with an explicit coverage.
-pub fn report_evidence_with(ctx: &Ctx<'_>, op: &str, params: Value, r: Report, cov: Coverage) -> Result<craft_anything_evidence::Evidence, ToolError> {
+pub fn report_evidence_with(ctx: &Ctx<'_>, op: &str, params: Value, r: Report, cov: Coverage) -> Result<f_builder_evidence::Evidence, ToolError> {
     ev(ctx, op, params)?.result(r.result).summary(r.summary).confidence(r.confidence).limitations(r.limitations).locations(r.locations).coverage(cov).build()
 }
 
 /// `cov`, downgraded to partial when function discovery hit a cap (the list it pages is incomplete).
-pub fn program_coverage(prog: &craft_anything_disasm::Program, mut cov: Coverage) -> Coverage {
+pub fn program_coverage(prog: &f_builder_disasm::Program, mut cov: Coverage) -> Coverage {
     if prog.discovery_capped() {
-        cov.status = craft_anything_evidence::CoverageStatus::Partial;
+        cov.status = f_builder_evidence::CoverageStatus::Partial;
     }
     cov
 }
@@ -250,7 +250,7 @@ pub mod test_support {
     /// An engine with `bytes` opened as the active target.
     pub fn engine_with(name: &str, bytes: &[u8]) -> Engine {
         let e = Engine::new(crate::testing::session());
-        let p = craft_anything_testkit::temp_file(name, bytes);
+        let p = f_builder_testkit::temp_file(name, bytes);
         e.call("core_target_open", json!({"path": p.to_string_lossy()}), CallOptions::new(Caller::Cli)).unwrap();
         e
     }
@@ -266,7 +266,7 @@ pub mod test_support {
         }
     }
 
-    pub fn call_err(e: &Engine, id: &str, params: Value) -> craft_anything_evidence::ToolError {
+    pub fn call_err(e: &Engine, id: &str, params: Value) -> f_builder_evidence::ToolError {
         match e.call(id, params, CallOptions::new(Caller::Mcp)) {
             Ok(v) => panic!("{id} should fail, got {v:?}"),
             Err(err) => err,

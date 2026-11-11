@@ -1,4 +1,4 @@
-use craft_anything_formats::der::{oid, oid_name};
+use f_builder_formats::der::{oid, oid_name};
 
 #[test]
 fn unfinished_oid_does_not_alias_a_known_algorithm() {

@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-platform"
-description = "Native platform services for Craft Anything: owned processes, capture, sandbox, engine store"
+name = "f-builder-platform"
+description = "Native platform services for F-Builder: owned processes, capture, sandbox, engine store"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ publish = false
 workspace = true
 
 [dependencies]
-craft-anything-evidence = { workspace = true }
+f-builder-evidence = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

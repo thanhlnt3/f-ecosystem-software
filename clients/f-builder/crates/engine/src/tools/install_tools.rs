@@ -4,14 +4,14 @@
 //! runtime is one row of [`RUNTIMES`]; add one by adding a row.
 //!
 //! Games are recognised by the same code as `core_target_triage`
-//! (`craft_anything_engines::game::detect_in`), over this tool's own no-links walk.
+//! (`f_builder_engines::game::detect_in`), over this tool's own no-links walk.
 
 use super::native_common::{params_json, spec};
 use super::static_input::{builder, partial};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_engines::game;
-use craft_anything_evidence::{Authority, Confidence, Coverage, Limitation, Location, Subject, ToolError};
-use craft_anything_formats::{godot_pck, pe_is_managed, plist, unreal_iostore, unreal_pak};
+use f_builder_engines::game;
+use f_builder_evidence::{Authority, Confidence, Coverage, Limitation, Location, Subject, ToolError};
+use f_builder_formats::{godot_pck, pe_is_managed, plist, unreal_iostore, unreal_pak};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -952,7 +952,7 @@ mod tests {
     use super::super::native_common::test_support::{call, call_err};
     use super::*;
     use crate::Engine;
-    use craft_anything_testkit::games::{GodotFile, Il2cppSample, godot_embedded, godot_pck, il2cpp_metadata};
+    use f_builder_testkit::games::{GodotFile, Il2cppSample, godot_embedded, godot_pck, il2cpp_metadata};
     use std::collections::HashSet;
 
     fn engine() -> Engine {
@@ -988,7 +988,7 @@ mod tests {
 
     /// A tiny PE with a CLI header, which is all `pe_is_managed` asks.
     fn managed_pe() -> Vec<u8> {
-        craft_anything_testkit::managed::managed_assembly(4)
+        f_builder_testkit::managed::managed_assembly(4)
     }
 
     #[test]
@@ -1193,7 +1193,7 @@ mod tests {
     #[test]
     fn a_real_unreal_pak_and_a_program_with_a_pack_pass_their_looks() {
         let d = tempfile::tempdir().unwrap();
-        write(d.path(), "Game/Content/Paks/Game.pak", &craft_anything_testkit::games::unreal_pak(&[("Game/", "a.txt", b"hi", false)]));
+        write(d.path(), "Game/Content/Paks/Game.pak", &f_builder_testkit::games::unreal_pak(&[("Game/", "a.txt", b"hi", false)]));
         let v = survey(d.path());
         assert_eq!(ids(&v)[0], "unreal");
         assert!(step(&v, "game_pak_list")["args"]["path"].as_str().unwrap().ends_with("Game.pak"));

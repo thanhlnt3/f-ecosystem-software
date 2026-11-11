@@ -23,8 +23,8 @@
 
 use crate::model::Effort;
 use crate::{BackendConfig, BackendKind, Role};
-use craft_anything_engine::Settings;
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_engine::Settings;
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -33,7 +33,7 @@ use std::path::Path;
 /// Malformed files and I/O errors are returned rather than replaced by default settings.
 fn settings_for_selection(path: &Path, current: &Settings) -> Result<Settings, ToolError> {
     match std::fs::read_to_string(path) {
-        Ok(text) => craft_anything_engine::settings::read_settings(&text).map_err(|e| {
+        Ok(text) => f_builder_engine::settings::read_settings(&text).map_err(|e| {
             ToolError::new(ErrorCode::BadSettings, format!("The settings couldn't be read: {e}"))
                 .with_remediation("Fix config.toml before changing the AI's model.")
         }),
@@ -45,7 +45,7 @@ fn settings_for_selection(path: &Path, current: &Settings) -> Result<Settings, T
 /// Commit validated options through one path for hub and tool callers, which already hold the session.
 /// Preserve unrelated disk changes, reject a changed backend or project, and update memory only after saving.
 pub(crate) fn save_agent_selection(
-    session: &mut craft_anything_engine::Session,
+    session: &mut f_builder_engine::Session,
     path: &Path,
     context: &crate::ModelContext,
     options: BackendOptions,

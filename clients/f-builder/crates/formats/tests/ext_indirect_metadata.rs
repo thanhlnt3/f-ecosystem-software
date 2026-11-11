@@ -1,4 +1,4 @@
-use craft_anything_formats::fsread::{self, Limits};
+use f_builder_formats::fsread::{self, Limits};
 
 const BS: usize = 1024;
 const PER: usize = BS / 4;
@@ -11,7 +11,7 @@ fn put(data: &mut [u8], at: usize, value: u32) {
 }
 
 fn sparse_file(nblocks: usize) -> Vec<u8> {
-    let mut data = craft_anything_testkit::firmware::ext_image(false);
+    let mut data = f_builder_testkit::firmware::ext_image(false);
     data.resize(15 * BS, 0);
     put(&mut data, 1024 + 4, 15);
     data[FILE_INODE + 40..FILE_INODE + 100].fill(0);

@@ -5,13 +5,13 @@
 //! `session/request_permission` becomes [`AgentEvent::ConsentNeeded`].
 //!
 //! [`AcpCore`] is the protocol alone (lines in, lines and events out) so it's tested without a
-//! process; [`AcpConversation`] runs it against the agent through `craft_anything_platform`.
+//! process; [`AcpConversation`] runs it against the agent through `f_builder_platform`.
 
 use super::{McpCommand, display_for};
 use crate::model::Stop;
 use crate::{AgentEvent, Conversation, FailureKind, TurnFailure};
-use craft_anything_platform::sync::Mutex;
-use craft_anything_platform::{RunningProcess, StdinMode};
+use f_builder_platform::sync::Mutex;
+use f_builder_platform::{RunningProcess, StdinMode};
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 use std::io::Write;
@@ -265,7 +265,7 @@ impl AcpCore {
             "protocolVersion": PROTOCOL_VERSION,
             // The agent reads and writes files and runs commands itself, asking us first.
             "clientCapabilities": {"fs": {"readTextFile": false, "writeTextFile": false}, "terminal": false},
-            "clientInfo": {"name": "craft-anything", "version": env!("CARGO_PKG_VERSION")},
+            "clientInfo": {"name": "f-builder", "version": env!("CARGO_PKG_VERSION")},
         });
         vec![self.request("initialize", params, Pending::Initialize)]
     }
@@ -689,9 +689,9 @@ pub struct AcpConversation {
     /// Suppress MCP attachment and refuse permission requests; startup flags restrict native tools.
     question: bool,
     /// Report invalid backend settings through the conversation before starting a child process.
-    validation_error: Option<craft_anything_evidence::ToolError>,
+    validation_error: Option<f_builder_evidence::ToolError>,
     /// An access mode this agent cannot hold. Cleared for model-list discovery, which sends no prompt.
-    access_error: Option<craft_anything_evidence::ToolError>,
+    access_error: Option<f_builder_evidence::ToolError>,
     /// Copied onto the core when the process starts, and applied before the session is ready.
     session_config: Vec<(String, String)>,
     /// The backend's stored key and its `authMethods` id, for an agent that asks the host to
@@ -703,17 +703,17 @@ impl AcpConversation {
     /// Open a session and read its model catalogue without sending a prompt. Waits for metadata
     /// until `timeout`, carrying startup errors back to the caller; dropping this temporary
     /// conversation stops its process. Blocking: call off the UI thread.
-    pub fn model_choices(self, timeout: Duration) -> Result<Vec<String>, craft_anything_evidence::ToolError> {
+    pub fn model_choices(self, timeout: Duration) -> Result<Vec<String>, f_builder_evidence::ToolError> {
         self.model_metadata(timeout).map(|metadata| metadata.models)
     }
 
     /// Read a fresh session's selected model and configuration choices without a model turn.
     /// Blocking and bounded, with the same process cleanup as model catalogue discovery.
-    pub fn model_metadata(self, timeout: Duration) -> Result<ModelMetadata, craft_anything_evidence::ToolError> {
+    pub fn model_metadata(self, timeout: Duration) -> Result<ModelMetadata, f_builder_evidence::ToolError> {
         self.model_metadata_with_stop(timeout, &Stop::default())
     }
 
-    pub(crate) fn model_metadata_with_stop(mut self, timeout: Duration, stop: &Stop) -> Result<ModelMetadata, craft_anything_evidence::ToolError> {
+    pub(crate) fn model_metadata_with_stop(mut self, timeout: Duration, stop: &Stop) -> Result<ModelMetadata, f_builder_evidence::ToolError> {
         stop.check()?;
         // No prompt is sent. The question-shaped session only keeps the tool server off, so a
         // refusal of questions and Clean room does not apply to reading the model list.
@@ -733,7 +733,7 @@ impl AcpConversation {
             }
             for event in self.poll() {
                 if let AgentEvent::Error { message, remediation, .. } = event {
-                    let error = craft_anything_evidence::ToolError::unavailable(message);
+                    let error = f_builder_evidence::ToolError::unavailable(message);
                     return Err(match remediation {
                         Some(fix) => error.with_remediation(fix),
                         None => error,
@@ -747,20 +747,20 @@ impl AcpConversation {
         }
     }
 
-    fn model_metadata_timeout(&self) -> craft_anything_evidence::ToolError {
-        craft_anything_evidence::ToolError::unavailable(format!("{} did not list its models before the deadline.", display_for(&self.agent)))
+    fn model_metadata_timeout(&self) -> f_builder_evidence::ToolError {
+        f_builder_evidence::ToolError::unavailable(format!("{} did not list its models before the deadline.", display_for(&self.agent)))
             .with_remediation(self.adapter.sign_in_fix().unwrap_or_else(|| "Check the agent in a terminal, then try again.".into()))
     }
 
     /// Keep an adapter's settings check until the conversation starts. A failure is reported
     /// through the usual events without launching a process or changing the person's settings.
-    pub fn with_validation(mut self, result: Result<(), craft_anything_evidence::ToolError>) -> Self {
+    pub fn with_validation(mut self, result: Result<(), f_builder_evidence::ToolError>) -> Self {
         self.validation_error = result.err();
         self
     }
 
     /// Keep an access-mode refusal until the conversation starts. Model-list discovery clears it.
-    pub fn with_access_limit(mut self, result: Result<(), craft_anything_evidence::ToolError>) -> Self {
+    pub fn with_access_limit(mut self, result: Result<(), f_builder_evidence::ToolError>) -> Self {
         self.access_error = result.err();
         self
     }
@@ -841,12 +841,12 @@ impl AcpConversation {
         }
     }
 
-    fn lock(&self) -> craft_anything_platform::sync::MutexGuard<'_, Option<Shared>> {
+    fn lock(&self) -> f_builder_platform::sync::MutexGuard<'_, Option<Shared>> {
         self.shared.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Start the agent and send `initialize`.
-    fn spawn(&mut self) -> Result<(), craft_anything_evidence::ToolError> {
+    fn spawn(&mut self) -> Result<(), f_builder_evidence::ToolError> {
         if let Some(error) = self.validation_error.clone().or_else(|| self.access_error.clone()) {
             return Err(error);
         }
@@ -870,7 +870,7 @@ impl AcpConversation {
             .args(&self.args)
             .cwd(&self.cwd)
             // Our own CLI, started from inside the agent, calls tools as an agent (not the person).
-            .env(craft_anything_engine::AGENT_ENV, "1")
+            .env(f_builder_engine::AGENT_ENV, "1")
             .stdin(StdinMode::Piped)
             // One process serves the whole chat; a builder turn may take hours.
             .timeout(Duration::from_secs(24 * 3600))
@@ -982,7 +982,7 @@ impl Conversation for AcpConversation {
             self.failure = Some(TurnFailure::new(if ready { FailureKind::Transient } else { FailureKind::Unknown }));
             let tail = self.lock().as_ref().map(|s| s.stderr.iter().cloned().collect::<Vec<_>>().join("\n")).unwrap_or_default();
             events.extend(self.rx.try_iter());
-            let command = craft_anything_platform::process::printable_command(std::ffi::OsStr::new(&self.program), &self.args);
+            let command = f_builder_platform::process::printable_command(std::ffi::OsStr::new(&self.program), &self.args);
             let check = format!("{} --version", crate::ssh::shell_quote(&self.program));
             let log = self.logs.as_ref().and_then(|dir| {
                 let report = crate::failure_log::Report {
@@ -1046,9 +1046,7 @@ mod tests {
         core.sign_in_fix = super::super::adapter_for("copilot").sign_in_fix();
         core.start();
         let output = events(core.line(r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Authentication required"}}"#));
-        assert!(
-            matches!(&output[0], AgentEvent::Error { remediation: Some(fix), .. } if fix.contains("copilot login") && fix.contains("restart Craft Anything"))
-        );
+        assert!(matches!(&output[0], AgentEvent::Error { remediation: Some(fix), .. } if fix.contains("copilot login") && fix.contains("restart F-Builder")));
     }
 
     #[test]
@@ -1087,7 +1085,7 @@ mod tests {
     }
 
     fn core(resume: Option<&str>) -> AcpCore {
-        let mcp = McpCommand { command: "/opt/ca/craft-anything-cli".into(), args: vec!["mcp".into()], notes: None };
+        let mcp = McpCommand { command: "/opt/ca/f-builder-cli".into(), args: vec!["mcp".into()], notes: None };
         AcpCore::new("Gemini", "gemini-cli", "Gemini CLI", PathBuf::from("/w/project"), mcp, resume.map(str::to_string))
     }
 
@@ -1110,7 +1108,7 @@ mod tests {
         let new = sent(&c.line(r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true}}}"#));
         assert_eq!(new[0]["method"], "session/new");
         assert_eq!(new[0]["params"]["cwd"], "/w/project");
-        assert_eq!(new[0]["params"]["mcpServers"][0]["name"], "craft-anything");
+        assert_eq!(new[0]["params"]["mcpServers"][0]["name"], "f-builder");
         assert!(new[0]["params"]["mcpServers"][0].get("type").is_none(), "only an adapter that asks sends type");
         assert_eq!(new[0]["params"]["mcpServers"][0]["env"], json!([]));
         let prompt = sent(&c.line(r#"{"jsonrpc":"2.0","id":2,"result":{"sessionId":"s-1"}}"#));
@@ -1188,7 +1186,7 @@ mod tests {
 
         // A `session/new` refusal with ACP's auth-required code gets the stored-key fix for an
         // agent that takes one, whatever its message says ("Login required" names no key).
-        let mcp = McpCommand { command: "/opt/ca/craft-anything-cli".into(), args: vec!["mcp".into()], notes: None };
+        let mcp = McpCommand { command: "/opt/ca/f-builder-cli".into(), args: vec!["mcp".into()], notes: None };
         let mut c = AcpCore::new("Devin", "devin", "Devin", PathBuf::from("/w/project"), mcp, None).with_auth(Some(("devin-browser".into(), "sk-test".into())));
         c.start();
         c.line(r#"{"jsonrpc":"2.0","id":1,"result":{"authMethods":[{"id":"devin-browser"}]}}"#);
@@ -1297,7 +1295,7 @@ printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn"}}\n' "$prompt
 "#;
         std::fs::write(&program, script).unwrap();
         std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec!["mcp".into()], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec!["mcp".into()], notes: None };
         let mut c = AcpConversation::new("Scripted ACP", "gemini-cli", program.display().to_string(), vec![recovery.into()], dir.path().into(), mcp, None)
             .with_preamble("P:".into());
         let finish = |c: &mut AcpConversation| {
@@ -1520,7 +1518,7 @@ printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn"}}\n' "$prompt
         grok.start();
         let typed = sent(&grok.line(r#"{"jsonrpc":"2.0","id":1,"result":{"agentCapabilities":{"loadSession":true}}}"#));
         assert_eq!(typed[0]["params"]["mcpServers"][0]["type"], "stdio");
-        assert_eq!(typed[0]["params"]["mcpServers"][0]["name"], "craft-anything");
+        assert_eq!(typed[0]["params"]["mcpServers"][0]["name"], "f-builder");
 
         let mut question = core(None);
         question.question = true;

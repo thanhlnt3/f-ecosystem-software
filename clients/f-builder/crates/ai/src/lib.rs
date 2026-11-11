@@ -35,8 +35,8 @@ pub use model::Effort;
 
 use crate::agent::{ApiConversation, EngineHost, LoopConfig, ModelSlot};
 use crate::model::{ChatModel, Delta, Msg, Stop, TurnRequest, TurnResult};
-use craft_anything_engine::{Engine, Settings};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_engine::{Engine, Settings};
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -380,8 +380,8 @@ impl ChatModel for Tunneled {
 }
 
 /// The tools this layer adds to the engine's (rebuild control), for
-/// [`craft_anything_engine::Engine::shared`].
-pub fn tools() -> Vec<craft_anything_engine::ToolSpec> {
+/// [`f_builder_engine::Engine::shared`].
+pub fn tools() -> Vec<f_builder_engine::ToolSpec> {
     let mut v = rebuild::tools::specs();
     v.extend(key_tools::specs());
     v.extend(model_tools::specs());
@@ -475,7 +475,7 @@ impl AiHub {
         match name {
             Some(n) if cfg.get(n).is_none() => {
                 return Err(
-                    ToolError::invalid(format!("No AI backend named {n:?}")).with_remediation("See `craft-anything-cli ai list`, or add one in Settings → AI.")
+                    ToolError::invalid(format!("No AI backend named {n:?}")).with_remediation("See `f-builder-cli ai list`, or add one in Settings → AI.")
                 );
             }
             Some(n) => {
@@ -684,7 +684,7 @@ impl AiHub {
         let session = self.engine.try_session().ok_or_else(|| ToolError::invalid("The app is busy with another task. Try again in a moment."))?;
         let config = AiConfig::from_table(&session.settings.ai)?;
         let backend = config.get(name).cloned().ok_or_else(|| {
-            ToolError::invalid(format!("No AI backend named {name:?}")).with_remediation("See `craft-anything-cli ai list`, or add one in Settings → AI.")
+            ToolError::invalid(format!("No AI backend named {name:?}")).with_remediation("See `f-builder-cli ai list`, or add one in Settings → AI.")
         })?;
         Ok(ModelContext { backend, directory: session.project.as_ref().map(|p| p.root.clone()) })
     }
@@ -746,7 +746,7 @@ impl AiHub {
 
     /// Some built-in asset provider has a key, so builds can generate assets.
     pub fn has_asset_keys(&self) -> bool {
-        let providers = craft_anything_engines::assets::AssetProviders::built_in();
+        let providers = f_builder_engines::assets::AssetProviders::built_in();
         providers.ids().into_iter().any(|id| self.has_asset_key(&providers, id))
     }
 
@@ -766,7 +766,7 @@ impl AiHub {
     }
 
     /// The provider's key is stored or in its environment variable.
-    pub fn has_asset_key(&self, providers: &craft_anything_engines::assets::AssetProviders, provider: &str) -> bool {
+    pub fn has_asset_key(&self, providers: &f_builder_engines::assets::AssetProviders, provider: &str) -> bool {
         providers.get(provider).is_some_and(|p| keys::asset_key(&self.keys, p.as_ref()).is_some())
     }
 
@@ -797,7 +797,7 @@ impl AiHub {
 
     fn entry(&self, name: &str) -> Result<BackendEntry, ToolError> {
         self.config().get(name).cloned().ok_or_else(|| {
-            ToolError::invalid(format!("No AI backend named {name:?}")).with_remediation("See `craft-anything-cli ai list`, or add one in Settings → AI.")
+            ToolError::invalid(format!("No AI backend named {name:?}")).with_remediation("See `f-builder-cli ai list`, or add one in Settings → AI.")
         })
     }
 
@@ -918,14 +918,14 @@ impl AiHub {
     /// mode. `deep` is the run's mode, given by the caller: a tool that starts a build holds the
     /// session (#1102).
     pub fn start_builder(&self, entry: &BackendEntry, beginner: bool, transcript: Option<PathBuf>, deep: bool) -> Result<ApiConversation, ToolError> {
-        use craft_anything_engine::Toolset;
+        use f_builder_engine::Toolset;
         let toolsets = if deep { self.engine.registry().toolsets() } else { vec![Toolset::Core, Toolset::Build] };
         self.start_loop(entry, beginner, transcript, deep, &toolsets, true)
     }
 
     /// Start the asset extractor: our agent loop with the Build tools and the game archive tools.
     pub fn start_extractor(&self, entry: &BackendEntry, beginner: bool, transcript: Option<PathBuf>) -> Result<ApiConversation, ToolError> {
-        use craft_anything_engine::Toolset;
+        use f_builder_engine::Toolset;
         self.start_loop(entry, beginner, transcript, true, &[Toolset::Core, Toolset::Build, Toolset::Formats], false)
     }
 
@@ -936,7 +936,7 @@ impl AiHub {
         beginner: bool,
         transcript: Option<PathBuf>,
         deep: bool,
-        toolsets: &[craft_anything_engine::Toolset],
+        toolsets: &[f_builder_engine::Toolset],
         lean_for_local: bool,
     ) -> Result<ApiConversation, ToolError> {
         let mut slot = self.build_model(entry)?;
@@ -1003,8 +1003,8 @@ impl AiHub {
         if e.config.kind == BackendKind::AgentCli {
             let program = cli_agents::program_of(&e.config, &e.options)?;
             let p = match e.config.ssh_host.as_deref().filter(|h| !h.trim().is_empty()) {
-                Some(h) => craft_anything_platform::Process::new("ssh").args(ssh::ssh_args(h, &[program.clone(), "--version".into()])),
-                None => craft_anything_platform::Process::new(&program).arg("--version"),
+                Some(h) => f_builder_platform::Process::new("ssh").args(ssh::ssh_args(h, &[program.clone(), "--version".into()])),
+                None => f_builder_platform::Process::new(&program).arg("--version"),
             };
             let out = p.timeout(Duration::from_secs(15)).run_checked()?;
             return Ok(TestReport {
@@ -1093,7 +1093,7 @@ fn reach(e: &BackendEntry, key: Option<String>) -> Result<u64, String> {
         BackendKind::Gemini => openai::OpenAi::gemini(base, need(key)?, &e.config.model).list_models(t).map(|_| ()).map_err(|x| x.message),
         BackendKind::OpenaiCompatible | BackendKind::AgentCli if e.config.ssh_host.as_deref().is_some_and(|h| !h.trim().is_empty()) => {
             let host = e.config.ssh_host.clone().unwrap_or_default();
-            craft_anything_platform::Process::new("ssh")
+            f_builder_platform::Process::new("ssh")
                 .args(ssh::ssh_args(&host, &["true".to_string()]))
                 .timeout(Duration::from_secs(10))
                 .run_checked()
@@ -1120,7 +1120,7 @@ fn reach(e: &BackendEntry, key: Option<String>) -> Result<u64, String> {
             Ok(program) => {
                 // A saved path that's gone (#721): PATH has nothing to do with it.
                 let by_path = std::path::Path::new(&program).parent().is_some_and(|p| !p.as_os_str().is_empty());
-                craft_anything_platform::which(&program)
+                f_builder_platform::which(&program)
                     .map(|_| ())
                     .ok_or_else(|| if by_path { format!("there's no program at {program}") } else { format!("{program} isn't on PATH") })
             }

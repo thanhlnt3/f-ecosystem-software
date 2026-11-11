@@ -1,15 +1,15 @@
-//! Connect Craft Anything to coding-agent apps: detect them, plan the change, merge our MCP
+//! Connect F-Builder to coding-agent apps: detect them, plan the change, merge our MCP
 //! server entry into their config without disturbing anything else (comments included), back up,
 //! verify, roll back on failure, install our skill, check health (`doctor`) and uninstall.
 //!
-//! Typical flow (what `craft-anything-cli setup` does):
+//! Typical flow (what `f-builder-cli setup` does):
 //! ```no_run
-//! use craft_anything_setup::*;
+//! use f_builder_setup::*;
 //! let host = Host::current();
 //! let req = PlanRequest { clients: vec!["codex".into()], all_detected: false, command: default_command()?, include_skill: true };
 //! let plan = plan(&host, &req)?;      // read-only; print it for --dry-run
 //! if !plan.blocked { let report = apply(&plan); }
-//! # Ok::<(), craft_anything_evidence::ToolError>(())
+//! # Ok::<(), f_builder_evidence::ToolError>(())
 //! ```
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 

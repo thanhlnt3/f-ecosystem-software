@@ -1,4 +1,4 @@
-use craft_anything_formats::{FormatError, unreal_iostore, unreal_pak};
+use f_builder_formats::{FormatError, unreal_iostore, unreal_pak};
 
 fn index_mount(count: i32, bytes: &[u8]) -> Result<String, FormatError> {
     let footer = unreal_pak::Footer {
@@ -37,7 +37,7 @@ fn empty_and_terminated_ansi_and_utf16_strings_still_read() {
 
 #[test]
 fn iostore_uses_the_same_terminator_validation() {
-    let mut toc = unreal_iostore::toc(&craft_anything_testkit::games::unreal_utoc(9, u32::MAX)).unwrap();
+    let mut toc = unreal_iostore::toc(&f_builder_testkit::games::unreal_utoc(9, u32::MAX)).unwrap();
     let mount_len = i32::from_le_bytes(toc.directory_index[..4].try_into().unwrap()) as usize;
     assert_eq!(unreal_iostore::files(&toc, 10).unwrap().2, 3);
     toc.directory_index[4 + mount_len - 1] = b'!';

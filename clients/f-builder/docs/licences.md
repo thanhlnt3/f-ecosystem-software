@@ -1,6 +1,6 @@
 # Licences
 
-Craft Anything is MIT OR Apache-2.0. This page says what we may depend on, how it is checked,
+F-Builder is MIT OR Apache-2.0. This page says what we may depend on, how it is checked,
 and how the third-party licence bundle for a release is made.
 
 ## Policy

@@ -2,7 +2,7 @@
 //! (a key, billed per token) and a harness (a coding agent already installed). Without the split,
 //! eight more providers push the harnesses off the screen.
 
-use craft_anything_ai::Detected;
+use f_builder_ai::Detected;
 
 /// Which half of the detected list is showing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -59,7 +59,7 @@ pub fn bar(ui: &mut egui::Ui, chosen: &mut Option<DetectTab>, detected: &[Detect
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_ai::{BackendConfig, BackendKind, Detected};
+    use f_builder_ai::{BackendConfig, BackendKind, Detected};
 
     fn detected(kind: BackendKind) -> Detected {
         let suggestion = BackendConfig { name: "X".into(), kind, model: "m".into(), base_url: None, ssh_host: None, enabled: true };

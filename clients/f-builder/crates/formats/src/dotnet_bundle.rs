@@ -188,7 +188,7 @@ impl PackedFormat for DotnetBundle {
 mod tests {
     use super::*;
     use crate::packed;
-    use craft_anything_testkit::packed::{DOTNET_SIGNATURE, dotnet_bundle, dotnet_sample};
+    use f_builder_testkit::packed::{DOTNET_SIGNATURE, dotnet_bundle, dotnet_sample};
 
     #[test]
     fn a_member_cannot_borrow_bytes_from_the_manifest() {

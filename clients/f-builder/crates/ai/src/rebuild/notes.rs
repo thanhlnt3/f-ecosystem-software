@@ -1,7 +1,7 @@
 //! Notes the person adds while the builder works, handed over at the builder's next step instead
 //! of after its whole turn. The run writes each one to `inbox/notes/<id>.json`; a coding agent
 //! that runs a command after every tool call (Claude Code's PostToolUse hook, running
-//! `craft-anything-cli builder-notes <dir>`) claims what's there by renaming it to
+//! `f-builder-cli builder-notes <dir>`) claims what's there by renaming it to
 //! `<id>.read.json` and gives the text to the model; the run sees the rename and shows the note as
 //! read. The rename is the one moment a note changes hands, so "take back" works until then.
 //! Notes nobody claimed still go in after the turn, as before.
@@ -22,10 +22,10 @@ fn read(dir: &Path, id: u64) -> PathBuf {
 }
 
 /// Leave a note for the builder's next step.
-pub fn hand_over(dir: &Path, id: u64, text: &str) -> Result<(), craft_anything_evidence::ToolError> {
-    std::fs::create_dir_all(dir).map_err(|e| craft_anything_evidence::ToolError::io(dir.display(), e))?;
-    let bytes = serde_json::to_vec(&serde_json::json!({"id": id, "text": text})).map_err(|e| craft_anything_evidence::ToolError::internal(e.to_string()))?;
-    craft_anything_engine::project::write_atomic(&pending(dir, id), &bytes)
+pub fn hand_over(dir: &Path, id: u64, text: &str) -> Result<(), f_builder_evidence::ToolError> {
+    std::fs::create_dir_all(dir).map_err(|e| f_builder_evidence::ToolError::io(dir.display(), e))?;
+    let bytes = serde_json::to_vec(&serde_json::json!({"id": id, "text": text})).map_err(|e| f_builder_evidence::ToolError::internal(e.to_string()))?;
+    f_builder_engine::project::write_atomic(&pending(dir, id), &bytes)
 }
 
 /// Take a note back before the builder read it: true when it was still waiting.

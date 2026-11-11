@@ -109,7 +109,7 @@ Add to a running build	Thêm vào lượt xây dựng đang chạy
 Added	Đã thêm
 Added {n} picture(s). The builder uses them from your next change.	Đã thêm {n} ảnh. Trình xây dựng sẽ dùng chúng từ thay đổi tiếp theo của bạn.
 Address to file offset	Địa chỉ sang vị trí trong tệp
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	Thêm trình dịch ngược của nó vào Chế độ Chuyên sâu. Craft Anything có thể tải về và thiết lập giúp bạn.
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	Thêm trình dịch ngược của nó vào Chế độ Chuyên sâu. F-Builder có thể tải về và thiết lập giúp bạn.
 Advanced	Nâng cao
 After installing one, look for it again.	Sau khi cài một cái, hãy tìm lại.
 Agent	Tác tử
@@ -199,7 +199,7 @@ Build with {name} instead	Xây dựng bằng {name} thay thế
 Build without it	Xây dựng mà không dùng nó
 Builder's questions:	Câu hỏi của trình xây dựng:
 Building	Đang xây dựng
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	Việc xây dựng cần một tác tử lập trình trên máy tính này (Claude Code, Codex hoặc Gemini CLI: cài một cái và đăng nhập một lần trong cửa sổ riêng của nó), hoặc một AI có khóa API. Craft Anything không bao giờ nhìn thấy tài khoản của bạn.
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	Việc xây dựng cần một tác tử lập trình trên máy tính này (Claude Code, Codex hoặc Gemini CLI: cài một cái và đăng nhập một lần trong cửa sổ riêng của nó), hoặc một AI có khóa API. F-Builder không bao giờ nhìn thấy tài khoản của bạn.
 Building needs a coding agent such as Claude Code, or an AI with an API key.	Việc xây dựng cần một tác tử lập trình như Claude Code, hoặc một AI có khóa API.
 Builds	Các lượt xây dựng
 Builds and answers may use it again.	Các lượt xây dựng và câu trả lời có thể dùng lại nó.
@@ -250,7 +250,7 @@ Classes	Lớp
 Claude Code folder (CLAUDE_CONFIG_DIR)	Thư mục Claude Code (CLAUDE_CONFIG_DIR)
 Clean room	Phòng sạch
 Clean room / Deep	Phòng sạch / Chuyên sâu
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	Phòng sạch không bao giờ đọc mã, tệp hay mã nguồn trang của bản gốc. Chế độ Chuyên sâu đọc chúng bằng mọi công cụ mà Craft Anything có.
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	Phòng sạch không bao giờ đọc mã, tệp hay mã nguồn trang của bản gốc. Chế độ Chuyên sâu đọc chúng bằng mọi công cụ mà F-Builder có.
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	Phòng sạch không bao giờ đọc mã, tệp hay mã nguồn trang của bản gốc: chỉ làm việc từ những gì bạn nhìn thấy. Chuyên sâu đọc chúng bằng mọi công cụ, và cả Ghidra nếu đã cài. Mỗi phát hiện đều ghi lại cách nào đã được dùng.
 Clean room on	Phòng sạch đang bật
 Clean room or Deep	Phòng sạch hoặc Chuyên sâu
@@ -307,13 +307,13 @@ Couldn't open {}: {}	Không thể mở {}: {}
 Couldn't start a worker thread: {e}	Không thể khởi động luồng xử lý: {e}
 Couldn't start it.	Không thể khởi động nó.
 Coverage unknown	Chưa rõ mức bao phủ
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything không thể xây dựng bằng {engine}, nên Unity là lựa chọn gần nhất.
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	Craft Anything hoặc máy tính đã đóng khi đang làm việc. Mọi thứ đến lúc này đều được giữ lại; Tiếp tục sẽ làm tiếp từ chỗ đã dừng.
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything đọc mã và tệp của nó bằng mọi công cụ mình có. Chỉ dùng cho riêng bạn.
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything đọc mã, tệp và mã nguồn trang của bản gốc bằng mọi công cụ mình có, và cả Ghidra nếu đã cài.
-Craft Anything report.md	Craft Anything report.md
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Các bản ghi, lần kiểm tra của Craft Anything và mọi thứ nó đã xây dựng trong app/ sẽ bị xóa. Các tệp của riêng bạn trong thư mục vẫn giữ nguyên.
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder không thể xây dựng bằng {engine}, nên Unity là lựa chọn gần nhất.
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	F-Builder hoặc máy tính đã đóng khi đang làm việc. Mọi thứ đến lúc này đều được giữ lại; Tiếp tục sẽ làm tiếp từ chỗ đã dừng.
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder đọc mã và tệp của nó bằng mọi công cụ mình có. Chỉ dùng cho riêng bạn.
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder đọc mã, tệp và mã nguồn trang của bản gốc bằng mọi công cụ mình có, và cả Ghidra nếu đã cài.
+F-Builder report.md	F-Builder report.md
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Các bản ghi, lần kiểm tra của F-Builder và mọi thứ nó đã xây dựng trong app/ sẽ bị xóa. Các tệp của riêng bạn trong thư mục vẫn giữ nguyên.
 Crash dump	Bản dump sự cố
 Create the project	Tạo dự án
 Critical	Nghiêm trọng
@@ -506,7 +506,7 @@ Hide the console	Ẩn bảng điều khiển
 High	Cao
 Home	Trang chủ
 How alike a rebuild must look to the original before refining stops.	Bản dựng lại phải giống bản gốc đến mức nào thì việc tinh chỉnh mới dừng.
-How closely may Craft Anything look at it?	Craft Anything được phép xem xét nó kỹ đến mức nào?
+How closely may F-Builder look at it?	F-Builder được phép xem xét nó kỹ đến mức nào?
 How complete is the rebuild	Bản dựng lại hoàn chỉnh đến đâu
 How do I open an app?	Làm sao để mở một ứng dụng?
 How do the window and the page talk to each other?	Cửa sổ và trang trò chuyện với nhau bằng cách nào?
@@ -566,7 +566,7 @@ Is there any readable text inside?	Bên trong có văn bản đọc được kh�
 Is this file safe to open?	Mở tệp này có an toàn không?
 It closed straight away.	Nó đã đóng ngay lập tức.
 It closed straight away. It said:	Nó đã đóng ngay lập tức. Nó báo:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Nó chưa có trên máy tính này. Craft Anything có thể tải Ghidra {version} và môi trường chạy Java cần thiết (khoảng {mb} MB), đối chiếu cả hai với mã kiểm tra (checksum) của nhà phát hành, rồi cài vào thư mục riêng của mình. Không có gì khác trên máy tính của bạn bị thay đổi.
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Nó chưa có trên máy tính này. F-Builder có thể tải Ghidra {version} và môi trường chạy Java cần thiết (khoảng {mb} MB), đối chiếu cả hai với mã kiểm tra (checksum) của nhà phát hành, rồi cài vào thư mục riêng của mình. Không có gì khác trên máy tính của bạn bị thay đổi.
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	Nó chưa có trên máy tính này. Hãy cài Ghidra {version} từ trang phát hành của nó, rồi chọn thư mục của nó.
 It's already open.	Nó đã được mở.
 It's already open. Right-click it to open another copy.	Nó đã được mở. Nhấp chuột phải vào nó để mở thêm một bản sao khác.
@@ -611,7 +611,7 @@ Last: {what}	Gần nhất: {what}
 Launch an app	Khởi chạy một ứng dụng
 Leave a few GB for the rest of your computer.	Hãy chừa lại vài GB cho phần còn lại của máy tính.
 Leave a path empty to use the managed install. We never need environment variables.	Để trống đường dẫn để dùng bản cài do ứng dụng quản lý. Chúng tôi không bao giờ cần biến môi trường.
-Leave empty to use the one Craft Anything sets up.	Để trống để dùng bản mà Craft Anything thiết lập.
+Leave empty to use the one F-Builder sets up.	Để trống để dùng bản mà F-Builder thiết lập.
 Let a project generate assets	Cho phép dự án tạo tài sản
 Let's go	Bắt đầu thôi
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	Cho phép trình xây dựng tạo mô hình 3D và kết cấu (texture) chân thực cho trò chơi, {model} một mô hình, với ngân sách {budget} cho mỗi dự án.
@@ -743,8 +743,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	Không tìm thấy gì
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	Chưa tìm thấy gì. Chúng tôi tìm khóa API, máy chủ mô hình cục bộ (Ollama, LM Studio) và các ứng dụng tác tử bạn đã có. Nếu có một cái ở cổng khác hoặc máy tính khác, bạn có thể thêm bằng địa chỉ của nó bên dưới.
 Nothing inside it is read.	Chúng tôi không đọc bất cứ thứ gì bên trong.
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	Chúng tôi không đọc bất cứ thứ gì bên trong; Craft Anything chỉ làm việc dựa trên những gì bạn nhìn thấy. Phiên bản của bạn sẽ có hình ảnh riêng.
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Chúng tôi không đọc bất cứ thứ gì bên trong bản gốc: không đọc mã, tệp hay mã nguồn trang. Craft Anything chỉ làm việc dựa trên những gì bạn nhìn thấy: hình ảnh, trang như khách truy cập thấy, và quan sát nó chạy.
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	Chúng tôi không đọc bất cứ thứ gì bên trong; F-Builder chỉ làm việc dựa trên những gì bạn nhìn thấy. Phiên bản của bạn sẽ có hình ảnh riêng.
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Chúng tôi không đọc bất cứ thứ gì bên trong bản gốc: không đọc mã, tệp hay mã nguồn trang. F-Builder chỉ làm việc dựa trên những gì bạn nhìn thấy: hình ảnh, trang như khách truy cập thấy, và quan sát nó chạy.
 Nothing made yet. What you make shows up here.	Chưa tạo gì cả. Những gì bạn tạo sẽ hiện ở đây.
 Nothing matches the filter.	Không có gì khớp với bộ lọc.
 Nothing matches.	Không có gì khớp.
@@ -867,7 +867,7 @@ Plugin command or address	Lệnh hoặc địa chỉ của plugin
 Plugin id	ID plugin
 Plugin removed.	Đã gỡ plugin.
 Plugins	Plugin
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Plugin thêm các công cụ mà Craft Anything cung cấp như của chính nó: máy chủ MCP (một lệnh hoặc một địa chỉ; hãy đọc các công cụ của chúng sau khi thêm) hoặc thành phần WebAssembly (một tệp .wasm, không thể chạm vào tệp của bạn hay mạng).
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Plugin thêm các công cụ mà F-Builder cung cấp như của chính nó: máy chủ MCP (một lệnh hoặc một địa chỉ; hãy đọc các công cụ của chúng sau khi thêm) hoặc thành phần WebAssembly (một tệp .wasm, không thể chạm vào tệp của bạn hay mạng).
 Plugins added here always ask before each call.	Plugin thêm ở đây luôn hỏi trước mỗi lần gọi.
 Plugins read. Their new tools are offered from the next start.	Đã đọc plugin. Các công cụ mới của chúng sẽ có từ lần khởi động tiếp theo.
 Preserving software that's no longer supported.	Bảo tồn phần mềm không còn được hỗ trợ.
@@ -1036,7 +1036,7 @@ Sign in and add the Unity Editor	Đăng nhập và thêm Unity Editor
 Sign in and install Unreal Engine	Đăng nhập và cài Unreal Engine
 Simple	Đơn giản
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	Đơn giản: bạn nói muốn gì, chúng tôi lo phần còn lại. Nâng cao: mọi công cụ, bằng chứng và nhật ký.
-Since Craft Anything opened.	Từ khi Craft Anything mở.
+Since F-Builder opened.	Từ khi F-Builder mở.
 Size	Kích thước
 Skip setup	Bỏ qua thiết lập
 Smart contract interface	Giao diện hợp đồng thông minh
@@ -1093,14 +1093,14 @@ Take files out of an Unreal pak	Lấy tệp ra khỏi một gói pak của Unrea
 Take out packed files	Lấy các tệp đã đóng gói ra
 Target	Mục tiêu
 Targets	Các mục tiêu
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	Thư mục đó đã có {names}, là nơi Craft Anything lưu tệp riêng của mình. Hãy chọn thư mục khác, hoặc chuyển chúng đi trước.
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	Thư mục đó đã có {names}, là nơi F-Builder lưu tệp riêng của mình. Hãy chọn thư mục khác, hoặc chuyển chúng đi trước.
 That folder is already a project, so it's open now.	Thư mục đó đã là một dự án, nên giờ nó đang được mở.
 The Rust toolchain (rustup.rs).	Bộ công cụ Rust (rustup.rs).
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	Trình xây dựng tự trả lời các câu hỏi của mình và cho biết nó đã chọn gì ("Tôi quyết định: …"), nên bạn có thể thay đổi.
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	Trình xây dựng tạo mô hình 3D và texture cho trò chơi từ mô tả về các thiết kế gốc, trả phí từ tài khoản fal.ai của bạn. Mô hình có ít đa giác để trò chơi chạy nhanh. Một mô hình có texture tốn {model} và một hình ảnh tốn {picture}. Mỗi dự án có ngân sách {budget}, và bạn sẽ được hỏi trước khi vượt mức. Khóa được lưu trong chuỗi khóa hệ thống của bạn.
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	Trình xây dựng đọc chúng (mã, ghi chú, hình ảnh) và dựng ứng dụng trong một thư mục ứng dụng mới ngay cạnh. Tệp của bạn được giữ nguyên.
 The builder will decide its questions and tell you what it chose.	Trình xây dựng sẽ tự quyết định các câu hỏi và cho bạn biết nó đã chọn gì.
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	Trình xây dựng làm việc trực tiếp trên các tệp này và giữ lại những gì hoạt động. Craft Anything thêm vài bản ghi riêng của mình bên cạnh chúng.
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	Trình xây dựng làm việc trực tiếp trên các tệp này và giữ lại những gì hoạt động. F-Builder thêm vài bản ghi riêng của mình bên cạnh chúng.
 The builder's questions	Câu hỏi của trình xây dựng
 The builder's questions come to you as cards, and it waits for your answer.	Câu hỏi của trình xây dựng sẽ đến với bạn dưới dạng thẻ, và nó chờ câu trả lời của bạn.
 The builder's questions will come to you.	Câu hỏi của trình xây dựng sẽ được gửi đến bạn.
@@ -1213,7 +1213,7 @@ What a program exports	Chương trình xuất ra những gì
 What a program imports	Chương trình nhập vào những gì
 What are its main parts?	Các phần chính của nó là gì?
 What brings you here?	Bạn đến đây để làm gì?
-What can Craft Anything do?	Craft Anything làm được những gì?
+What can F-Builder do?	F-Builder làm được những gì?
 What data was sent?	Dữ liệu nào đã được gửi đi?
 What do you want to look inside?	Bạn muốn xem bên trong cái gì?
 What do you want to make?	Bạn muốn tạo gì?
@@ -1268,7 +1268,7 @@ Why we ask	Vì sao chúng tôi hỏi
 Window / focus info	Thông tin cửa sổ / tiêu điểm
 Windows resources	Tài nguyên Windows
 Wireshark tools check	Kiểm tra công cụ Wireshark
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	Nếu không có nó, Chế độ Chuyên sâu sẽ dùng trình dịch ngược riêng của Craft Anything, kết quả thô hơn.
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	Nếu không có nó, Chế độ Chuyên sâu sẽ dùng trình dịch ngược riêng của F-Builder, kết quả thô hơn.
 Work out a copy's size	Tính dung lượng của một bản sao
 Work out what an installed app is built on	Tìm ra ứng dụng đã cài được xây dựng trên nền tảng nào
 Workbench	Bàn làm việc
@@ -1430,12 +1430,12 @@ View	Xem
 Window	Cửa sổ
 Help	Trợ giúp
 Command palette	Bảng lệnh
-Craft Anything on GitHub	Craft Anything trên GitHub
+F-Builder on GitHub	F-Builder trên GitHub
 Report a problem…	Báo cáo sự cố…
-Quit Craft Anything	Thoát Craft Anything
-About Craft Anything	Giới thiệu Craft Anything
+Quit F-Builder	Thoát F-Builder
+About F-Builder	Giới thiệu F-Builder
 Services	Dịch vụ
-Hide Craft Anything	Ẩn Craft Anything
+Hide F-Builder	Ẩn F-Builder
 Hide others	Ẩn các ứng dụng khác
 Show all	Hiện tất cả
 Close window	Đóng cửa sổ

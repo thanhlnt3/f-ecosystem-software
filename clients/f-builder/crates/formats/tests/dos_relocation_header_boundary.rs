@@ -1,5 +1,5 @@
-use craft_anything_formats::dos;
-use craft_anything_testkit::dos_mz;
+use f_builder_formats::dos;
+use f_builder_testkit::dos_mz;
 
 #[test]
 fn relocation_records_cannot_extend_into_the_load_module() {

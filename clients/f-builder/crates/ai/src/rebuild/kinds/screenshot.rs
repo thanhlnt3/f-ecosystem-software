@@ -8,17 +8,17 @@
 //! the two windows look and which of the original's labelled controls the build lacks.
 
 use super::*;
-use craft_anything_engine::tools::web_common::{Image, decode_picture, decode_png, perceptual_similarity, resize};
-use craft_anything_engine::workspace::Claim;
-use craft_anything_platform::process::Process;
+use f_builder_engine::tools::web_common::{Image, decode_picture, decode_png, perceptual_similarity, resize};
+use f_builder_engine::workspace::Claim;
+use f_builder_platform::process::Process;
 
 /// What every app and game brief asks for, so the check can see the result.
-pub const SCREENSHOT_CONTRACT: &str = "Give the program a `--screenshot <file.png>` option: start normally, draw about 120 frames, save the window's picture as a PNG to that file and exit. With the option, open the window without taking focus, so a check never gets in the way of what the person is doing, and on Windows also behind other windows (a covered window still draws there; on macOS and Linux it may stop drawing, so don't lower it there). Keep it drawing while it isn't focused, or the picture never comes. In egui: `ViewportBuilder::with_active(false)`, on Windows `with_window_level(WindowLevel::AlwaysOnBottom)`, and on macOS `with_activate_ignoring_other_apps(false)` through `NativeOptions::event_loop_builder`; in Unity, `Application.runInBackground = true`; other stacks, their own way. Started without the option, the program opens as usual. Craft Anything runs it that way after each build to check the result, and a build without the option, or with a blank picture, doesn't pass. Try it yourself: run it with a file inside app/ (for example app/shots/now.png) and check that it saves the picture.";
+pub const SCREENSHOT_CONTRACT: &str = "Give the program a `--screenshot <file.png>` option: start normally, draw about 120 frames, save the window's picture as a PNG to that file and exit. With the option, open the window without taking focus, so a check never gets in the way of what the person is doing, and on Windows also behind other windows (a covered window still draws there; on macOS and Linux it may stop drawing, so don't lower it there). Keep it drawing while it isn't focused, or the picture never comes. In egui: `ViewportBuilder::with_active(false)`, on Windows `with_window_level(WindowLevel::AlwaysOnBottom)`, and on macOS `with_activate_ignoring_other_apps(false)` through `NativeOptions::event_loop_builder`; in Unity, `Application.runInBackground = true`; other stacks, their own way. Started without the option, the program opens as usual. F-Builder runs it that way after each build to check the result, and a build without the option, or with a blank picture, doesn't pass. Try it yourself: run it with a file inside app/ (for example app/shots/now.png) and check that it saves the picture.";
 
 /// Include the shared catalogue's supported entrypoints so the builder knows how checks start it.
 /// A builder that can look at pictures is also told to look at its own.
 pub fn contract(sees_pictures: bool) -> String {
-    let entries = craft_anything_engine::toolchains::catalogue()
+    let entries = f_builder_engine::toolchains::catalogue()
         .iter()
         .filter(|t| !t.launch.is_empty())
         .map(|t| format!("{}: {}", t.name, t.launch.iter().map(|r| r.file.as_str()).collect::<Vec<_>>().join(" or ")))
@@ -152,7 +152,7 @@ fn running_note(cx: &CheckCx, program: &Path, args: &[String], dir: &Path) -> (S
         return (String::new(), Vec::new());
     }
     let Some(RuntimeCapture { params, shot, tree }) =
-        capture_request(&cx.ws.app_dir(), program, args, dir, original_tree.is_file(), craft_anything_platform::which::which)
+        capture_request(&cx.ws.app_dir(), program, args, dir, original_tree.is_file(), f_builder_platform::which::which)
     else {
         return (" Started normally, its window couldn't be pictured because its project paths or interpreter couldn't be resolved.".into(), Vec::new());
     };
@@ -365,7 +365,7 @@ pub fn picture_likeness(shot: &Image, pictures: &[PathBuf]) -> Likeness {
         let Some(b) = std::fs::read(p).ok().and_then(|bytes| decode_picture(&bytes).ok()) else { continue };
         let b = resize(&b, COMPARE.0, COMPARE.1);
         let detail = perceptual_similarity(&a, &b);
-        let layout = craft_anything_engine::tools::web_common::block_similarity(&a, &b, 16, 24);
+        let layout = f_builder_engine::tools::web_common::block_similarity(&a, &b, 16, 24);
         let score = (detail + layout) * 50.0;
         // "reference/picture-1.png", or "capture/window.png" for the original running.
         let folder = p.parent().and_then(|d| d.file_name()).map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
@@ -389,7 +389,7 @@ fn last_lines(stderr: &str, stdout: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_engine::tools::web_common::encode_png;
+    use f_builder_engine::tools::web_common::encode_png;
 
     /// `path` with its own separators, as a resolved path has them.
     fn native(path: PathBuf) -> PathBuf {
@@ -401,9 +401,9 @@ mod tests {
     #[test]
     fn runtime_capture_normalizes_relative_project_paths() {
         let cwd = std::env::current_dir().unwrap();
-        let app = Path::new("projects with spaces/sample.cany/app");
+        let app = Path::new("projects with spaces/sample.fbproj/app");
         let interpreter = app.join(".venv/bin/python");
-        let dir = Path::new("projects with spaces/sample.cany/checks/round-1");
+        let dir = Path::new("projects with spaces/sample.fbproj/checks/round-1");
         let args = vec!["main.py".to_string()];
         let request = capture_request(app, &interpreter, &args, dir, true, |_| panic!("a selected filesystem path must not use PATH lookup")).unwrap();
         assert_eq!(request.params["working_directory"], json!(native(cwd.join(app))));

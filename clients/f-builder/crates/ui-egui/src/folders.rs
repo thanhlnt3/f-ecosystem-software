@@ -5,14 +5,14 @@
 use crate::i18n::{tr, trf};
 use crate::state::Modal;
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, Pick, widgets};
-use craft_anything_ai::rebuild::stacks;
-use craft_anything_engine::workspace::{self, ExistingFiles, FolderState, Workspace};
+use crate::{BuilderApp, Pick, widgets};
 use egui::{RichText, Ui, Vec2};
+use f_builder_ai::rebuild::stacks;
+use f_builder_engine::workspace::{self, ExistingFiles, FolderState, Workspace};
 use std::path::PathBuf;
 
 /// The Make screen's "Saved in" line: the folder the project will be in, and a way to pick another.
-pub fn make_line(app: &mut CraftApp, ui: &mut Ui) {
+pub fn make_line(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let d = &app.state.make;
     let (place, how) = match &d.folder {
@@ -55,7 +55,7 @@ pub fn make_line(app: &mut CraftApp, ui: &mut Ui) {
     });
 }
 
-fn clear(app: &mut CraftApp) {
+fn clear(app: &mut BuilderApp) {
     let d = &mut app.state.make;
     d.folder = None;
     d.folder_files = None;
@@ -65,7 +65,7 @@ fn clear(app: &mut CraftApp) {
 
 /// A folder was picked for the new project: an existing project opens; one with files asks what
 /// they are (or uses the answer from Settings).
-pub fn picked(app: &mut CraftApp, folder: PathBuf) {
+pub fn picked(app: &mut BuilderApp, folder: PathBuf) {
     match workspace::folder_state(&folder) {
         Ok(FolderState::Project) => open_project(app, &folder),
         Ok(FolderState::Empty) => {
@@ -88,7 +88,7 @@ pub fn picked(app: &mut CraftApp, folder: PathBuf) {
 
 /// "Work on my project" picked a folder: its files are the app, edited in place (nothing asked).
 /// An existing project opens; an empty folder has nothing to work on.
-pub fn picked_own(app: &mut CraftApp, folder: PathBuf) {
+pub fn picked_own(app: &mut BuilderApp, folder: PathBuf) {
     // The dialog runs beside the window: a pick that ends after leaving the door is dropped, or
     // a version made on Make would edit that folder.
     if !app.state.make.mine {
@@ -108,7 +108,7 @@ pub fn picked_own(app: &mut CraftApp, folder: PathBuf) {
     }
 }
 
-fn open_project(app: &mut CraftApp, folder: &std::path::Path) {
+fn open_project(app: &mut BuilderApp, folder: &std::path::Path) {
     match Workspace::open(folder) {
         Ok(ws) => {
             app.toast(tr("That folder is already a project, so it's open now."), false);
@@ -119,9 +119,9 @@ fn open_project(app: &mut CraftApp, folder: &std::path::Path) {
     }
 }
 
-/// Use the picked folder's files this way, unless something there is named like Craft Anything's
+/// Use the picked folder's files this way, unless something there is named like F-Builder's
 /// own files: then the folder isn't used (nothing of theirs is ever replaced).
-fn choose(app: &mut CraftApp, choice: ExistingFiles) {
+fn choose(app: &mut BuilderApp, choice: ExistingFiles) {
     let Some(folder) = app.state.make.folder.clone() else { return };
     let clash = workspace::clashes(&folder, choice);
     if clash.is_empty() {
@@ -133,17 +133,14 @@ fn choose(app: &mut CraftApp, choice: ExistingFiles) {
         clear(app);
         let names = clash.join(", ");
         app.toast(
-            trf(
-                "That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.",
-                &[("names", &names)],
-            ),
+            trf("That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.", &[("names", &names)]),
             true,
         );
     }
 }
 
 /// "This folder already has files": the app itself, or material to start from.
-pub fn existing_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
+pub fn existing_modal(app: &mut BuilderApp, ui: &mut Ui, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.set_width(560.0);
     let Some(folder) = app.state.make.folder.clone() else {
@@ -168,7 +165,7 @@ pub fn existing_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
             size,
             "code",
             "They're my app: edit them in place",
-            "The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.",
+            "The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.",
             current == Some(ExistingFiles::Edit),
         );
         if edit.clicked() {
@@ -210,7 +207,7 @@ pub fn existing_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
 pub const EXISTING_CHOICES: [(&str, Option<ExistingFiles>); 3] =
     [("Ask each time", None), ("Edit them in place", Some(ExistingFiles::Edit)), ("Start from them", Some(ExistingFiles::StartFrom))];
 
-impl CraftApp {
+impl BuilderApp {
     /// Keep a project that lives outside the project folders in the list.
     pub fn remember_project(&mut self, root: &std::path::Path) {
         if self.settings.remember_project(root) {

@@ -1,8 +1,8 @@
-//! Projects (`*.cany` folders): evidence, unknowns, annotations and notes that survive restarts.
+//! Projects (`*.fbproj` folders): evidence, unknowns, annotations and notes that survive restarts.
 //!
 //! Layout:
 //! ```text
-//! name.cany/
+//! name.fbproj/
 //!   project.toml          name, purpose, created, format version
 //!   evidence/ab/<id>.json content-addressed evidence records
 //!   unknowns/<id>.json
@@ -13,7 +13,7 @@
 
 use crate::session::Annotations;
 use crate::versioned::{Step, upgrade};
-use craft_anything_evidence::{ErrorCode, Evidence, ToolError, Unknown, is_evidence_id};
+use f_builder_evidence::{ErrorCode, Evidence, ToolError, Unknown, is_evidence_id};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -39,8 +39,9 @@ pub fn read_project_meta(text: &str) -> Result<ProjectMeta, ToolError> {
         Some(v) => v.as_integer().and_then(|n| u32::try_from(n).ok()).ok_or_else(|| bad(format!("format_version ({v}) isn't a whole number")))?,
     };
     if found > FORMAT_VERSION {
-        return Err(ToolError::unsupported(format!("This project was made by a newer Craft Anything (format {found})."))
-            .with_remediation("Update Craft Anything to open it."));
+        return Err(
+            ToolError::unsupported(format!("This project was made by a newer F-Builder (format {found}).")).with_remediation("Update F-Builder to open it.")
+        );
     }
     let reached = upgrade(&mut table, found, FIRST_FORMAT, FORMAT_STEPS).map_err(bad)?;
     table.insert("format_version".into(), toml::Value::Integer(reached.into()));
@@ -214,19 +215,19 @@ impl Project {
 
 /// Write `bytes` to `path` atomically: a temp file of its own, fsync, then rename (retried on
 /// Windows while another program holds the file for a moment).
-pub use craft_anything_platform::fs::write_atomic;
+pub use f_builder_platform::fs::write_atomic;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_evidence::{Environment, EvidenceBuilder, Subject};
+    use f_builder_evidence::{Environment, EvidenceBuilder, Subject};
 
     /// #273: threads saving one file at once shared a temp file, so saves failed with "not found"
     /// and the file could be left half one version, half another.
     #[test]
     fn saves_from_several_threads_never_mix() {
         let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("craft.json");
+        let p = dir.path().join("f-builder.json");
         let versions: Vec<Vec<u8>> = (0..4u8).map(|i| vec![b'a' + i; 4096 * (usize::from(i) + 1)]).collect();
         std::thread::scope(|s| {
             for v in &versions {
@@ -294,7 +295,7 @@ mod tests {
     #[test]
     fn evidence_round_trips_and_detects_tampering() {
         let dir = tempfile::tempdir().unwrap();
-        let p = Project::create(&dir.path().join("t.cany"), "t", Purpose::Education).unwrap();
+        let p = Project::create(&dir.path().join("t.fbproj"), "t", Purpose::Education).unwrap();
         let ev = EvidenceBuilder::new("x", Subject::default(), Environment::builtin(true)).result(serde_json::json!(1)).build().unwrap();
         p.store_evidence(&ev).unwrap();
         assert_eq!(p.load_evidence(&ev.id).unwrap(), ev);

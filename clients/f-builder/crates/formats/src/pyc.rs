@@ -704,7 +704,7 @@ pub fn flatten(root: &CodeObject) -> Vec<FlatCode<'_>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::packed::{code_38, code_311, marshal as m, pyc};
+    use f_builder_testkit::packed::{code_38, code_311, marshal as m, pyc};
 
     fn sample_38() -> Vec<u8> {
         let inner = code_38("helper", "app.py", 7, &["os", "path"], &["inner text"], &[]);

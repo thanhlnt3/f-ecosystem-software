@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-ai"
-description = "AI backends, the agent loop and crews for Craft Anything"
+name = "f-builder-ai"
+description = "AI backends, the agent loop and crews for F-Builder"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,16 +11,19 @@ workspace = true
 
 [dependencies]
 schemars = { workspace = true }
-craft-anything-evidence = { workspace = true }
-craft-anything-engine = { workspace = true }
-craft-anything-engines = { workspace = true }
-craft-anything-formats = { workspace = true }
-craft-anything-platform = { workspace = true }
+f-builder-evidence = { workspace = true }
+f-builder-engine = { workspace = true }
+f-builder-engines = { workspace = true }
+f-builder-formats = { workspace = true }
+f-builder-platform = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 toml = { workspace = true }
-ureq = "3"
+# Kho chứng thư của hệ điều hành (platform-verifier), không kèm webpki-roots: license của nó
+# (CDLA-Permissive-2.0) không có trong danh sách của F-Eco. `_ring` là nhà cung cấp mật mã mà
+# tính năng `rustls` mặc định của ureq vẫn dùng.
+ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "_ring", "platform-verifier", "gzip"] }
 dirs = "6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -34,4 +37,4 @@ keyring = { version = "3", default-features = false, features = ["windows-native
 
 [dev-dependencies]
 tempfile = "3"
-craft-anything-testkit = { workspace = true }
+f-builder-testkit = { workspace = true }

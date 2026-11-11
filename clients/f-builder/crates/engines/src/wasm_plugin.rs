@@ -1,24 +1,24 @@
 //! WASM component plugins (R1.8), with the `wasm-plugins` feature: a component that exports the
-//! `craft-anything:plugin/tools` interface (`wit/plugin.wit`) adds tools. It imports nothing, so
+//! `f-builder:plugin/tools` interface (`wit/plugin.wit`) adds tools. It imports nothing, so
 //! it can't reach files, the network, the environment or other programs: its only way out is the
 //! JSON it returns. Each call runs in a fresh instance with a fuel budget (bounded work) and a
 //! memory cap, so a plugin can't hang or exhaust the app, and nothing carries over between calls.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde::Deserialize;
 use serde_json::Value;
 use std::path::Path;
 use wasmtime::component::{Component, Instance, Linker};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder};
 
-/// The plugin API version this host speaks (`package craft-anything:plugin@…` in plugin.wit).
+/// The plugin API version this host speaks (`package f-builder:plugin@…` in plugin.wit).
 pub const API_VERSION: &str = "0.1.0";
 /// The interface a plugin exports to add tools, at [`API_VERSION`].
-pub const INTERFACE: &str = "craft-anything:plugin/tools@0.1.0";
+pub const INTERFACE: &str = "f-builder:plugin/tools@0.1.0";
 /// The interface a plugin exports to add checks, at [`API_VERSION`].
-pub const CHECKS_INTERFACE: &str = "craft-anything:plugin/checks@0.1.0";
-const TOOLS_BASE: &str = "craft-anything:plugin/tools";
-const CHECKS_BASE: &str = "craft-anything:plugin/checks";
+pub const CHECKS_INTERFACE: &str = "f-builder:plugin/checks@0.1.0";
+const TOOLS_BASE: &str = "f-builder:plugin/tools";
+const CHECKS_BASE: &str = "f-builder:plugin/checks";
 
 /// Whether a plugin built against API `found` works with this host (`ours`): semver, so the same
 /// major version, and for 0.x the same minor too. Patch versions only add optional JSON fields.
@@ -37,7 +37,7 @@ pub fn compatible(found: &str, ours: &str) -> bool {
     }
 }
 
-/// The export of `base` (`craft-anything:plugin/tools`) among `exports` that this host can use:
+/// The export of `base` (`f-builder:plugin/tools`) among `exports` that this host can use:
 /// `Ok(None)` when there's none, an error when there's one built for an incompatible version.
 fn resolve<'a>(exports: impl Iterator<Item = &'a str>, base: &str) -> Result<Option<String>, ToolError> {
     let mut incompatible = None;
@@ -49,8 +49,8 @@ fn resolve<'a>(exports: impl Iterator<Item = &'a str>, base: &str) -> Result<Opt
         incompatible = Some(version.to_string());
     }
     match incompatible {
-        Some(v) => Err(ToolError::new(ErrorCode::NotSupported, format!("The plugin exports {base} for API {v}; this Craft Anything speaks {API_VERSION}."))
-            .with_remediation("Rebuild the plugin against this version's plugin.wit, or use a Craft Anything that matches it.")),
+        Some(v) => Err(ToolError::new(ErrorCode::NotSupported, format!("The plugin exports {base} for API {v}; this F-Builder speaks {API_VERSION}."))
+            .with_remediation("Rebuild the plugin against this version's plugin.wit, or use a F-Builder that matches it.")),
         None => Ok(None),
     }
 }
@@ -136,7 +136,7 @@ impl WasmPlugin {
         Ok(WasmPlugin { engine, component, linker, tools, checks })
     }
 
-    /// The interfaces it exports and their versions, e.g. `craft-anything:plugin/tools@0.1.0`.
+    /// The interfaces it exports and their versions, e.g. `f-builder:plugin/tools@0.1.0`.
     pub fn interfaces(&self) -> Vec<&str> {
         self.tools.iter().chain(self.checks.iter()).map(String::as_str).collect()
     }
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn a_plugin_describes_its_tools_and_answers_calls() {
-        let p = WasmPlugin::from_bytes(craft_anything_testkit::wasm_plugin::echo_plugin_wat(false).as_bytes()).unwrap();
+        let p = WasmPlugin::from_bytes(f_builder_testkit::wasm_plugin::echo_plugin_wat(false).as_bytes()).unwrap();
         let tools = p.describe().unwrap();
         assert_eq!(tools.len(), 1);
         assert_eq!((tools[0].name.as_str(), tools[0].title.as_deref()), ("echo", Some("Echo")));
@@ -246,16 +246,16 @@ mod tests {
 
     #[test]
     fn a_plugin_that_loops_is_stopped() {
-        let p = WasmPlugin::from_bytes(craft_anything_testkit::wasm_plugin::echo_plugin_wat(true).as_bytes()).unwrap();
+        let p = WasmPlugin::from_bytes(f_builder_testkit::wasm_plugin::echo_plugin_wat(true).as_bytes()).unwrap();
         let e = p.call("spin", &json!({})).unwrap_err();
         assert_eq!(e.code, ErrorCode::OverLimit, "{e:?}");
     }
 
-    /// The example plugin built for real, only where `CRAFT_ANYTHING_TEST_WASM_PLUGIN` names its
+    /// The example plugin built for real, only where `F_BUILDER_TEST_WASM_PLUGIN` names its
     /// component (see examples/wasm-plugin-wordcount/README.md).
     #[test]
     fn the_example_plugin_counts_words() {
-        let Some(path) = std::env::var_os("CRAFT_ANYTHING_TEST_WASM_PLUGIN") else { return };
+        let Some(path) = std::env::var_os("F_BUILDER_TEST_WASM_PLUGIN") else { return };
         let p = WasmPlugin::load(Path::new(&path)).unwrap();
         assert_eq!(p.describe().unwrap()[0].name, "count_words");
         assert_eq!(p.call("count_words", &json!({"text": "one two\nthree"})).unwrap(), json!({"words": 3, "lines": 2, "characters": 13}));
@@ -263,11 +263,11 @@ mod tests {
         assert!(p.call("nope", &json!({})).is_err());
     }
 
-    /// The example check plugin built for real, only where `CRAFT_ANYTHING_TEST_WASM_CHECK` names
+    /// The example check plugin built for real, only where `F_BUILDER_TEST_WASM_CHECK` names
     /// its component (see examples/wasm-plugin-readme-check/README.md).
     #[test]
     fn the_example_check_reads_the_readme() {
-        let Some(path) = std::env::var_os("CRAFT_ANYTHING_TEST_WASM_CHECK") else { return };
+        let Some(path) = std::env::var_os("F_BUILDER_TEST_WASM_CHECK") else { return };
         let p = WasmPlugin::load(Path::new(&path)).unwrap();
         assert_eq!(p.exports().unwrap(), (false, true));
         let info = p.describe_checks().unwrap();
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn a_plugin_can_offer_checks_instead_of_tools() {
-        let p = WasmPlugin::from_bytes(craft_anything_testkit::wasm_plugin::check_plugin_wat(false).as_bytes()).unwrap();
+        let p = WasmPlugin::from_bytes(f_builder_testkit::wasm_plugin::check_plugin_wat(false).as_bytes()).unwrap();
         assert_eq!(p.exports().unwrap(), (false, true));
         let checks = p.describe_checks().unwrap();
         assert_eq!(
@@ -296,7 +296,7 @@ mod tests {
         let v = p.run_check("looks_fine", &build).unwrap();
         assert_eq!((v["passed"].clone(), v["similarity"].clone(), v["seen"].clone()), (json!(false), json!(70), build));
         assert!(p.describe().is_err(), "no tools interface");
-        let tools = WasmPlugin::from_bytes(craft_anything_testkit::wasm_plugin::echo_plugin_wat(false).as_bytes()).unwrap();
+        let tools = WasmPlugin::from_bytes(f_builder_testkit::wasm_plugin::echo_plugin_wat(false).as_bytes()).unwrap();
         assert_eq!(tools.exports().unwrap(), (true, false));
     }
 
@@ -316,9 +316,9 @@ mod tests {
         assert!(!compatible("0.2.0", "0.1.0") && !compatible("1.0.0", "0.1.0"), "0.x: the minor version is the breaking one");
         assert!(compatible("1.4.0", "1.0.0") && !compatible("2.0.0", "1.0.0"));
         assert!(!compatible("0.1", "0.1.0") && !compatible("x.y.z", "0.1.0"));
-        let wat = craft_anything_testkit::wasm_plugin::echo_plugin_wat(false);
+        let wat = f_builder_testkit::wasm_plugin::echo_plugin_wat(false);
         let newer_patch = WasmPlugin::from_bytes(wat.replace("tools@0.1.0", "tools@0.1.7").as_bytes()).unwrap();
-        assert_eq!(newer_patch.interfaces(), ["craft-anything:plugin/tools@0.1.7"]);
+        assert_eq!(newer_patch.interfaces(), ["f-builder:plugin/tools@0.1.7"]);
         assert_eq!(newer_patch.call("echo", &json!(1)).unwrap(), json!(1));
         let Err(e) = WasmPlugin::from_bytes(wat.replace("tools@0.1.0", "tools@0.2.0").as_bytes()) else { panic!("a 0.2 plugin loaded") };
         assert!(e.message.contains("0.2.0") && e.message.contains(API_VERSION), "{}", e.message);
@@ -326,7 +326,7 @@ mod tests {
 
     #[test]
     fn the_host_and_the_wit_agree_on_the_version() {
-        assert!(WIT.contains(&format!("package craft-anything:plugin@{API_VERSION};")));
+        assert!(WIT.contains(&format!("package f-builder:plugin@{API_VERSION};")));
         assert_eq!(INTERFACE, format!("{TOOLS_BASE}@{API_VERSION}"));
         assert_eq!(CHECKS_INTERFACE, format!("{CHECKS_BASE}@{API_VERSION}"));
     }

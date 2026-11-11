@@ -14,6 +14,8 @@ members = [
     "sdk/c",
 
 ]
+# F-Builder là Cargo workspace riêng (edition 2024, [patch] wgpu-hal, xtask riêng).
+exclude = ["clients/f-builder"]
 
 [workspace.package]
 version = "0.1.0"

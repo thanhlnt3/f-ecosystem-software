@@ -5,9 +5,9 @@
 use crate::i18n::tr;
 use crate::state::{GameFiles, Modal, PendingPicture};
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, Pick, icons, widgets};
-use craft_anything_engine::evidence::ToolError;
+use crate::{BuilderApp, Pick, icons, widgets};
 use egui::{RichText, Sense, Ui, Vec2};
+use f_builder_engine::evidence::ToolError;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
@@ -25,7 +25,7 @@ fn kind_label(kind: &str) -> (&'static str, &'static str, bool) {
     }
 }
 
-pub fn show(app: &mut CraftApp, ui: &mut Ui) {
+pub fn show(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         let full_w = ui.available_width();
@@ -73,7 +73,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
 }
 
 /// What the picked game is made of, and the way to ask about it.
-fn about(app: &mut CraftApp, ui: &mut Ui, w: f32) {
+fn about(app: &mut BuilderApp, ui: &mut Ui, w: f32) {
     let t = Tokens::get(ui.ctx());
     let (Some(folder), Some(v)) = (app.state.game.folder.clone(), app.state.game.profile.as_ref()) else { return };
     let g = &v["game"];
@@ -126,7 +126,7 @@ fn about(app: &mut CraftApp, ui: &mut Ui, w: f32) {
     }
 }
 
-fn archives(app: &mut CraftApp, ui: &mut Ui, w: f32) {
+fn archives(app: &mut BuilderApp, ui: &mut Ui, w: f32) {
     let t = Tokens::get(ui.ctx());
     let g = &app.state.game;
     if g.looking {
@@ -178,7 +178,7 @@ fn archives(app: &mut CraftApp, ui: &mut Ui, w: f32) {
     }
 }
 
-fn open_archive(app: &mut CraftApp, path: String, kind: String) {
+fn open_archive(app: &mut BuilderApp, path: String, kind: String) {
     let g = &mut app.state.game;
     g.open = Some(path.clone());
     g.open_kind = kind.clone();
@@ -195,7 +195,7 @@ fn open_archive(app: &mut CraftApp, path: String, kind: String) {
     app.act(tool, params, tr("Read a game's files"));
 }
 
-fn contents(app: &mut CraftApp, ui: &mut Ui) {
+fn contents(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let g = &app.state.game;
     let Some(open) = g.open.clone() else { return };
@@ -267,7 +267,7 @@ fn row_detail(r: &Value) -> String {
 
 /// Saving starts with the person's word that they may unpack this game (asked once per folder),
 /// then where to save.
-fn ask_to_save(app: &mut CraftApp, archive: String, item: Value) {
+fn ask_to_save(app: &mut BuilderApp, archive: String, item: Value) {
     let base = row_name(&item);
     let stem = base.rsplit(['/', '\\']).next().unwrap_or(&base).trim_end_matches(".uasset").to_string();
     let g = &mut app.state.game;
@@ -280,7 +280,7 @@ fn ask_to_save(app: &mut CraftApp, archive: String, item: Value) {
 }
 
 /// The question asked before a game's files are unpacked.
-pub fn permission_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
+pub fn permission_modal(app: &mut BuilderApp, ui: &mut Ui, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(52.0), Sense::hover());
     ui.painter().rect_filled(rect, t.radius, t.accent_soft);
@@ -309,14 +309,14 @@ pub fn permission_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
 }
 
 /// The game's folder was picked: look for its archives.
-pub fn folder_picked(app: &mut CraftApp, folder: PathBuf) {
+pub fn folder_picked(app: &mut BuilderApp, folder: PathBuf) {
     app.state.game = GameFiles { folder: Some(folder.clone()), looking: true, permitted: app.state.game.permitted.clone(), ..Default::default() };
     app.act("game_archives_list", json!({"path": folder.display().to_string()}), tr("Find a game's files"));
     app.act("core_target_triage", json!({"path": folder.display().to_string()}), tr("Look at a game"));
 }
 
 /// Where to save the pending picture was picked: save it.
-pub fn save_to(app: &mut CraftApp, mut output: PathBuf) {
+pub fn save_to(app: &mut BuilderApp, mut output: PathBuf) {
     let Some(p) = app.state.game.pending.take() else { return };
     if output.extension().is_none() {
         output.set_extension("png");
@@ -337,12 +337,12 @@ pub fn save_to(app: &mut CraftApp, mut output: PathBuf) {
 }
 
 /// The name the save dialog suggests.
-pub fn suggested_name(app: &CraftApp) -> String {
+pub fn suggested_name(app: &BuilderApp) -> String {
     app.state.game.pending.as_ref().map_or_else(|| "picture.png".to_string(), |p| p.name.clone())
 }
 
 /// A game tool finished.
-pub fn tool_done(app: &mut CraftApp, tool: &str, result: Result<Value, ToolError>) {
+pub fn tool_done(app: &mut BuilderApp, tool: &str, result: Result<Value, ToolError>) {
     let g = &mut app.state.game;
     match (tool, result) {
         ("game_archives_list", Ok(v)) => {

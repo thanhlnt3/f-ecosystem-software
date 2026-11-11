@@ -109,7 +109,7 @@ Add to a running build	Doplnit probíhající sestavení
 Added	Přidáno
 Added {n} picture(s). The builder uses them from your next change.	Přidané obrázky: {n}. Sestavovací agent je použije od vaší příští změny.
 Address to file offset	Převést adresu na offset v souboru
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	Přidá dekompilátor do Hloubkového režimu. Craft Anything jej může stáhnout a nastavit za vás.
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	Přidá dekompilátor do Hloubkového režimu. F-Builder jej může stáhnout a nastavit za vás.
 Advanced	Pokročilý
 After installing one, look for it again.	Po instalaci jej znovu vyhledejte.
 Agent	AI agent
@@ -199,7 +199,7 @@ Build with {name} instead	Místo toho sestavit pomocí {name}
 Build without it	Sestavit bez něj
 Builder's questions:	Otázky sestavovacího agenta:
 Building	Probíhá sestavení
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	Sestavení vyžaduje programovacího agenta v tomto počítači (Claude Code, Codex nebo Gemini CLI: nainstalujte jej a jednou se přihlaste v jeho vlastním okně), nebo AI s klíčem API. Craft Anything nikdy nemá přístup k vašemu účtu.
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	Sestavení vyžaduje programovacího agenta v tomto počítači (Claude Code, Codex nebo Gemini CLI: nainstalujte jej a jednou se přihlaste v jeho vlastním okně), nebo AI s klíčem API. F-Builder nikdy nemá přístup k vašemu účtu.
 Building needs a coding agent such as Claude Code, or an AI with an API key.	Sestavení vyžaduje programovacího agenta, například Claude Code, nebo AI s klíčem API.
 Builds	Sestavení
 Builds and answers may use it again.	Při sestavování a odpovídání může být znovu použit.
@@ -250,7 +250,7 @@ Classes	Třídy
 Claude Code folder (CLAUDE_CONFIG_DIR)	Složka Claude Code (CLAUDE_CONFIG_DIR)
 Clean room	Čistá místnost
 Clean room / Deep	Čistá místnost / Hloubkový režim
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	Režim Čistá místnost nikdy nečte kód, soubory ani zdrojový kód stránek originálu. Hloubkový režim je čte všemi nástroji, které Craft Anything nabízí.
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	Režim Čistá místnost nikdy nečte kód, soubory ani zdrojový kód stránek originálu. Hloubkový režim je čte všemi nástroji, které F-Builder nabízí.
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	Režim Čistá místnost nikdy nečte kód, soubory ani zdrojový kód stránek originálu: vychází z toho, co vidíte. Hloubkový režim je čte všemi nástroji a také pomocí Ghidra, pokud je nainstalována. Každé zjištění zaznamenává použitý režim.
 Clean room on	Režim Čistá místnost zapnutý
 Clean room or Deep	Čistá místnost nebo Hloubkový režim
@@ -307,13 +307,13 @@ Couldn't open {}: {}	Nepodařilo se otevřít {}: {}
 Couldn't start a worker thread: {e}	Nepodařilo se spustit pracovní vlákno: {e}
 Couldn't start it.	Nepodařilo se spustit.
 Coverage unknown	Pokrytí neznámé
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything neumí sestavovat pomocí {engine}, proto je nejbližší volbou Unity.
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	Craft Anything nebo počítač se během práce vypnul. Dosavadní práce je zachována; tlačítko Pokračovat naváže tam, kde skončila.
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything čte kód a soubory všemi svými nástroji. Pro vaše soukromé použití.
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything čte kód, soubory a zdrojový kód stránek originálu všemi svými nástroji a také pomocí Ghidra, pokud je nainstalována.
-Craft Anything report.md	Zpráva Craft Anything.md
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Záznamy Craft Anything, kontroly a vše sestavené v app/ budou smazány. Vaše vlastní soubory ve složce zůstanou beze změny.
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder neumí sestavovat pomocí {engine}, proto je nejbližší volbou Unity.
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	F-Builder nebo počítač se během práce vypnul. Dosavadní práce je zachována; tlačítko Pokračovat naváže tam, kde skončila.
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder čte kód a soubory všemi svými nástroji. Pro vaše soukromé použití.
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder čte kód, soubory a zdrojový kód stránek originálu všemi svými nástroji a také pomocí Ghidra, pokud je nainstalována.
+F-Builder report.md	Zpráva F-Builder.md
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Záznamy F-Builder, kontroly a vše sestavené v app/ budou smazány. Vaše vlastní soubory ve složce zůstanou beze změny.
 Crash dump	Výpis pádu
 Create the project	Vytvořit projekt
 Critical	Kritická
@@ -506,7 +506,7 @@ Hide the console	Skrýt konzoli
 High	Vysoká
 Home	Úvod
 How alike a rebuild must look to the original before refining stops.	Požadovaná podobnost rekonstrukce s originálem, při které se vylepšování zastaví.
-How closely may Craft Anything look at it?	Jak podrobně jej smí Craft Anything zkoumat?
+How closely may F-Builder look at it?	Jak podrobně jej smí F-Builder zkoumat?
 How complete is the rebuild	Úplnost rekonstrukce
 How do I open an app?	Jak otevřu aplikaci?
 How do the window and the page talk to each other?	Jak spolu komunikují okno a stránka?
@@ -566,7 +566,7 @@ Is there any readable text inside?	Je uvnitř nějaký čitelný text?
 Is this file safe to open?	Je bezpečné tento soubor otevřít?
 It closed straight away.	Ihned se ukončil.
 It closed straight away. It said:	Ihned se ukončil. Vypsal:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	V tomto počítači zatím není. Craft Anything může stáhnout Ghidra {version} a potřebné běhové prostředí Java (asi {mb} MB), ověřit obojí podle kontrolních součtů vydavatelů a nastavit je ve vlastní složce. Nic dalšího v počítači se nezmění.
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	V tomto počítači zatím není. F-Builder může stáhnout Ghidra {version} a potřebné běhové prostředí Java (asi {mb} MB), ověřit obojí podle kontrolních součtů vydavatelů a nastavit je ve vlastní složce. Nic dalšího v počítači se nezmění.
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	V tomto počítači zatím není. Nainstalujte Ghidra {version} ze stránky vydání a pak vyberte její složku.
 It's already open.	Již je otevřený.
 It's already open. Right-click it to open another copy.	Již je otevřený. Pravým tlačítkem můžete otevřít další kopii.
@@ -611,7 +611,7 @@ Last: {what}	Naposledy: {what}
 Launch an app	Spustit aplikaci
 Leave a few GB for the rest of your computer.	Ponechte několik GB pro zbytek počítače.
 Leave a path empty to use the managed install. We never need environment variables.	Prázdná cesta použije spravovanou instalaci. Proměnné prostředí nejsou potřeba.
-Leave empty to use the one Craft Anything sets up.	Ponechte prázdné pro použití instalace, kterou nastaví Craft Anything.
+Leave empty to use the one F-Builder sets up.	Ponechte prázdné pro použití instalace, kterou nastaví F-Builder.
 Let a project generate assets	Povolit projektu generovat podklady
 Let's go	Začít
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	Umožní sestavovacímu agentovi vytvářet realistické 3D modely a textury pro hry, {model} za model, s rozpočtem {budget} na projekt.
@@ -743,8 +743,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	Nic nenalezeno
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	Zatím nic nenalezeno. Hledáme klíče API, místní servery modelů (Ollama, LM Studio) a aplikace agentů, které už máte. Server na jiném portu nebo jiném počítači můžete přidat podle adresy níže.
 Nothing inside it is read.	Nic uvnitř se nečte.
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	Nic uvnitř se nečte; Craft Anything vychází z toho, co vidíte. Vaše verze dostane vlastní grafiku.
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Nic uvnitř originálu se nečte: ani jeho kód, ani soubory, ani zdrojový kód stránek. Craft Anything vychází z toho, co vidíte: obrázky, stránka z pohledu návštěvníka a pozorování běhu.
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	Nic uvnitř se nečte; F-Builder vychází z toho, co vidíte. Vaše verze dostane vlastní grafiku.
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Nic uvnitř originálu se nečte: ani jeho kód, ani soubory, ani zdrojový kód stránek. F-Builder vychází z toho, co vidíte: obrázky, stránka z pohledu návštěvníka a pozorování běhu.
 Nothing made yet. What you make shows up here.	Zatím jste nic nevytvořili. Zde se zobrazí vaše výtvory.
 Nothing matches the filter.	Filtru nic neodpovídá.
 Nothing matches.	Žádná shoda.
@@ -867,7 +867,7 @@ Plugin command or address	Příkaz nebo adresa pluginu
 Plugin id	ID pluginu
 Plugin removed.	Plugin odebrán.
 Plugins	Pluginy
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Pluginy přidávají nástroje, které Craft Anything nabízí jako vlastní: servery MCP (příkaz nebo adresa; po přidání načtěte jejich nástroje) nebo komponenty WebAssembly (soubor .wasm, který nemá přístup k vašim souborům ani síti).
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Pluginy přidávají nástroje, které F-Builder nabízí jako vlastní: servery MCP (příkaz nebo adresa; po přidání načtěte jejich nástroje) nebo komponenty WebAssembly (soubor .wasm, který nemá přístup k vašim souborům ani síti).
 Plugins added here always ask before each call.	Zde přidané pluginy vždy před každým voláním žádají o schválení.
 Plugins read. Their new tools are offered from the next start.	Pluginy načteny. Jejich nové nástroje budou k dispozici od příštího spuštění.
 Preserving software that's no longer supported.	Zachování softwaru, který už není podporován.
@@ -1036,7 +1036,7 @@ Sign in and add the Unity Editor	Přihlásit se a přidat Unity Editor
 Sign in and install Unreal Engine	Přihlásit se a nainstalovat Unreal Engine
 Simple	Jednoduchý
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	Jednoduchý: řekněte, co chcete, a aplikace vše zařídí. Pokročilý: všechny nástroje, důkazy i protokoly.
-Since Craft Anything opened.	Od spuštění Craft Anything.
+Since F-Builder opened.	Od spuštění F-Builder.
 Size	Velikost
 Skip setup	Přeskočit nastavení
 Smart contract interface	Rozhraní chytrého kontraktu
@@ -1093,14 +1093,14 @@ Take files out of an Unreal pak	Extrahovat soubory z archivu Unreal .pak
 Take out packed files	Extrahovat zabalené soubory
 Target	Cíl
 Targets	Cíle
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	Složka již obsahuje {names}, kde Craft Anything ukládá vlastní soubory. Vyberte jinou složku nebo je nejprve přesuňte jinam.
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	Složka již obsahuje {names}, kde F-Builder ukládá vlastní soubory. Vyberte jinou složku nebo je nejprve přesuňte jinam.
 That folder is already a project, so it's open now.	Tato složka již je projektem, proto se nyní otevřela.
 The Rust toolchain (rustup.rs).	Sada nástrojů Rust (rustup.rs).
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	Sestavovací agent si odpovídá sám a sdělí svou volbu („Rozhodl jsem: …“), abyste ji mohli změnit.
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	Sestavovací agent vytváří 3D modely a textury hry podle popisů originálních návrhů; platí se z vašeho účtu fal.ai. Modely mají málo polygonů, aby hra běžela rychle. Model s texturou stojí {model} a obrázek {picture}. Každý projekt má rozpočet {budget} a před jeho překročením se vás aplikace zeptá. Klíč je uložen v systémové klíčence.
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	Sestavovací agent je přečte (kód, poznámky, obrázky) a sestaví aplikaci v nové sousední složce app. Vaše soubory zůstanou beze změny.
 The builder will decide its questions and tell you what it chose.	Sestavovací agent své otázky rozhodne sám a sdělí vám svou volbu.
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	Sestavovací agent pracuje přímo s těmito soubory a zachová funkční části. Craft Anything k nim přidá několik vlastních záznamů.
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	Sestavovací agent pracuje přímo s těmito soubory a zachová funkční části. F-Builder k nim přidá několik vlastních záznamů.
 The builder's questions	Otázky sestavovacího agenta
 The builder's questions come to you as cards, and it waits for your answer.	Otázky sestavovacího agenta se zobrazí jako karty a agent počká na vaši odpověď.
 The builder's questions will come to you.	Otázky sestavovacího agenta budete dostávat vy.
@@ -1213,7 +1213,7 @@ What a program exports	Co program exportuje
 What a program imports	Co program importuje
 What are its main parts?	Jaké jsou hlavní části?
 What brings you here?	Co vás sem přivádí?
-What can Craft Anything do?	Co umí Craft Anything?
+What can F-Builder do?	Co umí F-Builder?
 What data was sent?	Jaká data byla odeslána?
 What do you want to look inside?	Do čeho chcete nahlédnout?
 What do you want to make?	Co chcete vytvořit?
@@ -1268,7 +1268,7 @@ Why we ask	Proč se ptáme
 Window / focus info	Informace o okně / fokusu
 Windows resources	Prostředky Windows
 Wireshark tools check	Kontrola nástrojů Wireshark
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	Bez ní Hloubkový režim používá vlastní dekompilátor Craft Anything, který poskytuje hrubší výsledek.
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	Bez ní Hloubkový režim používá vlastní dekompilátor F-Builder, který poskytuje hrubší výsledek.
 Work out a copy's size	Vypočítat velikost kopie
 Work out what an installed app is built on	Zjistit, na čem je založena nainstalovaná aplikace
 Workbench	Pracovní plocha
@@ -1430,12 +1430,12 @@ View	Zobrazení
 Window	Okno
 Help	Nápověda
 Command palette	Paleta příkazů
-Craft Anything on GitHub	Craft Anything na GitHubu
+F-Builder on GitHub	F-Builder na GitHubu
 Report a problem…	Nahlásit problém…
-Quit Craft Anything	Ukončit Craft Anything
-About Craft Anything	O aplikaci Craft Anything
+Quit F-Builder	Ukončit F-Builder
+About F-Builder	O aplikaci F-Builder
 Services	Služby
-Hide Craft Anything	Skrýt Craft Anything
+Hide F-Builder	Skrýt F-Builder
 Hide others	Skrýt ostatní
 Show all	Zobrazit vše
 Close window	Zavřít okno

@@ -731,7 +731,7 @@ pub fn parse_xml(data: &[u8]) -> Result<Value, FormatError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::apple as fx;
+    use f_builder_testkit::apple as fx;
 
     #[test]
     fn xml_has_one_complete_root_with_only_markup_space_around_values() {
@@ -820,7 +820,7 @@ mod tests {
         let sample = fx::sample_plist();
         let b = fx::to_bplist(&sample);
         let x = fx::to_xml(&sample).into_bytes();
-        for m in craft_anything_testkit::mutations(&b).into_iter().chain(craft_anything_testkit::mutations(&x)) {
+        for m in f_builder_testkit::mutations(&b).into_iter().chain(f_builder_testkit::mutations(&x)) {
             let _ = parse(&m);
         }
         for i in 0..b.len() {
@@ -828,7 +828,7 @@ mod tests {
         }
         for seed in 0..200 {
             let mut n = b"bplist00".to_vec();
-            n.extend(craft_anything_testkit::noise(seed, 64));
+            n.extend(f_builder_testkit::noise(seed, 64));
             let _ = parse(&n);
         }
         // A self-referencing array must be refused, not loop.

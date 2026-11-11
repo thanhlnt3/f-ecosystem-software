@@ -109,7 +109,7 @@ Add to a running build	Lisa jooksvale ehitusele
 Added	Lisatud
 Added {n} picture(s). The builder uses them from your next change.	Lisatud {n} pilt(i). Ehitaja kasutab neid alates sinu järgmisest muudatusest.
 Address to file offset	Aadress failinihkeni
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	Lisab oma dekompilaatori sügavasse režiimi. Craft Anything saab selle sinu eest alla laadida ja seadistada.
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	Lisab oma dekompilaatori sügavasse režiimi. F-Builder saab selle sinu eest alla laadida ja seadistada.
 Advanced	Täpsem
 After installing one, look for it again.	Pärast selle installimist otsi uuesti.
 Agent	Agent
@@ -199,7 +199,7 @@ Build with {name} instead	Ehita selle asemel {name} abil
 Build without it	Ehita ilma selleta
 Builder's questions:	Ehitaja küsimused:
 Building	Ehitan
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	Ehitamiseks on vaja selles arvutis programmeerimisagenti (Claude Code, Codex või Gemini CLI: paigalda üks ja logi selle oma aknas üks kord sisse) või AI-d API võtmega. Craft Anything ei näe kunagi sinu kontot.
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	Ehitamiseks on vaja selles arvutis programmeerimisagenti (Claude Code, Codex või Gemini CLI: paigalda üks ja logi selle oma aknas üks kord sisse) või AI-d API võtmega. F-Builder ei näe kunagi sinu kontot.
 Building needs a coding agent such as Claude Code, or an AI with an API key.	Ehitamiseks on vaja programmeerimisagenti nagu Claude Code või AI-d API võtmega.
 Builds	Ehitused
 Builds and answers may use it again.	Ehitused ja vastused võivad seda uuesti kasutada.
@@ -250,7 +250,7 @@ Classes	Klassid
 Claude Code folder (CLAUDE_CONFIG_DIR)	Claude Code'i kaust (CLAUDE_CONFIG_DIR)
 Clean room	Puhas ruum
 Clean room / Deep	Puhas ruum / Sügav
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	Puhas ruum ei loe kunagi originaali koodi, faile ega lehe lähteteksti. Sügav režiim loeb neid kõigi Craft Anything'i tööriistadega.
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	Puhas ruum ei loe kunagi originaali koodi, faile ega lehe lähteteksti. Sügav režiim loeb neid kõigi F-Builder'i tööriistadega.
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	Puhas ruum ei loe kunagi originaali koodi, faile ega lehe lähteteksti: see töötab selle põhjal, mida sa näed. Sügav loeb neid kõigi tööriistadega ja Ghidraga, kui see on paigaldatud. Iga leid registreerib, mida kasutati.
 Clean room on	Puhas ruum sees
 Clean room or Deep	Puhas ruum või sügav
@@ -307,13 +307,13 @@ Couldn't open {}: {}	Ei õnnestunud avada {}: {}
 Couldn't start a worker thread: {e}	Töölõime ei õnnestunud käivitada: {e}
 Couldn't start it.	Seda ei õnnestunud käivitada.
 Coverage unknown	Katvus teadmata
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything ei saa ehitada mootoriga {engine}, seega Unity on lähim valik.
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	Craft Anything või arvuti suleti töö ajal. Kõik senine on alles; Jätka jätkab sealt, kus pooleli jäi.
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything loeb selle koodi ja faile kõigi oma tööriistadega. Sinu isiklikuks kasutuseks.
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything loeb originaali koodi, faile ja lehe lähteteksti kõigi oma tööriistadega ning Ghidraga, kui see on paigaldatud.
-Craft Anything report.md	Craft Anything'i aruanne.md
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Craft Anything'i kirjed, kontrollid ja kõik, mis see kausta app/ ehitas, kustutatakse. Sinu enda failid kaustas jäävad puutumata.
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder ei saa ehitada mootoriga {engine}, seega Unity on lähim valik.
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	F-Builder või arvuti suleti töö ajal. Kõik senine on alles; Jätka jätkab sealt, kus pooleli jäi.
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder loeb selle koodi ja faile kõigi oma tööriistadega. Sinu isiklikuks kasutuseks.
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder loeb originaali koodi, faile ja lehe lähteteksti kõigi oma tööriistadega ning Ghidraga, kui see on paigaldatud.
+F-Builder report.md	F-Builder'i aruanne.md
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	F-Builder'i kirjed, kontrollid ja kõik, mis see kausta app/ ehitas, kustutatakse. Sinu enda failid kaustas jäävad puutumata.
 Crash dump	Krahhidump
 Create the project	Loo projekt
 Critical	Kriitiline
@@ -506,7 +506,7 @@ Hide the console	Peida konsool
 High	Kõrge
 Home	Avaleht
 How alike a rebuild must look to the original before refining stops.	Kui sarnane peab taasehitus originaaliga välja nägema, enne kui täiustamine lõpeb.
-How closely may Craft Anything look at it?	Kui lähedalt tohib Craft Anything seda vaadata?
+How closely may F-Builder look at it?	Kui lähedalt tohib F-Builder seda vaadata?
 How complete is the rebuild	Kui täielik on taasehitus
 How do I open an app?	Kuidas rakendust avada?
 How do the window and the page talk to each other?	Kuidas aken ja leht omavahel suhtlevad?
@@ -566,7 +566,7 @@ Is there any readable text inside?	Kas sees on loetavat teksti?
 Is this file safe to open?	Kas seda faili on turvaline avada?
 It closed straight away.	See sulgus kohe.
 It closed straight away. It said:	See sulgus kohe. See ütles:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	See pole selles arvutis veel. Craft Anything saab alla laadida Ghidra {version} ja vajaliku Java käituskeskkonna (umbes {mb} MB), kontrollida mõlemad nende avaldajate kontrollsummadega ja seadistada need oma kausta. Midagi muud sinu arvutis ei muutu.
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	See pole selles arvutis veel. F-Builder saab alla laadida Ghidra {version} ja vajaliku Java käituskeskkonna (umbes {mb} MB), kontrollida mõlemad nende avaldajate kontrollsummadega ja seadistada need oma kausta. Midagi muud sinu arvutis ei muutu.
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	See pole selles arvutis veel. Paigalda Ghidra {version} selle väljalaskelehelt ja vali siis selle kaust.
 It's already open.	See on juba avatud.
 It's already open. Right-click it to open another copy.	See on juba avatud. Teise koopia avamiseks tee sellel paremklõps.
@@ -611,7 +611,7 @@ Last: {what}	Viimane: {what}
 Launch an app	Käivita rakendus
 Leave a few GB for the rest of your computer.	Jäta mõned GB ülejäänud arvutile.
 Leave a path empty to use the managed install. We never need environment variables.	Jäta tee tühjaks, et kasutada hallatavat paigaldust. Keskkonnamuutujaid pole meil kunagi vaja.
-Leave empty to use the one Craft Anything sets up.	Jäta tühjaks, et kasutada seda, mille Craft Anything seadistab.
+Leave empty to use the one F-Builder sets up.	Jäta tühjaks, et kasutada seda, mille F-Builder seadistab.
 Let a project generate assets	Luba projektil varasid genereerida
 Let's go	Lähme
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	Laseb ehitajal luua realistlikke 3D-mudeleid ja tekstuure mängudele, hinnaga {model} mudeli eest, eelarvega {budget} projekti kohta.
@@ -743,8 +743,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	Midagi ei leitud
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	Veel ei leitud midagi. Otsime API võtmeid, kohalikke mudeliservereid (Ollama, LM Studio) ja agendirakendusi, mis sul juba on. Teise pordi või arvuti oma saab allpool aadressi järgi lisada.
 Nothing inside it is read.	Selle sees ei loeta midagi.
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	Selle sees ei loeta midagi; Craft Anything töötab selle põhjal, mida sa näed. Sinu versioon saab oma graafika.
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Originaali sees ei loeta midagi: ei koodi, faile ega lehe lähteteksti. Craft Anything töötab selle põhjal, mida sa näed: pildid, leht nii, nagu külastaja seda näeb, ja selle töötamise jälgimine.
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	Selle sees ei loeta midagi; F-Builder töötab selle põhjal, mida sa näed. Sinu versioon saab oma graafika.
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Originaali sees ei loeta midagi: ei koodi, faile ega lehe lähteteksti. F-Builder töötab selle põhjal, mida sa näed: pildid, leht nii, nagu külastaja seda näeb, ja selle töötamise jälgimine.
 Nothing made yet. What you make shows up here.	Veel pole midagi loodud. See, mida lood, ilmub siia.
 Nothing matches the filter.	Filtriga ei vasta miski.
 Nothing matches.	Miski ei vasta.
@@ -867,7 +867,7 @@ Plugin command or address	Plugina käsk või aadress
 Plugin id	Plugina ID
 Plugin removed.	Plugin eemaldatud.
 Plugins	Pluginad
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Pluginad lisavad tööriistu, mida Craft Anything pakub omadena: MCP-serverid (käsk või aadress; pärast lisamist loe nende tööriistad sisse) või WebAssembly komponendid (.wasm fail, mis ei pääse sinu failidele ega võrgule ligi).
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Pluginad lisavad tööriistu, mida F-Builder pakub omadena: MCP-serverid (käsk või aadress; pärast lisamist loe nende tööriistad sisse) või WebAssembly komponendid (.wasm fail, mis ei pääse sinu failidele ega võrgule ligi).
 Plugins added here always ask before each call.	Siin lisatud pluginad küsivad enne iga kutset.
 Plugins read. Their new tools are offered from the next start.	Pluginad loetud. Nende uusi tööriistu pakutakse järgmisest käivitamisest.
 Preserving software that's no longer supported.	Tarkvara säilitamine, mida enam ei toetata.
@@ -1036,7 +1036,7 @@ Sign in and add the Unity Editor	Logi sisse ja lisa Unity Editor
 Sign in and install Unreal Engine	Logi sisse ja paigalda Unreal Engine
 Simple	Lihtne
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	Lihtne: ütle, mida soovid, ja see tehakse sinu eest. Täpsem: iga tööriist, tõendid ja logid.
-Since Craft Anything opened.	Alates Craft Anything'i avamisest.
+Since F-Builder opened.	Alates F-Builder'i avamisest.
 Size	Suurus
 Skip setup	Jäta seadistamine vahele
 Smart contract interface	Nutilepingu liides
@@ -1093,14 +1093,14 @@ Take files out of an Unreal pak	Võta failid Unreali pakist välja
 Take out packed files	Võta pakitud failid välja
 Target	Sihtmärk
 Targets	Sihtmärgid
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	Selles kaustas on juba {names}, kus Craft Anything hoiab oma faile. Vali teine kaust või liiguta need esmalt välja.
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	Selles kaustas on juba {names}, kus F-Builder hoiab oma faile. Vali teine kaust või liiguta need esmalt välja.
 That folder is already a project, so it's open now.	See kaust on juba projekt, seega on see nüüd avatud.
 The Rust toolchain (rustup.rs).	Rusti tööriistakomplekt (rustup.rs).
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	Ehitaja vastab oma küsimustele ise ja ütleb, mida valis („Otsustasin: …“), et saaksid seda muuta.
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	Ehitaja loob mängu 3D-mudelid ja tekstuurid originaalkavandite kirjelduste põhjal, sinu fal.ai konto eest. Mudelid on madala polügoonide arvuga, et mäng töötaks kiiresti. Tekstuuriga mudel maksab {model} ja pilt {picture}. Igal projektil on eelarve {budget} ja enne selle ületamist küsitakse sinult. Võti hoitakse sinu süsteemi võtmehoidlas.
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	Ehitaja loeb neid (kood, märkmed, pildid) ja ehitab rakenduse nende kõrvale uude app-kausta. Sinu failid jäävad puutumata.
 The builder will decide its questions and tell you what it chose.	Ehitaja otsustab oma küsimused ja ütleb sulle, mida valis.
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	Ehitaja töötab nende failidega otse ja hoiab selle, mis töötab. Craft Anything lisab nende kõrvale mõned omad kirjed.
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	Ehitaja töötab nende failidega otse ja hoiab selle, mis töötab. F-Builder lisab nende kõrvale mõned omad kirjed.
 The builder's questions	Ehitaja küsimused
 The builder's questions come to you as cards, and it waits for your answer.	Ehitaja küsimused tulevad sinuni kaartidena ja ta ootab sinu vastust.
 The builder's questions will come to you.	Ehitaja küsimused tulevad sinuni.
@@ -1213,7 +1213,7 @@ What a program exports	Mida programm ekspordib
 What a program imports	Mida programm impordib
 What are its main parts?	Millised on selle põhiosad?
 What brings you here?	Mis sind siia tõi?
-What can Craft Anything do?	Mida Craft Anything suudab?
+What can F-Builder do?	Mida F-Builder suudab?
 What data was sent?	Milliseid andmeid saadeti?
 What do you want to look inside?	Millesse soovid sisse vaadata?
 What do you want to make?	Mida soovid luua?
@@ -1268,7 +1268,7 @@ Why we ask	Miks me küsime
 Window / focus info	Akna / fookuse info
 Windows resources	Windowsi ressursid
 Wireshark tools check	Wireshargi tööriistade kontroll
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	Ilma selleta kasutab sügav režiim Craft Anything'i enda dekompilaatorit, mis on karedam.
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	Ilma selleta kasutab sügav režiim F-Builder'i enda dekompilaatorit, mis on karedam.
 Work out a copy's size	Arvuta koopia suurus
 Work out what an installed app is built on	Tee kindlaks, millele paigaldatud rakendus on ehitatud
 Workbench	Töölaud
@@ -1430,12 +1430,12 @@ View	Vaade
 Window	Aken
 Help	Abi
 Command palette	Käsupalett
-Craft Anything on GitHub	Craft Anything GitHubis
+F-Builder on GitHub	F-Builder GitHubis
 Report a problem…	Teata probleemist…
-Quit Craft Anything	Välju Craft Anything'ist
-About Craft Anything	Craft Anything'ist
+Quit F-Builder	Välju F-Builder'ist
+About F-Builder	F-Builder'ist
 Services	Teenused
-Hide Craft Anything	Peida Craft Anything
+Hide F-Builder	Peida F-Builder
 Hide others	Peida teised
 Show all	Näita kõiki
 Close window	Sulge aken

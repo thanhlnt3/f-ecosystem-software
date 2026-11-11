@@ -1,11 +1,11 @@
 //! The macOS menu bar: the app's own actions, with the shortcuts Mac apps use, beside the system's
 //! window and app items. Every label is in the app's language, and follows it when it changes.
 
-use crate::CraftApp;
+use crate::BuilderApp;
 use crate::i18n::{self, tr};
 use crate::palette::{self, AppCommand};
 use crate::state::Screen;
-use craft_anything_engine::Mode;
+use f_builder_engine::Mode;
 use muda::accelerator::{Accelerator, Code, Modifiers};
 use muda::{AboutMetadata, CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use std::sync::mpsc::{Receiver, channel};
@@ -77,7 +77,7 @@ impl MenuBar {
             i
         };
         let settings = item("Settings", cmd(Code::Comma), Action::App(AppCommand::Settings));
-        let quit = item("Quit Craft Anything", cmd(Code::KeyQ), Action::Quit);
+        let quit = item("Quit F-Builder", cmd(Code::KeyQ), Action::Quit);
         let new_project = item("New project", cmd(Code::KeyN), Action::NewProject);
         let open_file = item("Open a file…", cmd(Code::KeyO), Action::App(AppCommand::OpenFile));
         let open_folder =
@@ -85,7 +85,7 @@ impl MenuBar {
         let export = item("Export a report (Markdown)", None, Action::App(AppCommand::ExportReport));
         let palette = item("Command palette", cmd(Code::KeyK), Action::Palette);
         let theme = item("Switch light / dark theme", None, Action::App(AppCommand::ToggleTheme));
-        let website = item("Craft Anything on GitHub", None, Action::Url(REPO));
+        let website = item("F-Builder on GitHub", None, Action::Url(REPO));
         let report = item("Report a problem…", None, Action::Url(NEW_ISSUE));
         let mut check = |label: &'static str, action: Action| {
             let i = CheckMenuItem::new(tr(label), true, false, None);
@@ -104,7 +104,7 @@ impl MenuBar {
             s
         };
         // The first submenu is the app menu; macOS titles it with the app's name.
-        let app_menu = Submenu::new("Craft Anything", true);
+        let app_menu = Submenu::new("F-Builder", true);
         let file = sub("File");
         let view = sub("View");
         let window = sub("Window");
@@ -116,7 +116,7 @@ impl MenuBar {
             i
         };
         let services = system(PredefinedMenuItem::services, "Services");
-        let hide = system(PredefinedMenuItem::hide, "Hide Craft Anything");
+        let hide = system(PredefinedMenuItem::hide, "Hide F-Builder");
         let hide_others = system(PredefinedMenuItem::hide_others, "Hide others");
         let show_all = system(PredefinedMenuItem::show_all, "Show all");
         let close_window = system(PredefinedMenuItem::close_window, "Close window");
@@ -124,9 +124,9 @@ impl MenuBar {
         let minimise = system(PredefinedMenuItem::minimize, "Minimise");
         let zoom = system(PredefinedMenuItem::maximize, "Zoom");
         let to_front = system(PredefinedMenuItem::bring_all_to_front, "Bring all to front");
-        let about_metadata = AboutMetadata { name: Some("Craft Anything".into()), version: Some(env!("CARGO_PKG_VERSION").into()), ..Default::default() };
-        let about = PredefinedMenuItem::about(Some(&tr("About Craft Anything")), Some(about_metadata));
-        labels.push((Label::System(about.clone()), "About Craft Anything"));
+        let about_metadata = AboutMetadata { name: Some("F-Builder".into()), version: Some(env!("CARGO_PKG_VERSION").into()), ..Default::default() };
+        let about = PredefinedMenuItem::about(Some(&tr("About F-Builder")), Some(about_metadata));
+        labels.push((Label::System(about.clone()), "About F-Builder"));
         let sep = PredefinedMenuItem::separator;
         let menu = Menu::new();
         let built = app_menu
@@ -157,7 +157,7 @@ impl MenuBar {
 }
 
 /// Runs what was picked since the last frame and shows the current mode and switches.
-pub fn update(app: &mut CraftApp, ctx: &egui::Context) {
+pub fn update(app: &mut BuilderApp, ctx: &egui::Context) {
     if let Some(bar) = app.menu_bar.as_mut() {
         let language = i18n::language();
         if bar.language != language {

@@ -2,7 +2,7 @@
 //! run `=h& 9090`, which serves that session's Rizin over HTTP on this computer; each command is
 //! one `GET /cmd/<command>` answered with its text output. Only 127.0.0.1 is ever contacted.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde_json::{Value, json};
 use std::io::Read;
 use std::time::Duration;
@@ -33,7 +33,8 @@ pub fn command(port: u16, cmd: &str, timeout: Duration) -> Result<(String, bool)
     let url = format!("http://127.0.0.1:{port}/cmd/{}", encode(cmd));
     let agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
-        .user_agent("CraftAnything-dev")
+        .tls_config(ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::PlatformVerifier).build())
+        .user_agent("FBuilder-dev")
         .timeout_connect(Some(Duration::from_secs(2)))
         .timeout_global(Some(timeout))
         .build()

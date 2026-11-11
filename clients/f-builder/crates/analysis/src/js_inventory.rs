@@ -2,8 +2,8 @@
 //! with nested archives expanded to a bounded depth. Pure: callers feed bytes.
 
 use crate::js_app::Cancelled;
-use craft_anything_evidence::sha256_hex;
-use craft_anything_formats::{asar, java_class, zip};
+use f_builder_evidence::sha256_hex;
+use f_builder_formats::{asar, java_class, zip};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -80,7 +80,7 @@ impl Inventory {
     pub fn content_id(&self) -> String {
         let mut pairs: Vec<(&str, Option<&str>)> = self.entries.iter().map(|e| (e.path.as_str(), e.sha256.as_deref())).collect();
         pairs.sort_unstable();
-        format!("inv_{}", sha256_hex(craft_anything_evidence::canonical_json(&json!(pairs)).as_bytes()))
+        format!("inv_{}", sha256_hex(f_builder_evidence::canonical_json(&json!(pairs)).as_bytes()))
     }
 }
 
@@ -451,7 +451,7 @@ pub fn compare_inventories(l: &Inventory, r: &Inventory, max_rows: usize) -> Val
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::electron as fx;
+    use f_builder_testkit::electron as fx;
 
     #[test]
     fn nested_zip_with_asar_inside() {

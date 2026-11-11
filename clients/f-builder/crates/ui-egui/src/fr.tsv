@@ -17,7 +17,7 @@ Built by	Construit par
 Whatever Settings → AI builds with.	Celui utilisé dans Réglages → IA pour construire.
 found on this computer; set up when you start	trouvé sur cet ordinateur ; configuré au démarrage
 Set up a builder	Configurer un constructeur
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	Pour construire, il faut un agent de code sur cet ordinateur (Claude Code, Codex ou Gemini CLI : installez-en un et connectez-vous-y une fois dans sa propre fenêtre), ou une IA avec une clé d'API. Craft Anything ne voit jamais votre compte.
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	Pour construire, il faut un agent de code sur cet ordinateur (Claude Code, Codex ou Gemini CLI : installez-en un et connectez-vous-y une fois dans sa propre fenêtre), ou une IA avec une clé d'API. F-Builder ne voit jamais votre compte.
 Looking on this computer…	Recherche sur cet ordinateur…
 No coding agent was found on this computer yet.	Aucun agent de code n'a encore été trouvé sur cet ordinateur.
 Found on this computer	Trouvé sur cet ordinateur
@@ -27,7 +27,7 @@ Look again	Chercher à nouveau
 After installing one, look for it again.	Après en avoir installé un, relancez la recherche.
 Use an API key…	Utiliser une clé d'API…
 Cancel	Annuler
-What can Craft Anything do?	Que peut faire Craft Anything ?
+What can F-Builder do?	Que peut faire F-Builder ?
 How do I open an app?	Comment ouvrir une application ?
 Is it safe to look inside programs?	Est-ce sans risque de regarder à l'intérieur des programmes ?
 What does this program do?	Que fait ce programme ?
@@ -107,7 +107,7 @@ Starting…	Démarrage…
 Getting Ghidra	Récupération de Ghidra
 Ghidra is ready. Deep mode uses it from now on.	Ghidra est prêt. Le mode Approfondi l'utilise désormais.
 Looking inside needs Deep mode	Regarder à l'intérieur nécessite le mode Approfondi
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	La salle blanche ne lit jamais le code, les fichiers ni le source de page de l'original. Le mode Approfondi les lit avec tous les outils de Craft Anything.
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	La salle blanche ne lit jamais le code, les fichiers ni le source de page de l'original. Le mode Approfondi les lit avec tous les outils de F-Builder.
 Turn on Deep mode	Activer le mode Approfondi
 Not now	Pas maintenant
 Ghidra is ready	Ghidra est prêt
@@ -116,10 +116,10 @@ Ghidra, a free reverse-engineering tool from the NSA, gives Deep mode richer dec
 Your project starts as soon as it's done.	Votre projet démarre dès que c'est terminé.
 Deep mode now decompiles with Ghidra. The first look at a large program can take several minutes.	Le mode Approfondi décompile maintenant avec Ghidra. Le premier examen d'un gros programme peut prendre plusieurs minutes.
 This keeps going in the background, and each download is checked against its publisher's checksum before it's used.	Cela continue en arrière-plan, et chaque téléchargement est vérifié avec la somme de contrôle de son éditeur avant d'être utilisé.
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Il n'est pas encore sur cet ordinateur. Craft Anything peut télécharger Ghidra {version} et l'environnement Java dont il a besoin (environ {mb} Mo), les vérifier avec les sommes de contrôle de leurs éditeurs et les installer dans son propre dossier. Rien d'autre ne change sur votre ordinateur.
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Il n'est pas encore sur cet ordinateur. F-Builder peut télécharger Ghidra {version} et l'environnement Java dont il a besoin (environ {mb} Mo), les vérifier avec les sommes de contrôle de leurs éditeurs et les installer dans son propre dossier. Rien d'autre ne change sur votre ordinateur.
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	Il n'est pas encore sur cet ordinateur. Installez Ghidra {version} depuis sa page de versions, puis choisissez son dossier.
 Open Ghidra's release page	Ouvrir la page des versions de Ghidra
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	Sans lui, le mode Approfondi utilise le décompilateur de Craft Anything, plus rudimentaire.
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	Sans lui, le mode Approfondi utilise le décompilateur de F-Builder, plus rudimentaire.
 Start building	Lancer la construction
 Done	Terminé
 Close	Fermer
@@ -162,7 +162,7 @@ Lets the builder make realistic 3D models and textures for games, {model} a mode
 Key saved	Clé enregistrée
 Remove	Retirer
 Made with {engine}	Fait avec {engine}
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything ne sait pas construire avec {engine}, Unity est donc le plus proche.
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder ne sait pas construire avec {engine}, Unity est donc le plus proche.
 Build with	Construire avec
 Built with {stack}, as you asked, so no game engine is needed.	Construit avec {stack}, comme demandé, donc aucun moteur de jeu n'est nécessaire.
 Looking for game engines on this computer…	Recherche de moteurs de jeu sur cet ordinateur…
@@ -262,12 +262,12 @@ Pick another folder…	Choisir un autre dossier…
 Choose a folder…	Choisir un dossier…
 Use the projects folder	Utiliser le dossier des projets
 That folder is already a project, so it's open now.	Ce dossier est déjà un projet, il est donc maintenant ouvert.
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	Ce dossier contient déjà {names}, où Craft Anything range ses propres fichiers. Choisissez un autre dossier, ou déplacez-les d'abord.
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	Ce dossier contient déjà {names}, où F-Builder range ses propres fichiers. Choisissez un autre dossier, ou déplacez-les d'abord.
 This folder already has files	Ce dossier contient déjà des fichiers
  and {n} more	 et {n} de plus
 How should the builder use them?	Comment le constructeur doit-il les utiliser ?
 They're my app: edit them in place	C'est mon application : les modifier sur place
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	Le constructeur travaille directement sur ces fichiers et garde ce qui fonctionne. Craft Anything ajoute quelques fichiers de suivi à côté.
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	Le constructeur travaille directement sur ces fichiers et garde ce qui fonctionne. F-Builder ajoute quelques fichiers de suivi à côté.
 Start from them	Partir de ces fichiers
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	Le constructeur les lit (code, notes, images) et construit l'application dans un nouveau dossier app à côté. Vos fichiers restent tels quels.
 Don't ask again (you can change this in Settings)	Ne plus demander (modifiable dans les Réglages)
@@ -429,10 +429,10 @@ A game	Un jeu
 Nothing — start fresh	Rien — partir de zéro
 You chose:	Votre choix :
 Type the website's address:	Tapez l'adresse du site web :
-How closely may Craft Anything look at it?	Jusqu'où Craft Anything peut-il l'examiner ?
+How closely may F-Builder look at it?	Jusqu'où F-Builder peut-il l'examiner ?
 For everything you make, like the switch in the title bar.	Pour tout ce que vous créez, comme l'interrupteur de la barre de titre.
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	Rien à l'intérieur n'est lu ; Craft Anything travaille à partir de ce que vous voyez. Votre version a ses propres graphismes.
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything lit son code et ses fichiers avec tous ses outils. Pour votre usage privé.
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	Rien à l'intérieur n'est lu ; F-Builder travaille à partir de ce que vous voyez. Votre version a ses propres graphismes.
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder lit son code et ses fichiers avec tous ses outils. Pour votre usage privé.
 More makes a big program's first look faster.	Plus de mémoire accélère le premier examen d'un gros programme.
 Ghidra isn't on this computer yet, so the built-in decompiler stands in.	Ghidra n'est pas encore sur cet ordinateur, le décompilateur intégré le remplace donc.
 Ideas:	Idées :
@@ -459,7 +459,7 @@ A copy to try something else from here.	Une copie pour essayer autre chose à pa
 Project name	Nom du projet
 Only its name changes; its folder stays where it is.	Seul son nom change ; son dossier reste où il est.
 Delete {name}?	Supprimer {name} ?
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Les fichiers de suivi de Craft Anything, ses vérifications et tout ce qu'il a construit dans app/ sont supprimés. Vos propres fichiers dans le dossier restent tels quels.
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Les fichiers de suivi de F-Builder, ses vérifications et tout ce qu'il a construit dans app/ sont supprimés. Vos propres fichiers dans le dossier restent tels quels.
 Its folder is deleted with everything in it: what was built, the checks and the conversation.	Son dossier est supprimé avec tout son contenu : ce qui a été construit, les vérifications et la conversation.
 This can't be undone.	C'est irréversible.
 Delete it	Le supprimer
@@ -577,7 +577,7 @@ Working… ({n} steps so far)	En cours… ({n} étapes jusqu'ici)
 Worked through {n} steps	{n} étapes effectuées
 {n} step(s) didn't work and were retried or skipped.	{n} étape(s) n'ont pas fonctionné et ont été relancées ou ignorées.
 This build stopped part-way	Cette construction s'est arrêtée en cours de route
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	Craft Anything ou l'ordinateur s'est fermé pendant le travail. Tout ce qui a été fait est conservé ; Continuer reprend là où cela s'est arrêté.
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	F-Builder ou l'ordinateur s'est fermé pendant le travail. Tout ce qui a été fait est conservé ; Continuer reprend là où cela s'est arrêté.
 Paused	En pause
 Everything so far is kept. Continue picks up where it stopped.	Tout ce qui a été fait est conservé. Continuer reprend là où cela s'est arrêté.
 May I {action}?	Puis-je {action} ?
@@ -655,10 +655,10 @@ Language	Langue
 System	Système
 Clean room / Deep	Salle blanche / Approfondi
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	La salle blanche ne lit jamais le code, les fichiers ni le source de page de l'original : elle travaille à partir de ce que vous voyez. Approfondi les lit avec tous les outils, et avec Ghidra quand il est installé. Chaque découverte indique lequel a été utilisé.
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	Ajoute son décompilateur au mode Approfondi. Craft Anything peut le télécharger et l'installer pour vous.
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	Ajoute son décompilateur au mode Approfondi. F-Builder peut le télécharger et l'installer pour vous.
 More memory makes Ghidra's first look at a big program faster; leave some for the rest of the computer. Used from the next time Ghidra starts.	Plus de mémoire accélère le premier examen d'un gros programme par Ghidra ; laissez-en pour le reste de l'ordinateur. Pris en compte au prochain démarrage de Ghidra.
 Ghidra folder	Dossier de Ghidra
-Leave empty to use the one Craft Anything sets up.	Laissez vide pour utiliser celui installé par Craft Anything.
+Leave empty to use the one F-Builder sets up.	Laissez vide pour utiliser celui installé par F-Builder.
 Choose…	Choisir…
 Java runtime	Environnement Java
 Only for Ghidra. Empty = managed.	Uniquement pour Ghidra. Vide = géré automatiquement.
@@ -701,7 +701,7 @@ What a new game may spend on generated pictures and 3D models before you're aske
 Picture model	Modèle d'images
 What pictures and textures are made with.	Ce qui sert à créer les images et les textures.
 a picture	une image
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Les plugins ajoutent des outils que Craft Anything propose comme les siens : serveurs MCP (une commande ou une adresse ; lisez leurs outils après l'ajout) ou composants WebAssembly (un fichier .wasm, qui ne peut toucher ni à vos fichiers ni au réseau).
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Les plugins ajoutent des outils que F-Builder propose comme les siens : serveurs MCP (une commande ou une adresse ; lisez leurs outils après l'ajout) ou composants WebAssembly (un fichier .wasm, qui ne peut toucher ni à vos fichiers ni au réseau).
 No plugins yet.	Aucun plugin pour l'instant.
 Runs its tools without asking	Lance ses outils sans demander
 On	Activé
@@ -769,7 +769,7 @@ Maximise	Agrandir
 Minimise	Réduire
 {n} job(s) running	{n} tâche(s) en cours
 AI use this session	Usage de l'IA cette session
-Since Craft Anything opened.	Depuis l'ouverture de Craft Anything.
+Since F-Builder opened.	Depuis l'ouverture de F-Builder.
 Clean room or Deep	Salle blanche ou Approfondi
 Clean room: nothing inside the original is read. We work from what you can see: pictures, the page as a visitor sees it, and watching it run.	Salle blanche : rien à l'intérieur de l'original n'est lu. Nous travaillons à partir de ce que vous voyez : des images, la page telle qu'un visiteur la voit, et l'observation de son fonctionnement.
 Deep: we read its code, files and page source with every tool we have, and with Ghidra when it's installed. Click to switch.	Approfondi : nous lisons son code, ses fichiers et le source de page avec tous nos outils, et avec Ghidra quand il est installé. Cliquez pour basculer.
@@ -865,12 +865,12 @@ View	Présentation
 Window	Fenêtre
 Help	Aide
 Command palette	Palette de commandes
-Craft Anything on GitHub	Craft Anything sur GitHub
+F-Builder on GitHub	F-Builder sur GitHub
 Report a problem…	Signaler un problème…
-Quit Craft Anything	Quitter Craft Anything
-About Craft Anything	À propos de Craft Anything
+Quit F-Builder	Quitter F-Builder
+About F-Builder	À propos de F-Builder
 Services	Services
-Hide Craft Anything	Masquer Craft Anything
+Hide F-Builder	Masquer F-Builder
 Hide others	Masquer les autres
 Show all	Tout afficher
 Close window	Fermer la fenêtre
@@ -892,7 +892,7 @@ Studio	Studio
 Ghidra	Ghidra
 {} {name}	{} {name}
  · ssh {h}	 · ssh {h}
-Craft Anything	Craft Anything
+F-Builder	F-Builder
 SHA-256	SHA-256
 {} {v}	{} {v}
 {:.1} GB	{:.1} GB
@@ -1066,8 +1066,8 @@ Copy a file to the phone	Copier un fichier vers le téléphone
 Copy an app off the phone	Copier une application depuis le téléphone
 Couldn't open {}: {}	Impossible d'ouvrir {} : {}
 Couldn't start a worker thread: {e}	Impossible de démarrer un thread de travail : {e}
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything lit le code, les fichiers et le code source des pages de l'original avec tous les outils dont il dispose, et avec Ghidra s'il est installé.
-Craft Anything report.md	Rapport Craft Anything report.md
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder lit le code, les fichiers et le code source des pages de l'original avec tous les outils dont il dispose, et avec Ghidra s'il est installé.
+F-Builder report.md	Rapport F-Builder report.md
 Crash dump	Image mémoire après plantage
 Critical	Critique
 Cross-reference: a place in the program that uses or calls the thing you're looking at.	Référence croisée : un endroit du programme qui utilise ou appelle l'élément observé.
@@ -1225,7 +1225,7 @@ Name many addresses	Nommer plusieurs adresses
 Names the program's author gave to functions or variables that survived in the file.	Noms que l'auteur du programme a donnés à des fonctions ou à des variables et qui ont été conservés dans le fichier.
 New	Nouveau
 Next address	Adresse suivante
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Rien n'est lu à l'intérieur de l'original : ni son code, ni ses fichiers, ni la source de sa page. Craft Anything travaille à partir de ce qui est visible : des images, la page telle qu'un visiteur la voit, et l'observation de son exécution.
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Rien n'est lu à l'intérieur de l'original : ni son code, ni ses fichiers, ni la source de sa page. F-Builder travaille à partir de ce qui est visible : des images, la page telle qu'un visiteur la voit, et l'observation de son exécution.
 Objective-C classes	Classes Objective-C
 Objective-C protocols	Protocoles Objective-C
 Observe a JS runtime	Observer un environnement d'exécution JS

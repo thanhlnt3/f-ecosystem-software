@@ -1,5 +1,5 @@
-use craft_anything_formats::zip::{self, ZipError};
-use craft_anything_testkit::electron::zip_stored;
+use f_builder_formats::zip::{self, ZipError};
+use f_builder_testkit::electron::zip_stored;
 
 fn assert_split(data: &[u8]) {
     assert!(matches!(zip::parse(data, 10), Err(ZipError::Unsupported(_))));

@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-testkit"
-description = "Test helpers and synthetic sample builders for Craft Anything"
+name = "f-builder-testkit"
+description = "Test helpers and synthetic sample builders for F-Builder"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -6,14 +6,14 @@ use super::native_common::{params_json, spec};
 use super::static_input::{builder, format_err};
 use super::web_common::{Image, encode_png};
 use crate::tool::{CancelToken, Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Confidence, Coverage, ErrorCode, Limitation, Location, Subject, ToolError};
-use craft_anything_formats::godot_pck;
-use craft_anything_formats::unity_bundle;
-use craft_anything_formats::unity_serialized;
-use craft_anything_formats::unity_texture;
-use craft_anything_formats::unreal_iostore;
-use craft_anything_formats::unreal_pak::{self, Entry, Footer};
-use craft_anything_formats::{pixels, unreal_texture};
+use f_builder_evidence::{Confidence, Coverage, ErrorCode, Limitation, Location, Subject, ToolError};
+use f_builder_formats::godot_pck;
+use f_builder_formats::unity_bundle;
+use f_builder_formats::unity_serialized;
+use f_builder_formats::unity_texture;
+use f_builder_formats::unreal_iostore;
+use f_builder_formats::unreal_pak::{self, Entry, Footer};
+use f_builder_formats::{pixels, unreal_texture};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -235,7 +235,7 @@ fn open_pak(ctx: &Ctx<'_>, raw: &str) -> Result<Pak, ToolError> {
             };
             (Some(index.mount_point), index.file_count, files)
         }
-        Err(craft_anything_formats::FormatError::Unsupported(why)) => {
+        Err(f_builder_formats::FormatError::Unsupported(why)) => {
             lims.push(Limitation::new(
                 "encrypted_index",
                 format!("{why}; listing it needs that key, which only the game has. Keys aren't searched for or guessed."),
@@ -352,7 +352,7 @@ fn game_iostore_list(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Too
     } else {
         match unreal_iostore::files(&toc, usize::MAX) {
             Ok((mount, files, total)) => (Some(mount), files, Some(total)),
-            Err(craft_anything_formats::FormatError::Unsupported(why)) => {
+            Err(f_builder_formats::FormatError::Unsupported(why)) => {
                 lims.push(Limitation::new(
                     "encrypted_index",
                     format!("{why}; naming its files needs that key, which only the game has. Keys aren't searched for or guessed."),
@@ -449,7 +449,7 @@ fn game_unity_list(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolE
         let shown = file.clone().unwrap_or_else(|| name.clone());
         let head = src.read(0, src.len().min(unity_serialized::HEADER_READ as u64))?;
         let h = unity_serialized::header(&head, src.len()).map_err(|e| match e {
-            craft_anything_formats::FormatError::Unsupported(why) => ToolError::unsupported(format!("{shown} is a Unity {why}, which isn't read here.")),
+            f_builder_formats::FormatError::Unsupported(why) => ToolError::unsupported(format!("{shown} is a Unity {why}, which isn't read here.")),
             _ => ToolError::unsupported(format!("{shown} isn't a Unity serialized file."))
                 .with_remediation("Pass a .assets file, level<n> or globalgamemanagers from the game's <Game>_Data folder, or a bundle."),
         })?;
@@ -634,7 +634,7 @@ fn game_unity_bundle_list(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let head = read_at(&mut file, &path, 0, len.min(unity_bundle::HEADER_READ as u64))?;
     let h = unity_bundle::header(&head, len).map_err(|e| match e {
-        craft_anything_formats::FormatError::Unsupported(why) => ToolError::unsupported(format!("{name} is a {why} bundle, which isn't read here.")),
+        f_builder_formats::FormatError::Unsupported(why) => ToolError::unsupported(format!("{name} is a {why} bundle, which isn't read here.")),
         _ => ToolError::unsupported(format!("{name} isn't a UnityFS bundle."))
             .with_remediation("Unity bundles are usually .bundle files under <Game>_Data/StreamingAssets, or data.unity3d."),
     })?;
@@ -837,7 +837,7 @@ fn game_unity_asset_export(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutpu
     let rgba = unity_texture::decode(t.format, t.width, t.height, &pixels).map_err(|e| format_err(e, "a Unity texture's pixels"))?;
     let png = encode_png(&Image { width: t.width, height: t.height, rgba })?;
     crate::project::write_atomic(&out, &png)?;
-    let sha256 = craft_anything_evidence::sha256_hex(&png);
+    let sha256 = f_builder_evidence::sha256_hex(&png);
     let result = json!({
         "path_id": p.path_id,
         "name": t.name,
@@ -1008,7 +1008,7 @@ fn game_unreal_texture_export(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOu
         "saved": {"width": mip.width, "height": mip.height, "mip": index, "from": from},
         "output": out.display().to_string(),
         "size": png.len(),
-        "sha256": craft_anything_evidence::sha256_hex(&png),
+        "sha256": f_builder_evidence::sha256_hex(&png),
     });
     let b = builder(ctx, "game_unreal_texture_export", Subject { kind: "archive".into(), sha256: None, name: Some(shown_name) }, params_json(&p))
         .result(result)
@@ -1195,7 +1195,7 @@ fn readable(e: &Entry) -> Result<bool, ToolError> {
     }
     let method = e.compression.to_lowercase();
     if method != "none" && method != "zlib" {
-        let oodle = if method.contains("oodle") { " Oodle is a commercial library the game ships; Craft Anything doesn't run it." } else { "" };
+        let oodle = if method.contains("oodle") { " Oodle is a commercial library the game ships; F-Builder doesn't run it." } else { "" };
         return Err(ToolError::unsupported(format!("{file} is compressed with {}, which isn't supported here.{oodle}", e.compression)));
     }
     Ok(method == "zlib")
@@ -1239,7 +1239,7 @@ fn copy_entry<W: Write>(pak: &mut Pak, e: &Entry, zlib: bool, sink: &mut Sink<W>
             }
             let raw = read_at(&mut pak.file, &pak.path, start, end - start)?;
             let room = e.uncompressed_size.saturating_sub(sink.written);
-            let block = craft_anything_formats::firmware::inflate(&raw, true, room, true)
+            let block = f_builder_formats::firmware::inflate(&raw, true, room, true)
                 .map_err(|err| damaged(format!("a block of {} didn't inflate ({err})", shown(e))))?;
             sink.put(&block.data.unwrap_or_default(), out)?;
         }
@@ -1387,7 +1387,7 @@ mod tests {
     use serde_json::json;
 
     fn pak() -> Vec<u8> {
-        craft_anything_testkit::games::unreal_pak(&[
+        f_builder_testkit::games::unreal_pak(&[
             ("/", "Game.uproject", b"{}", false),
             ("Game/Content/Maps/", "Level.umap", b"level bytes", true),
             ("Game/Content/Maps/", "Level.uexp", b"more", false),
@@ -1397,7 +1397,7 @@ mod tests {
     #[test]
     fn a_file_that_isnt_a_pak_is_named() {
         let e = Engine::new(crate::testing::session());
-        let p = craft_anything_testkit::temp_file("cef.pak", b"not an unreal archive at all, just bytes that go on for a while");
+        let p = f_builder_testkit::temp_file("cef.pak", b"not an unreal archive at all, just bytes that go on for a while");
         let err = e.call("game_pak_list", json!({"path": p}), CallOptions::new(Caller::Mcp)).unwrap_err();
         assert!(err.message.contains("no standard Unreal pak footer"), "{err:?}");
         let err = e.call("game_pak_list", json!({"path": "relative.pak"}), CallOptions::new(Caller::Mcp)).unwrap_err();
@@ -1407,7 +1407,7 @@ mod tests {
     #[test]
     fn lists_an_unreal_pak_with_paging_and_a_filter() {
         let e = Engine::new(crate::testing::session());
-        let p = craft_anything_testkit::temp_file("Game-Windows.pak", &pak());
+        let p = f_builder_testkit::temp_file("Game-Windows.pak", &pak());
         let call = |params: serde_json::Value| e.call("game_pak_list", params, CallOptions::new(Caller::Mcp)).unwrap().to_json();
         let v = call(json!({"path": p}));
         let r = &v["result"];
@@ -1430,7 +1430,7 @@ mod tests {
         let e = Engine::new(crate::testing::session());
         let dir = tempfile::tempdir().unwrap();
         let utoc = dir.path().join("Game-Windows.utoc");
-        std::fs::write(&utoc, craft_anything_testkit::games::unreal_utoc(0x9, u32::MAX)).unwrap();
+        std::fs::write(&utoc, f_builder_testkit::games::unreal_utoc(0x9, u32::MAX)).unwrap();
         let call = |params: serde_json::Value| e.call("game_iostore_list", params, CallOptions::new(Caller::Mcp));
         // The .ucas beside it finds its table of contents.
         let v = call(json!({"path": dir.path().join("Game-Windows.ucas")})).unwrap().to_json();
@@ -1448,12 +1448,12 @@ mod tests {
         assert_eq!(v["result"]["matching"].as_u64(), Some(1));
 
         // Encrypted names are counted, not shown.
-        std::fs::write(&utoc, craft_anything_testkit::games::unreal_utoc(0xb, u32::MAX)).unwrap();
+        std::fs::write(&utoc, f_builder_testkit::games::unreal_utoc(0xb, u32::MAX)).unwrap();
         let v = call(json!({"path": utoc})).unwrap().to_json();
         assert!(v["summary"].as_str().unwrap().contains("names are encrypted"), "{v}");
         assert_eq!((v["result"]["files"].as_array().map(Vec::len), v["result"]["chunk_count"].as_u64()), (Some(0), Some(3)));
         // Unencrypted containers without a directory index still return header metadata and the not_indexed limitation, with unknown file totals and coverage.
-        std::fs::write(&utoc, craft_anything_testkit::games::unreal_utoc(0x1, u32::MAX)).unwrap();
+        std::fs::write(&utoc, f_builder_testkit::games::unreal_utoc(0x1, u32::MAX)).unwrap();
         let v = call(json!({"path": utoc})).unwrap().to_json();
         assert!(v["summary"].as_str().unwrap().contains("no directory index"), "{v}");
         assert_eq!((v["result"]["flags"]["indexed"].as_bool(), v["result"]["chunk_count"].as_u64()), (Some(false), Some(3)));
@@ -1463,14 +1463,14 @@ mod tests {
         assert!(v["result"]["matching"].is_null());
         assert_eq!(v["coverage"]["status"].as_str(), Some("unknown"));
         assert_eq!(v["limitations"][0]["code"].as_str(), Some("not_indexed"));
-        let pak = craft_anything_testkit::temp_file("x.utoc", b"not a table of contents");
+        let pak = f_builder_testkit::temp_file("x.utoc", b"not a table of contents");
         assert!(call(json!({"path": pak})).unwrap_err().message.contains("isn't an IoStore"));
     }
 
     #[test]
     fn lists_a_unity_assets_file() {
         let e = Engine::new(crate::testing::session());
-        let p = craft_anything_testkit::temp_file("sharedassets0.assets", &craft_anything_testkit::games::unity_assets());
+        let p = f_builder_testkit::temp_file("sharedassets0.assets", &f_builder_testkit::games::unity_assets());
         let call = |params: serde_json::Value| e.call("game_unity_list", params, CallOptions::new(Caller::Mcp));
         let v = call(json!({"path": p})).unwrap().to_json();
         let r = &v["result"];
@@ -1489,13 +1489,13 @@ mod tests {
         }
         let mut bundle = b"UnityFS".to_vec();
         bundle.resize(64, 0);
-        let bundle = craft_anything_testkit::temp_file("data.unity3d", &bundle);
+        let bundle = f_builder_testkit::temp_file("data.unity3d", &bundle);
         assert!(call(json!({"path": bundle})).unwrap_err().message.contains("Unity bundle"));
     }
 
     #[test]
     fn lists_and_saves_the_textures_of_a_bundles_serialized_files() {
-        use craft_anything_testkit::games::{unity_assets, unity_bundle_files, unity_serialized_file, unity_texture2d};
+        use f_builder_testkit::games::{unity_assets, unity_bundle_files, unity_serialized_file, unity_texture2d};
         let e = Engine::new(crate::testing::session());
         let dir = tempfile::tempdir().unwrap();
         // A scene bundle: its level, then its shared assets with a DXT1 texture in the bundle's .resS.
@@ -1535,7 +1535,7 @@ mod tests {
 
     #[test]
     fn a_bundle_built_without_its_unity_version_uses_the_games() {
-        use craft_anything_testkit::games::{unity_bundle_with, unity_serialized_file, unity_texture2d};
+        use f_builder_testkit::games::{unity_bundle_with, unity_serialized_file, unity_texture2d};
         let e = Engine::new(crate::testing::session());
         let dir = tempfile::tempdir().unwrap();
         let data = dir.path().join("Game_Data");
@@ -1559,7 +1559,7 @@ mod tests {
     fn lists_a_unity_bundle_and_counts_its_objects() {
         let e = Engine::new(crate::testing::session());
         let call = |params: serde_json::Value| e.call("game_unity_bundle_list", params, CallOptions::new(Caller::Mcp));
-        let p = craft_anything_testkit::temp_file("level.bundle", &craft_anything_testkit::games::unity_bundle());
+        let p = f_builder_testkit::temp_file("level.bundle", &f_builder_testkit::games::unity_bundle());
         let v = call(json!({"path": p})).unwrap().to_json();
         let r = &v["result"];
         assert_eq!((r["format_version"].as_u64(), r["table_compression"].as_str(), r["file_count"].as_u64()), (Some(8), Some("LZ4"), Some(2)));
@@ -1572,18 +1572,18 @@ mod tests {
         assert!(v["summary"].as_str().unwrap().contains("2 file(s) and 4 object(s)"), "{v}");
         let v = call(json!({"path": p, "filter": "ress"})).unwrap().to_json();
         assert_eq!(v["result"]["matching"].as_u64(), Some(1));
-        let not = craft_anything_testkit::temp_file("x.bundle", b"UnityWeb and some more bytes");
+        let not = f_builder_testkit::temp_file("x.bundle", b"UnityWeb and some more bytes");
         assert!(call(json!({"path": not})).unwrap_err().message.contains("isn't a UnityFS bundle"));
     }
 
     #[test]
     fn a_bundle_listing_says_when_it_read_only_some_serialized_files() {
-        use craft_anything_testkit::games::{unity_bundle_files, unity_serialized_file};
+        use f_builder_testkit::games::{unity_bundle_files, unity_serialized_file};
         let e = Engine::new(crate::testing::session());
         let serialized = unity_serialized_file("2022.3.62f1", &[(1, vec![0; 16])]);
         let names: Vec<String> = (1..=17).map(|i| format!("member-{i:02}")).collect();
         let members: Vec<(&str, &[u8], bool)> = names.iter().map(|s| (s.as_str(), serialized.as_slice(), true)).collect();
-        let p = craft_anything_testkit::temp_file("many.bundle", &unity_bundle_files(&members));
+        let p = f_builder_testkit::temp_file("many.bundle", &unity_bundle_files(&members));
         let v = e.call("game_unity_bundle_list", json!({"path": p, "limit": 500}), CallOptions::new(Caller::Mcp)).unwrap().to_json();
         assert_eq!(v["limitations"][0]["code"], "files_unread", "{v}");
         assert!(v["summary"].as_str().unwrap().contains("at least 16 object(s)"), "{v}");
@@ -1591,7 +1591,7 @@ mod tests {
 
     #[test]
     fn saves_unity_textures_as_png() {
-        use craft_anything_testkit::games::{unity_bundle_with, unity_serialized_file, unity_texture2d};
+        use f_builder_testkit::games::{unity_bundle_with, unity_serialized_file, unity_texture2d};
         let e = Engine::new(crate::testing::session());
         let dir = tempfile::tempdir().unwrap();
         // 2×1 RGBA32 inline (stored bottom row first), and a 4×4 DXT1 block streamed from the .resS.
@@ -1633,7 +1633,7 @@ mod tests {
 
     #[test]
     fn saves_unreal_textures_only_with_permission() {
-        use craft_anything_testkit::games::{unreal_pak, unreal_texture_package};
+        use f_builder_testkit::games::{unreal_pak, unreal_texture_package};
         let e = Engine::new(crate::testing::session());
         let dir = tempfile::tempdir().unwrap();
         // A 4×4 red mip in the .ubulk (BGRA) and a 2×2 one inline; the .uexp is zlib-compressed in the pak.
@@ -1647,7 +1647,7 @@ mod tests {
         let out = |name: &str| dir.path().join(name);
 
         let err = call(json!({"path": pak_path, "file": "Game/UI/T_Icon.uasset", "output": out("a.png")})).unwrap_err();
-        assert_eq!(err.code, craft_anything_evidence::ErrorCode::ConsentRequired, "{err:?}");
+        assert_eq!(err.code, f_builder_evidence::ErrorCode::ConsentRequired, "{err:?}");
         assert!(!out("a.png").exists());
 
         let v = call(json!({"path": pak_path, "file": "game/ui/t_icon.uasset", "output": out("a.png"), "permission": true})).unwrap().to_json();
@@ -1682,13 +1682,13 @@ mod tests {
         let paks = dir.path().join("Game/Content/Paks");
         std::fs::create_dir_all(&paks).unwrap();
         std::fs::write(paks.join("Game-Windows.pak"), pak()).unwrap();
-        std::fs::write(paks.join("Game-Windows.utoc"), craft_anything_testkit::games::unreal_utoc(0x9, u32::MAX)).unwrap();
+        std::fs::write(paks.join("Game-Windows.utoc"), f_builder_testkit::games::unreal_utoc(0x9, u32::MAX)).unwrap();
         std::fs::write(dir.path().join("cef.pak"), b"a Chromium resource pack, not an Unreal one at all").unwrap();
         let data = dir.path().join("Game_Data");
         std::fs::create_dir_all(data.join("StreamingAssets")).unwrap();
-        std::fs::write(data.join("sharedassets0.assets"), craft_anything_testkit::games::unity_assets()).unwrap();
-        std::fs::write(data.join("level0"), craft_anything_testkit::games::unity_assets()).unwrap();
-        std::fs::write(data.join("StreamingAssets/ui.bundle"), craft_anything_testkit::games::unity_bundle()).unwrap();
+        std::fs::write(data.join("sharedassets0.assets"), f_builder_testkit::games::unity_assets()).unwrap();
+        std::fs::write(data.join("level0"), f_builder_testkit::games::unity_assets()).unwrap();
+        std::fs::write(data.join("StreamingAssets/ui.bundle"), f_builder_testkit::games::unity_bundle()).unwrap();
         std::fs::write(data.join("sharedassets0.assets.resS"), b"pixels").unwrap();
         let v = e.call("game_archives_list", json!({"path": dir.path()}), CallOptions::new(Caller::Mcp)).unwrap().to_json();
         let r = &v["result"];
@@ -1716,7 +1716,7 @@ mod tests {
 
     #[test]
     fn finds_godot_packs_on_their_own_and_inside_a_program() {
-        use craft_anything_testkit::games::{GodotFile, godot_embedded, godot_pck};
+        use f_builder_testkit::games::{GodotFile, godot_embedded, godot_pck};
         let list = |dir: &std::path::Path| -> serde_json::Value {
             Engine::new(crate::testing::session()).call("game_archives_list", json!({"path": dir}), CallOptions::new(Caller::Mcp)).unwrap().to_json()
         };
@@ -1756,7 +1756,7 @@ mod tests {
     #[test]
     fn takes_stored_and_zlib_files_out() {
         let e = Engine::new(crate::testing::session());
-        let p = craft_anything_testkit::temp_file("Game-Windows.pak", &pak());
+        let p = f_builder_testkit::temp_file("Game-Windows.pak", &pak());
         let dir = tempfile::tempdir().unwrap();
         let call =
             |file: &str, out: &std::path::Path| e.call("game_pak_extract", json!({"path": p, "file": file, "output": out}), CallOptions::new(Caller::Mcp));
@@ -1766,7 +1766,7 @@ mod tests {
             let out = dir.path().join(file.rsplit('/').next().unwrap());
             let v = call(file, &out).unwrap().to_json();
             assert_eq!(std::fs::read(&out).unwrap(), want, "{file}");
-            assert_eq!(v["result"]["sha256"].as_str(), Some(craft_anything_evidence::sha256_hex(want).as_str()));
+            assert_eq!(v["result"]["sha256"].as_str(), Some(f_builder_evidence::sha256_hex(want).as_str()));
         }
         // Nothing is overwritten, a missing file is named, and nothing half-written stays.
         let taken = dir.path().join("LEVEL.umap");
@@ -1783,7 +1783,7 @@ mod tests {
     #[test]
     fn takes_a_folder_out_a_page_at_a_time() {
         let e = Engine::new(crate::testing::session());
-        let p = craft_anything_testkit::temp_file("Game-Windows.pak", &pak());
+        let p = f_builder_testkit::temp_file("Game-Windows.pak", &pak());
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("Original");
         let call = |limit: usize| {

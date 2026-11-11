@@ -6,7 +6,7 @@ use crate::i18n::tr;
 use crate::make::{ago, status_shown};
 use crate::state::Screen;
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, icons, widgets};
+use crate::{BuilderApp, icons, widgets};
 use egui::{RichText, Sense, Ui, Vec2};
 
 pub const WIDTH: f32 = 248.0;
@@ -16,18 +16,18 @@ pub const FOLDED: f32 = 56.0;
 const FOLD_BELOW: f32 = 900.0;
 
 /// Folded: by the person, or because the window is narrow.
-pub fn folded(app: &CraftApp, ctx: &egui::Context) -> bool {
+pub fn folded(app: &BuilderApp, ctx: &egui::Context) -> bool {
     app.state.sidebar_folded || ctx.content_rect().width() < FOLD_BELOW
 }
 
-pub fn width(app: &CraftApp, ctx: &egui::Context) -> f32 {
+pub fn width(app: &BuilderApp, ctx: &egui::Context) -> f32 {
     if folded(app, ctx) { FOLDED } else { WIDTH }
 }
 const ROW_H: f32 = 34.0;
 /// Room above the first row and below Settings.
 const EDGE: f32 = 14.0;
 
-pub fn show(app: &mut CraftApp, ui: &mut Ui) {
+pub fn show(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let fold = folded(app, ui.ctx());
     ui.data_mut(|d| d.insert_temp(egui::Id::new("sidebar-folded"), fold));

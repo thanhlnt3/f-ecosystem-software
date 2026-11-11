@@ -6,7 +6,7 @@
 use super::native_common::{hex, params_json, spec};
 use super::static_input::builder;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, Limitation, Location, Subject, ToolError};
+use f_builder_evidence::{Authority, Confidence, Coverage, Limitation, Location, Subject, ToolError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -184,7 +184,7 @@ fn scan_file(file: &Path, cancelled: &dyn Fn() -> bool) -> Result<Vec<Wire>, Too
         let filled = carry + n;
         let hay = buf.get(..filled).unwrap_or(&[]);
         let mut i = 0usize;
-        while let Some(p) = craft_anything_formats::find_bytes(hay.get(i..).unwrap_or(&[]), SENTINEL, usize::MAX) {
+        while let Some(p) = f_builder_formats::find_bytes(hay.get(i..).unwrap_or(&[]), SENTINEL, usize::MAX) {
             offsets.push(base + (i + p) as u64);
             i += p + 1;
             if offsets.len() >= MAX_WIRES {
@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn reads_a_v1_wire_from_a_file_and_a_folder() {
         let e = Engine::new(crate::testing::session());
-        let p = craft_anything_testkit::temp_file("App.exe", &exe(b"\x01\x09010110r01"));
+        let p = f_builder_testkit::temp_file("App.exe", &exe(b"\x01\x09010110r01"));
         let v = call(&e, "js_electron_fuses_show", json!({"path": p}));
         let w = &v["result"]["wires"][0];
         assert_eq!(v["result"]["sentinel_count"], 1);
@@ -374,7 +374,7 @@ mod tests {
     #[test]
     fn missing_sentinel_unknown_version_and_truncation() {
         let e = Engine::new(crate::testing::session());
-        let p = craft_anything_testkit::temp_file("plain.bin", &[0u8; 64]);
+        let p = f_builder_testkit::temp_file("plain.bin", &[0u8; 64]);
         let v = call(&e, "js_electron_fuses_show", json!({"path": p}));
         assert_eq!(v["result"]["sentinel_count"], 0);
         assert!(v["limitations"].as_array().unwrap().iter().any(|l| l["code"] == "sentinel_missing"));
@@ -382,7 +382,7 @@ mod tests {
         let mut d = vec![0u8; 10];
         d.extend(SENTINEL);
         d.extend(b"\x02\x0501");
-        let p = craft_anything_testkit::temp_file("v2.bin", &d);
+        let p = f_builder_testkit::temp_file("v2.bin", &d);
         let v = call(&e, "js_electron_fuses_show", json!({"path": p}));
         let w = &v["result"]["wires"][0];
         assert_eq!(w["truncated"], true);

@@ -1,0 +1,34 @@
+[package]
+name = "f-builder-cli"
+description = "F-Builder on the command line: every tool, the MCP server, setup and doctor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+f-builder-engine = { workspace = true }
+f-builder-engines = { workspace = true }
+f-builder-evidence = { workspace = true }
+f-builder-platform = { workspace = true }
+f-builder-mcp = { workspace = true }
+f-builder-ai = { workspace = true }
+f-builder-setup = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+ctrlc = { version = "3", features = ["termination"] }
+
+[features]
+wasm-plugins = ["f-builder-engine/wasm-plugins"]
+
+[dev-dependencies]
+tempfile = "3"
+
+[build-dependencies]
+# The DPI-aware manifest for f-builder-cli.exe; build.rs only uses it when targeting Windows.
+winresource = "0.1"

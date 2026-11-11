@@ -74,7 +74,7 @@ pub fn turn_cost(path: Option<&Path>, resumed: Option<&str>, session: Option<&st
     kept.totals.insert(session.to_string(), total);
     match serde_json::to_vec_pretty(&kept) {
         Ok(bytes) => {
-            if let Err(e) = craft_anything_platform::write_atomic(path, &bytes) {
+            if let Err(e) = f_builder_platform::write_atomic(path, &bytes) {
                 log::warn!("couldn't keep Claude Code's session cost in {}: {}", path.display(), e.message);
             }
         }

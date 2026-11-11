@@ -8,11 +8,11 @@ use crate::i18n::{tr, trf};
 use crate::slash::{self, Command, Typed};
 use crate::state::FeedItem;
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, chat, icons, prompt_box, widgets};
-use craft_anything_engine::evidence::ToolError;
-use craft_anything_engine::questions::{self, AskedQuestion};
-use craft_anything_engine::workspace::Workspace;
+use crate::{BuilderApp, chat, icons, prompt_box, widgets};
 use egui::{RichText, Ui};
+use f_builder_engine::evidence::ToolError;
+use f_builder_engine::questions::{self, AskedQuestion};
+use f_builder_engine::workspace::Workspace;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
@@ -77,7 +77,7 @@ pub fn prompts(feed: &[FeedItem], asked: &[Asked]) -> Vec<prompt_box::Prompt> {
     out
 }
 
-impl CraftApp {
+impl BuilderApp {
     /// Read a project's kept questions, the first time it's opened.
     pub(crate) fn load_asked(&mut self, ws: &Workspace) {
         self.asked.entry(ws.root.clone()).or_insert_with(|| questions::load(ws).into_iter().map(Asked::from).collect());
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn a_question_answered_by_a_replacement_says_so() {
-        let mut app = crate::demo::app(crate::demo::engine(craft_anything_engine::Mode::Beginner, true));
+        let mut app = crate::demo::app(crate::demo::engine(f_builder_engine::Mode::Beginner, true));
         app.question_done(Ok(serde_json::json!({
             "project": "/tmp/example",
             "question": "where?",

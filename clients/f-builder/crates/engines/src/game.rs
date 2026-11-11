@@ -6,8 +6,8 @@
 //! opened only after Windows confirms the vendor signed them. Accounts, licences and terms stay in
 //! the vendor's own windows, with the person.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::process::{Cancel, Launch, Process};
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::process::{Cancel, Launch, Process};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -70,7 +70,7 @@ impl Found {
     }
 }
 
-/// An engine Craft Anything can build a game with.
+/// An engine F-Builder can build a game with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Builder {
@@ -395,7 +395,7 @@ impl Profile {
             s.push_str(&format!(" {} scene file{}.", self.scenes, if self.scenes == 1 { "" } else { "s" }));
         }
         let floor = if self.capped { "at least " } else { "" };
-        s.push_str(&format!(" Size: {floor}{} in {} files.", craft_anything_evidence::human_bytes(self.bytes), self.files));
+        s.push_str(&format!(" Size: {floor}{} in {} files.", f_builder_evidence::human_bytes(self.bytes), self.files));
         Some(s)
     }
 }
@@ -553,7 +553,7 @@ pub struct Places {
     /// Explicit Visual Studio or VC toolset directories (`VSINSTALLDIR`, `VCINSTALLDIR`, `VCToolsInstallDir`).
     pub vs_roots: Vec<PathBuf>,
     pub applications: Option<PathBuf>,
-    /// Craft Anything's own engine store (where it puts Godot).
+    /// F-Builder's own engine store (where it puts Godot).
     pub store: PathBuf,
     /// Look on PATH too (off in tests).
     pub use_path: bool,
@@ -583,7 +583,7 @@ pub fn inventory(p: &Places) -> Inventory {
     engines.extend(unity_editors(p));
     engines.extend(unreal_installs(p));
     engines.extend(godot_installs(p));
-    if let Some(cargo) = p.use_path.then(|| craft_anything_platform::which("cargo")).flatten() {
+    if let Some(cargo) = p.use_path.then(|| f_builder_platform::which("cargo")).flatten() {
         engines.push(Installed { builder: Builder::Rust, version: String::new(), program: cargo });
     }
     engines.sort_by(|a, b| (a.builder as u8).cmp(&(b.builder as u8)).then_with(|| version_key(&b.version).cmp(&version_key(&a.version))));
@@ -728,7 +728,7 @@ fn godot_installs(p: &Places) -> Vec<Installed> {
         .collect();
     if p.use_path {
         for n in ["godot4", "godot"] {
-            if let Some(program) = craft_anything_platform::which(n) {
+            if let Some(program) = f_builder_platform::which(n) {
                 v.push(Installed { builder: Builder::Godot, version: String::new(), program });
             }
         }
@@ -790,7 +790,7 @@ fn has_msvc_compiler(toolset: &Path) -> bool {
 
 // ---- getting one ---------------------------------------------------------------------------------
 
-/// The Godot release Craft Anything downloads.
+/// The Godot release F-Builder downloads.
 pub const GODOT_VERSION: &str = "4.4.1-stable";
 /// Largest file unpacked from Godot's download: the macOS app's universal program is over the
 /// 256 MB other engines' files are held to (#100). The download is checked against Godot's own

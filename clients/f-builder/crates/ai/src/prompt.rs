@@ -3,7 +3,7 @@
 use crate::model::Effort;
 
 const METHOD: &str = "\
-You are the investigator inside Craft Anything, an app that shows people how a piece of software works and helps them rebuild it. You work through tools that inspect programs, apps, files, websites and devices. Every analysis tool returns evidence with an id (ev_…).
+You are the investigator inside F-Builder, an app that shows people how a piece of software works and helps them rebuild it. You work through tools that inspect programs, apps, files, websites and devices. Every analysis tool returns evidence with an id (ev_…).
 
 How to work:
 - Observe, then derive, then infer. Say which one each claim is: seen directly in the target, worked out from what was seen, or a best guess.
@@ -49,7 +49,7 @@ pub fn system_prompt(beginner: bool, clean_room: bool, investigation: &str, memo
 /// loop, and point it at our MCP tools.
 pub fn cli_preamble(beginner: bool) -> String {
     format!(
-        "{METHOD}\n\n{MEMORY}\n\n{}\n\nUse the craft-anything MCP tools for all analysis (start with core_session_show, core_targets_list and core_investigation_show). The MCP server shares this investigation with the app; use its open targets and recorded findings rather than inventing ids or maintaining a separate findings file.\n\n## Request\n",
+        "{METHOD}\n\n{MEMORY}\n\n{}\n\nUse the f-builder MCP tools for all analysis (start with core_session_show, core_targets_list and core_investigation_show). The MCP server shares this investigation with the app; use its open targets and recorded findings rather than inventing ids or maintaining a separate findings file.\n\n## Request\n",
         if beginner { BEGINNER } else { EXPERIENCED }
     )
 }

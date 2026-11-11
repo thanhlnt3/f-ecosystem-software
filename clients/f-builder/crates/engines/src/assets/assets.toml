@@ -1,4 +1,4 @@
-# The models Craft Anything generates game assets with, and what each one costs (US dollars, the
+# The models F-Builder generates game assets with, and what each one costs (US dollars, the
 # provider's listed prices). `provider` names an asset provider in the registry (`fal`), and
 # `endpoint` is the model's address at that provider. The `[default]` table picks the model used
 # when Settings names none; `[assets] image_model` in config.toml picks another picture model by

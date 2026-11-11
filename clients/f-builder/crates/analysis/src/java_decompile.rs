@@ -12,9 +12,9 @@
 //! lambda/`invokedynamic` desugaring and synthetic members are not reconstructed, local names and
 //! types are not recovered). Hostile or truncated code yields a readable fallback, never a panic.
 
-use craft_anything_evidence::{Confidence, Limitation};
-use craft_anything_formats::java_class::{self, ClassFile, Member};
-use craft_anything_formats::java_ops::{self, Insn};
+use f_builder_evidence::{Confidence, Limitation};
+use f_builder_formats::java_class::{self, ClassFile, Member};
+use f_builder_formats::java_ops::{self, Insn};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The decompilation of one method.
@@ -694,7 +694,7 @@ fn base_limitations() -> Vec<Limitation> {
     vec![
         Limitation::new(
             "decompiler_inferred",
-            "This pseudo-Java is reconstructed from bytecode by Craft Anything's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence.",
+            "This pseudo-Java is reconstructed from bytecode by F-Builder's built-in decompiler; it is a best guess, not the original source. The bytecode disassembly is the evidence.",
         ),
         Limitation::new("generics_erased", "Generic type arguments are erased in bytecode and are not shown."),
         Limitation::new("names_and_types_inferred", "Local variables are named v0, v1, … (no debug names); their declared types are not reconstructed."),
@@ -846,8 +846,8 @@ pub fn decompile_class(cf: &ClassFile) -> ClassDecompile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_formats::java_class::parse;
-    use craft_anything_testkit::java as fx;
+    use f_builder_formats::java_class::parse;
+    use f_builder_testkit::java as fx;
 
     fn method<'a>(cf: &'a ClassFile, name: &str) -> &'a Member {
         cf.methods.iter().find(|m| m.name == name).unwrap()
@@ -901,7 +901,7 @@ mod tests {
     #[test]
     fn hostile_never_panics() {
         let data = fx::hello_class();
-        for m in craft_anything_testkit::mutations(&data) {
+        for m in f_builder_testkit::mutations(&data) {
             if let Ok(cf) = parse(&m) {
                 for method in &cf.methods {
                     let _ = decompile_method(&cf, method);

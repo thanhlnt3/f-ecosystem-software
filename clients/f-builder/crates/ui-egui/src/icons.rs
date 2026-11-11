@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn every_target_kind_has_an_embedded_icon() {
-        use craft_anything_engine::TargetKind as K;
+        use f_builder_engine::TargetKind as K;
         for k in [
             K::Elf,
             K::Pe,

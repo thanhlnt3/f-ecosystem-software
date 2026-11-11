@@ -1,4 +1,4 @@
-use craft_anything_formats::{FormatError, unity_bundle};
+use f_builder_formats::{FormatError, unity_bundle};
 
 /// A stored table describing blocks without requiring their contents to decompress.
 fn bundle(version: u32, flags: u32, sizes: &[u32], data_len: usize) -> (Vec<u8>, Vec<u8>) {

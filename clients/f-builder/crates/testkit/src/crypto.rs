@@ -2,7 +2,7 @@
 //!
 //! One 2048-bit RSA key and one NIST P-256 key are generated lazily and reused, so the signing
 //! fixtures (X.509 certs, APK v2/v3 signers, Mach-O CMS) carry genuine signatures that the
-//! verifier in `craft-anything-formats` can check round-trip. Test-time only.
+//! verifier in `f-builder-formats` can check round-trip. Test-time only.
 
 use crate::android::{der, der_oid};
 use p256::ecdsa::{Signature as P256Sig, SigningKey as P256Sk, VerifyingKey as P256Vk};
@@ -178,7 +178,7 @@ pub fn cms_detached_rsa(content: &[u8], cn: &str, o: &str) -> Vec<u8> {
 
 /// The APK v2/v3 SHA-256 content digest over an unsigned ZIP, with `block_offset` the position the
 /// signing block will occupy (the ZIP's original central-directory offset). Mirrors the scheme in
-/// `craft-anything-formats::verify`, reimplemented here so the fixtures do not depend on it.
+/// `f-builder-formats::verify`, reimplemented here so the fixtures do not depend on it.
 pub fn apk_content_digest_sha256(zip: &[u8], block_offset: usize) -> [u8; 32] {
     let eocd = zip.len() - 22;
     let cd_off = u32::from_le_bytes(zip[eocd + 16..eocd + 20].try_into().unwrap()) as usize;

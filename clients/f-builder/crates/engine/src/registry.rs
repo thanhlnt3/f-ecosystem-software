@@ -36,7 +36,7 @@ impl RuntimeTool {
 
 /// A run-time group's id kept for the process, once per distinct id.
 pub fn custom_toolset(id: &str) -> Option<Toolset> {
-    use craft_anything_platform::sync::Mutex;
+    use f_builder_platform::sync::Mutex;
     use std::sync::{OnceLock, PoisonError};
     static SEEN: OnceLock<Mutex<Vec<&'static str>>> = OnceLock::new();
     if let Some(t) = Toolset::from_id(id) {
@@ -213,7 +213,7 @@ mod tests {
         let r = Registry::with_all_tools();
         assert_eq!(r.canonical("core_session_show"), Some("core_session_show"));
         assert_eq!(r.canonical("core-session-show"), Some("core_session_show"));
-        assert_eq!(r.canonical("mcp__craft-anything__core_session_show"), Some("core_session_show"));
+        assert_eq!(r.canonical("mcp__f-builder__core_session_show"), Some("core_session_show"));
         assert_eq!(r.canonical("mcp__other__nope"), None);
         assert_eq!(r.canonical("Read"), None, "an agent's own tool isn't ours");
     }

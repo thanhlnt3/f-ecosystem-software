@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–10):
+> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–10, nhóm 11 đang làm):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện tiếng Việt và tiếng Anh.
@@ -478,6 +478,7 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `crates/feco-manifest` | Lược đồ và trình kiểm tra `f-app.toml` (dùng chung cho cổng, CLI và kiểm duyệt) |
 | `crates/feco-tuf` | Kho TUF (dựng, ký, thu hồi, xoay khóa) và client xác minh cho launcher; công cụ `feco-tuf` |
 | `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu, F-Store; công cụ `feco-catalog`; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
+| `clients/f-builder` | F-Builder: công cụ tự xây app bằng coding agent, phát triển từ Craft Anything 0.6.0 (Cargo workspace riêng; xem `clients/f-builder/README.md` và `NOTICE`) |
 | `clients/feco-launcher` | F-Launcher: thư viện (đăng nhập, cài/cập nhật/gỡ qua TUF, mã khởi chạy, API cục bộ) và giao diện egui |
 | `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me`; khi được launcher mở thì đăng nhập bằng mã khởi chạy |
 | `sdk/` | F-SDK: `rust` (crate `fsdk`), `c` (C ABI `fsdk_c` và header), `python` (binding `ctypes`), `typescript` (gói `@f-eco/sdk`) |

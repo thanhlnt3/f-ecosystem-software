@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use craft_anything_engine::workspace::ProjectUsage;
+use f_builder_engine::workspace::ProjectUsage;
 
 use crate::i18n::{tr, trf};
 
@@ -107,7 +107,7 @@ pub fn duration_words(d: Duration) -> String {
 }
 
 /// The tooltip for usage: what each number is, and what it counts (`counts`, e.g. "Every build
-/// of this project." or "Since Craft Anything opened.").
+/// of this project." or "Since F-Builder opened.").
 pub fn explain(u: &ProjectUsage, counts: &str) -> String {
     let mut lines = vec![trf("{in} in, {out} out.", &[("in", &tokens_words(u.input_tokens)), ("out", &tokens_words(u.output_tokens))])];
     if u.priced && u.estimated_usd() >= NOT_MONEY {
@@ -163,7 +163,7 @@ mod tests {
     fn a_saved_cost_from_before_the_split_counts_as_an_estimate() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
-            dir.path().join(craft_anything_engine::workspace::USAGE_FILE),
+            dir.path().join(f_builder_engine::workspace::USAGE_FILE),
             r#"{"version":1,"work_ms":5,"input_tokens":1,"output_tokens":1,"cost_usd":3.12,"priced":true}"#,
         )
         .unwrap();

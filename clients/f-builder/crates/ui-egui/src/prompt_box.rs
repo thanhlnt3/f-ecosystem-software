@@ -28,7 +28,7 @@ pub struct PromptBox<'a> {
     pub rows: (usize, usize),
     /// The paperclip's tooltip; `None` hides it (no attachments here).
     pub attach: Option<&'a str>,
-    /// A small picture of each attachment, in order, once it's decoded (`CraftApp::previews`).
+    /// A small picture of each attachment, in order, once it's decoded (`BuilderApp::previews`).
     pub previews: &'a [Option<egui::TextureHandle>],
     /// A run or answer is in progress: a stop button beside Send, named this ("Stop", "Pause").
     pub stop_button: Option<&'a str>,
@@ -520,7 +520,7 @@ mod tests {
             }
         }
         let mut h = Harness::builder().with_size(egui::vec2(800.0, 400.0)).build_eframe(|cc| {
-            crate::CraftApp::setup_context(&cc.egui_ctx);
+            crate::BuilderApp::setup_context(&cc.egui_ctx);
             Screen::default()
         });
         h.run();

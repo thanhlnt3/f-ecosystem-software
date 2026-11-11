@@ -1,8 +1,8 @@
 //! Background work. Everything slow (engine tools, AI detection, file dialogs, file writes) runs on
 //! a worker thread; the UI polls finished results once per frame and never waits.
 
-use craft_anything_engine::{CancelToken, Progress};
-use craft_anything_platform::sync::Mutex;
+use f_builder_engine::{CancelToken, Progress};
+use f_builder_platform::sync::Mutex;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, PoisonError};
 use std::time::Instant;

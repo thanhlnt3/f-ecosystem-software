@@ -22,8 +22,8 @@
 
 use crate::process::Cancel;
 #[cfg(unix)]
-use craft_anything_evidence::sha256_hex;
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::sha256_hex;
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -39,7 +39,7 @@ use std::sync::{Arc, PoisonError};
 use std::time::{Instant, SystemTime};
 
 /// Reserved environment variable that carries the per-run ownership token.
-pub const RUN_ID_ENV: &str = "CRAFT_ANYTHING_RUN_ID";
+pub const RUN_ID_ENV: &str = "F_BUILDER_RUN_ID";
 
 /// A scripted terminal event, dispatched when the capture clock reaches `at_ms`.
 #[derive(Debug, Clone)]
@@ -625,7 +625,7 @@ mod piped {
                 executable: "cmd.exe".into(),
                 args: args.iter().map(Into::into).collect(),
                 cwd: None,
-                env: vec![("CRAFT_TEST_WORD".into(), "first".into())],
+                env: vec![("F_BUILDER_TEST_WORD".into(), "first".into())],
                 terminal: Terminal::default(),
                 events: Vec::new(),
                 timeout: Duration::from_millis(timeout_ms),
@@ -639,7 +639,7 @@ mod piped {
             let never: Cancel = std::sync::Arc::new(|| false);
             let only_errors = capture(spec(&["/c", "echo oops 1>&2 & exit 2"], 10_000), never.clone()).unwrap();
             assert_eq!(only_errors.terminal.lines, ["oops"], "no blank line before error output alone");
-            let c = capture(spec(&["/c", "echo %CRAFT_TEST_WORD% & exit 3"], 10_000), never.clone()).unwrap();
+            let c = capture(spec(&["/c", "echo %F_BUILDER_TEST_WORD% & exit 3"], 10_000), never.clone()).unwrap();
             assert_eq!((c.exit.reason.as_str(), c.exit.code), ("exited", Some(3)));
             assert_eq!(c.terminal.lines, ["first"]);
             assert_eq!(c.manifest.pty_backend, "pipes");

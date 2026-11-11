@@ -4,7 +4,7 @@
 //! keys; the token is checked in constant time by the bridge. A response echoes the request id and
 //! either an `ok` result or an `error` with a stable code.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

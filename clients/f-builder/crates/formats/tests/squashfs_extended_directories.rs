@@ -1,5 +1,5 @@
-use craft_anything_formats::fsread::{self, Limits};
-use craft_anything_testkit::firmware::{squashfs_image, squashfs_image_with_extended_directories};
+use f_builder_formats::fsread::{self, Limits};
+use f_builder_testkit::firmware::{squashfs_image, squashfs_image_with_extended_directories};
 
 fn check_directories(root: bool, nested: bool) {
     let limits = Limits::default();
@@ -33,7 +33,7 @@ fn tables_and_file_blocks_must_be_inside_bytes_used() {
     let limits = Limits::default();
     let good = fsread::squashfs::read(&data, &limits);
     let used = data.len();
-    data.extend_from_slice(craft_anything_testkit::firmware::SQUASHFS_README);
+    data.extend_from_slice(f_builder_testkit::firmware::SQUASHFS_README);
     assert_eq!(fsread::squashfs::read(&data, &limits), good);
     let inode_table = u64::from_le_bytes(data[64..72].try_into().unwrap()) as usize;
     data[inode_table + 18..inode_table + 22].copy_from_slice(&(used as u32).to_le_bytes());

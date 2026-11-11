@@ -1,4 +1,4 @@
-use craft_anything_formats::fsread::{self, Limits};
+use f_builder_formats::fsread::{self, Limits};
 
 fn root_image(root_name: &[u8]) -> Vec<u8> {
     let mut data = vec![0u8; 112];
@@ -75,7 +75,7 @@ fn missing_entry_pointers_are_incomplete_but_an_empty_directory_is_complete() {
 
 #[test]
 fn symlink_targets_share_the_payload_budget_and_retain_their_declared_size() {
-    let mut data = craft_anything_testkit::firmware::romfs_image();
+    let mut data = f_builder_testkit::firmware::romfs_image();
     data[64..68].copy_from_slice(&3u32.to_be_bytes()); // readme.txt becomes a link
     for limits in [Limits { max_file_bytes: 10, ..Limits::default() }, Limits { max_total_bytes: 23, ..Limits::default() }] {
         let image = fsread::romfs::read(&data, &limits);

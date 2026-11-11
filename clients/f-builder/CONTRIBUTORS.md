@@ -1,5 +1,10 @@
 # Contributors
 
+F-Builder is based on Craft Anything 0.6.0 (https://github.com/storytold/craft-anything). The people below built Craft Anything;
+F-Builder's own changes are in the F-EcoSystem-Software git history.
+
+## Craft Anything contributors
+
 Craft Anything is built by the people below and everyone in the repository's history. Anyone
 whose pull request is merged is a contributor.
 

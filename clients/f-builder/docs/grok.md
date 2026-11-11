@@ -1,14 +1,14 @@
 # Grok Build
 
-Craft Anything can use the installed Grok Build CLI for a deep build through the
+F-Builder can use the installed Grok Build CLI for a deep build through the
 Agent Client Protocol (ACP). This is separate from the xAI API. When `XAI_API_KEY` is set,
 Settings → AI also offers **xAI (Grok)** as an OpenAI-compatible server for questions.
 
 ## Setup
 
 1. Install Grok Build. Its program is `grok`, usually in `~/.grok/bin` (or `%USERPROFILE%\.grok\bin`).
-   Craft Anything looks there even when a desktop launch left that folder off `PATH`.
-2. Sign in with `grok login`. Grok keeps that login in `auth.json`. Craft Anything checks
+   F-Builder looks there even when a desktop launch left that folder off `PATH`.
+2. Sign in with `grok login`. Grok keeps that login in `auth.json`. F-Builder checks
    whether the file exists and does not read it or sign in for you. When `auth.json` exists under
    `GROK_HOME`, or under `~/.grok` when that variable is unset, the app treats Grok as signed
    in. A missing file is unknown, so a build still starts and Grok reports an authentication
@@ -45,10 +45,10 @@ grok agent --model <cli_model> --no-leader --reasoning-effort <level> stdio
 
 `--model` and `--reasoning-effort` are omitted when you have not chosen them. `--no-leader` is
 always passed, so the run does not attach to a Grok session you already have open. `stdio`
-comes last. Craft Anything does not pass `--always-approve`.
+comes last. F-Builder does not pass `--always-approve`.
 
 The CLI `--model` flag is visible while Grok starts, then `session/new` switches back to the
-model saved in Grok. Craft Anything sets the chosen model again with `session/set_config_option`
+model saved in Grok. F-Builder sets the chosen model again with `session/set_config_option`
 before the session is ready, and sets the reasoning effort after that, because a model change
 can reset it. The value on the wire is a string (`"grok-4.6"`, `"low"`), not a nested object.
 If the session already has that value, the call is skipped.
@@ -74,10 +74,10 @@ refusal below does not apply to it.
 
 ## Tools, MCP and Clean room
 
-Builds attach Craft Anything's MCP server on `session/new` as a stdio server named
-`craft-anything`, with `"type": "stdio"` because Grok's server list rejects an object that
+Builds attach F-Builder's MCP server on `session/new` as a stdio server named
+`f-builder`, with `"type": "stdio"` because Grok's server list rejects an object that
 has no type. That field is sent only for Grok. Grok also keeps the MCP servers from your own
-Grok config. Craft Anything does not edit that config and cannot turn those servers off for
+Grok config. F-Builder does not edit that config and cannot turn those servers off for
 one run.
 
 Clean room, deep chat, and questions are refused before Grok starts. `grok agent` does not
@@ -87,7 +87,7 @@ permission, so Clean room cannot keep the original out of reach. A question must
 files. Deep chat is only analysis, and a saved permission or an always-approve setting can
 edit without a request, so that limit cannot be held either. A deep build is allowed: it may
 read, and an edit is gated only when Grok sends `session/request_permission`. A Grok config
-that approves every tool will still edit without asking. Craft Anything does not pass
+that approves every tool will still edit without asking. F-Builder does not pass
 `--always-approve`, and it does not replace the person's Grok config to force a prompt.
 
 ## What was checked
@@ -99,7 +99,7 @@ argument order, the `type: stdio` server payload, and the config queue are cover
 tests with a scripted agent.
 
 A live deep build was run on 2026-11-06 with Grok Build 1.0.77. The turn finished in about
-30 seconds. A tool call named the `craft-anything` server or `core_session_show`, and one
+30 seconds. A tool call named the `f-builder` server or `core_session_show`, and one
 permission request was answered with allow. That run used a temporary `GROK_HOME` whose
 `ui.permission_mode` was `ask`, and a symlink to the existing auth file. The file was not
 read, and the person's own Grok config was not changed. A config that approves every tool

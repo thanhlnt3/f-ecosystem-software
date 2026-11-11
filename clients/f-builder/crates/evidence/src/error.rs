@@ -45,7 +45,7 @@ pub enum ErrorCode {
     ProgramFailed,
     /// The user (or project policy) declined consent for a tool that runs code or changes a device.
     ConsentRequired,
-    /// A bug in Craft Anything itself. Reported, never panicked.
+    /// A bug in F-Builder itself. Reported, never panicked.
     Internal,
 }
 

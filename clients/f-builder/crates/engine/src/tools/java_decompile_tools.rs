@@ -8,8 +8,8 @@ use super::external_disasm_tools::{input_file, locate, run};
 use super::native_common::{params_json, spec};
 use super::static_input::builder;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, Limitation, ToolError};
-use craft_anything_formats::zip;
+use f_builder_evidence::{Authority, Confidence, Coverage, Limitation, ToolError};
+use f_builder_formats::zip;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -124,14 +124,14 @@ fn java_vineflower_decompile(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOut
     let p: Params = parse_params(params)?;
     let (file, subject) = input_file(ctx, p.path.as_deref())?;
     let vineflower = locate(ctx, "vineflower")?;
-    let out_dir = TempDir(fresh_temp_dir("craft-anything-vineflower")?);
+    let out_dir = TempDir(fresh_temp_dir("f-builder-vineflower")?);
     let (exe, mut args) = super::external_disasm_tools::program_for(ctx, &vineflower)?;
     args.extend([file.display().to_string(), out_dir.0.display().to_string()]);
     ctx.report(None, "Decompiling with Vineflower");
     let out = run(ctx, &exe, &args, "vineflower")?;
     let (sources, capped) = read_sources(&out_dir.0);
     if sources.is_empty() {
-        let mut err = craft_anything_platform::process::nonzero_error("vineflower", &out);
+        let mut err = f_builder_platform::process::nonzero_error("vineflower", &out);
         if out.success {
             err = ToolError::invalid("Vineflower produced no Java source").with_remediation("Pass a .class file or a JAR with classes in it.");
         }
@@ -196,7 +196,7 @@ mod tests {
         std::fs::write(dir.path().join("com/example/Foo.java"), "class Foo {\n}\n").unwrap();
         std::fs::write(dir.path().join("notes.txt"), "not source").unwrap();
         let zip_bytes =
-            craft_anything_testkit::electron::zip_stored(&[("org/demo/Bar.java", b"class Bar {}\n".as_slice()), ("META-INF/MANIFEST.MF", b"x".as_slice())]);
+            f_builder_testkit::electron::zip_stored(&[("org/demo/Bar.java", b"class Bar {}\n".as_slice()), ("META-INF/MANIFEST.MF", b"x".as_slice())]);
         std::fs::write(dir.path().join("app.jar"), zip_bytes).unwrap();
         let (s, capped) = read_sources(dir.path());
         assert!(!capped);

@@ -3,10 +3,10 @@
 //! file); a key is never returned, and the journal redacts `api_key` like every secret-named field.
 
 use crate::AiHub;
-use craft_anything_engine::EngineRef;
-use craft_anything_engine::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_engines::assets::{AssetProvider, AssetProviders, fal};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_engine::EngineRef;
+use f_builder_engine::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
+use f_builder_engines::assets::{AssetProvider, AssetProviders, fal};
+use f_builder_evidence::{ErrorCode, ToolError};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -135,17 +135,17 @@ fn assets_key_remove(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Too
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_engine::{CallOptions, Caller, Engine};
+    use f_builder_engine::{CallOptions, Caller, Engine};
 
     // Nothing here stores or reads a real key (tests never touch the machine's keychain).
     #[test]
     fn a_key_that_doesnt_look_like_one_is_refused_before_anything_is_stored() {
-        let e = Engine::shared(craft_anything_engine::testing::session(), specs());
+        let e = Engine::shared(f_builder_engine::testing::session(), specs());
         for bad in ["", "has a space", &"x".repeat(600)] {
             let err = e.call("assets_key_set", json!({"api_key": bad}), CallOptions::new(Caller::Cli)).unwrap_err();
             assert_eq!(err.code, ErrorCode::BadInput, "{bad:?}");
         }
-        assert!(craft_anything_engine::journal::bounded(&json!({"api_key": "fal-secret"})).to_string().contains("(redacted)"));
+        assert!(f_builder_engine::journal::bounded(&json!({"api_key": "fal-secret"})).to_string().contains("(redacted)"));
         // A provider that doesn't exist is refused before the keychain is touched.
         let set = json!({"api_key": "k-1", "provider": "nope"});
         let other = json!({"provider": "nope"});

@@ -48,7 +48,7 @@ mod tests {
     use super::*;
 
     fn args(options: &BackendOptions) -> Vec<String> {
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec!["mcp".into()], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec!["mcp".into()], notes: None };
         Devin.args(&ArgsCx { options, prompt: "make a game", preamble: "PRE ", mcp: &mcp, resume: None, builder: true, reads_checked: false, question: false })
     }
 

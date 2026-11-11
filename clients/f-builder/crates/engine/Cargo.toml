@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-engine"
-description = "Craft Anything engine: session, projects, the tool registry every surface dispatches through, settings and jobs"
+name = "f-builder-engine"
+description = "F-Builder engine: session, projects, the tool registry every surface dispatches through, settings and jobs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,13 +10,13 @@ publish = false
 workspace = true
 
 [dependencies]
-craft-anything-evidence = { workspace = true }
-craft-anything-formats = { workspace = true }
-craft-anything-disasm = { workspace = true }
-craft-anything-js = { workspace = true }
-craft-anything-analysis = { workspace = true }
-craft-anything-platform = { workspace = true }
-craft-anything-engines = { workspace = true }
+f-builder-evidence = { workspace = true }
+f-builder-formats = { workspace = true }
+f-builder-disasm = { workspace = true }
+f-builder-js = { workspace = true }
+f-builder-analysis = { workspace = true }
+f-builder-platform = { workspace = true }
+f-builder-engines = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = { workspace = true }
@@ -38,9 +38,9 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "webp"
 
 [features]
 # WASM component plugins (R1.8): compiles wasmtime, so off by default.
-wasm-plugins = ["craft-anything-engines/wasm-plugins"]
+wasm-plugins = ["f-builder-engines/wasm-plugins"]
 
 [dev-dependencies]
 sha1 = "0.10"
-craft-anything-testkit = { workspace = true }
+f-builder-testkit = { workspace = true }
 tempfile = "3"

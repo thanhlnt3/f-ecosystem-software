@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>F-Builder</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14957f"/>
+      <stop offset="1" stop-color="#0b5247"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#tile)"/>
+  <rect x="150" y="120" width="70" height="272" rx="14" fill="#ffffff"/>
+  <rect x="150" y="120" width="212" height="66" rx="14" fill="#ffffff"/>
+  <rect x="150" y="232" width="172" height="62" rx="14" fill="#ffffff"/>
+  <polygon points="372,300 385,339 424,352 385,365 372,404 359,365 320,352 359,339" fill="#fde68a"/>
+</svg>

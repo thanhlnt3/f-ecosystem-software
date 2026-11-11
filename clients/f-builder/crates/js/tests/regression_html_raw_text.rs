@@ -1,4 +1,4 @@
-use craft_anything_js::html::scan_html;
+use f_builder_js::html::scan_html;
 
 #[test]
 fn regression_text_elements_do_not_invent_script_dependencies() {

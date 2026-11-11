@@ -14,7 +14,7 @@ fn run_in(app: &Path, prog: &Path, args: &[String], minutes: u64, stop: &CheckSt
     // zero deadline is seen and count as passed.
     stop.check().map_err(|e| e.message)?;
     let s = stop.clone();
-    craft_anything_platform::Process::new(prog)
+    f_builder_platform::Process::new(prog)
         .args(args)
         .cwd(app)
         .timeout(timeout)
@@ -49,7 +49,7 @@ pub(super) fn own_build_check(app: &Path, place: &str, stack: &str, editor: Opti
     match stacks::toolchain_in(app).filter(|_| engine.is_none()) {
         Some(tool) => own_build(app, tool, stop),
         None if engine.is_some() || static_site(app) => build_check(app, place, stack, editor, stop),
-        None => (true, "Nothing was built: Craft Anything doesn't know how to build this kind of project.".into()),
+        None => (true, "Nothing was built: F-Builder doesn't know how to build this kind of project.".into()),
     }
 }
 
@@ -79,12 +79,12 @@ fn own_build(app: &Path, tool: &stacks::Toolchain, stop: &CheckStop) -> (bool, S
 /// A person's own project: run its tests. Output that says none ran isn't a failure, and neither
 /// is a project we know no way to test, and the note says so.
 pub(super) fn own_tests_check(app: &Path, tool: Option<&stacks::Toolchain>, stop: &CheckStop) -> (bool, String) {
-    let Some(tool) = tool else { return (true, "No tests ran: Craft Anything doesn't know how to test this kind of project.".into()) };
+    let Some(tool) = tool else { return (true, "No tests ran: F-Builder doesn't know how to test this kind of project.".into()) };
     let says_none = |text: &str| tool.no_tests.iter().find(|n| text.contains(n.as_str())).cloned();
     if let Some(name) = &tool.test_script {
         // shortcut: `workspaces=true` in .npmrc can give a root with no script tests; they aren't
         // run, and the note says so. Read .npmrc if that turns up.
-        let script = craft_anything_engine::outputs::npm_script(app, name).unwrap_or_default();
+        let script = f_builder_engine::outputs::npm_script(app, name).unwrap_or_default();
         if script.is_empty() || tool.no_tests.iter().any(|n| n == script.trim()) {
             return (true, format!("No tests ran: package.json has no `{name}` script to run."));
         }

@@ -2,20 +2,20 @@
 //! Godot" dialog, the engines list in Settings, and the download progress shown everywhere. Also a
 //! game's generated-assets switch and the fal.ai key it needs.
 //!
-//! Craft Anything downloads only what it can check (Godot against its official checksums; Unity
+//! F-Builder downloads only what it can check (Godot against its official checksums; Unity
 //! Hub and the Epic Games Launcher against their vendors' signatures). Sign-in, licences and the
 //! engines themselves stay in the vendors' own apps, with the person.
 
 use crate::i18n::{tr, trf};
 use crate::state::{MakeDraft, Modal, Screen};
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, Done, icons, widgets};
-use craft_anything_ai::rebuild::KindRegistry;
-use craft_anything_engine::{CallOptions, Caller};
-use craft_anything_engines::assets::{AssetProvider, AssetProviders, fal};
-use craft_anything_engines::game::{self, Builder, Inventory};
-use craft_anything_engines::ghidra::{self, get};
+use crate::{BuilderApp, Done, icons, widgets};
 use egui::{RichText, Ui, Vec2};
+use f_builder_ai::rebuild::KindRegistry;
+use f_builder_engine::{CallOptions, Caller};
+use f_builder_engines::assets::{AssetProvider, AssetProviders, fal};
+use f_builder_engines::game::{self, Builder, Inventory};
+use f_builder_engines::ghidra::{self, get};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -35,7 +35,7 @@ pub struct Flow {
     pub start_after: bool,
 }
 
-impl CraftApp {
+impl BuilderApp {
     /// Look for game engines again (in the background; skipped while a look is running).
     pub fn refresh_game_engines(&mut self) {
         if self.engine_flow.checking || self.headless {
@@ -56,7 +56,7 @@ impl CraftApp {
     pub fn detect_game_engine(&mut self, path: PathBuf) {
         self.state.make.found = None;
         self.jobs.spawn("Look at the game", false, move |_| {
-            let folder = craft_anything_ai::rebuild::game_folder(&path);
+            let folder = f_builder_ai::rebuild::game_folder(&path);
             Ok(Done::GameFound { found: folder.as_deref().and_then(game::detect), path })
         });
     }
@@ -67,7 +67,7 @@ impl CraftApp {
             return;
         }
         // Installs go through the engines_install tool, as they do from the CLI or an agent.
-        let install = |engine: &Arc<craft_anything_engine::Engine>, id: &'static str, j: &crate::jobs::JobCtx| {
+        let install = |engine: &Arc<f_builder_engine::Engine>, id: &'static str, j: &crate::jobs::JobCtx| {
             let progress = j.reporter();
             let opts = CallOptions::new(Caller::Ui).with_cancel(j.cancel.clone()).with_progress(&progress);
             engine.call("engines_install", serde_json::json!({"engine": id}), opts).map(|_| ()).map_err(|e| e.for_people())
@@ -127,7 +127,7 @@ pub struct GhidraFlow {
     pub start_after: Option<Box<crate::state::MakeDraft>>,
 }
 
-impl CraftApp {
+impl BuilderApp {
     /// Ghidra is here for Deep mode to use (looked up once, then remembered).
     pub fn ghidra_ready(&mut self) -> bool {
         let settings = &self.settings;
@@ -173,12 +173,12 @@ impl CraftApp {
 }
 
 /// Where Clean room can't do what was asked (a look inside the original): why, and the switch.
-pub fn deep_needed(app: &mut CraftApp, ui: &mut Ui) {
+pub fn deep_needed(app: &mut BuilderApp, ui: &mut Ui) {
     widgets::empty_state(
         ui,
         "shield-check",
         "Looking inside needs Deep mode",
-        "Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.",
+        "Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.",
     );
     ui.vertical_centered(|ui| {
         if widgets::primary_icon(ui, Some("microscope"), "Turn on Deep mode", true).clicked() {
@@ -190,7 +190,7 @@ pub fn deep_needed(app: &mut CraftApp, ui: &mut Ui) {
 }
 
 /// [`deep_needed`] as a dialog, for a look inside asked for anywhere else.
-pub fn deep_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
+pub fn deep_modal(app: &mut BuilderApp, ui: &mut Ui, close: &mut bool) {
     deep_needed(app, ui);
     ui.add_space(4.0);
     ui.vertical_centered(|ui| {
@@ -201,7 +201,7 @@ pub fn deep_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
 }
 
 /// Asked when Deep mode could use Ghidra and it isn't here: get it (then use it), or go on without.
-pub fn ghidra_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
+pub fn ghidra_modal(app: &mut BuilderApp, ui: &mut Ui, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.set_width(520.0);
     let ready = app.ghidra_ready();
@@ -240,7 +240,7 @@ pub fn ghidra_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
         body(
             ui,
             trf(
-                "It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.",
+                "It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.",
                 &[("version", get::VERSION), ("mb", &get::DOWNLOAD_MB.to_string())],
             ),
         );
@@ -251,7 +251,7 @@ pub fn ghidra_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
         }
     }
     if !ready && downloading.is_none() {
-        body(ui, tr("Without it, Deep mode uses Craft Anything's own decompiler, which is rougher."));
+        body(ui, tr("Without it, Deep mode uses F-Builder's own decompiler, which is rougher."));
     }
     ui.add_space(14.0);
     ui.horizontal(|ui| {
@@ -287,12 +287,12 @@ pub fn ghidra_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
 }
 
 /// The memory the person set for Ghidra (GB), or `None` for the automatic amount.
-pub fn ghidra_memory(app: &CraftApp) -> Option<u64> {
+pub fn ghidra_memory(app: &BuilderApp) -> Option<u64> {
     app.settings.engines.ghidra.memory_gb.map(|g| g.clamp(*ghidra::HEAP_GB.start(), *ghidra::HEAP_GB.end()))
 }
 
 /// "Ghidra will use …": the automatic amount in words, or the set one.
-pub fn ghidra_memory_words(app: &CraftApp) -> String {
+pub fn ghidra_memory_words(app: &BuilderApp) -> String {
     match ghidra_memory(app) {
         Some(gb) => trf("Ghidra will use up to {gb} GB of memory.", &[("gb", &gb.to_string())]),
         None => trf("Ghidra will use half of this computer's memory (up to {gb} GB).", &[("gb", &ghidra::HEAP_GB.end().to_string())]),
@@ -319,7 +319,7 @@ pub fn ghidra_memory_guide() -> String {
 }
 
 /// Settings → Engines: Automatic (half this computer's memory) or a set amount for Ghidra.
-pub fn ghidra_memory_setting(app: &mut CraftApp, ui: &mut Ui) {
+pub fn ghidra_memory_setting(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let set = ghidra_memory(app);
     ui.vertical(|ui| {
@@ -359,7 +359,7 @@ pub fn ghidra_memory_setting(app: &mut CraftApp, ui: &mut Ui) {
 }
 
 /// Settings → Engines: whether Deep mode can use Ghidra, and the way to get it.
-pub fn ghidra_status(app: &mut CraftApp, ui: &mut Ui) {
+pub fn ghidra_status(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     if let Some((fraction, message)) = app.ghidra_download() {
         progress_bar(ui, fraction, &message);
@@ -377,12 +377,12 @@ pub fn ghidra_status(app: &mut CraftApp, ui: &mut Ui) {
 }
 
 /// Which asset providers have a key stored, by id.
-fn stored_keys(hub: &craft_anything_ai::AiHub) -> BTreeMap<String, bool> {
+fn stored_keys(hub: &f_builder_ai::AiHub) -> BTreeMap<String, bool> {
     let all = AssetProviders::built_in();
     all.ids().into_iter().map(|id| (id.to_string(), hub.has_asset_key(&all, id))).collect()
 }
 
-impl CraftApp {
+impl BuilderApp {
     /// Find out which asset providers have a key set up (in the background: the keychain can be slow).
     pub fn check_asset_keys(&mut self) {
         if self.headless {
@@ -435,7 +435,7 @@ impl CraftApp {
 }
 
 /// A provider's key field and its Save button; returns the key when Save is pressed.
-fn key_field(app: &mut CraftApp, ui: &mut Ui, provider: &dyn AssetProvider, save: &str) -> Option<String> {
+fn key_field(app: &mut BuilderApp, ui: &mut Ui, provider: &dyn AssetProvider, save: &str) -> Option<String> {
     let t = Tokens::get(ui.ctx());
     let mut out = None;
     ui.horizontal(|ui| {
@@ -459,7 +459,7 @@ fn key_field(app: &mut CraftApp, ui: &mut Ui, provider: &dyn AssetProvider, save
 
 /// The game's "Generate custom pictures and models" switch and what they cost. It works while the
 /// project builds: a run keeps the person's choice when it saves, and the asset tools read it each time.
-pub fn assets_toggle(app: &mut CraftApp, ui: &mut Ui, mut on: bool) {
+pub fn assets_toggle(app: &mut BuilderApp, ui: &mut Ui, mut on: bool) {
     let t = Tokens::get(ui.ctx());
     if widgets::toggle(ui, &mut on, "Generate custom pictures and models").changed() {
         app.set_generate_assets(on);
@@ -483,7 +483,7 @@ pub fn assets_toggle(app: &mut CraftApp, ui: &mut Ui, mut on: bool) {
 }
 
 /// Asks for a fal.ai key when generated assets are turned on without one.
-pub fn assets_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
+pub fn assets_modal(app: &mut BuilderApp, ui: &mut Ui, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.set_width(520.0);
     ui.horizontal(|ui| {
@@ -535,9 +535,9 @@ struct AssetPrices {
 }
 
 impl AssetPrices {
-    fn of(app: &CraftApp) -> AssetPrices {
+    fn of(app: &BuilderApp) -> AssetPrices {
         use crate::usage::asset_cost_words;
-        use craft_anything_engines::assets::{Catalogue, Shape, usd};
+        use f_builder_engines::assets::{Catalogue, Shape, usd};
         let table = Catalogue::built_in();
         let picture =
             table.image_model(app.settings.assets.image_model.as_deref()).or_else(|_| table.image_model(None)).map(|m| m.cost(Shape::Square)).unwrap_or(0.0);
@@ -556,7 +556,7 @@ fn keys_link(ui: &mut Ui, provider: &dyn AssetProvider) {
 }
 
 /// Settings → AI: each asset provider's key for game assets.
-pub fn assets_settings(app: &mut CraftApp, ui: &mut Ui) {
+pub fn assets_settings(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     ui.label(RichText::new(tr("Game assets")).font(theme::medium(theme::SMALL)));
     ui.add(
@@ -613,7 +613,7 @@ pub fn chosen(kinds: &KindRegistry, d: &MakeDraft) -> Option<Builder> {
 }
 
 /// "Build with" on Make: what made the original, the engine we'll use, and whether it's here.
-pub fn build_with(app: &mut CraftApp, ui: &mut Ui) {
+pub fn build_with(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let b = chosen(&app.kinds, &app.state.make);
     if let Some(f) = app.state.make.found.clone() {
@@ -623,7 +623,7 @@ pub fn build_with(app: &mut CraftApp, ui: &mut Ui) {
         });
         if !matches!(f.engine, game::Made::Unity | game::Made::Unreal | game::Made::Godot) {
             ui.label(
-                RichText::new(trf("Craft Anything can't build with {engine}, so Unity is the closest match.", &[("engine", f.engine.name())]))
+                RichText::new(trf("F-Builder can't build with {engine}, so Unity is the closest match.", &[("engine", f.engine.name())]))
                     .color(t.text_dim)
                     .size(theme::SMALL),
             );
@@ -683,7 +683,7 @@ fn cpp_step(os: &str) -> (&'static str, &'static str, Option<&'static str>) {
 }
 
 /// "Ready — Unity 6000.0.23f1" or "Not on this computer yet" with the way to get it.
-fn status_line(app: &mut CraftApp, ui: &mut Ui, b: Builder, offer: bool) {
+fn status_line(app: &mut BuilderApp, ui: &mut Ui, b: Builder, offer: bool) {
     let t = Tokens::get(ui.ctx());
     let inv = app.game_engines.clone();
     ui.horizontal_wrapped(|ui| match &inv {
@@ -728,7 +728,7 @@ enum Action {
     OpenPage(&'static str),
 }
 
-fn steps(app: &CraftApp, b: Builder, inv: &Inventory) -> Vec<Step> {
+fn steps(app: &BuilderApp, b: Builder, inv: &Inventory) -> Vec<Step> {
     let opened = app.engine_flow.installer_opened.contains(&b);
     let direct = game::installer(b).is_some();
     let step = |title: &str, detail: &str, done: bool, action: Option<Action>| Step { title: tr(title), detail: tr(detail), done, action };
@@ -797,7 +797,7 @@ fn steps(app: &CraftApp, b: Builder, inv: &Inventory) -> Vec<Step> {
 }
 
 /// The body of the "Get <engine>" dialog. Sets `close` when the person is done with it.
-pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
+pub fn modal(app: &mut BuilderApp, ui: &mut Ui, b: Builder, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.set_width(520.0);
     let Some(inv) = app.game_engines.clone() else {
@@ -940,7 +940,7 @@ pub fn progress_bar(ui: &mut Ui, fraction: Option<f32>, message: &str) {
 }
 
 /// Settings → Engines: each game engine, whether it's here, and the way to get it.
-pub fn settings_section(app: &mut CraftApp, ui: &mut Ui) {
+pub fn settings_section(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     if app.game_engines.is_none() {
         app.refresh_game_engines();
@@ -965,7 +965,7 @@ pub fn settings_section(app: &mut CraftApp, ui: &mut Ui) {
 }
 
 /// The download running anywhere in the app, for the title bar: (title, fraction, message).
-pub fn global_download(app: &CraftApp) -> Option<(String, Option<f32>, String)> {
+pub fn global_download(app: &BuilderApp) -> Option<(String, Option<f32>, String)> {
     let id = app.engine_flow.job.map(|(_, id)| id).or(app.ghidra.job)?;
     let j = app.jobs.running().find(|j| j.id == id)?;
     let p = j.progress();
@@ -973,7 +973,7 @@ pub fn global_download(app: &CraftApp) -> Option<(String, Option<f32>, String)> 
 }
 
 /// Unity Hub or the Epic Games Launcher, through the engines_app_open tool.
-fn open_app(app: &mut CraftApp, b: Builder) {
+fn open_app(app: &mut BuilderApp, b: Builder) {
     let which = if b == Builder::Unity { "unity_hub" } else { "epic_launcher" };
     app.act("engines_app_open", serde_json::json!({"app": which}), tr("Open the installer app"));
 }

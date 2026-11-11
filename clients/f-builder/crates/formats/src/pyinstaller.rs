@@ -396,7 +396,7 @@ fn capitalise(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::packed;
-    use craft_anything_testkit::packed::{code_311, pyinstaller, pyinstaller_sample, pyz};
+    use f_builder_testkit::packed::{code_311, pyinstaller, pyinstaller_sample, pyz};
 
     fn find<'a>(l: &'a PackedListing, path: &str) -> &'a PackedEntry {
         l.entries.iter().find(|e| e.path == path).unwrap_or_else(|| panic!("{path} isn't listed"))
@@ -606,10 +606,10 @@ mod tests {
     #[test]
     fn a_table_past_the_room_left_keeps_what_fits_and_says_so() {
         let table = pyc::read_value(
-            &craft_anything_testkit::packed::marshal::list(vec![
-                craft_anything_testkit::packed::marshal::tuple(vec![
-                    craft_anything_testkit::packed::marshal::string("a"),
-                    craft_anything_testkit::packed::marshal::tuple(vec![craft_anything_testkit::packed::marshal::int(0); 3]),
+            &f_builder_testkit::packed::marshal::list(vec![
+                f_builder_testkit::packed::marshal::tuple(vec![
+                    f_builder_testkit::packed::marshal::string("a"),
+                    f_builder_testkit::packed::marshal::tuple(vec![f_builder_testkit::packed::marshal::int(0); 3]),
                 ]);
                 3
             ]),

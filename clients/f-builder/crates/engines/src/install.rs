@@ -10,9 +10,9 @@
 //! - we download and unpack into a temporary folder and only then swap it into place, so a failed or
 //!   cancelled install never leaves a half-written engine behind.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::fs::write_atomic;
-use craft_anything_platform::process::Cancel;
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::fs::write_atomic;
+use f_builder_platform::process::Cancel;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
@@ -72,7 +72,7 @@ pub fn install(
     }
     let engine = crate::engine(engine_id).ok_or_else(|| {
         ToolError::new(ErrorCode::NotSupported, format!("There is no engine called {engine_id:?}."))
-            .with_remediation("See Settings → Engines for the engines Craft Anything knows.")
+            .with_remediation("See Settings → Engines for the engines F-Builder knows.")
     })?;
     let pins = match engine.install {
         Install::Pinned(pins) => pins,
@@ -80,7 +80,7 @@ pub fn install(
             return Err(ToolError::new(ErrorCode::NotSupported, format!("{} is installed by its own setup, not here.", engine.name)).with_remediation(how));
         }
         Install::Manual => {
-            return Err(ToolError::new(ErrorCode::NotSupported, format!("Craft Anything doesn't install {} for you.", engine.name))
+            return Err(ToolError::new(ErrorCode::NotSupported, format!("F-Builder doesn't install {} for you.", engine.name))
                 .with_remediation("Install it by hand and set its path in Settings → Engines."));
         }
     };
@@ -233,7 +233,8 @@ pub fn download_to(
     }
     let agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
-        .user_agent("CraftAnything-dev")
+        .tls_config(ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::PlatformVerifier).build())
+        .user_agent("FBuilder-dev")
         .timeout_connect(Some(Duration::from_secs(20)))
         .timeout_recv_response(Some(Duration::from_secs(60)))
         .timeout_recv_body(Some(Duration::from_secs(60 * 20)))
@@ -276,7 +277,7 @@ pub fn download_to(
 fn status_error(status: u16, url: &str) -> ToolError {
     let remediation = match status {
         429 | 500..=599 => "The download server is busy or having trouble. Try again in a few minutes.",
-        404 | 410 => "The file isn't at its usual address any more. Please report this so Craft Anything can be updated.",
+        404 | 410 => "The file isn't at its usual address any more. Please report this so F-Builder can be updated.",
         _ => "Try again later. If it keeps happening, please report it.",
     };
     ToolError::new(ErrorCode::EngineMissing, format!("The download server answered {status} for {url}.")).with_remediation(remediation)
@@ -295,11 +296,11 @@ pub fn unpack(
     match format {
         ArchiveFormat::Zip => unpack_zip(data, dest, strip_prefix, MAX_ENTRY_BYTES, cancel, report),
         ArchiveFormat::TarGz => {
-            let (tar, _) = craft_anything_formats::firmware::gunzip(data, MAX_TAR_BYTES).map_err(|e| decompress_error("gzip", e.to_string()))?;
+            let (tar, _) = f_builder_formats::firmware::gunzip(data, MAX_TAR_BYTES).map_err(|e| decompress_error("gzip", e.to_string()))?;
             unpack_tar(&tar, dest, strip_prefix, cancel, report)
         }
         ArchiveFormat::TarXz => {
-            let tar = craft_anything_formats::decompress::xz(data, MAX_TAR_BYTES).map_err(|e| decompress_error("xz", e.to_string()))?;
+            let tar = f_builder_formats::decompress::xz(data, MAX_TAR_BYTES).map_err(|e| decompress_error("xz", e.to_string()))?;
             unpack_tar(&tar, dest, strip_prefix, cancel, report)
         }
         ArchiveFormat::File { name } => {
@@ -358,7 +359,7 @@ fn unpack_zip(
     cancel: Option<&Cancel>,
     report: &dyn Fn(&str),
 ) -> Result<usize, ToolError> {
-    use craft_anything_formats::zip;
+    use f_builder_formats::zip;
     let archive = zip::parse(data, MAX_ENTRIES).map_err(|e| ToolError::new(ErrorCode::GarbledOutput, format!("The archive could not be read: {e}")))?;
     let mut written = 0usize;
     for (i, entry) in archive.entries.iter().enumerate() {
@@ -386,7 +387,7 @@ fn unpack_zip(
 /// Unpack an (uncompressed) tar into `dest`. Only regular files are written: folders are made as
 /// needed, and symlinks, hard links and device nodes are skipped.
 fn unpack_tar(data: &[u8], dest: &Path, strip_prefix: Option<&str>, cancel: Option<&Cancel>, report: &dyn Fn(&str)) -> Result<usize, ToolError> {
-    use craft_anything_formats::tarcpio::{self, MemberKind};
+    use f_builder_formats::tarcpio::{self, MemberKind};
     let listing = tarcpio::tar(data, MAX_ENTRIES).ok_or_else(|| ToolError::new(ErrorCode::GarbledOutput, "The archive is not a tar file."))?;
     if listing.truncated {
         return Err(ToolError::new(ErrorCode::OverLimit, format!("The archive has more than {MAX_ENTRIES} entries."))
@@ -469,12 +470,12 @@ mod tests {
         assert_eq!(status_error(504, "https://example.invalid/x").message, "The download server answered 504 for https://example.invalid/x.");
     }
 
-    /// A real install, only where `CRAFT_ANYTHING_TEST_INSTALL` names an engine (it downloads)
-    /// and `CRAFT_ANYTHING_TEST_INSTALL_STORE` a folder to install into: the pin downloads,
+    /// A real install, only where `F_BUILDER_TEST_INSTALL` names an engine (it downloads)
+    /// and `F_BUILDER_TEST_INSTALL_STORE` a folder to install into: the pin downloads,
     /// verifies, unpacks, and `locate` finds the engine.
     #[test]
     fn a_pinned_engine_installs_for_real() {
-        let (Ok(id), Ok(store)) = (std::env::var("CRAFT_ANYTHING_TEST_INSTALL"), std::env::var("CRAFT_ANYTHING_TEST_INSTALL_STORE")) else { return };
+        let (Ok(id), Ok(store)) = (std::env::var("F_BUILDER_TEST_INSTALL"), std::env::var("F_BUILDER_TEST_INSTALL_STORE")) else { return };
         let r = install(&id, Path::new(&store), None, None, &|_| {}).unwrap();
         assert!(r.files_written > 0, "{r:?}");
         assert!(r.located.as_ref().is_some_and(|p| p.is_file()), "installed but not found: {r:?}");
@@ -534,7 +535,7 @@ mod tests {
 
     #[test]
     fn unpacks_tar_gz_files_only_and_safely() {
-        use craft_anything_testkit::firmware as fx;
+        use f_builder_testkit::firmware as fx;
         let tar = fx::tar_entries(&[
             ("jdk/", b'5', b"", ""),
             ("jdk/bin/java", b'0', b"#!/bin/sh\n", ""),
@@ -610,7 +611,7 @@ mod tests {
 
     /// Minimal single-entry stored zip (local header + central directory + EOCD), for tests only.
     fn make_stored_zip(name: &str, body: &[u8]) -> Vec<u8> {
-        let crc = craft_anything_formats::zip::crc32(body);
+        let crc = f_builder_formats::zip::crc32(body);
         let nb = name.as_bytes();
         let mut out = Vec::new();
         // local file header

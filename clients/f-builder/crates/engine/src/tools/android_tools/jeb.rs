@@ -5,9 +5,7 @@
 
 use crate::tool::{CancelToken, Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
 use crate::tools::native_common::spec;
-use craft_anything_evidence::{
-    Authority, Confidence, Coverage, Environment, ErrorCode, EvidenceBuilder, Limitation, Location, Subject, ToolError, host_triple,
-};
+use f_builder_evidence::{Authority, Confidence, Coverage, Environment, ErrorCode, EvidenceBuilder, Limitation, Location, Subject, ToolError, host_triple};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -27,7 +25,7 @@ pub fn specs() -> Vec<ToolSpec> {
             "engines_jeb_check",
             "Check the JEB connection",
             "Connect to the user-run JEB MCP server set in Settings → Engines (jeb_url, loopback only), report its server information, upstream tools and client information. Never starts JEB.",
-            "Check that Craft Anything can talk to your running JEB.",
+            "Check that F-Builder can talk to your running JEB.",
             Toolset::Android,
             Effects::NETWORK_EVIDENCE,
             Requires::Nothing,
@@ -325,7 +323,7 @@ impl Client {
         let payload = serde_json::to_vec(body).map_err(|e| ToolError::internal(e.to_string()))?;
         let mut stream = self.connect()?;
         let mut req = format!(
-            "POST {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: CraftAnything-dev\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: {PROTOCOL_VERSION}\r\nContent-Length: {}\r\nConnection: close\r\n",
+            "POST {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: FBuilder-dev\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: {PROTOCOL_VERSION}\r\nContent-Length: {}\r\nConnection: close\r\n",
             self.ep.path,
             self.ep.host_header,
             payload.len()
@@ -465,7 +463,7 @@ impl Client {
     fn initialize(&mut self) -> Result<Value, ToolError> {
         let r = self.request(
             "initialize",
-            json!({"protocolVersion": PROTOCOL_VERSION, "capabilities": {}, "clientInfo": {"name": "craft-anything", "version": env!("CARGO_PKG_VERSION")}}),
+            json!({"protocolVersion": PROTOCOL_VERSION, "capabilities": {}, "clientInfo": {"name": "f-builder", "version": env!("CARGO_PKG_VERSION")}}),
         )?;
         self.post(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}), None)?;
         Ok(r)
@@ -673,7 +671,7 @@ fn android_jeb_decompile(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
 mod tests {
     use super::*;
     use crate::{CallOptions, Caller, Engine};
-    use craft_anything_platform::sync::Mutex;
+    use f_builder_platform::sync::Mutex;
     use std::io::BufRead;
     use std::net::TcpListener;
     use std::sync::Arc;
@@ -789,7 +787,7 @@ mod tests {
         let err = call(&e, "android_jeb_decompile", json!({"item_address": "Lbad;", "item_kind": "method"})).unwrap_err();
         assert_eq!(err.code, ErrorCode::ProgramFailed);
         assert!(err.message.contains("no such item"));
-        let f = craft_anything_testkit::temp_file("x.apk", b"PK\x05\x06");
+        let f = f_builder_testkit::temp_file("x.apk", b"PK\x05\x06");
         let o = call(&e, "android_jeb_open", json!({"path": f})).unwrap();
         assert_eq!(o["result"]["payload"]["opened"], true);
         assert_eq!(o["subject"]["sha256"].as_str().unwrap().len(), 64);
@@ -861,7 +859,7 @@ mod tests {
         let msgs = sse_messages(b"data: {\"id\":1,\"result\":2}\n\ndata: junk\n\n");
         assert_eq!(matching(msgs, 1).unwrap()["result"], 2);
         for seed in 0..50 {
-            let n = craft_anything_testkit::noise(seed, 300);
+            let n = f_builder_testkit::noise(seed, 300);
             let _ = dechunk(&n);
             let _ = sse_messages(&n);
             let _ = parse_endpoint(&String::from_utf8_lossy(&n));

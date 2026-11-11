@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
-description = "An example Craft Anything check plugin: the build says how to run it."
+description = "An example F-Builder check plugin: the build says how to run it."
 
-# Not part of the Craft Anything workspace: it builds for wasm32-unknown-unknown on its own.
+# Not part of the F-Builder workspace: it builds for wasm32-unknown-unknown on its own.
 [workspace]
 
 [lib]

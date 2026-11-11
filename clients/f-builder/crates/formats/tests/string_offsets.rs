@@ -1,4 +1,4 @@
-use craft_anything_formats::strings::{Encoding, extract};
+use f_builder_formats::strings::{Encoding, extract};
 
 #[test]
 fn ascii_offsets_do_not_wrap_past_the_address_space() {

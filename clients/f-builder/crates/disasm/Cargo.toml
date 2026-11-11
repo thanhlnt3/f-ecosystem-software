@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-disasm"
-description = "Craft Anything's own native engine: decoding, functions, control flow, references, pseudo-C"
+name = "f-builder-disasm"
+description = "F-Builder's own native engine: decoding, functions, control flow, references, pseudo-C"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ publish = false
 workspace = true
 
 [dependencies]
-craft-anything-formats = { workspace = true }
+f-builder-formats = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -19,4 +19,4 @@ yaxpeax-arm = { workspace = true }
 yaxpeax-arch = { workspace = true }
 
 [dev-dependencies]
-craft-anything-testkit = { workspace = true }
+f-builder-testkit = { workspace = true }

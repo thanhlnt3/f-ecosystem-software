@@ -112,9 +112,9 @@ created folders in the real config directory (`Session::default()` uses it).
 - Tests never touch the network, never start installers or GUI programs, and never write outside a
   temp folder. Use ids that are refused before any I/O, or local stand-in servers.
 - When you widen what a tool does (a new download, a launch), grep the tests that call it.
-- Tests build their session with `craft_anything_engine::testing::session()` (config, plugin
+- Tests build their session with `f_builder_engine::testing::session()` (config, plugin
   caches, engine store and projects in a temp folder); `cargo xtask layers` rejects
-  `Session::default()`. CLI tests set `CRAFT_ANYTHING_CONFIG_DIR` to a temp folder.
+  `Session::default()`. CLI tests set `F_BUILDER_CONFIG_DIR` to a temp folder.
 
 **A demo app wired to the person's settings.** The headless app the UI tests use built its AI hub
 with `AiHub::new`, which saves to the real `config.toml` and the system keychain; no test had
@@ -267,10 +267,10 @@ the same variable, lost its own provider settings, and failed with "unsupported 
 `config.toml` and restore it after the run instead, and leave the agent's environment as it is.
 
 **A renamed CLI can't start the builder's tools.** To keep a live run's binary from being locked, it
-was copied as `cli-r25.exe`; the CLI finds itself by name (`craft-anything-cli`) to start the
+was copied as `cli-r25.exe`; the CLI finds itself by name (`f-builder-cli`) to start the
 builder's MCP server, so Claude Code saw no tools and stopped. Copy it under its own name into a
 folder of its own.
-It happened again in a release: the macOS app bundle had only `craft-anything`, with the CLI in
+It happened again in a release: the macOS app bundle had only `f-builder`, with the CLI in
 a separate zip, so every Claude Code build from the 0.2.0 DMG failed the same way (#91). Every
 package that ships the app ships the CLI beside its executable, and the packaging script runs
 the CLI from the finished package before it's published.
@@ -310,7 +310,7 @@ shaders, and on an RTX 5060 Ti the device was lost as the window opened ("Parent
 lost", #522). Where a library chooses a program or DLL by searching, name the one that ships
 with the system (FXC), and keep the environment variable (`WGPU_DX12_COMPILER`) as the way to
 another. A window that can't start now says how to draw without the graphics card
-(`CRAFT_ANYTHING_RENDERER=software`). Not run on the reporter's machine or on Windows here.
+(`F_BUILDER_RENDERER=software`). Not run on the reporter's machine or on Windows here.
 
 **"Not installed" for a program that was there.** The system answers "not found" both for a missing
 program and for a file whose interpreter is missing (an npm script with no `node`), and we turned
@@ -395,8 +395,8 @@ when a window is slow to open, check which adapter `desktop.log` says it drew wi
 **A Metal version taken from the OS, not from the compiler.** wgpu-hal picks the Metal shading
 language from the macOS version alone; on a 2012 iMac under OpenCore Legacy Patcher, macOS 15 asked
 for `metal3.2`, the compiler stopped at 3.1, every shader failed and the window never opened (#742,
-upstream #10687). Our `[patch]` of wgpu-hal probes the compiler (`vendor/wgpu-hal/CRAFT_ANYTHING.md`).
-The advice on a lost device named `CRAFT_ANYTHING_RENDERER`, which only Windows reads: check that
+upstream #10687). Our `[patch]` of wgpu-hal probes the compiler (`vendor/wgpu-hal/F_BUILDER.md`).
+The advice on a lost device named `F_BUILDER_RENDERER`, which only Windows reads: check that
 advice names only settings the platform actually reads. Not run on the reporter's Mac.
 
 **A Mac app that couldn't find Claude Code, and offered a GitHub key instead.** An app opened from
@@ -449,7 +449,7 @@ crash is a leak: have it watch the process it serves and end by itself (`caffein
 that checks the PID), and test by killing the owner, not by dropping the guard.
 
 **Stopping a long run leaves children behind** unless every program goes through
-`craft_anything_platform::process`. After stopping one, check that its child processes are gone.
+`f_builder_platform::process`. After stopping one, check that its child processes are gone.
 
 **Separate target folders fill the disk.** Agents given their own `CARGO_TARGET_DIR` under
 `target/` (to avoid locking a running exe) left them behind; one reached 79 GB and the disk filled
@@ -541,12 +541,12 @@ dot/space aliases. Probe a supported long name in tests instead of assuming a fi
 **Two writers to one file.** The app and the rebuild run both wrote `feed.json`. Give each persisted
 file one owner; when another writer is unavoidable (an answer given from the CLI while a run is
 going), merge what's on disk before saving instead of overwriting it.
-The same happened in `craft.json`: a run saved from the copy it started with and undid a budget
+The same happened in `f-builder.json`: a run saved from the copy it started with and undid a budget
 the person raised meanwhile (and any "always allow" answer). Fields the person owns change only
 through `Workspace::set_person`; `save` keeps them as they are on disk.
 And again inside one process: the engine had its own `write_atomic` whose temp file was named
-by process only, so two threads saving `craft.json` wrote the same temp file and one rename found
-it gone (#273). There is one atomic writer, `craft_anything_platform::fs::write_atomic`; don't
+by process only, so two threads saving `f-builder.json` wrote the same temp file and one rename found
+it gone (#273). There is one atomic writer, `f_builder_platform::fs::write_atomic`; don't
 write another.
 The UI settings worker also released the session guard after cloning settings, letting that stale
 snapshot overwrite a later model-selection save. Keep the guard through the worker's disk write
@@ -568,7 +568,7 @@ before running a process rather than starting an agent without the tools its tas
 run's environment, so the builder ran without our tools and fell back to calling the CLI from a shell.
 V2 also names a tool call `id` (V1: `callID`), so every tool event was dropped and the feed stayed empty
 for the whole turn. Use a file in `OPENCODE_CONFIG` with `run --standalone`, and confirm a live run
-reached the server (`mcp connected server=craft-anything` in OpenCode's log), not just that it started.
+reached the server (`mcp connected server=f-builder` in OpenCode's log), not just that it started.
 
 **A side door to a service the main path avoided.** Runs used `--standalone` so OpenCode's shared
 service never saw them, and #1185 deleted the sessions a stopped turn left. But the model check

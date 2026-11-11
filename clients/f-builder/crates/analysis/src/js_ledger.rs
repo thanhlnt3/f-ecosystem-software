@@ -7,7 +7,7 @@
 //! never proves something only the built app can show, and static facts never prove runtime ones.
 
 use crate::js_app::AppGraph;
-use craft_anything_evidence::sha256_hex;
+use f_builder_evidence::sha256_hex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -329,8 +329,8 @@ pub fn build_ledger(g: &AppGraph, bindings: &[Binding], reviews: &[Review], evid
     let statuses: Vec<(&str, &str)> = rows.iter().filter_map(|r| Some((r.get("expectation_id")?.as_str()?, r.get("status")?.as_str()?))).collect();
     closed.sort();
     json!({
-        "ledger_id": format!("lg_{}", sha256_hex(craft_anything_evidence::canonical_json(&json!({"graph": g.graph_id, "statuses": statuses})).as_bytes())),
-        "closed_hash": sha256_hex(craft_anything_evidence::canonical_json(&json!(closed)).as_bytes()),
+        "ledger_id": format!("lg_{}", sha256_hex(f_builder_evidence::canonical_json(&json!({"graph": g.graph_id, "statuses": statuses})).as_bytes())),
+        "closed_hash": sha256_hex(f_builder_evidence::canonical_json(&json!(closed)).as_bytes()),
         "graph_id": g.graph_id,
         "status": ledger_status,
         "counts": counts,

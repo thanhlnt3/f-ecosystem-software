@@ -1,13 +1,13 @@
 //! WASM component plugins written out in WAT (no guest toolchain needed).
 
-/// A plugin exporting `craft-anything:plugin/tools@0.1.0` with one tool, `echo`, whose `call`
+/// A plugin exporting `f-builder:plugin/tools@0.1.0` with one tool, `echo`, whose `call`
 /// answers `{"ok": <input>}`. With `spin`, `call` loops forever instead (to test the work limit).
 pub fn echo_plugin_wat(spin: bool) -> String {
     let describe = r#"[{"name":"echo","title":"Echo","description":"Returns its input","input_schema":{"type":"object"}}]"#;
     component_wat("tools", "call", "input", describe, r#"{"ok":"#, spin)
 }
 
-/// A plugin exporting `craft-anything:plugin/checks@0.1.0` with one check, `looks_fine`, for
+/// A plugin exporting `f-builder:plugin/checks@0.1.0` with one check, `looks_fine`, for
 /// games, that asks for `.md` files and answers
 /// `{"passed": <passed>, "similarity": 70, "summary": "…", "seen": <the build it was given>}`.
 pub fn check_plugin_wat(passed: bool) -> String {
@@ -16,7 +16,7 @@ pub fn check_plugin_wat(passed: bool) -> String {
     component_wat("checks", "run", "build", describe, &prefix, false)
 }
 
-/// A component exporting `craft-anything:plugin/<interface>@0.1.0` with `describe` (returns
+/// A component exporting `f-builder:plugin/<interface>@0.1.0` with `describe` (returns
 /// `describe`) and `<func>(name, <param>)`, which answers `prefix + <param> + "}"` (or loops).
 pub fn component_wat(interface: &str, func: &str, param: &str, describe: &str, prefix: &str, spin: bool) -> String {
     let body = if spin {
@@ -63,7 +63,7 @@ pub fn component_wat(interface: &str, func: &str, param: &str, describe: &str, p
   (func $f (param "name" string) (param "{param}" string) (result string)
     (canon lift (core func $i "{func}") (memory (core memory $i "memory")) (realloc (core func $i "cabi_realloc"))))
   (instance $x (export "describe" (func $describe)) (export "{func}" (func $f)))
-  (export "craft-anything:plugin/{interface}@0.1.0" (instance $x)))"#,
+  (export "f-builder:plugin/{interface}@0.1.0" (instance $x)))"#,
         describe = wat_str(describe),
         prefix = wat_str(prefix),
         describe_len = describe.len(),

@@ -10,8 +10,8 @@ use crate::inbox::Inbox;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
 use crate::tools::interaction_tools::{Verdict, ask_approval, inbox, inside, resolve, workspace_of};
 use crate::workspace::{AssetRecord, Workspace};
-use craft_anything_engines::assets::{AssetProvider, AssetProviders, AssetRequest, Catalogue, Generated, Shape, about_usd, fal, usd};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_engines::assets::{AssetProvider, AssetProviders, AssetRequest, Catalogue, Generated, Shape, about_usd, fal, usd};
+use f_builder_evidence::{ErrorCode, ToolError};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -129,7 +129,7 @@ struct Job {
 
 fn job(ctx: &Ctx<'_>) -> Result<Job, ToolError> {
     // First: outside a project no keys are loaded, so "no key" would be wrong for a saved one (#923).
-    let not_project = || ToolError::new(ErrorCode::FeatureMissing, "Assets can only be generated inside a Craft Anything project.");
+    let not_project = || ToolError::new(ErrorCode::FeatureMissing, "Assets can only be generated inside a F-Builder project.");
     let inbox = inbox(ctx).ok_or_else(not_project)?;
     let ws = workspace_of(&inbox).ok_or_else(not_project)?;
     let keys = ctx.session.ext.get::<AssetKeys>().unwrap_or_default();
@@ -376,9 +376,9 @@ mod tests {
 
     /// Stands in for fal.ai: records each request's endpoint and answers with a few bytes.
     #[derive(Default)]
-    struct StandIn(craft_anything_platform::sync::Mutex<Vec<String>>);
+    struct StandIn(f_builder_platform::sync::Mutex<Vec<String>>);
 
-    impl craft_anything_engines::assets::AssetProvider for StandIn {
+    impl f_builder_engines::assets::AssetProvider for StandIn {
         fn id(&self) -> &'static str {
             "fal"
         }
@@ -447,7 +447,7 @@ mod tests {
     /// A provider that serves nothing in the catalogue.
     struct Named(&'static str);
 
-    impl craft_anything_engines::assets::AssetProvider for Named {
+    impl f_builder_engines::assets::AssetProvider for Named {
         fn id(&self) -> &'static str {
             self.0
         }
@@ -466,7 +466,7 @@ mod tests {
         let err =
             e.call("assets_image_generate", json!({"prompt": "a crate", "save_as": "crate.png"}), crate::CallOptions::new(crate::Caller::Cli)).err().unwrap();
         assert_eq!(err.code, ErrorCode::FeatureMissing);
-        assert!(err.message.contains("inside a Craft Anything project"), "{}", err.message);
+        assert!(err.message.contains("inside a F-Builder project"), "{}", err.message);
     }
 
     #[test]

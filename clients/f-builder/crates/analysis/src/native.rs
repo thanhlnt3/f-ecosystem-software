@@ -2,12 +2,12 @@
 //! graphs and paths, feature tracing, API boundaries, Objective-C/Swift metadata, UI action
 //! traces and value flow. Each returns a [`Report`] the engine turns into evidence.
 
-use craft_anything_disasm::dataflow::def_use;
-use craft_anything_disasm::pseudo::lift;
-use craft_anything_disasm::{Function, Image, Program, XrefKind};
-use craft_anything_evidence::{Confidence, Limitation, Location};
-use craft_anything_formats::hints::{Hint, detect};
-use craft_anything_formats::{Binary, Format};
+use f_builder_disasm::dataflow::def_use;
+use f_builder_disasm::pseudo::lift;
+use f_builder_disasm::{Function, Image, Program, XrefKind};
+use f_builder_evidence::{Confidence, Limitation, Location};
+use f_builder_formats::hints::{Hint, detect};
+use f_builder_formats::{Binary, Format};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -81,7 +81,7 @@ pub fn triage(bin: &Binary, data: &[u8], file_name: &str) -> Report {
     let packers: Vec<&Hint> = hints.iter().filter(|h| matches!(h.category, "packer" | "protector" | "installer")).collect();
     let has = |id: &str| hints.iter().any(|h| h.id == id);
     // An AnyCPU .NET assembly has a 32-bit PE header but runs at the machine's own size.
-    let managed = if has("dotnet") { craft_anything_formats::dotnet::pe::parse_pe(data).ok().map(|p| p.dotnet_arch()) } else { None };
+    let managed = if has("dotnet") { f_builder_formats::dotnet::pe::parse_pe(data).ok().map(|p| p.dotnet_arch()) } else { None };
     let built_for = match managed.as_deref() {
         Some("anycpu") => "any CPU (64-bit on a 64-bit system)".to_string(),
         Some("anycpu-prefer-32") => "any CPU, preferring 32-bit".to_string(),
@@ -796,10 +796,7 @@ pub fn resolve_name(prog: &Program, user: &BTreeMap<u64, String>, name: &str) ->
     if let Some((a, _)) = prog.data_names.iter().find(|(_, n)| n.as_str() == name) {
         return Some(*a);
     }
-    prog.import_slots
-        .iter()
-        .find(|(_, s)| s.name == name || craft_anything_disasm::slot_label(s) == name || s.name.trim_start_matches('_') == name)
-        .map(|(a, _)| *a)
+    prog.import_slots.iter().find(|(_, s)| s.name == name || f_builder_disasm::slot_label(s) == name || s.name.trim_start_matches('_') == name).map(|(a, _)| *a)
 }
 
 pub fn xrefs_to_name(prog: &Program, user: &BTreeMap<u64, String>, name: &str, names: Names<'_>) -> Report {
@@ -843,7 +840,7 @@ fn glob_like(name: &str, pattern: &str) -> bool {
 }
 
 pub fn objc_classes(img: &Image, pattern: &str) -> Report {
-    let meta = craft_anything_formats::macho::objc_metadata(&img.data, &img.bin);
+    let meta = f_builder_formats::macho::objc_metadata(&img.data, &img.bin);
     let mut labels: Vec<String> = meta
         .classes
         .iter()
@@ -873,11 +870,11 @@ pub fn objc_classes(img: &Image, pattern: &str) -> Report {
 }
 
 pub fn objc_protocols(img: &Image) -> Report {
-    let meta = craft_anything_formats::macho::objc_metadata(&img.data, &img.bin);
+    let meta = f_builder_formats::macho::objc_metadata(&img.data, &img.bin);
     let mut protocols: Vec<Value> = meta.protocols.iter().map(|p| json!({"name": p.name, "address": hex(p.addr), "methods": p.methods})).collect();
     // Swift protocol descriptors from symbols.
     let swift: BTreeSet<String> =
-        img.bin.symbols.iter().filter_map(|s| craft_anything_formats::swift::classify(&s.name)).filter(|c| c.category == "protocols").map(|c| c.path).collect();
+        img.bin.symbols.iter().filter_map(|s| f_builder_formats::swift::classify(&s.name)).filter(|c| c.category == "protocols").map(|c| c.path).collect();
     for s in &swift {
         protocols.push(json!({"name": s, "swift": true}));
     }
@@ -893,7 +890,7 @@ pub fn swift_types(bin: &Binary, category: Option<&str>, pattern: Option<&str>) 
     let mut groups: BTreeMap<&str, BTreeMap<String, Vec<String>>> = BTreeMap::new();
     let mut total = 0usize;
     for s in &bin.symbols {
-        let Some(c) = craft_anything_formats::swift::classify(&s.name) else { continue };
+        let Some(c) = f_builder_formats::swift::classify(&s.name) else { continue };
         if category.is_some_and(|cat| cat != c.category) || pattern.is_some_and(|p| !glob_like(&c.path, p)) {
             continue;
         }
@@ -917,7 +914,7 @@ pub fn swift_types(bin: &Binary, category: Option<&str>, pattern: Option<&str>) 
 }
 
 pub fn dispatch_metadata(img: &Image, prog: &Program, max_records: usize, names: Names<'_>) -> Report {
-    let meta = craft_anything_formats::macho::objc_metadata(&img.data, &img.bin);
+    let meta = f_builder_formats::macho::objc_metadata(&img.data, &img.bin);
     let mut records = Vec::new();
     'outer: for c in &meta.classes {
         for m in &c.methods {
@@ -940,7 +937,7 @@ pub fn dispatch_metadata(img: &Image, prog: &Program, max_records: usize, names:
         if records.len() >= max_records {
             break;
         }
-        if let Some(c) = craft_anything_formats::swift::classify(&s.name)
+        if let Some(c) = f_builder_formats::swift::classify(&s.name)
             && matches!(c.role, "Objective-C thunk" | "protocol witness table" | "metadata accessor")
         {
             records.push(json!({"kind": "swift_symbol", "symbol": s.name, "type": c.path, "role": c.role, "address": hex(s.addr)}));
@@ -958,7 +955,7 @@ pub fn dispatch_metadata(img: &Image, prog: &Program, max_records: usize, names:
 
 /// UI action / selector → handlers → static calls.
 pub fn ui_action(img: &Image, prog: &Program, action: &str, max_depth: usize, max_nodes: usize, max_edges: usize, names: Names<'_>) -> Report {
-    let meta = craft_anything_formats::macho::objc_metadata(&img.data, &img.bin);
+    let meta = f_builder_formats::macho::objc_metadata(&img.data, &img.bin);
     let mut handlers: Vec<(u64, String)> = Vec::new();
     for c in &meta.classes {
         for m in &c.methods {
@@ -1120,8 +1117,8 @@ pub fn value_trace(img: &Image, prog: &Program, f: &Function, o: &ValueTraceOpts
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_disasm::{Limits, NoControl};
-    use craft_anything_testkit as tk;
+    use f_builder_disasm::{Limits, NoControl};
+    use f_builder_testkit as tk;
     use std::sync::Arc;
 
     fn setup(bytes: Vec<u8>) -> (Image, Program) {
@@ -1133,7 +1130,7 @@ mod tests {
     #[test]
     fn triage_does_not_call_go_or_dotnet_stripped() {
         let (elf, _) = tk::elf64(tk::ElfArch::X86_64, false);
-        let bin = craft_anything_formats::parse_binary(&elf).unwrap();
+        let bin = f_builder_formats::parse_binary(&elf).unwrap();
         assert!(bin.mitigations.stripped);
         let plain = triage(&bin, &elf, "s");
         assert!(plain.summary.contains("(stripped)"), "{}", plain.summary);
@@ -1157,7 +1154,7 @@ mod tests {
     #[test]
     fn triage_calls_an_anycpu_assembly_any_cpu_not_32_bit() {
         let data = tk::managed::managed_assembly(1);
-        let bin = craft_anything_formats::parse_binary(&data).unwrap();
+        let bin = f_builder_formats::parse_binary(&data).unwrap();
         assert_eq!(bin.bits, 32, "the PE header itself is PE32");
         let t = triage(&bin, &data, "Sample.dll");
         assert_eq!(t.result["dotnet_arch"], "anycpu");

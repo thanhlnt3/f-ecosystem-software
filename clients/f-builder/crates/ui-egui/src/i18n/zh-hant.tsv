@@ -109,7 +109,7 @@ Add to a running build	補充正在進行的建置
 Added	已新增
 Added {n} picture(s). The builder uses them from your next change.	已新增 {n} 張圖片。建置助手會從你下次提出修改時開始使用。
 Address to file offset	位址轉檔案偏移
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	將其反編譯器加入深度模式。Craft Anything 可以為你下載並設定。
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	將其反編譯器加入深度模式。F-Builder 可以為你下載並設定。
 Advanced	進階
 After installing one, look for it again.	安裝後，請重新尋找。
 Agent	代理程式
@@ -199,7 +199,7 @@ Build with {name} instead	改用 {name} 建置
 Build without it	不使用它，繼續建置
 Builder's questions:	建置助手的問題：
 Building	建置中
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	建置需要此電腦上的程式設計代理程式 (Claude Code、Codex 或 Gemini CLI：安裝其中一個，並在其視窗中登入一次)，或設定了 API 金鑰的 AI。Craft Anything 不會接觸你的帳戶。
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	建置需要此電腦上的程式設計代理程式 (Claude Code、Codex 或 Gemini CLI：安裝其中一個，並在其視窗中登入一次)，或設定了 API 金鑰的 AI。F-Builder 不會接觸你的帳戶。
 Building needs a coding agent such as Claude Code, or an AI with an API key.	建置需要 Claude Code 等程式設計代理，或設定了 API 金鑰的 AI。
 Builds	建置
 Builds and answers may use it again.	建置和回答時可以再次使用它。
@@ -250,7 +250,7 @@ Classes	類別
 Claude Code folder (CLAUDE_CONFIG_DIR)	Claude Code 資料夾 (CLAUDE_CONFIG_DIR)
 Clean room	淨室
 Clean room / Deep	淨室 / 深度
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	淨室模式從不讀取原作的程式碼、檔案或網頁原始碼。深度模式會使用 Craft Anything 的全部工具讀取它們。
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	淨室模式從不讀取原作的程式碼、檔案或網頁原始碼。深度模式會使用 F-Builder 的全部工具讀取它們。
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	淨室模式不會讀取原作的程式碼、檔案或網頁原始碼，只依據可見內容工作。深度模式會使用全部工具讀取這些內容，安裝 Ghidra 後也會使用它。每項發現都會記錄所用模式。
 Clean room on	淨室模式已開啟
 Clean room or Deep	淨室或深度模式
@@ -307,13 +307,13 @@ Couldn't open {}: {}	無法開啟 {}：{}
 Couldn't start a worker thread: {e}	無法啟動工作執行緒：{e}
 Couldn't start it.	無法啟動。
 Coverage unknown	涵蓋範圍未知
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything 無法使用 {engine} 建置，因此改用最接近的 Unity。
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	工作期間 Craft Anything 或電腦已關閉。目前的進度全部保留；選擇「繼續」可從停止處接著進行。
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything 使用全部工具讀取其程式碼和檔案。僅供你個人使用。
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything 會使用全部工具讀取原作的程式碼、檔案和網頁原始碼；已安裝 Ghidra 時也會使用它。
-Craft Anything report.md	Craft Anything 報告.md
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	將刪除 Craft Anything 的紀錄、檢查結果及 app/ 中建置的全部內容。資料夾中你自己的檔案保持不變。
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder 無法使用 {engine} 建置，因此改用最接近的 Unity。
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	工作期間 F-Builder 或電腦已關閉。目前的進度全部保留；選擇「繼續」可從停止處接著進行。
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder 使用全部工具讀取其程式碼和檔案。僅供你個人使用。
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder 會使用全部工具讀取原作的程式碼、檔案和網頁原始碼；已安裝 Ghidra 時也會使用它。
+F-Builder report.md	F-Builder 報告.md
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	將刪除 F-Builder 的紀錄、檢查結果及 app/ 中建置的全部內容。資料夾中你自己的檔案保持不變。
 Crash dump	當機傾印
 Create the project	建立專案
 Critical	嚴重
@@ -506,7 +506,7 @@ Hide the console	隱藏主控台
 High	高
 Home	首頁
 How alike a rebuild must look to the original before refining stops.	重建結果與原作的外觀相似度達到多少時停止改進。
-How closely may Craft Anything look at it?	允許 Craft Anything 研究到什麼程度？
+How closely may F-Builder look at it?	允許 F-Builder 研究到什麼程度？
 How complete is the rebuild	重建完成度
 How do I open an app?	如何開啟應用程式？
 How do the window and the page talk to each other?	視窗與網頁之間如何通訊？
@@ -566,7 +566,7 @@ Is there any readable text inside?	裡面有可讀的文字嗎？
 Is this file safe to open?	這個檔案可以安全開啟嗎？
 It closed straight away.	它啟動後立即關閉了。
 It closed straight away. It said:	程式啟動後立即關閉。輸出如下：
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	此電腦尚未安裝。Craft Anything 可以下載 Ghidra {version} 及所需的 Java 執行階段 (約 {mb} MB)，對照發行者的總和檢查碼驗證兩者，並安裝到自己的資料夾中。電腦上的其他內容不會變更。
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	此電腦尚未安裝。F-Builder 可以下載 Ghidra {version} 及所需的 Java 執行階段 (約 {mb} MB)，對照發行者的總和檢查碼驗證兩者，並安裝到自己的資料夾中。電腦上的其他內容不會變更。
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	這台電腦尚未安裝 Ghidra。請從發佈頁面安裝 Ghidra {version}，然後選擇其資料夾。
 It's already open.	它已經開啟了。
 It's already open. Right-click it to open another copy.	已經開啟。按右鍵可再開啟一個副本。
@@ -611,7 +611,7 @@ Last: {what}	最近：{what}
 Launch an app	啟動應用程式
 Leave a few GB for the rest of your computer.	請為電腦的其他工作保留幾 GB 記憶體。
 Leave a path empty to use the managed install. We never need environment variables.	路徑留空即可使用受管理的安裝，無須設定環境變數。
-Leave empty to use the one Craft Anything sets up.	留空則使用 Craft Anything 安裝的版本。
+Leave empty to use the one F-Builder sets up.	留空則使用 F-Builder 安裝的版本。
 Let a project generate assets	允許專案產生素材
 Let's go	開始吧
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	允許建置助手為遊戲製作逼真的 3D 模型和紋理，每個模型 {model}，每個專案預算 {budget}。
@@ -743,8 +743,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	未找到內容
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	尚未找到。我們會尋找你已有的 API 金鑰、本機模型伺服器 (Ollama、LM Studio) 和代理程式應用程式。其他連接埠或其他電腦上的伺服器可以在下方依位址新增。
 Nothing inside it is read.	不會讀取其內部內容。
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	不會讀取其內部內容；Craft Anything 僅依據你能看到的內容工作。你的版本會使用自己的美術素材。
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	不會讀取原作的內部內容，包括程式碼、檔案和網頁原始碼。Craft Anything 僅根據可見內容工作：圖片、訪客所見的網頁以及執行時的表現。
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	不會讀取其內部內容；F-Builder 僅依據你能看到的內容工作。你的版本會使用自己的美術素材。
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	不會讀取原作的內部內容，包括程式碼、檔案和網頁原始碼。F-Builder 僅根據可見內容工作：圖片、訪客所見的網頁以及執行時的表現。
 Nothing made yet. What you make shows up here.	還沒有作品。你製作的內容會顯示在這裡。
 Nothing matches the filter.	沒有符合篩選條件的內容。
 Nothing matches.	沒有相符項目。
@@ -867,7 +867,7 @@ Plugin command or address	外掛命令或位址
 Plugin id	外掛 ID
 Plugin removed.	已移除外掛。
 Plugins	外掛
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	外掛為 Craft Anything 新增可直接使用的工具：包括 MCP 伺服器 (命令或位址，新增後需讀取其工具)，以及 WebAssembly 元件 (.wasm 檔案，無法存取你的檔案或網路)。
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	外掛為 F-Builder 新增可直接使用的工具：包括 MCP 伺服器 (命令或位址，新增後需讀取其工具)，以及 WebAssembly 元件 (.wasm 檔案，無法存取你的檔案或網路)。
 Plugins added here always ask before each call.	此處新增的外掛在每次呼叫前都會詢問。
 Plugins read. Their new tools are offered from the next start.	已讀取外掛。下次啟動起即可使用它們的新工具。
 Preserving software that's no longer supported.	保存已停止維護的軟體。
@@ -1036,7 +1036,7 @@ Sign in and add the Unity Editor	登入並新增 Unity Editor
 Sign in and install Unreal Engine	登入並安裝 Unreal Engine
 Simple	簡易
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	簡易：描述需求，即可為你處理。進階：使用所有工具，檢視證據和記錄。
-Since Craft Anything opened.	自 Craft Anything 啟動以來。
+Since F-Builder opened.	自 F-Builder 啟動以來。
 Size	大小
 Skip setup	略過設定
 Smart contract interface	智慧合約介面
@@ -1093,14 +1093,14 @@ Take files out of an Unreal pak	從 Unreal pak 中擷取檔案
 Take out packed files	擷取打包檔案
 Target	目標
 Targets	目標
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	該資料夾中已有 {names}，Craft Anything 會在其中存放本身的檔案。請選擇其他資料夾，或先將它們移出。
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	該資料夾中已有 {names}，F-Builder 會在其中存放本身的檔案。請選擇其他資料夾，或先將它們移出。
 That folder is already a project, so it's open now.	該資料夾已經是專案，現已開啟。
 The Rust toolchain (rustup.rs).	Rust 工具鏈 (rustup.rs)。
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	建置助手會自行回答問題並說明選擇 (「我決定：…」)，方便你修改。
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	建置助手根據原創設計的描述產生遊戲的 3D 模型和紋理，費用從你的 fal.ai 帳戶扣除。模型採用低多邊形設計，讓遊戲執行流暢。帶紋理的模型費用為 {model}，圖片費用為 {picture}。每個專案的預算為 {budget}，超出前會先詢問你。金鑰儲存在系統鑰匙圈中。
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	建置助手會讀取這些檔案 (程式碼、筆記、圖片)，並在旁邊新建 app 資料夾來建置應用程式。你的檔案保持不變。
 The builder will decide its questions and tell you what it chose.	建置助手會自行決定，並告知你它的選擇。
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	建置助手直接編輯這些檔案，並保留已有的有效內容。Craft Anything 會在旁邊新增少量本身的記錄。
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	建置助手直接編輯這些檔案，並保留已有的有效內容。F-Builder 會在旁邊新增少量本身的記錄。
 The builder's questions	建置助手的問題
 The builder's questions come to you as cards, and it waits for your answer.	建置助手的問題會以卡片形式交給你，並等待你的回答。
 The builder's questions will come to you.	建置助手的問題會交給你回答。
@@ -1213,7 +1213,7 @@ What a program exports	程式匯出的內容
 What a program imports	程式匯入的內容
 What are its main parts?	它主要由哪些部分組成？
 What brings you here?	你想用它做什麼？
-What can Craft Anything do?	Craft Anything 可以做什麼？
+What can F-Builder do?	F-Builder 可以做什麼？
 What data was sent?	傳送了哪些資料？
 What do you want to look inside?	你想查看什麼的內部？
 What do you want to make?	你想製作什麼？
@@ -1268,7 +1268,7 @@ Why we ask	為什麼詢問
 Window / focus info	視窗 / 焦點資訊
 Windows resources	Windows 資源
 Wireshark tools check	檢查 Wireshark 工具
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	未安裝時，深度模式會使用 Craft Anything 內建的反編譯器，結果較為粗略。
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	未安裝時，深度模式會使用 F-Builder 內建的反編譯器，結果較為粗略。
 Work out a copy's size	計算副本大小
 Work out what an installed app is built on	分析已安裝應用程式所用的技術
 Workbench	工作臺
@@ -1430,12 +1430,12 @@ View	顯示方式
 Window	視窗
 Help	輔助說明
 Command palette	命令面板
-Craft Anything on GitHub	GitHub 上的 Craft Anything
+F-Builder on GitHub	GitHub 上的 F-Builder
 Report a problem…	回報問題…
-Quit Craft Anything	結束 Craft Anything
-About Craft Anything	關於 Craft Anything
+Quit F-Builder	結束 F-Builder
+About F-Builder	關於 F-Builder
 Services	服務
-Hide Craft Anything	隱藏 Craft Anything
+Hide F-Builder	隱藏 F-Builder
 Hide others	隱藏其他
 Show all	顯示全部
 Close window	關閉視窗

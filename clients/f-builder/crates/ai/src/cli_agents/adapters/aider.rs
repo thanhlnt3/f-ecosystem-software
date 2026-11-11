@@ -281,7 +281,7 @@ fn check_setup(options: &BackendOptions, env: &dyn Fn(&str) -> Option<String>, f
             "Aider has no model or API key set up, so it would offer to sign in to OpenRouter and wait for a browser nobody is at.",
         )
         .with_remediation(
-                        "Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY for the computer Craft Anything runs on, or name a model in Aider's own ~/.aider.conf.yml. Aider's ~/.env counts too.",
+                        "Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY for the computer F-Builder runs on, or name a model in Aider's own ~/.aider.conf.yml. Aider's ~/.env counts too.",
         )),
         Some(model) if model.starts_with("openrouter/") && !key_seen("OPENROUTER_API_KEY", options, env, files) => Err(ToolError::new(
             ErrorCode::BadSettings,
@@ -297,7 +297,7 @@ mod tests {
     use super::*;
 
     fn args(builder: bool, options: &BackendOptions) -> Vec<String> {
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec!["mcp".into()], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec!["mcp".into()], notes: None };
         Aider.args(&ArgsCx { options, prompt: "make a game", preamble: "PRE ", mcp: &mcp, resume: None, builder, reads_checked: false, question: false })
     }
 

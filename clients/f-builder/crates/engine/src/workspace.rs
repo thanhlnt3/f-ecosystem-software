@@ -3,8 +3,8 @@
 //!
 //! ```text
 //! <projects>/<slug>/
-//!   craft.json           the manifest (request, target, status, history)
-//!   investigation.cany/  evidence, memory and journal (a regular project)
+//!   f-builder.json           the manifest (request, target, status, history)
+//!   investigation.fbproj/  evidence, memory and journal (a regular project)
 //!   capture/             what we recorded from the target (screenshots, blueprint)
 //!   reference/           pictures of the original the person added (the look to match)
 //!   app/                 the generated project (its own git repository)
@@ -20,7 +20,7 @@
 use crate::inbox::{next_counter, now_ms};
 use crate::project::write_atomic;
 use crate::versioned::{self, upgrade};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 
 pub mod progress;
 
-pub const MANIFEST: &str = "craft.json";
+pub const MANIFEST: &str = "f-builder.json";
 
 /// Folders a copy of a project leaves out: what a build makes again, which can be gigabytes.
 const REBUILT: &[&str] = &["node_modules", "target", ".godot", "Library", "Temp", ".venv", "__pycache__", ".next", ".turbo"];
@@ -77,12 +77,12 @@ fn copy_tree(from: &Path, to: &Path, skip: &dyn Fn(&Path) -> bool, depth: usize)
     Ok(())
 }
 
-/// The current `craft.json` format version. Bumping it means appending a step to [`MANIFEST_STEPS`].
+/// The current `f-builder.json` format version. Bumping it means appending a step to [`MANIFEST_STEPS`].
 pub const MANIFEST_VERSION: u32 = 4;
 
-/// The steps that bring an older `craft.json` forward; step `i` goes from version `i` to `i + 1`.
+/// The steps that bring an older `f-builder.json` forward; step `i` goes from version `i` to `i + 1`.
 const MANIFEST_STEPS: &[versioned::Step<Value>] = &[manifest_v0_to_v1, manifest_v1_to_v2, manifest_v2_to_v3, manifest_v3_to_v4];
-const _: () = assert!(MANIFEST_STEPS.len() == MANIFEST_VERSION as usize, "one step per craft.json version");
+const _: () = assert!(MANIFEST_STEPS.len() == MANIFEST_VERSION as usize, "one step per f-builder.json version");
 
 /// Version 0 (no `version` field) has the same shape as version 1; only the number is new.
 fn manifest_v0_to_v1(doc: &mut Value) -> Result<(), String> {
@@ -115,7 +115,7 @@ fn manifest_v3_to_v4(doc: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
-/// Read a `craft.json` document of any version this build understands. A newer manifest is read
+/// Read a `f-builder.json` document of any version this build understands. A newer manifest is read
 /// as far as its fields are known and keeps its version, so [`Workspace::save`] refuses to write it.
 pub fn read_manifest(bytes: &[u8]) -> Result<Manifest, ToolError> {
     let mut doc: Value = serde_json::from_slice(bytes).map_err(|e| ToolError::invalid(format!("it isn't valid JSON: {e}")))?;
@@ -126,9 +126,9 @@ pub fn read_manifest(bytes: &[u8]) -> Result<Manifest, ToolError> {
     if found > MANIFEST_VERSION {
         return serde_json::from_value(doc).map_err(|e| {
             ToolError::unsupported(format!(
-                "This project was made by a newer Craft Anything (craft.json version {found}; this one reads up to {MANIFEST_VERSION}) and can't be read: {e}"
+                "This project was made by a newer F-Builder (f-builder.json version {found}; this one reads up to {MANIFEST_VERSION}) and can't be read: {e}"
             ))
-            .with_remediation("Update Craft Anything to open it.")
+            .with_remediation("Update F-Builder to open it.")
         });
     }
     let reached = upgrade(&mut doc, found, 0, MANIFEST_STEPS).map_err(|e| ToolError::invalid(format!("it couldn't be brought up to date: {e}")))?;
@@ -138,7 +138,7 @@ pub fn read_manifest(bytes: &[u8]) -> Result<Manifest, ToolError> {
     serde_json::from_value(doc).map_err(|e| ToolError::invalid(e.to_string()))
 }
 
-/// The JSON Schema of `craft.json` as published in `docs/schemas/craft.schema.json`.
+/// The JSON Schema of `f-builder.json` as published in `docs/schemas/f-builder.schema.json`.
 pub fn manifest_schema() -> String {
     let schema = schemars::generate::SchemaSettings::draft2020_12().into_generator().into_root_schema_for::<Manifest>();
     serde_json::to_string_pretty(&schema).map(|s| s + "\n").unwrap_or_default()
@@ -374,11 +374,11 @@ impl From<CheckRecord> for CheckResult {
     }
 }
 
-/// A workspace's manifest (`craft.json`): what the person asked for, the target, status and history.
-/// Its schema is published in `docs/schemas/craft.schema.json` (`cargo xtask schemas`).
+/// A workspace's manifest (`f-builder.json`): what the person asked for, the target, status and history.
+/// Its schema is published in `docs/schemas/f-builder.schema.json` (`cargo xtask schemas`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Manifest {
-    /// The craft.json format version. Missing means 0: written before files had versions.
+    /// The f-builder.json format version. Missing means 0: written before files had versions.
     #[serde(default)]
     pub version: u32,
     pub name: String,
@@ -577,11 +577,11 @@ impl ProjectUsage {
         std::fs::read(root.join(USAGE_FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }
 
-    /// Change the saved usage (the run's job). A file from a newer Craft Anything is left alone.
+    /// Change the saved usage (the run's job). A file from a newer F-Builder is left alone.
     pub fn update(root: &Path, f: impl FnOnce(&mut ProjectUsage)) -> Result<(), ToolError> {
         let mut u = ProjectUsage::load(root);
         if u.version > USAGE_VERSION {
-            return Err(ToolError::unsupported(format!("{USAGE_FILE} was written by a newer Craft Anything, so it isn't changed.")));
+            return Err(ToolError::unsupported(format!("{USAGE_FILE} was written by a newer F-Builder, so it isn't changed.")));
         }
         f(&mut u);
         u.version = USAGE_VERSION;
@@ -720,7 +720,7 @@ impl Workspace {
         Ok(copy)
     }
 
-    /// Delete the project: everything Craft Anything made in its folder (its records, checks and
+    /// Delete the project: everything F-Builder made in its folder (its records, checks and
     /// what was built in app/). The person's own files stay: an app edited in place, and the
     /// files a project started from. A folder left empty is removed. This can't be undone.
     pub fn delete(self) -> Result<(), ToolError> {
@@ -737,7 +737,7 @@ impl Workspace {
         if !self.manifest.app_in_root {
             gone(&self.app_dir())?;
         }
-        // craft.json last: a delete that stops part-way leaves a project that can be deleted again.
+        // f-builder.json last: a delete that stops part-way leaves a project that can be deleted again.
         for name in OWN_NAMES.iter().filter(|n| **n != MANIFEST) {
             gone(&self.root.join(name))?;
         }
@@ -770,11 +770,11 @@ impl Workspace {
                 let clash = clashes(folder, existing);
                 if !clash.is_empty() {
                     return Err(ToolError::invalid(format!(
-                        "{} already has {}, which Craft Anything would keep its own files in.",
+                        "{} already has {}, which F-Builder would keep its own files in.",
                         folder.display(),
                         clash.join(", ")
                     ))
-                    .with_remediation("Pick another folder, or move those out of it first; Craft Anything never replaces your files."));
+                    .with_remediation("Pick another folder, or move those out of it first; F-Builder never replaces your files."));
                 }
                 manifest.app_in_root = existing == ExistingFiles::Edit;
                 manifest.start_files = names;
@@ -793,7 +793,7 @@ impl Workspace {
         Ok(Workspace { root: root.to_path_buf(), manifest })
     }
 
-    /// Made by a newer Craft Anything: it can be looked at but not changed (saving is refused, so
+    /// Made by a newer F-Builder: it can be looked at but not changed (saving is refused, so
     /// fields this build doesn't know are never lost).
     pub fn is_read_only(&self) -> bool {
         self.manifest.version > MANIFEST_VERSION
@@ -830,10 +830,10 @@ impl Workspace {
     fn write_manifest(&self, m: &Manifest) -> Result<(), ToolError> {
         if self.is_read_only() {
             return Err(ToolError::unsupported(format!(
-                "{} was made by a newer Craft Anything (craft.json version {}), so this one doesn't change it.",
+                "{} was made by a newer F-Builder (f-builder.json version {}), so this one doesn't change it.",
                 self.manifest.name, self.manifest.version
             ))
-            .with_remediation("Update Craft Anything to keep working on this project. Nothing was written."));
+            .with_remediation("Update F-Builder to keep working on this project. Nothing was written."));
         }
         let bytes = serde_json::to_vec_pretty(m).map_err(|e| ToolError::internal(e.to_string()))?;
         write_atomic(&self.root.join(MANIFEST), &bytes)
@@ -848,7 +848,7 @@ impl Workspace {
     }
 
     pub fn investigation_dir(&self) -> PathBuf {
-        self.root.join("investigation.cany")
+        self.root.join("investigation.fbproj")
     }
     pub fn capture_dir(&self) -> PathBuf {
         self.root.join("capture")
@@ -862,7 +862,7 @@ impl Workspace {
         if self.manifest.app_in_root { "the project folder" } else { "app/" }
     }
 
-    /// One of Craft Anything's own records in this project (the manifest, the feed, the inbox,
+    /// One of F-Builder's own records in this project (the manifest, the feed, the inbox,
     /// the person's pictures…), which the builder never changes, even when the app is the
     /// project folder itself. checks/ isn't one: the builder keeps its notes there.
     pub fn is_own_record(&self, p: &Path) -> bool {
@@ -977,7 +977,7 @@ impl Workspace {
 /// The coding agent's session, copied into the project ([`Workspace::agent_session_path`]).
 pub const AGENT_SESSION_FILE: &str = "agent-session.jsonl";
 
-/// The names Craft Anything keeps in a project folder beside app/. A folder the person picks
+/// The names F-Builder keeps in a project folder beside app/. A folder the person picks
 /// mustn't already have any of them.
 pub const OWN_NAMES: &[&str] = &[
     MANIFEST,
@@ -995,7 +995,7 @@ pub const OWN_NAMES: &[&str] = &[
     "capture",
     "reference",
     "attachments",
-    "investigation.cany",
+    "investigation.fbproj",
     crate::pins::PINNED,
 ];
 
@@ -1052,7 +1052,7 @@ pub const START_FILES_SHOWN: usize = 40;
 pub enum FolderState {
     /// Missing or empty: the project starts there as usual.
     Empty,
-    /// Already a Craft Anything project.
+    /// Already a F-Builder project.
     Project,
     /// The person's files: the first names (sorted, at most [`START_FILES_SHOWN`]) and how many.
     HasFiles { names: Vec<String>, count: usize },
@@ -1083,7 +1083,7 @@ pub enum ActionKind {
     Publish,
     /// Deleting anything outside the project or the temp folder.
     DeleteOutside,
-    /// Changing the system, its settings or users, system files, or Craft Anything's own records.
+    /// Changing the system, its settings or users, system files, or F-Builder's own records.
     System,
     /// Tools with no rule of their own.
     OtherTools,
@@ -1142,7 +1142,7 @@ pub const ACTION_KINDS: &[KindRow] = &[
     KindRow {
         kind: ActionKind::System,
         name: "system",
-        what: "changing the system, its settings or users, system files, or Craft Anything's own records",
+        what: "changing the system, its settings or users, system files, or F-Builder's own records",
         auto: Approval::Refuse,
         manual: Approval::Ask,
     },
@@ -1209,7 +1209,7 @@ pub enum ExistingFiles {
     StartFrom,
 }
 
-/// What's already in `folder` under a name Craft Anything would keep its own files in (app/ too
+/// What's already in `folder` under a name F-Builder would keep its own files in (app/ too
 /// when the app goes beside the person's files). A project can start there only when it's empty.
 pub fn clashes(folder: &Path, existing: ExistingFiles) -> Vec<&'static str> {
     OWN_NAMES.iter().copied().chain((existing == ExistingFiles::StartFrom).then_some("app")).filter(|n| folder.join(n).exists()).collect()
@@ -1315,7 +1315,7 @@ pub fn attachable_picture(p: &Path) -> bool {
 /// Where pictures pasted from the clipboard wait until their message is sent: this person's own
 /// cache folder (never a temp folder other users can read).
 pub fn pasted_dir() -> PathBuf {
-    dirs::cache_dir().or_else(|| dirs::home_dir().map(|h| h.join(".cache"))).unwrap_or_else(std::env::temp_dir).join("Craft Anything").join("pasted")
+    dirs::cache_dir().or_else(|| dirs::home_dir().map(|h| h.join(".cache"))).unwrap_or_else(std::env::temp_dir).join("F-Builder").join("pasted")
 }
 
 /// Save a picture pasted from the clipboard (8-bit RGBA, `width`×`height`) as `pasted-<time>-<n>.png`
@@ -1357,7 +1357,7 @@ pub fn save_pasted_picture(dir: &Path, width: u32, height: u32, rgba: Vec<u8>, k
             Err(e) => return Err(ToolError::io(path.display(), e)),
         }
     };
-    craft_anything_platform::fs::write_atomic_private(&path, &png)?;
+    f_builder_platform::fs::write_atomic_private(&path, &png)?;
     Ok(path)
 }
 
@@ -1374,9 +1374,9 @@ fn forget_old_pastes(dir: &Path, keep: &[PathBuf]) {
     }
 }
 
-/// The default projects folder: `Documents/Craft Anything`, else `~/Craft Anything`.
+/// The default projects folder: `Documents/F-Builder`, else `~/F-Builder`.
 pub fn default_projects_dir() -> PathBuf {
-    dirs::document_dir().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from(".")).join("Craft Anything")
+    dirs::document_dir().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from(".")).join("F-Builder")
 }
 
 #[cfg(test)]
@@ -1614,7 +1614,7 @@ mod tests {
         assert_eq!(again, multi, "each page's likeness is kept");
     }
 
-    /// A craft.json as written before versions existed (and before checks were structured).
+    /// A f-builder.json as written before versions existed (and before checks were structured).
     const MANIFEST_V0: &str = r#"{
   "name": "Example",
   "request": "Clone it",
@@ -1652,7 +1652,7 @@ mod tests {
     /// Approval choices survive an old manifest, a stale save and a copy.
     #[test]
     fn approval_choices_survive_an_old_manifest_a_stale_save_and_a_copy() {
-        // A version-2 craft.json (before approvals) opens with none chosen and is saved as current.
+        // A version-2 f-builder.json (before approvals) opens with none chosen and is saved as current.
         let dir = tempfile::tempdir().unwrap();
         let v2 = MANIFEST_V0.replacen('{', r#"{ "version": 2,"#, 1);
         std::fs::write(dir.path().join(MANIFEST), &v2).unwrap();
@@ -1703,7 +1703,7 @@ mod tests {
         std::fs::write(dir.path().join(MANIFEST), r#"{"version": 7, "name": {"parts": []}}"#).unwrap();
         let err = Workspace::open(dir.path()).unwrap_err();
         assert_eq!(err.code, ErrorCode::NotSupported);
-        assert!(err.message.contains("newer Craft Anything") && err.remediation.is_some());
+        assert!(err.message.contains("newer F-Builder") && err.remediation.is_some());
     }
 
     #[test]
@@ -1715,9 +1715,9 @@ mod tests {
 
     #[test]
     fn the_published_schema_is_current() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/schemas/craft.schema.json");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/schemas/f-builder.schema.json");
         let published = std::fs::read_to_string(path).unwrap_or_default().replace("\r\n", "\n");
-        assert!(published == manifest_schema(), "docs/schemas/craft.schema.json is stale: run `cargo xtask schemas`");
+        assert!(published == manifest_schema(), "docs/schemas/f-builder.schema.json is stale: run `cargo xtask schemas`");
         let schema: Value = serde_json::from_str(&published).unwrap();
         assert!(schema["properties"]["version"].is_object() && schema["properties"]["checks"].is_object());
     }
@@ -1793,7 +1793,7 @@ mod tests {
     }
 
     #[test]
-    fn a_folder_with_names_craft_anything_uses_is_refused() {
+    fn a_folder_with_names_f_builder_uses_is_refused() {
         let d = tempfile::tempdir().unwrap();
         let checks = d.path().join("checks-here");
         std::fs::create_dir_all(checks.join("checks")).unwrap();
@@ -1840,23 +1840,23 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let ws = Workspace::create(d.path(), "New", "x", TargetRef::None).unwrap();
         let saved: Value = serde_json::from_slice(&std::fs::read(ws.root.join(MANIFEST)).unwrap()).unwrap();
-        assert!(saved.get("app_in_root").is_none() && saved.get("start_files").is_none(), "a usual project's craft.json is unchanged");
+        assert!(saved.get("app_in_root").is_none() && saved.get("start_files").is_none(), "a usual project's f-builder.json is unchanged");
     }
 
     /// A project's own records are recognized even when the app is the folder.
     #[test]
-    fn craft_anythings_records_are_its_own_even_when_the_app_is_the_folder() {
+    fn f_builders_records_are_its_own_even_when_the_app_is_the_folder() {
         let d = tempfile::tempdir().unwrap();
         std::fs::write(d.path().join("index.html"), "<p>hi</p>").unwrap();
         let ws = Workspace::create_at(d.path(), "Site", "x", TargetRef::None, Some(ExistingFiles::Edit)).unwrap();
-        for own in ["craft.json", "feed.json", "inbox/a.json", "reference/picture-1.png", "investigation.cany/x"] {
+        for own in ["f-builder.json", "feed.json", "inbox/a.json", "reference/picture-1.png", "investigation.fbproj/x"] {
             assert!(ws.is_own_record(&ws.root.join(own)), "{own}");
         }
-        for theirs in ["index.html", "src/main.rs", "checks/round-1/notes.md", "craft.json.bak"] {
+        for theirs in ["index.html", "src/main.rs", "checks/round-1/notes.md", "f-builder.json.bak"] {
             assert!(!ws.is_own_record(&ws.root.join(theirs)), "{theirs}");
         }
         if cfg!(windows) {
-            assert!(ws.is_own_record(&ws.root.join("CRAFT.JSON")), "paths on Windows ignore case");
+            assert!(ws.is_own_record(&ws.root.join("F-BUILDER.JSON")), "paths on Windows ignore case");
         }
     }
 
@@ -1870,7 +1870,7 @@ mod tests {
         assert_session_migrated(&recorded, Some(false));
     }
 
-    /// Read a literal `craft.json` sample, check both modes and the saved document.
+    /// Read a literal `f-builder.json` sample, check both modes and the saved document.
     fn assert_session_migrated(doc: &str, want: Option<bool>) {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(MANIFEST), doc).unwrap();
@@ -1944,7 +1944,7 @@ mod tests {
         ws.delete().unwrap();
         assert!(!d.path().join("snake").exists(), "a project of its own goes with its folder");
 
-        // An app edited in place: Craft Anything's records go, the person's files stay.
+        // An app edited in place: F-Builder's records go, the person's files stay.
         let mine = d.path().join("mine");
         std::fs::create_dir_all(&mine).unwrap();
         std::fs::write(mine.join("index.html"), "<p>hi</p>").unwrap();

@@ -779,7 +779,7 @@ mod tests {
     fn unsupported_is_never_valid_on_garbage() {
         // Random bytes must never verify as Valid.
         for seed in 0..64 {
-            let n = craft_anything_testkit::noise(seed, 200);
+            let n = f_builder_testkit::noise(seed, 200);
             let v = verify_signature(&n, SigScheme::RsaPkcs1v15(Digest::Sha256), &n, &n);
             assert!(!v.is_valid());
             let _ = verify_macho_cms(&n, &n);
@@ -789,7 +789,7 @@ mod tests {
 
     #[test]
     fn rsa_signature_round_trip_and_tamper() {
-        use craft_anything_testkit::crypto;
+        use f_builder_testkit::crypto;
         let (spki, sign) = crypto::rsa_signer();
         let msg = b"the exact bytes that were signed";
         let sig = sign(msg, 0);
@@ -806,7 +806,7 @@ mod tests {
 
     #[test]
     fn ecdsa_p256_round_trip() {
-        use craft_anything_testkit::crypto;
+        use f_builder_testkit::crypto;
         let (spki, sign) = crypto::p256_signer();
         let msg = b"ecdsa message";
         let sig = sign(msg);
@@ -818,7 +818,7 @@ mod tests {
 
     #[test]
     fn chain_links_and_self_signed() {
-        use craft_anything_testkit::crypto;
+        use f_builder_testkit::crypto;
         // Leaf signed by a self-signed CA: the leaf link verifies against the CA.
         let (leaf, ca) = crypto::cert_chain();
         let chain = verify_chain(&[&leaf, &ca]);
@@ -834,7 +834,7 @@ mod tests {
 
     #[test]
     fn macho_cms_verifies_and_detects_tamper() {
-        use craft_anything_testkit::{apple, crypto};
+        use f_builder_testkit::{apple, crypto};
         let cd = apple::code_directory_blob();
         let cms = crypto::cms_detached_rsa(&cd, "Craft Signer", "Craft Org");
         let r = verify_macho_cms(&cms, &cd).expect("parse");
@@ -851,7 +851,7 @@ mod tests {
 
     #[test]
     fn apk_signer_verifies_and_detects_tamper() {
-        use craft_anything_testkit::android;
+        use f_builder_testkit::android;
         let apk = android::signed_apk(false);
         let block = crate::apk_sign::parse(&apk).expect("signing block");
         assert!(!block.signers.is_empty());
@@ -873,7 +873,7 @@ mod tests {
 
     #[test]
     fn apk_content_digest_matches_reference() {
-        use craft_anything_testkit::{android, crypto};
+        use f_builder_testkit::{android, crypto};
         let apk = android::signed_apk(false);
         let block = crate::apk_sign::parse(&apk).unwrap();
         let computed = apk_content_digest(&apk, block.offset, Digest::Sha256).unwrap();
@@ -886,7 +886,7 @@ mod tests {
 
     #[test]
     fn jar_v1_integrity_and_pkcs7() {
-        use craft_anything_testkit::{android, crypto};
+        use f_builder_testkit::{android, crypto};
         // Build the same .SF/.RSA the signed APK carries and verify the PKCS#7 over the .SF.
         let sf = b"Signature-Version: 1.0\r\nSHA-256-Digest-Manifest: AAA=\r\n\r\n";
         let rsa = crypto::cms_detached_rsa(sf, "Craft Signer", "Craft Org");

@@ -639,7 +639,7 @@ mod tests {
     #[test]
     fn hostile() {
         for seed in 0..200 {
-            let n = craft_anything_testkit::noise(seed, 256);
+            let n = f_builder_testkit::noise(seed, 256);
             let code: Vec<u16> = n.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect();
             let _ = decode(&code, 1000);
         }

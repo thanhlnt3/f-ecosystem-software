@@ -7,7 +7,7 @@ use super::external_disasm_tools::{input_file, locate, run};
 use super::native_common::{params_json, spec};
 use super::static_input::builder;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, Limitation, Subject, ToolError};
+use f_builder_evidence::{Authority, Confidence, Coverage, Limitation, Subject, ToolError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -129,7 +129,7 @@ fn radio_recording_decode(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput
     let out = run(ctx, &exe, &args, "rtl_433")?;
     let (msgs, other) = messages(&out.stdout_text());
     if !out.success && msgs.is_empty() {
-        return Err(craft_anything_platform::process::nonzero_error("rtl_433", &out));
+        return Err(f_builder_platform::process::nonzero_error("rtl_433", &out));
     }
     let mut by_model: BTreeMap<String, u64> = BTreeMap::new();
     for m in &msgs {
@@ -188,7 +188,7 @@ fn radio_decoders_list(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, T
     let all: Vec<Value> = text.lines().filter_map(decoder_line).collect();
     if all.is_empty() {
         return Err(
-            craft_anything_platform::process::nonzero_error("rtl_433", &out).with_remediation("This rtl_433 didn't print a decoder list; check its version.")
+            f_builder_platform::process::nonzero_error("rtl_433", &out).with_remediation("This rtl_433 didn't print a decoder list; check its version.")
         );
     }
     let shown: Vec<&Value> =
@@ -233,7 +233,7 @@ mod tests {
     fn bad_requests_are_refused_before_running() {
         let mut s = crate::testing::session();
         // A stand-in path, so the checks below run without rtl_433 installed.
-        let stand_in = craft_anything_testkit::temp_file("rtl_433.exe", b"");
+        let stand_in = f_builder_testkit::temp_file("rtl_433.exe", b"");
         s.settings.engines.tools.rtl433 = Some(stand_in.clone());
         let e = Engine::new(s);
         for bad in [json!({"path": stand_in, "decoders": [0]}), json!({"path": stand_in, "sample_rate": 5}), json!({"path": "relative.cu8"})] {
@@ -241,11 +241,11 @@ mod tests {
         }
     }
 
-    /// A real decode, only where `CRAFT_ANYTHING_TEST_RTL433` names rtl_433 and
-    /// `CRAFT_ANYTHING_TEST_RTL433_REC` a recording of an Acurite rain gauge (from rtl_433's tests).
+    /// A real decode, only where `F_BUILDER_TEST_RTL433` names rtl_433 and
+    /// `F_BUILDER_TEST_RTL433_REC` a recording of an Acurite rain gauge (from rtl_433's tests).
     #[test]
     fn live_decode_with_rtl_433() {
-        let (Some(exe), Some(rec)) = (std::env::var_os("CRAFT_ANYTHING_TEST_RTL433"), std::env::var("CRAFT_ANYTHING_TEST_RTL433_REC").ok()) else { return };
+        let (Some(exe), Some(rec)) = (std::env::var_os("F_BUILDER_TEST_RTL433"), std::env::var("F_BUILDER_TEST_RTL433_REC").ok()) else { return };
         let mut s = crate::testing::session();
         s.settings.engines.tools.rtl433 = Some(exe.into());
         let e = Engine::new(s);

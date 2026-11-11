@@ -4,7 +4,7 @@
 //! way and claims, input by input, that it exits like the original and prints what it prints.
 
 use super::*;
-use craft_anything_engine::workspace::Claim;
+use f_builder_engine::workspace::Claim;
 
 /// Where the original's runs are kept in the capture folder.
 pub const RUNS_DIR: &str = "runs";
@@ -54,15 +54,15 @@ pub fn is_console(program: &Path) -> bool {
     };
     let Some(head) = read(64 * 1024) else { return false };
     if head.starts_with(b"MZ") {
-        return craft_anything_formats::pe::headers(&head).is_ok_and(|h| h.subsystem == 3);
+        return f_builder_formats::pe::headers(&head).is_ok_and(|h| h.subsystem == 3);
     }
-    let Some(b) = read(MAX_READ).and_then(|bytes| craft_anything_formats::parse_binary(&bytes).ok()) else { return false };
+    let Some(b) = read(MAX_READ).and_then(|bytes| f_builder_formats::parse_binary(&bytes).ok()) else { return false };
     loads_no_window(&b)
 }
 
 /// An ELF or Mach-O executable that loads none of [`WINDOW_LIBRARIES`].
-fn loads_no_window(b: &craft_anything_formats::Binary) -> bool {
-    use craft_anything_formats::Format;
+fn loads_no_window(b: &f_builder_formats::Binary) -> bool {
+    use f_builder_formats::Format;
     matches!(b.format, Format::Elf | Format::MachO)
         && b.entry.is_some()
         && !b.libraries.iter().any(|l| {
@@ -126,7 +126,7 @@ impl Worker {
                 Ok(out) => {
                     let record = run_record(name, &args, &result_of(&out));
                     let bytes = serde_json::to_vec_pretty(&record).map_err(|e| ToolError::internal(e.to_string()))?;
-                    craft_anything_engine::project::write_atomic(&dir.join(format!("{}.json", slug(name))), &bytes)?;
+                    f_builder_engine::project::write_atomic(&dir.join(format!("{}.json", slug(name))), &bytes)?;
                     kept.push(*name);
                     records.push(record);
                 }
@@ -205,7 +205,7 @@ impl Check for RunsCheck {
     fn run(&self, cx: &mut CheckCx) -> Result<CheckResult, ToolError> {
         let (ws, round) = (cx.ws, cx.round);
         let godot = cx.godot();
-        let Some((program, base)) = craft_anything_engine::outputs::launch(&ws.app_dir(), godot.as_deref()) else {
+        let Some((program, base)) = f_builder_engine::outputs::launch(&ws.app_dir(), godot.as_deref()) else {
             return Ok(CheckResult::new(self.id(), round, false, screenshot::NO_PROGRAM));
         };
         let out = ws.checks_dir().join(format!("round-{round}")).join(RUNS_DIR);
@@ -230,7 +230,7 @@ impl Check for RunsCheck {
             };
             let file = out.join(format!("{}.json", slug(&name)));
             if let Ok(bytes) = serde_json::to_vec_pretty(&built) {
-                craft_anything_engine::project::write_atomic(&file, &bytes)?;
+                f_builder_engine::project::write_atomic(&file, &bytes)?;
                 artifacts.extend(file.strip_prefix(&ws.root).ok().map(Path::to_path_buf));
             }
             claims.extend(run_claims(&original, &built, &names));
@@ -280,13 +280,13 @@ mod tests {
     #[test]
     fn a_unix_program_is_a_console_one_unless_it_loads_a_windowing_library() {
         let binary = |format, libs: &[&str]| {
-            let mut b = craft_anything_formats::Binary::raw(craft_anything_formats::Arch::X86_64, 0, 0, 0);
+            let mut b = f_builder_formats::Binary::raw(f_builder_formats::Arch::X86_64, 0, 0, 0);
             b.format = format;
             b.entry = Some(0x1000);
             b.libraries = libs.iter().map(|l| (*l).to_string()).collect();
             b
         };
-        use craft_anything_formats::Format;
+        use f_builder_formats::Format;
         assert!(loads_no_window(&binary(Format::Elf, &["libc.so.6", "libssl.so.3"])));
         assert!(!loads_no_window(&binary(Format::Elf, &["libc.so.6", "libX11.so.6"])));
         assert!(!loads_no_window(&binary(Format::Elf, &["libGL.so.1"])));
@@ -312,8 +312,8 @@ mod tests {
         );
         // Programs made here, read but never run: a console tool and a windowed app.
         let (tool, app) = (d.path().join("tool.exe"), d.path().join("app.exe"));
-        std::fs::write(&tool, craft_anything_testkit::pe64_subsystem(3)).unwrap();
-        std::fs::write(&app, craft_anything_testkit::pe64_subsystem(2)).unwrap();
+        std::fs::write(&tool, f_builder_testkit::pe64_subsystem(3)).unwrap();
+        std::fs::write(&app, f_builder_testkit::pe64_subsystem(2)).unwrap();
         assert!(is_console(&tool) && !is_console(&app));
         assert_eq!(CASES.iter().map(|(n, _)| slug(n)).collect::<Vec<_>>(), ["no-arguments", "help", "version"]);
         let ws = Workspace::create(d.path(), "Tool", "Rebuild this tool", TargetRef::None).unwrap();

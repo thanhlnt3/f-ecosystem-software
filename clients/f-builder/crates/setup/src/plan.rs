@@ -3,7 +3,7 @@
 use crate::clients::{Client, Format, Host, SERVER_NAME, clients, is_owned_entry};
 use crate::config;
 use crate::skill;
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde::Serialize;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -14,7 +14,7 @@ pub struct PlanRequest {
     /// Client ids. Empty (and not `all_detected`) means "refresh the clients that already have our entry".
     pub clients: Vec<String>,
     pub all_detected: bool,
-    /// Program and args to register, e.g. `["/usr/local/bin/craft-anything-cli", "mcp"]`.
+    /// Program and args to register, e.g. `["/usr/local/bin/f-builder-cli", "mcp"]`.
     pub command: Vec<String>,
     /// Also install the skill into each selected client's skills folder.
     pub include_skill: bool,
@@ -85,11 +85,11 @@ pub fn backup_path(p: &Path) -> PathBuf {
     skill::backup_path(p)
 }
 
-/// The default registration: this machine's `craft-anything-cli` plus `mcp`.
+/// The default registration: this machine's `f-builder-cli` plus `mcp`.
 pub fn default_command() -> Result<Vec<String>, ToolError> {
-    let p = craft_anything_platform::self_cli_path().ok_or_else(|| {
-        ToolError::new(ErrorCode::EngineMissing, "Couldn't find craft-anything-cli.")
-            .with_remediation("Install Craft Anything (the CLI ships next to the app), or pass its path explicitly.")
+    let p = f_builder_platform::self_cli_path().ok_or_else(|| {
+        ToolError::new(ErrorCode::EngineMissing, "Couldn't find f-builder-cli.")
+            .with_remediation("Install F-Builder (the CLI ships next to the app), or pass its path explicitly.")
     })?;
     Ok(vec![p.display().to_string(), "mcp".into()])
 }
@@ -273,7 +273,7 @@ pub struct ApplyReport {
 type Writer<'a> = &'a dyn Fn(&Path, &[u8]) -> Result<(), ToolError>;
 
 fn real_write(p: &Path, b: &[u8]) -> Result<(), ToolError> {
-    craft_anything_platform::write_atomic_private(p, b)
+    f_builder_platform::write_atomic_private(p, b)
 }
 
 /// Apply a plan. Config files are written one by one with a first-time backup, an atomic write and
@@ -322,7 +322,7 @@ pub(crate) fn apply_with(plan: &Plan, write: Writer<'_>) -> ApplyReport {
     if failed {
         for (idx, path, old) in done.iter().rev() {
             let r = match old {
-                Some(t) => craft_anything_platform::write_atomic(path, t.as_bytes()).map_err(|e| e.message),
+                Some(t) => f_builder_platform::write_atomic(path, t.as_bytes()).map_err(|e| e.message),
                 None => match std::fs::remove_file(path) {
                     Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
                     _ => Ok(()),
@@ -384,7 +384,7 @@ fn write_one(a: &Action, c: &Client, new: &str, write: Writer<'_>) -> Result<(),
         ));
     }
     if now.is_some() {
-        craft_anything_platform::backup_once(&a.path, &backup_path(&a.path)).map_err(|e| (e, false))?;
+        f_builder_platform::backup_once(&a.path, &backup_path(&a.path)).map_err(|e| (e, false))?;
     }
     write(&a.path, new.as_bytes()).map_err(|e| (e, true))?;
     verify(c, &a.path, &a.client_desired()).map_err(|e| (e, true))
@@ -455,20 +455,20 @@ pub fn uninstall(host: &Host) -> UninstallReport {
     let mut partial = false;
     for (c, old, new) in targets {
         let backup = backup_path(&c.config);
-        let r = craft_anything_platform::backup_once(&c.config, &backup)
-            .and_then(|_| craft_anything_platform::write_atomic_private(&c.config, new.as_bytes()))
-            .and_then(|_| {
+        let r = f_builder_platform::backup_once(&c.config, &backup).and_then(|_| f_builder_platform::write_atomic_private(&c.config, new.as_bytes())).and_then(
+            |_| {
                 let t = std::fs::read_to_string(&c.config).map_err(|e| ToolError::io(c.config.display(), e))?;
                 match config::read_entry(c, &t) {
                     Ok(None) => Ok(()),
                     _ => Err(ToolError::new(ErrorCode::FileError, "the entry is still there after removal")),
                 }
-            });
+            },
+        );
         let (outcome, error) = match r {
             Ok(()) => (Outcome::Removed, None),
             Err(e) => {
                 partial = true;
-                let restored = craft_anything_platform::write_atomic(&c.config, old.as_bytes()).is_ok();
+                let restored = f_builder_platform::write_atomic(&c.config, old.as_bytes()).is_ok();
                 (Outcome::Failed, Some(if restored { e.message } else { format!("{} Restore {} by hand.", e.message, backup.display()) }))
             }
         };

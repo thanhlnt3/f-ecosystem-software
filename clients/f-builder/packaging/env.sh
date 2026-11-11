@@ -3,15 +3,15 @@
 #
 # Exports:
 #   ROOT                  workspace root
-#   VERSION               [workspace.package] version from Cargo.toml (override: CRAFT_ANYTHING_VERSION)
+#   VERSION               [workspace.package] version from Cargo.toml (override: F_BUILDER_VERSION)
 #   DIST                  output directory for release artifacts (default: $ROOT/dist/release)
-#   CRAFT_ANYTHING_BUILD_SHA    git commit baked into the binaries (apps/craft-anything/build.rs)
-#   CRAFT_ANYTHING_BUILD_DATE   UTC build date, YYYY-MM-DD
+#   F_BUILDER_BUILD_SHA    git commit baked into the binaries (apps/f-builder/build.rs)
+#   F_BUILDER_BUILD_DATE   UTC build date, YYYY-MM-DD
 #   CARGO_TARGET_DIR      cargo's target dir (default: $ROOT/target)
 # Sets (not exported):
-#   BINS                  the binaries to build and ship: craft-anything, plus craft-anything-cli when the
-#                         workspace has apps/craft-anything-cli
-#   HAS_CLI               1 when craft-anything-cli is part of the build, else 0
+#   BINS                  the binaries to build and ship: f-builder, plus f-builder-cli when the
+#                         workspace has apps/f-builder-cli
+#   HAS_CLI               1 when f-builder-cli is part of the build, else 0
 #   CARGO_PKGS            `-p <bin>` arguments for cargo build
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,7 +26,7 @@ workspace_version() {
   ' "$ROOT/Cargo.toml"
 }
 
-VERSION="${CRAFT_ANYTHING_VERSION:-$(workspace_version)}"
+VERSION="${F_BUILDER_VERSION:-$(workspace_version)}"
 if [ -z "$VERSION" ]; then
   echo "error: could not read [workspace.package] version from $ROOT/Cargo.toml" >&2
   exit 1
@@ -37,18 +37,18 @@ DIST="${DIST:-$ROOT/dist/release}"
 mkdir -p "$DIST"
 export DIST
 
-if [ -z "${CRAFT_ANYTHING_BUILD_SHA:-}" ]; then
-  CRAFT_ANYTHING_BUILD_SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+if [ -z "${F_BUILDER_BUILD_SHA:-}" ]; then
+  F_BUILDER_BUILD_SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
 fi
-export CRAFT_ANYTHING_BUILD_SHA
-export CRAFT_ANYTHING_BUILD_DATE="${CRAFT_ANYTHING_BUILD_DATE:-$(date -u +%Y-%m-%d)}"
+export F_BUILDER_BUILD_SHA
+export F_BUILDER_BUILD_DATE="${F_BUILDER_BUILD_DATE:-$(date -u +%Y-%m-%d)}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
 
-# The headless CLI ships next to the app once apps/craft-anything-cli exists.
-BINS=(craft-anything)
+# The headless CLI ships next to the app once apps/f-builder-cli exists.
+BINS=(f-builder)
 HAS_CLI=0
-if [ -f "$ROOT/apps/craft-anything-cli/Cargo.toml" ]; then
-  BINS+=(craft-anything-cli)
+if [ -f "$ROOT/apps/f-builder-cli/Cargo.toml" ]; then
+  BINS+=(f-builder-cli)
   HAS_CLI=1
 fi
 CARGO_PKGS=()
@@ -58,7 +58,7 @@ unset _bin
 # The binary used for a `--version` smoke test: the CLI when shipped, else the app (which answers
 # --version before opening a window).
 smoke_bin() {
-  if [ "$HAS_CLI" = 1 ]; then echo craft-anything-cli; else echo craft-anything; fi
+  if [ "$HAS_CLI" = 1 ]; then echo f-builder-cli; else echo f-builder; fi
 }
 
 # Emit a GitHub Actions warning (plain stderr outside Actions).
@@ -86,11 +86,11 @@ copy_docs() {
   copy_font_licences "$dest"
 }
 
-# The app embeds the fonts in assets/fonts (OFL-1.1) and, built with CRAFT_FONTS_DIR (releases),
-# craft-fonts' too: ship their licences next to the binaries (craft-fonts' as OFL-<font>.txt).
+# The app embeds the fonts in assets/fonts (OFL-1.1) and, built with F_BUILDER_FONTS_DIR (releases),
+# f-builder-fonts' too: ship their licences next to the binaries (f-builder-fonts' as OFL-<font>.txt).
 copy_font_licences() {
   local dest="$1" lic
-  for lic in "$ROOT"/assets/fonts/OFL-*.txt "${CRAFT_FONTS_DIR:-/nonexistent}"/fonts/*/OFL.txt; do
+  for lic in "$ROOT"/assets/fonts/OFL-*.txt "${F_BUILDER_FONTS_DIR:-/nonexistent}"/fonts/*/OFL.txt; do
     [ -f "$lic" ] || continue
     case "$lic" in
       */fonts/*/OFL.txt) cp "$lic" "$dest/OFL-$(basename "$(dirname "$lic")").txt" ;;

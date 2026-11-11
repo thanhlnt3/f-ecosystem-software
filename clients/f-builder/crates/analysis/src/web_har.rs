@@ -7,8 +7,8 @@
 //! they appear in kept text, in raw, percent-encoded and JSON-escaped spellings; a sensitive value
 //! used as a JSON property name drops that property.
 
-use craft_anything_formats::har::{self, HarEntry};
-use craft_anything_formats::sourcemap::base64_decode;
+use f_builder_formats::har::{self, HarEntry};
+use f_builder_formats::sourcemap::base64_decode;
 use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 

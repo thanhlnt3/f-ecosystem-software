@@ -1,5 +1,5 @@
-use craft_anything_formats::sqlite::{CellValue, SqliteDb};
-use craft_anything_testkit::sqlite::{Val, without_rowid_db};
+use f_builder_formats::sqlite::{CellValue, SqliteDb};
+use f_builder_testkit::sqlite::{Val, without_rowid_db};
 
 fn text(value: &str) -> CellValue {
     CellValue::Text { text: value.into(), truncated: false }

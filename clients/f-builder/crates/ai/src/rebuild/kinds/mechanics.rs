@@ -1,15 +1,15 @@
 //! Games (and apps decompiled in Deep mode) keep their numbers in `app/MECHANICS.md` for people and in `app/mechanics.json` for
-//! checks ([`craft_anything_engine::mechanics`]). [`MechanicsCheck`] holds the build to the
+//! checks ([`f_builder_engine::mechanics`]). [`MechanicsCheck`] holds the build to the
 //! sheet: it must exist and be readable, and every number in it must appear in the code as
 //! written unless it's marked estimated (a value the code computes, or keeps in other units, is
 //! written there as the sheet has it). The note also says which values have no source.
 
 use super::*;
-use craft_anything_engine::mechanics::{self, MechanicValue, SheetProblem};
+use f_builder_engine::mechanics::{self, MechanicValue, SheetProblem};
 use std::collections::HashSet;
 
 /// What every game brief asks for, so the check can read the numbers.
-pub const MECHANICS_CONTRACT: &str = "Keep the same values in app/mechanics.json, which Craft Anything reads after each build: {\"version\": 1, \"values\": [{\"name\": \"walk speed\", \"group\": \"movement\", \"value\": 4.5, \"unit\": \"m/s\", \"source\": \"function 0x140012a0\"}, {\"name\": \"crouch\", \"group\": \"controls\", \"value\": \"hold\", \"estimated\": true}]}. A value is a number, text or true/false; give each one its source or \"estimated\": true, and use the sheet's numbers in the code as they're written there.";
+pub const MECHANICS_CONTRACT: &str = "Keep the same values in app/mechanics.json, which F-Builder reads after each build: {\"version\": 1, \"values\": [{\"name\": \"walk speed\", \"group\": \"movement\", \"value\": 4.5, \"unit\": \"m/s\", \"source\": \"function 0x140012a0\"}, {\"name\": \"crouch\", \"group\": \"controls\", \"value\": \"hold\", \"estimated\": true}]}. A value is a number, text or true/false; give each one its source or \"estimated\": true, and use the sheet's numbers in the code as they're written there.";
 
 /// At most this many names are listed in a note.
 const LISTED: usize = 8;
@@ -75,7 +75,7 @@ impl Check for MechanicsCheck {
             .values
             .iter()
             .filter_map(|v| match v.value {
-                MechanicValue::Number(n) if !v.estimated => Some(craft_anything_engine::workspace::Claim::new(
+                MechanicValue::Number(n) if !v.estimated => Some(f_builder_engine::workspace::Claim::new(
                     format!("{} ({n}) is used in the code", v.name),
                     found.contains(&key(n)),
                     "not in the code as written",
@@ -93,7 +93,7 @@ fn problem_note(p: &SheetProblem) -> String {
         SheetProblem::Missing => "There's no app/mechanics.json yet.".into(),
         SheetProblem::TooLarge => format!("app/mechanics.json is over {} KB: keep it to the values that shape play.", mechanics::MAX_BYTES / 1024),
         SheetProblem::Unreadable(why) => format!("app/mechanics.json can't be read: {why}."),
-        SheetProblem::Newer(v) => format!("app/mechanics.json says version {v}; this Craft Anything reads version {}.", mechanics::MECHANICS_VERSION),
+        SheetProblem::Newer(v) => format!("app/mechanics.json says version {v}; this F-Builder reads version {}.", mechanics::MECHANICS_VERSION),
         SheetProblem::Empty => "app/mechanics.json has no values.".into(),
     }
 }

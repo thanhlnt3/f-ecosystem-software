@@ -1,7 +1,7 @@
 # Example WASM plugin: word count
 
-A Craft Anything plugin with one tool, `count_words`, written in Rust. It implements
-`craft-anything:plugin/tools` from [`crates/engines/wit/plugin.wit`](../../crates/engines/wit/plugin.wit)
+A F-Builder plugin with one tool, `count_words`, written in Rust. It implements
+`f-builder:plugin/tools` from [`crates/engines/wit/plugin.wit`](../../crates/engines/wit/plugin.wit)
 and imports nothing, so it runs sandboxed: no files, network or environment.
 
 ## Build
@@ -18,7 +18,7 @@ what it exports.
 
 ## Use
 
-Craft Anything built with `--features wasm-plugins`, and in `config.toml`:
+F-Builder built with `--features wasm-plugins`, and in `config.toml`:
 
 ```toml
 [[plugins.wasm]]
@@ -27,11 +27,11 @@ path = "/full/path/to/wordcount.wasm"
 ```
 
 Its tool is then `wordcount_count_words`, everywhere: the app, the CLI
-(`craft-anything-cli wordcount-count-words --text "one two"`), MCP and the agent.
+(`f-builder-cli wordcount-count-words --text "one two"`), MCP and the agent.
 
 ## Check it
 
 ```sh
-CRAFT_ANYTHING_TEST_WASM_PLUGIN=/full/path/to/wordcount.wasm \
-  cargo test -p craft-anything-engines --features wasm-plugins the_example_plugin
+F_BUILDER_TEST_WASM_PLUGIN=/full/path/to/wordcount.wasm \
+  cargo test -p f-builder-engines --features wasm-plugins the_example_plugin
 ```

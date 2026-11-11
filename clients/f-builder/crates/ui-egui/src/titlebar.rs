@@ -6,10 +6,10 @@
 use crate::i18n::tr;
 use crate::state::Screen;
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, icons, widgets};
-use craft_anything_engine::Mode;
+use crate::{BuilderApp, icons, widgets};
 use egui::viewport::ResizeDirection;
 use egui::{RichText, Ui, Vec2};
+use f_builder_engine::Mode;
 
 /// macOS draws its own window buttons, frame and resize edges (#20).
 pub const NATIVE_FRAME: bool = cfg!(target_os = "macos");
@@ -37,7 +37,7 @@ fn label(size: f32, s: f32) -> f32 {
 }
 
 /// The title bar across the top of the window.
-pub fn bar(app: &mut CraftApp, ui: &mut Ui) {
+pub fn bar(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let height = HEIGHT * scale(ui.ctx());
     egui::Panel::top("titlebar").exact_size(height).frame(egui::Frame::new().fill(t.chrome)).show(ui, |ui| {
@@ -127,7 +127,7 @@ fn window_button(ui: &mut Ui, icon: &str, tip: &str, close: bool) -> egui::Respo
 
 /// Draws the bar: the app mark and what's open on the left, the switches, settings and (off
 /// macOS) the window buttons on the right. Empty parts move the window; a double-click zooms it.
-pub fn show(app: &mut CraftApp, ui: &mut Ui) {
+pub fn show(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let s = scale(&ctx);
@@ -156,7 +156,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
         if ui.add(crate::app_icon(22.0 * s).sense(egui::Sense::click())).on_hover_text(tr("Home")).clicked() {
             app.state.screen = Screen::Home;
         }
-        ui.label(theme::label_text("Craft Anything", label(12.0, s)).color(t.text).strong());
+        ui.label(theme::label_text("F-Builder", label(12.0, s)).color(t.text).strong());
         let in_project = app.state.screen == Screen::Project;
         let project = if in_project { app.workspace.as_ref().map(|w| w.manifest.name.clone()) } else { app.view.project.clone() };
         let target = if in_project { None } else { app.view.active_target().map(|t| (t.name.clone(), t.kind)) };
@@ -234,7 +234,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
 
 /// What the AI has used since the app opened ("about $3.20", or tokens without a price), once
 /// it has used anything; the details are in its tooltip.
-fn usage_pill(app: &CraftApp, ui: &mut Ui) {
+fn usage_pill(app: &BuilderApp, ui: &mut Ui) {
     let u = &app.session_usage;
     if !u.used_anything() {
         return;
@@ -245,7 +245,7 @@ fn usage_pill(app: &CraftApp, ui: &mut Ui) {
     r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &text));
     r.on_hover_ui(|ui| {
         ui.label(RichText::new(tr("AI use this session")).font(theme::semibold(theme::SMALL)));
-        ui.label(crate::usage::explain(u, "Since Craft Anything opened."));
+        ui.label(crate::usage::explain(u, "Since F-Builder opened."));
     });
 }
 
@@ -275,7 +275,7 @@ fn download_pill(ui: &mut Ui, title: &str, fraction: Option<f32>) -> egui::Respo
 }
 
 /// Clean room / Deep switch.
-fn deep_toggle(app: &mut CraftApp, ui: &mut Ui) {
+fn deep_toggle(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let deep = app.settings.deep_mode;
     let missing = app.ghidra_missing();
@@ -314,7 +314,7 @@ fn deep_toggle(app: &mut CraftApp, ui: &mut Ui) {
 }
 
 /// AI backend picker: configured brains, "No AI", "Set up…".
-fn backend_picker(app: &mut CraftApp, ui: &mut Ui) {
+fn backend_picker(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let current = format!("{} · {}", tr("AI"), app.state.backend.clone().unwrap_or_else(|| tr("None")));
     let mut choice: Option<Option<String>> = None;

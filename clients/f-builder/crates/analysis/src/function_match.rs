@@ -6,8 +6,8 @@
 //! ambiguous. Equal names say two functions correspond, not that the code is the same, so every
 //! pair says what comparing the bodies found.
 
-use craft_anything_disasm::{ArmConsts, Control, DisasmError, Flow, Function, Image, Mode, Op, Program, XrefKind};
-use craft_anything_evidence::sha256_hex;
+use f_builder_disasm::{ArmConsts, Control, DisasmError, Flow, Function, Image, Mode, Op, Program, XrefKind};
+use f_builder_evidence::sha256_hex;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -62,7 +62,7 @@ pub enum BodyStatus {
 /// A function as seen by the matcher.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FunctionRef {
-    #[serde(with = "craft_anything_formats::hex_addr")]
+    #[serde(with = "f_builder_formats::hex_addr")]
     pub entry: u64,
     pub name: String,
     pub size: u64,
@@ -156,7 +156,7 @@ fn zero_last(bytes: &mut [u8], pattern: &[u8]) -> bool {
     false
 }
 
-fn mask_x86(insn: &craft_anything_disasm::Insn, f: &Function, bytes: &mut [u8]) {
+fn mask_x86(insn: &f_builder_disasm::Insn, f: &Function, bytes: &mut [u8]) {
     let end = insn.end();
     let mask_addr = |a: u64, bytes: &mut [u8]| {
         let rel = a.wrapping_sub(end) as u32;
@@ -190,7 +190,7 @@ fn mask_x86(insn: &craft_anything_disasm::Insn, f: &Function, bytes: &mut [u8]) 
 }
 
 /// The instruction word with its address field cleared, for the encodings that hold one.
-fn mask_a64(insn: &craft_anything_disasm::Insn, f: &Function, word: u32) -> u32 {
+fn mask_a64(insn: &f_builder_disasm::Insn, f: &Function, word: u32) -> u32 {
     let leaves = flow_target(&insn.flow).is_some_and(|t| !f.contains(t));
     if word & 0x7c00_0000 == 0x1400_0000 {
         // b, bl

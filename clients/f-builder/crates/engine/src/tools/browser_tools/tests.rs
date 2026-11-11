@@ -2,7 +2,7 @@
 //! HTTP + WebSocket server that speaks a few CDP messages. No real browser is started.
 
 use crate::{CallOptions, Caller, Engine};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde_json::{Value, json};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -155,7 +155,7 @@ fn ws_write(stream: &mut TcpStream, text: &str) {
 }
 
 fn serve_ws(stream: &mut TcpStream) {
-    let bundle = craft_anything_testkit::electron::WEBPACK_BUNDLE;
+    let bundle = f_builder_testkit::electron::WEBPACK_BUNDLE;
     while let Some(msg) = ws_read(stream) {
         let req: Value = match serde_json::from_str(&msg) {
             Ok(v) => v,
@@ -599,7 +599,7 @@ fn compare_captures_is_pure() {
 
 /// Build a minimal web_page_show evidence record for compare tests.
 fn make_capture(scripts: &[&str], elements: &[&str]) -> Value {
-    use craft_anything_evidence::{Authority, Confidence, EvidenceBuilder, Subject};
+    use f_builder_evidence::{Authority, Confidence, EvidenceBuilder, Subject};
     let mut by_name = serde_json::Map::new();
     for el in elements {
         by_name.insert((*el).to_string(), json!(1));
@@ -948,10 +948,10 @@ fn coverage_records_the_scripts_it_shows() {
 }
 
 /// A loopback server that answers every GET with `body` and records the request paths.
-fn map_server(body: &'static str) -> (String, Arc<craft_anything_platform::sync::Mutex<Vec<String>>>) {
+fn map_server(body: &'static str) -> (String, Arc<f_builder_platform::sync::Mutex<Vec<String>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let origin = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
-    let seen = Arc::new(craft_anything_platform::sync::Mutex::new(Vec::new()));
+    let seen = Arc::new(f_builder_platform::sync::Mutex::new(Vec::new()));
     let seen2 = seen.clone();
     std::thread::spawn(move || {
         for s in listener.incoming() {

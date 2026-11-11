@@ -203,16 +203,16 @@ mod tests {
     #[test]
     fn reads_texture_layouts_from_2017_to_unity_6() {
         for version in ["2017.4.9f1", "2018.4.36f1", "2019.4.21f1", "2020.3.39f1", "2022.3.62f2", "6000.0.59f2"] {
-            let inline = craft_anything_testkit::games::unity_texture2d(version, "Checker", 2, 2, 4, Some(&[1; 16]), None);
+            let inline = f_builder_testkit::games::unity_texture2d(version, "Checker", 2, 2, 4, Some(&[1; 16]), None);
             let t = parse(&inline, version, false).unwrap_or_else(|e| panic!("{version}: {e}"));
             assert_eq!((t.name.as_str(), t.width, t.height, t.format, t.stream.clone()), ("Checker", 2, 2, 4, None), "{version}");
             let (start, len) = t.inline.unwrap();
             assert_eq!(&inline[start..start + len], &[1; 16]);
-            let streamed = craft_anything_testkit::games::unity_texture2d(version, "Block", 4, 4, 10, None, Some(("sharedassets0.assets.resS", 64, 8)));
+            let streamed = f_builder_testkit::games::unity_texture2d(version, "Block", 4, 4, 10, None, Some(("sharedassets0.assets.resS", 64, 8)));
             let t = parse(&streamed, version, false).unwrap();
             assert_eq!(t.stream, Some(StreamRef { path: "sharedassets0.assets.resS".into(), offset: 64, size: 8 }), "{version}");
         }
-        let old = craft_anything_testkit::games::unity_texture2d("2017.4.9f1", "x", 2, 2, 4, Some(&[0; 16]), None);
+        let old = f_builder_testkit::games::unity_texture2d("2017.4.9f1", "x", 2, 2, 4, Some(&[0; 16]), None);
         assert!(matches!(parse(&old, "5.6.7f1", false), Err(FormatError::Unsupported(_))));
         // A layout read wrong (here: as Unity 6) is refused, not misread.
         assert!(parse(&old, "6000.0.1f1", false).is_err());

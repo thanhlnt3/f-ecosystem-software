@@ -1,7 +1,7 @@
 //! A run's side of the project conversation: folding workflow events into the feed and keeping
 //! it saved as the run goes. The feed itself (its items and file) is `engine::feed`.
 
-pub use craft_anything_engine::feed::*;
+pub use f_builder_engine::feed::*;
 
 use super::activity::{Activity, ActivityFile};
 use super::*;
@@ -26,7 +26,7 @@ pub fn apply(feed: &mut Vec<FeedItem>, e: &RunEvent) {
         // Claude Code's TodoWrite, or our build_checklist (same shape) for API builders.
         RunEvent::Agent(AgentEvent::ToolStarted { tool, input, .. }) if tool == "TodoWrite" || tool == "build_checklist" => {
             if let Some(steps) = plan_from(input) {
-                if feed.iter().any(|i| matches!(i, FeedItem::Plan(_))) && craft_anything_engine::feed::visible_plan(feed).is_none() {
+                if feed.iter().any(|i| matches!(i, FeedItem::Plan(_))) && f_builder_engine::feed::visible_plan(feed).is_none() {
                     // The person folded the last list (#504): a new list is a new card at the end,
                     // and the folded one goes.
                     feed.retain(|i| !matches!(i, FeedItem::Plan(_) | FeedItem::PlanDismissed));
@@ -229,12 +229,12 @@ mod tests {
         apply(&mut feed, &call("in_progress"));
         apply(&mut feed, &call("completed"));
         assert_eq!(plans(&feed), 1, "updates in place while the list isn't folded");
-        assert!(craft_anything_engine::feed::dismiss_plan(&mut feed), "the list folds");
-        assert!(craft_anything_engine::feed::visible_plan(&feed).is_none());
+        assert!(f_builder_engine::feed::dismiss_plan(&mut feed), "the list folds");
+        assert!(f_builder_engine::feed::visible_plan(&feed).is_none());
         apply(&mut feed, &call("in_progress"));
         assert_eq!(plans(&feed), 1, "one checklist, not one folded and one new");
         assert!(!feed.iter().any(|i| matches!(i, FeedItem::PlanDismissed)), "the fold went with the old list");
-        assert!(craft_anything_engine::feed::visible_plan(&feed).is_some(), "the new list shows");
+        assert!(f_builder_engine::feed::visible_plan(&feed).is_some(), "the new list shows");
         assert!(matches!(feed.last(), Some(FeedItem::Plan(p)) if p[0].status == PlanStatus::Doing));
     }
 
@@ -250,7 +250,7 @@ mod tests {
             ]})
         };
         let call = |status: &str| RunEvent::Agent(AgentEvent::ToolStarted { call_id: "t".into(), tool: "TodoWrite".into(), input: todo(status) });
-        let steps = |f: &[FeedItem]| craft_anything_engine::feed::visible_plan(f).unwrap().to_vec();
+        let steps = |f: &[FeedItem]| f_builder_engine::feed::visible_plan(f).unwrap().to_vec();
         let mut feed = vec![FeedItem::User(UserItem::Text("A snake game".into()))];
         apply(&mut feed, &call("in_progress"));
         apply(&mut feed, &RunEvent::Finished { ok: true, message: "Ready.".into(), paused: false });
@@ -283,7 +283,7 @@ mod tests {
             if a.text() == "Clone it" && b.text() == "Make it blue" && text == "Done."));
         // An answer written to the file by someone else while it runs survives the run's saves.
         let inbox = Inbox::new(ws.inbox_dir());
-        let id = inbox.post(craft_anything_engine::inbox::RequestKind::Question, "Blue?", "", vec![], true, None).unwrap();
+        let id = inbox.post(f_builder_engine::inbox::RequestKind::Question, "Blue?", "", vec![], true, None).unwrap();
         let q = inbox.pending().into_iter().find(|r| r.id == id).unwrap();
         log.record(&RunEvent::Ask(q.clone()));
         record_answer(&ws, &q, "Yes").unwrap();

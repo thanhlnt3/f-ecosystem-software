@@ -4,9 +4,9 @@
 use crate::decode::{ArmConsts, Flow, Insn, Kind, Mode, Op};
 use crate::image::Image;
 use crate::{Control, DisasmError};
-use craft_anything_formats::hex_addr;
-use craft_anything_formats::strings::Encoding;
-use craft_anything_formats::{Format, SymbolKind};
+use f_builder_formats::hex_addr;
+use f_builder_formats::strings::Encoding;
+use f_builder_formats::{Format, SymbolKind};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -322,14 +322,14 @@ impl Program {
         }
         // Names a language's own metadata keeps even in a stripped program, with where they came from.
         let mut meta_names: BTreeMap<u64, (String, &'static str)> = BTreeMap::new();
-        for f in craft_anything_formats::go::functions(&img.data) {
+        for f in f_builder_formats::go::functions(&img.data) {
             if f.entry != 0 {
                 meta_names.entry(f.entry).or_insert((f.name, "go_pclntab"));
                 seeds.push((f.entry, "go_pclntab"));
             }
         }
         if bin.format == Format::MachO {
-            let meta = craft_anything_formats::macho::objc_metadata(&img.data, bin);
+            let meta = f_builder_formats::macho::objc_metadata(&img.data, bin);
             for c in &meta.classes {
                 for m in &c.methods {
                     if let Some(imp) = m.imp {
@@ -735,7 +735,7 @@ fn collect_strings(img: &Image, limits: &Limits) -> Vec<ProgString> {
         let n = usize::try_from(file_size).unwrap_or(0).min(budget);
         budget -= n;
         let Some(bytes) = img.data.get(off..off.saturating_add(n).min(img.data.len())) else { continue };
-        for f in craft_anything_formats::strings::extract(bytes, 0, limits.string_min_len, limits.max_strings - out.len()) {
+        for f in f_builder_formats::strings::extract(bytes, 0, limits.string_min_len, limits.max_strings - out.len()) {
             out.push(ProgString {
                 addr: addr.wrapping_add(f.offset),
                 file_offset: off as u64 + f.offset,
@@ -1249,7 +1249,7 @@ fn function_name(
     main_guess: Option<u64>,
 ) -> (String, &'static str) {
     let bin = &img.bin;
-    let mut syms: Vec<&craft_anything_formats::Symbol> =
+    let mut syms: Vec<&f_builder_formats::Symbol> =
         bin.symbols.iter().filter(|s| s.defined && s.kind == SymbolKind::Function && (s.addr == f.entry || s.addr == f.entry | 1)).collect();
     syms.sort_by_key(|s| (!s.global, s.name.starts_with('$'), s.name.len()));
     if let Some(s) = syms.first() {
@@ -1283,7 +1283,7 @@ fn function_name(
 mod tests {
     use super::*;
     use crate::NoControl;
-    use craft_anything_testkit as tk;
+    use f_builder_testkit as tk;
     use std::sync::Arc;
 
     fn analyze(bytes: Vec<u8>) -> (Image, Program) {
@@ -1509,7 +1509,7 @@ mod tests {
         let p = Program::analyze(&img, &Limits::default(), &NoControl).unwrap();
         let f = p.functions.get(&0x100).unwrap();
         assert!(f.insn_count >= 4);
-        let raw = Image::raw(Arc::from(tk::x86_64_code(0x1000, 0x2000, 0x3000)), craft_anything_formats::Arch::X86_64, 0x1000);
+        let raw = Image::raw(Arc::from(tk::x86_64_code(0x1000, 0x2000, 0x3000)), f_builder_formats::Arch::X86_64, 0x1000);
         let p = Program::analyze(&raw, &Limits::default(), &NoControl).unwrap();
         assert!(p.functions.contains_key(&0x1000));
         assert!(p.functions.contains_key(&(0x1000 + tk::x64::HELPER)));
@@ -1522,7 +1522,7 @@ mod tests {
         let mut code = vec![0xcc; 0x20];
         code[..10].copy_from_slice(&[0x85, 0xc0, 0x74, 0x0c, 0xe8, 0x07, 0, 0, 0, 0xc3]);
         code[0x10..0x16].copy_from_slice(&[0xb8, 1, 0, 0, 0, 0xc3]);
-        let raw = Image::raw(Arc::from(code), craft_anything_formats::Arch::X86_64, 0x1000);
+        let raw = Image::raw(Arc::from(code), f_builder_formats::Arch::X86_64, 0x1000);
         let p = Program::analyze(&raw, &Limits::default(), &NoControl).unwrap();
         let caller = p.functions.get(&0x1000).unwrap();
         assert!(caller.blocks.iter().all(|b| b.end <= 0x1010), "{:?}", caller.blocks);
@@ -1537,7 +1537,7 @@ mod tests {
         let mut code = vec![0u8; 0x20];
         code[..8].copy_from_slice(&[0x48, 0x8d, 0x05, 0x0e, 0, 0, 0, 0xc3]);
         code[0x10..0x1a].copy_from_slice(b"HelloWorld");
-        let raw = Image::raw(Arc::from(code), craft_anything_formats::Arch::X86_64, 0x1000);
+        let raw = Image::raw(Arc::from(code), f_builder_formats::Arch::X86_64, 0x1000);
         let p = Program::analyze(&raw, &Limits::default(), &NoControl).unwrap();
         let at = |a: u64| p.strings.iter().find(|s| s.addr == a).map(|s| s.text.as_str());
         assert_eq!((at(0x1010), at(0x1015)), (Some("Hello"), Some("World")), "{:?}", p.strings);
@@ -1555,7 +1555,7 @@ mod tests {
         for (i, t) in [0x1010u64, 0x1011, 0x1085, 0x1088, 0].iter().enumerate() {
             code[0x100 + i * 8..0x108 + i * 8].copy_from_slice(&t.to_le_bytes());
         }
-        let raw = Image::raw(Arc::from(code), craft_anything_formats::Arch::X86_64, 0x1000);
+        let raw = Image::raw(Arc::from(code), f_builder_formats::Arch::X86_64, 0x1000);
         let p = Program::analyze(&raw, &Limits::default(), &NoControl).unwrap();
         let caller = p.functions.get(&0x1000).unwrap();
         assert!(caller.blocks.iter().all(|b| b.end <= 0x1080), "{:?}", caller.blocks);
@@ -1583,7 +1583,7 @@ mod tests {
         // a regression fails instead of hanging the test run.
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            use craft_anything_formats::Arch;
+            use f_builder_formats::Arch;
             let base = u64::MAX - 63;
             for arch in [Arch::X86, Arch::X86_64, Arch::Arm, Arch::Aarch64, Arch::X86_16] {
                 for seed in 0..4 {
@@ -1610,9 +1610,9 @@ mod tests {
             }
         }
         for seed in 0..16 {
-            let raw = Image::raw(Arc::from(tk::noise(seed, 4096)), craft_anything_formats::Arch::X86_64, 0x1000);
+            let raw = Image::raw(Arc::from(tk::noise(seed, 4096)), f_builder_formats::Arch::X86_64, 0x1000);
             let _ = Program::analyze(&raw, &Limits::default(), &NoControl);
-            let raw = Image::raw(Arc::from(tk::noise(seed, 4096)), craft_anything_formats::Arch::Aarch64, 0x1000);
+            let raw = Image::raw(Arc::from(tk::noise(seed, 4096)), f_builder_formats::Arch::Aarch64, 0x1000);
             let _ = Program::analyze(&raw, &Limits::default(), &NoControl);
         }
     }

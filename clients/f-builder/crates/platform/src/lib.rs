@@ -1,6 +1,6 @@
-//! Native platform services for Craft Anything: owned processes, file safety and program lookup.
+//! Native platform services for F-Builder: owned processes, file safety and program lookup.
 //!
-//! Every external program Craft Anything runs goes through [`process`]: stdin is closed or fed from
+//! Every external program F-Builder runs goes through [`process`]: stdin is closed or fed from
 //! bytes we own, every run has wall and idle deadlines, output is capped and drained on threads,
 //! and the whole process group (Unix) or Job Object (Windows) is killed on timeout, cancel or drop.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
@@ -58,7 +58,7 @@ fn keep_awake_while(owner: u32, every: std::time::Duration) -> Option<KeepAwake>
     // ends the helper, so it never runs without doing its job. The owner is opened once and its
     // handle kept, so Windows can't give its id to another process the helper would then serve.
     let windows = format!(
-        "$ErrorActionPreference = 'Stop'; $k = Add-Type -Name P -Namespace CraftAnything -PassThru -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);'; $o = Get-Process -Id {owner}; $null = $o.Handle; while (-not $o.HasExited) {{ if ($k::SetThreadExecutionState(2147483649) -eq 0) {{ exit 1 }}; Start-Sleep -Seconds {} }}",
+        "$ErrorActionPreference = 'Stop'; $k = Add-Type -Name P -Namespace FBuilder -PassThru -MemberDefinition '[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);'; $o = Get-Process -Id {owner}; $null = $o.Handle; while (-not $o.HasExited) {{ if ($k::SetThreadExecutionState(2147483649) -eq 0) {{ exit 1 }}; Start-Sleep -Seconds {} }}",
         every.as_secs().max(1)
     );
     let p = if cfg!(windows) {
@@ -115,7 +115,7 @@ mod tests {
     fn stand_in(name: &str) -> Process {
         // argv[0] is the test binary even in a sandbox without /proc/self/exe.
         let exe = std::env::args_os().next().expect("test binary path");
-        Process::new(exe).args(["--ignored", "--exact", name, "--nocapture"]).env("CRAFT_KEEP_AWAKE_STAND_IN", "1").timeout(Duration::from_secs(15))
+        Process::new(exe).args(["--ignored", "--exact", name, "--nocapture"]).env("F_BUILDER_KEEP_AWAKE_STAND_IN", "1").timeout(Duration::from_secs(15))
     }
 
     fn helper() -> (KeepAwake, u16) {
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     #[ignore = "stand-in helper invoked by keep-awake lifecycle tests"]
     fn keep_awake_helper_stand_in() {
-        if std::env::var_os("CRAFT_KEEP_AWAKE_STAND_IN").is_none() {
+        if std::env::var_os("F_BUILDER_KEEP_AWAKE_STAND_IN").is_none() {
             return;
         }
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
@@ -216,7 +216,7 @@ mod tests {
     #[test]
     #[ignore = "stand-in CLI invoked by a_cli_can_exit_immediately_after_releasing_keep_awake"]
     fn keep_awake_cli_stand_in() {
-        if std::env::var_os("CRAFT_KEEP_AWAKE_STAND_IN").is_none() {
+        if std::env::var_os("F_BUILDER_KEEP_AWAKE_STAND_IN").is_none() {
             return;
         }
         let (guard, port) = helper();

@@ -1,5 +1,5 @@
-use craft_anything_formats::sqlite::{CellValue, SqliteDb};
-use craft_anything_testkit::sqlite::{PAGE_SIZE as PAGE, Val, build_record, table_db};
+use f_builder_formats::sqlite::{CellValue, SqliteDb};
+use f_builder_testkit::sqlite::{PAGE_SIZE as PAGE, Val, build_record, table_db};
 
 fn database(pages: usize) -> Vec<u8> {
     let mut data = table_db("CREATE TABLE t(value TEXT)", &[(1, vec![Val::Text("kept".into())])]);

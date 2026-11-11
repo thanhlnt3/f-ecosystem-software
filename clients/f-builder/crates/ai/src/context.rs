@@ -6,7 +6,7 @@
 //! keeps its result, and the most recent messages are never touched.
 
 use crate::model::{Block, Msg, Speaker};
-use craft_anything_evidence::ToolError;
+use f_builder_evidence::ToolError;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -138,7 +138,7 @@ fn deep_by_default() -> bool {
 pub fn save(path: &Path, history: &[Msg], deep: bool) -> Result<(), ToolError> {
     let text = serde_json::to_vec(&Transcript { version: TRANSCRIPT_VERSION, deep, history: history.to_vec() })
         .map_err(|e| ToolError::internal(format!("couldn't write the transcript: {e}")))?;
-    craft_anything_engine::project::write_atomic(path, &text)
+    f_builder_engine::project::write_atomic(path, &text)
 }
 
 /// A saved conversation, ready to continue in `deep` mode: `None` when there is none, it's

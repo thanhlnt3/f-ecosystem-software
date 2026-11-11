@@ -1,4 +1,4 @@
-use craft_anything_setup::{Host, clients, config};
+use f_builder_setup::{Host, clients, config};
 
 const CODEX: &str = "# Codex config\nmodel = \"x\" # chosen\nnote = \"\"\"\nfirst\nsecond\"\"\"\n\n[mcp_servers.other]\ncommand = \"o\" # theirs\n";
 
@@ -7,7 +7,7 @@ fn crlf(s: &str) -> String {
 }
 
 fn cli() -> [String; 2] {
-    ["/b/craft-anything-cli".to_string(), "mcp".to_string()]
+    ["/b/f-builder-cli".to_string(), "mcp".to_string()]
 }
 
 /// A TOML config saved with Windows line endings keeps them when setup adds our entry, and

@@ -1,4 +1,4 @@
-use craft_anything_analysis::standin::{Answer, BodyLeftOut, BuildOptions, StandIn, Turns, answer, build_from_bytes};
+use f_builder_analysis::standin::{Answer, BodyLeftOut, BuildOptions, StandIn, Turns, answer, build_from_bytes};
 use serde_json::{Value, json};
 
 fn entry(status: u16, mime: &str, body: &str, headers: Value) -> Value {

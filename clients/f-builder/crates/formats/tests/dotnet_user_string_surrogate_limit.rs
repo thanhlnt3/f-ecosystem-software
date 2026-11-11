@@ -1,4 +1,4 @@
-use craft_anything_formats::dotnet::meta::Metadata;
+use f_builder_formats::dotnet::meta::Metadata;
 
 fn metadata_with_user_string(units: &[u16]) -> Vec<u8> {
     let mut heap = vec![0, (units.len() * 2 + 1) as u8];

@@ -1,6 +1,6 @@
-use craft_anything_formats::firmware::{ScanOptions, scan};
-use craft_anything_formats::tarcpio::{cpio, member_data};
-use craft_anything_testkit::firmware as fx;
+use f_builder_formats::firmware::{ScanOptions, scan};
+use f_builder_formats::tarcpio::{cpio, member_data};
+use f_builder_testkit::firmware as fx;
 
 fn crc_archive() -> Vec<u8> {
     let mut archive = fx::cpio_newc(&[("file", &[255, 128, 65], 0o100644), ("link", b"file", 0o120777)]);

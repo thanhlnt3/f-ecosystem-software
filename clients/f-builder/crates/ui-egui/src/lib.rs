@@ -1,4 +1,4 @@
-//! The Craft Anything egui interface: Simple mode (make something from a prompt, or ask about a
+//! The F-Builder egui interface: Simple mode (make something from a prompt, or ask about a
 //! target) and Advanced mode (the full workbench). Both drive the same engine.
 //!
 //! Threading: the UI thread never waits. Engine tools, AI detection, file dialogs and file writes
@@ -45,9 +45,9 @@ pub mod usage;
 pub mod widgets;
 pub mod workbench;
 
-use craft_anything_ai::{AgentEvent, AiHub, BackendConfig, Conversation, Detected};
-use craft_anything_engine::evidence::{ErrorCode, Evidence, ToolError, Unknown};
-use craft_anything_engine::{CallOptions, Caller, Consent, Engine, Mode, Settings, TargetKind, ToolOutput, clean_room};
+use f_builder_ai::{AgentEvent, AiHub, BackendConfig, Conversation, Detected};
+use f_builder_engine::evidence::{ErrorCode, Evidence, ToolError, Unknown};
+use f_builder_engine::{CallOptions, Caller, Consent, Engine, Mode, Settings, TargetKind, ToolOutput, clean_room};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use state::{CenterTab, ChatItem, ConsentAnswer, Fill, RailKind, Screen, UiState};
@@ -156,10 +156,10 @@ pub enum Done {
         result: Result<Value, ToolError>,
     },
     /// What a scan found, and why an expected coding agent may be missing.
-    Detected(Vec<Detected>, Vec<craft_anything_ai::detect::DetectHint>),
+    Detected(Vec<Detected>, Vec<f_builder_ai::detect::DetectHint>),
     /// The configured backends, the ones chosen to build with and to extract with, and each one's
     /// options.
-    Backends(Vec<BackendConfig>, Option<String>, Option<String>, std::collections::BTreeMap<String, craft_anything_ai::BackendOptions>),
+    Backends(Vec<BackendConfig>, Option<String>, Option<String>, std::collections::BTreeMap<String, f_builder_ai::BackendOptions>),
     /// The models an AI can be set to (Settings → AI's model picker).
     ModelChoices {
         name: String,
@@ -167,21 +167,21 @@ pub enum Done {
     },
     AgentModelChoices {
         request: u64,
-        context: craft_anything_ai::ModelContext,
-        result: Result<Vec<craft_anything_ai::AgentModel>, ToolError>,
+        context: f_builder_ai::ModelContext,
+        result: Result<Vec<f_builder_ai::AgentModel>, ToolError>,
     },
     ModelTuning {
         name: String,
         cli_model: Option<String>,
-        result: Result<craft_anything_ai::model_options::ModelTuning, ToolError>,
+        result: Result<f_builder_ai::model_options::ModelTuning, ToolError>,
     },
     ModelChanged {
         name: String,
         model: String,
-        result: Result<craft_anything_ai::BackendOptions, ToolError>,
+        result: Result<f_builder_ai::BackendOptions, ToolError>,
     },
     ModelOptionsSaved {
-        params: craft_anything_ai::model_options::SetModelOptions,
+        params: f_builder_ai::model_options::SetModelOptions,
         result: Result<(), ToolError>,
     },
     Picked {
@@ -206,20 +206,20 @@ pub enum Done {
         target: crate::project::PictureTarget,
     },
     /// The game engines on this computer were listed.
-    GameEngines(craft_anything_engines::game::Inventory),
+    GameEngines(f_builder_engines::game::Inventory),
     /// What engine made the game at `path`.
     GameFound {
         path: PathBuf,
-        found: Option<craft_anything_engines::game::Found>,
+        found: Option<f_builder_engines::game::Found>,
     },
     /// An engine download finished: ready, or its vendor installer was opened.
     EngineGot {
-        builder: craft_anything_engines::game::Builder,
+        builder: f_builder_engines::game::Builder,
         installer: bool,
     },
     /// Ghidra and its Java were downloaded and set up for Deep mode.
     GhidraGot,
-    /// A tool started by a button finished (see `CraftApp::act`).
+    /// A tool started by a button finished (see `BuilderApp::act`).
     Acted {
         tool: &'static str,
         result: Result<Value, ToolError>,
@@ -233,20 +233,20 @@ pub enum Done {
     BackendAdded {
         name: String,
         result: Result<(), ToolError>,
-        /// `CraftApp::backend_choices` when the add started: a choice made since then stands.
+        /// `BuilderApp::backend_choices` when the add started: a choice made since then stands.
         choices: u64,
     },
     /// The projects folder was listed.
-    Projects(Vec<craft_anything_engine::workspace::Workspace>),
-    /// A new project's folder was made (see `CraftApp::start_make`).
+    Projects(Vec<f_builder_engine::workspace::Workspace>),
+    /// A new project's folder was made (see `BuilderApp::start_make`).
     Created {
-        ws: Box<craft_anything_engine::workspace::Workspace>,
+        ws: Box<f_builder_engine::workspace::Workspace>,
         request: String,
         backend: String,
         /// Why the pictures couldn't be copied, if they couldn't.
         pictures: Option<String>,
     },
-    /// A message's pictures were copied into its project (see `CraftApp::deliver`).
+    /// A message's pictures were copied into its project (see `BuilderApp::deliver`).
     Attached {
         root: PathBuf,
         text: String,
@@ -305,7 +305,7 @@ pub enum Pick {
     GameFolder,
     /// Where to save a picture from a game.
     SavePicture,
-    /// The program an agent app runs ([`CraftApp::picking_program_for`] says which).
+    /// The program an agent app runs ([`BuilderApp::picking_program_for`] says which).
     AgentProgram,
 }
 
@@ -326,8 +326,8 @@ pub struct TargetInfo {
 pub struct ModelTuningDraft {
     pub backend: String,
     pub cli_model: Option<String>,
-    pub choices: Option<craft_anything_ai::model_options::ModelTuning>,
-    pub context: Option<craft_anything_ai::config::CliContext>,
+    pub choices: Option<f_builder_ai::model_options::ModelTuning>,
+    pub context: Option<f_builder_ai::config::CliContext>,
     #[serde(default)]
     pub saving: bool,
     #[serde(default)]
@@ -336,13 +336,13 @@ pub struct ModelTuningDraft {
 
 impl ModelTuningDraft {
     /// Drop an override the selected model does not advertise before presenting its controls.
-    pub fn set_choices(&mut self, choices: craft_anything_ai::model_options::ModelTuning) {
+    pub fn set_choices(&mut self, choices: f_builder_ai::model_options::ModelTuning) {
         self.context = self.context.filter(|value| choices.context.iter().any(|choice| choice.value == *value));
         self.choices = Some(choices);
     }
 
-    pub fn params(&self) -> craft_anything_ai::model_options::SetModelOptions {
-        craft_anything_ai::model_options::SetModelOptions { backend: self.backend.clone(), expected_cli_model: self.cli_model.clone(), context: self.context }
+    pub fn params(&self) -> f_builder_ai::model_options::SetModelOptions {
+        f_builder_ai::model_options::SetModelOptions { backend: self.backend.clone(), expected_cli_model: self.cli_model.clone(), context: self.context }
     }
 }
 
@@ -357,7 +357,7 @@ pub struct SessionView {
     pub ledger_len: usize,
     pub unknowns: Vec<Unknown>,
     /// Recorded answers (`fnd_*`), distinct from the evidence ledger that supports them.
-    pub findings: Vec<craft_anything_engine::tools::investigation_tools::Finding>,
+    pub findings: Vec<f_builder_engine::tools::investigation_tools::Finding>,
     pub project: Option<String>,
     pub project_allows: Vec<String>,
 }
@@ -380,7 +380,7 @@ pub struct LogLine {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Prefs {
-    pub purpose: craft_anything_engine::project::Purpose,
+    pub purpose: f_builder_engine::project::Purpose,
     pub backend: Option<String>,
     pub explain_new: Option<bool>,
     pub rail: Option<RailKind>,
@@ -403,10 +403,10 @@ pub struct Prefs {
     pub unsent: std::collections::BTreeMap<PathBuf, String>,
 }
 
-pub const PREFS_KEY: &str = "craft-anything-ui";
+pub const PREFS_KEY: &str = "f-builder-ui";
 const LEDGER_VIEW_CAP: usize = 300;
 
-/// Frames that must have been shown before [`CraftApp::after_first_frames`] runs its callback.
+/// Frames that must have been shown before [`BuilderApp::after_first_frames`] runs its callback.
 const FIRST_FRAMES: u32 = 2;
 
 struct FirstFrames {
@@ -414,19 +414,19 @@ struct FirstFrames {
     done: Box<dyn FnOnce() + Send>,
 }
 
-pub struct CraftApp {
+pub struct BuilderApp {
     pub engine: Arc<Engine>,
     pub hub: Arc<AiHub>,
     pub state: UiState,
     /// The UI's copy of the settings; pushed into the session (and saved) when changed.
     pub settings: Settings,
-    /// Run once after the first frames have been drawn and shown (see [`CraftApp::after_first_frames`]).
+    /// Run once after the first frames have been drawn and shown (see [`BuilderApp::after_first_frames`]).
     first_frames: Option<FirstFrames>,
     /// Write settings to disk (off in tests and snapshots).
     pub persist: bool,
     /// Never open native dialogs (tests and snapshots).
     pub headless: bool,
-    /// The macOS menu bar, once the window is open ([`CraftApp::install_menu_bar`]).
+    /// The macOS menu bar, once the window is open ([`BuilderApp::install_menu_bar`]).
     #[cfg(target_os = "macos")]
     pub menu_bar: Option<menu::MenuBar>,
     pub view: SessionView,
@@ -434,7 +434,7 @@ pub struct CraftApp {
     pub conversation: Option<Box<dyn Conversation>>,
     pub backends: Vec<BackendConfig>,
     /// Each backend's options (an agent app's program and model), by name (Settings → AI).
-    pub backend_options: std::collections::BTreeMap<String, craft_anything_ai::BackendOptions>,
+    pub backend_options: std::collections::BTreeMap<String, f_builder_ai::BackendOptions>,
     /// The AI whose model is being chosen in Settings → AI, and the models it offers once they've
     /// come (`None`: still asking).
     pub model_picker: Option<(String, Option<Vec<String>>)>,
@@ -451,7 +451,7 @@ pub struct CraftApp {
     pub extractor: Option<String>,
     pub detected: Option<Vec<Detected>>,
     /// Why an expected coding agent may be missing, from the last scan.
-    pub detect_hints: Vec<craft_anything_ai::detect::DetectHint>,
+    pub detect_hints: Vec<f_builder_ai::detect::DetectHint>,
     pub detecting: bool,
     /// Counts AI choices, so an add that finishes later doesn't undo one made meanwhile.
     pub backend_choices: u64,
@@ -461,7 +461,7 @@ pub struct CraftApp {
     /// only to the keychain.
     pub server_form: ServerForm,
     /// Every project's rebuild in this window: working, waiting their turn, or finished.
-    pub runs: craft_anything_ai::rebuild::RunSet,
+    pub runs: f_builder_ai::rebuild::RunSet,
     /// What was typed for each note still waiting for a builder, by note id, to put back in the
     /// prompt box when the note is taken back.
     pub drafts: std::collections::HashMap<u64, project::Draft>,
@@ -478,11 +478,11 @@ pub struct CraftApp {
     /// Each project's building time and AI use, every build together (read from its usage.json).
     pub usage: std::collections::HashMap<PathBuf, usage::ProjectClock>,
     /// All AI use since the app opened: builds and chat.
-    pub session_usage: craft_anything_engine::workspace::ProjectUsage,
+    pub session_usage: f_builder_engine::workspace::ProjectUsage,
     /// The project shown on the Project screen.
-    pub workspace: Option<craft_anything_engine::workspace::Workspace>,
+    pub workspace: Option<f_builder_engine::workspace::Workspace>,
     /// Every project in the projects folder, newest first.
-    pub projects: Vec<craft_anything_engine::workspace::Workspace>,
+    pub projects: Vec<f_builder_engine::workspace::Workspace>,
     /// A preview server for a project opened without a run.
     pub preview: Option<String>,
     /// Questions asked about each project's build this session, and their answers (`just_ask`).
@@ -495,12 +495,12 @@ pub struct CraftApp {
     open_url: Option<String>,
     /// The open project's screenshot thumbnails (dropped when another project opens).
     pub thumbs: std::collections::HashMap<PathBuf, project::Thumb>,
-    /// Pictures of the attachments in the prompt boxes (`CraftApp::previews`).
+    /// Pictures of the attachments in the prompt boxes (`BuilderApp::previews`).
     pub previews: std::collections::HashMap<PathBuf, project::Thumb>,
     /// The kinds of thing this app can make; a fork registers its own here.
-    pub kinds: craft_anything_ai::rebuild::KindRegistry,
+    pub kinds: f_builder_ai::rebuild::KindRegistry,
     /// Game engines on this computer (`None` until the first look finishes).
-    pub game_engines: Option<craft_anything_engines::game::Inventory>,
+    pub game_engines: Option<f_builder_engines::game::Inventory>,
     /// Which asset providers have a key set up, by provider id (`None` until checked; the keys
     /// themselves never come into the app).
     pub asset_keys: Option<std::collections::BTreeMap<String, bool>>,
@@ -540,14 +540,14 @@ pub struct CraftApp {
     started: bool,
 }
 
-impl CraftApp {
+impl BuilderApp {
     /// Initialize UI state from the shared engine's saved settings, waiting rather than substituting defaults.
     pub fn new(engine: Arc<Engine>, hub: Arc<AiHub>) -> Self {
         // Wait for the engine if it's busy: defaults here would show Clean room and no AI, and the
         // next settings change would save them over the person's own.
         let settings = engine.session().settings.clone();
         i18n::set_language(&settings.language);
-        CraftApp {
+        BuilderApp {
             engine,
             hub,
             state: UiState::default(),
@@ -577,7 +577,7 @@ impl CraftApp {
             log: Vec::new(),
             key_inputs: Default::default(),
             server_form: ServerForm::default(),
-            runs: craft_anything_ai::rebuild::RunSet::new(craft_anything_engine::settings::BuildSettings::default().parallel),
+            runs: f_builder_ai::rebuild::RunSet::new(f_builder_engine::settings::BuildSettings::default().parallel),
             drafts: Default::default(),
             pending_paste: None,
             pending_attach_checks: Default::default(),
@@ -596,7 +596,7 @@ impl CraftApp {
             open_url: None,
             thumbs: Default::default(),
             previews: Default::default(),
-            kinds: craft_anything_ai::rebuild::KindRegistry::built_in(),
+            kinds: f_builder_ai::rebuild::KindRegistry::built_in(),
             game_engines: None,
             asset_keys: None,
             facts: Default::default(),
@@ -672,7 +672,7 @@ impl CraftApp {
         }
         self.state.unsent = p.unsent.into_iter().map(|(root, text)| (root, (text, Vec::new()))).collect();
         // Back to the project that was open, with its conversation, if it's still there.
-        if let Some(ws) = p.last_project.and_then(|root| craft_anything_engine::workspace::Workspace::open(&root).ok()) {
+        if let Some(ws) = p.last_project.and_then(|root| f_builder_engine::workspace::Workspace::open(&root).ok()) {
             self.open_workspace(ws);
         }
     }
@@ -865,7 +865,7 @@ impl CraftApp {
             },
             ledger_len: s.ledger_len(),
             unknowns: s.unknowns().take(500).cloned().collect(),
-            findings: craft_anything_engine::tools::investigation_tools::cached(&s).findings,
+            findings: f_builder_engine::tools::investigation_tools::cached(&s).findings,
             project: s.project.as_ref().map(|p| p.meta.name.clone()),
             project_allows: s.project.as_ref().map(|p| p.meta.allowed_tools.clone()).unwrap_or_default(),
         };
@@ -972,8 +972,8 @@ impl CraftApp {
                 if let Some(ws) = self.workspace.as_mut().filter(|w| v["project"].as_str().is_some_and(|p| w.root == std::path::Path::new(p))) {
                     let _ = ws.reload();
                     // What the tool added to the saved conversation.
-                    let text = craft_anything_engine::tools::project_tools::CALLED_DONE.to_string();
-                    self.state.feed.push(craft_anything_engine::feed::FeedItem::Step { step: craft_anything_engine::workspace::Step::Done, text });
+                    let text = f_builder_engine::tools::project_tools::CALLED_DONE.to_string();
+                    self.state.feed.push(f_builder_engine::feed::FeedItem::Step { step: f_builder_engine::workspace::Step::Done, text });
                 }
                 self.toast(tr("Called done. A new message carries on from here."), false);
             }
@@ -1034,7 +1034,7 @@ impl CraftApp {
 
     /// Says when a lock got stuck (crates/platform/src/sync.rs), with a way out.
     fn stuck_banner(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        use craft_anything_platform::sync::{self, ProblemKind};
+        use f_builder_platform::sync::{self, ProblemKind};
         let Some(problem) = sync::problems().into_iter().find(|p| p.kind != ProblemKind::SlowJob) else { return };
         let t = theme::Tokens::get(ctx);
         let text = match problem.kind {
@@ -1051,7 +1051,7 @@ impl CraftApp {
                     self.open_log(path);
                 }
                 if widgets::secondary(ui, None, "Restart").clicked() {
-                    match craft_anything_platform::process::start_another_copy() {
+                    match f_builder_platform::process::start_another_copy() {
                         Ok(_) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
                         Err(e) => self.toast(e.message, true),
                     }
@@ -1065,7 +1065,7 @@ impl CraftApp {
 
     /// Show a failure log in the system's viewer for text files.
     pub(crate) fn open_log(&mut self, path: &std::path::Path) {
-        if let Err(e) = craft_anything_platform::open_path(path) {
+        if let Err(e) = f_builder_platform::open_path(path) {
             self.toast(format!("{}: {}", e.message, path.display()), true);
         }
     }
@@ -1195,7 +1195,7 @@ impl CraftApp {
     }
 
     /// Choose the backend that builds or extracts (`None`: its default).
-    pub fn set_role(&mut self, role: craft_anything_ai::Role, name: Option<String>) {
+    pub fn set_role(&mut self, role: f_builder_ai::Role, name: Option<String>) {
         let hub = self.hub.clone();
         self.jobs.spawn(tr("Choose an AI's job"), true, move |_| {
             hub.set_role(role, name.as_deref()).map_err(|e| e.message)?;
@@ -1371,7 +1371,7 @@ impl CraftApp {
         if self.headless {
             return;
         }
-        let name = self.view.active_target().map(|t| format!("{} report.md", t.name)).unwrap_or_else(|| "Craft Anything report.md".into());
+        let name = self.view.active_target().map(|t| format!("{} report.md", t.name)).unwrap_or_else(|| "F-Builder report.md".into());
         let engine = self.engine.clone();
         #[cfg(not(target_arch = "wasm32"))]
         self.jobs.spawn("Export report", true, move |_| {
@@ -1485,7 +1485,7 @@ impl CraftApp {
                 self.extractor = extractor;
                 self.backend_options = options;
                 self.model_tuning.retain(|name, state| {
-                    self.backends.iter().any(|backend| backend.name == *name && craft_anything_ai::model_options::supported(backend))
+                    self.backends.iter().any(|backend| backend.name == *name && f_builder_ai::model_options::supported(backend))
                         && self.backend_options.get(name).and_then(|options| options.cli_model.as_ref()) == state.cli_model.as_ref()
                 });
             }
@@ -1529,7 +1529,7 @@ impl CraftApp {
             Done::ModelChanged { name, model, result } => match result {
                 Ok(options) => {
                     if let Some(backend) = self.backends.iter_mut().find(|backend| backend.name == name) {
-                        if backend.kind != craft_anything_ai::BackendKind::AgentCli {
+                        if backend.kind != f_builder_ai::BackendKind::AgentCli {
                             backend.model = model;
                         }
                         self.backend_options.insert(name.clone(), options);
@@ -1587,7 +1587,7 @@ impl CraftApp {
                             self.settings_changed();
                         }
                         Pick::TargetFile | Pick::TargetFolder => {
-                            self.state.make.target = craft_anything_engine::workspace::TargetRef::Local { path: path.clone() };
+                            self.state.make.target = f_builder_engine::workspace::TargetRef::Local { path: path.clone() };
                             self.state.make.game = pick == Pick::TargetFolder;
                             self.state.make.editing_url = false;
                             self.state.make.builder = None;
@@ -1620,7 +1620,7 @@ impl CraftApp {
             Done::GameEngines(inv) => self.engines_found(inv),
             Done::GameFound { path, found } => {
                 // Only if that game is still the one picked.
-                if self.state.make.target == (craft_anything_engine::workspace::TargetRef::Local { path }) {
+                if self.state.make.target == (f_builder_engine::workspace::TargetRef::Local { path }) {
                     self.state.make.found = found;
                 }
             }
@@ -1752,7 +1752,7 @@ impl CraftApp {
         }
         // Dropped pictures go to the prompt box on Make or a project; anything else opens.
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
-        let pictures = !dropped.is_empty() && dropped.iter().all(|p| craft_anything_engine::workspace::is_picture(p));
+        let pictures = !dropped.is_empty() && dropped.iter().all(|p| f_builder_engine::workspace::is_picture(p));
         match self.state.screen {
             Screen::Project if pictures => self.attach(dropped),
             Screen::Home if pictures => self.add_pictures(dropped),
@@ -1879,7 +1879,7 @@ impl CraftApp {
         let inner = rect.shrink(40.0);
         painter.rect_stroke(inner, t.radius_lg, egui::Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
         // Pictures dropped on Make or a project are attached; anything else opens.
-        let pictures = ctx.input(|i| i.raw.hovered_files.iter().all(|f| f.path.as_deref().is_some_and(craft_anything_engine::workspace::is_picture)));
+        let pictures = ctx.input(|i| i.raw.hovered_files.iter().all(|f| f.path.as_deref().is_some_and(f_builder_engine::workspace::is_picture)));
         let attach = pictures && matches!(self.state.screen, Screen::Home | Screen::Project);
         let g = theme::heading_galley(&painter, tr(if attach { "Drop to attach" } else { "Drop to open it" }), theme::TITLE, t.text, f32::INFINITY);
         painter.galley(inner.center() - g.size() / 2.0, g, t.text);
@@ -1938,9 +1938,9 @@ pub fn bounded_zoom(zoom: f32) -> f32 {
 }
 
 /// The 256 px app icon.
-pub static APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/ai.storyteller.craft-anything.png");
+pub static APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/io.github.thanhlnt3.f-builder.png");
 /// The app icon's master SVG, drawn at the exact pixel size wherever the app shows its icon.
-pub static APP_ICON_SVG: &[u8] = include_bytes!("../../../assets/app-icon/craft-anything.svg");
+pub static APP_ICON_SVG: &[u8] = include_bytes!("../../../assets/app-icon/f-builder.svg");
 
 /// The app icon at `size` points.
 pub fn app_icon(size: f32) -> egui::Image<'static> {
@@ -1950,10 +1950,10 @@ pub fn app_icon(size: f32) -> egui::Image<'static> {
 /// Run an action; a panic is logged and swallowed so one bad action never takes the app down.
 /// The configured backends and the ones chosen to build and to extract (read off the UI thread).
 pub(crate) fn backends(hub: &AiHub) -> Done {
-    Done::Backends(hub.backends(), hub.chosen(craft_anything_ai::Role::Builder), hub.chosen(craft_anything_ai::Role::Extractor), hub.options())
+    Done::Backends(hub.backends(), hub.chosen(f_builder_ai::Role::Builder), hub.chosen(f_builder_ai::Role::Extractor), hub.options())
 }
 
-impl CraftApp {
+impl BuilderApp {
     /// Act on every background job that has finished since the last frame.
     pub(crate) fn take_finished_jobs(&mut self) {
         for f in self.jobs.poll() {
@@ -1984,7 +1984,7 @@ pub fn guard_ui(ui: &mut egui::Ui, what: &str, f: impl FnOnce(&mut egui::Ui)) {
     }
 }
 
-impl eframe::App for CraftApp {
+impl eframe::App for BuilderApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         // This frame is being built, so the ones before it have been shown.
         if let Some(f) = self.first_frames.as_mut() {
@@ -2020,7 +2020,7 @@ impl eframe::App for CraftApp {
         for j in self.jobs.running() {
             j.cancel.cancel();
         }
-        craft_anything_engine::tools::deep::stop_analyses(std::time::Duration::from_secs(12));
+        f_builder_engine::tools::deep::stop_analyses(std::time::Duration::from_secs(12));
         // A change not written yet (or one being written as the window closed) is written now.
         if self.persist && (self.settings_dirty || self.save_due.is_some() || self.saving.is_some()) {
             let saved = if let Some(mut session) = self.engine.try_session() {
@@ -2060,7 +2060,7 @@ pub fn short_path(p: &Path) -> String {
 
 /// Human byte size.
 pub fn human_bytes(n: usize) -> String {
-    craft_anything_engine::evidence::human_bytes(n as u64)
+    f_builder_engine::evidence::human_bytes(n as u64)
 }
 
 /// Icon for a target kind.

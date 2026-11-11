@@ -1,12 +1,12 @@
 //! Native workflows: overview, function dossier, call graph, call path, feature trace, batch
 //! decompile, xrefs by name, API boundary, value flow, Objective-C/Swift metadata, dispatch
-//! metadata and UI-action tracing. The heavy lifting lives in `craft_anything_analysis::native`.
+//! metadata and UI-action tracing. The heavy lifting lives in `f_builder_analysis::native`.
 
 use super::native_common::{from_report, hex, image, native, params_json, resolve_function, select_document, spec, user_names};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_analysis::native as an;
-use craft_anything_disasm::pseudo::lift;
-use craft_anything_evidence::{Confidence, Coverage, Limitation, Location, ToolError};
+use f_builder_analysis::native as an;
+use f_builder_disasm::pseudo::lift;
+use f_builder_evidence::{Confidence, Coverage, Limitation, Location, ToolError};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -667,7 +667,7 @@ fn apple_ui_action_trace(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
 #[cfg(test)]
 mod tests {
     use super::super::native_common::test_support::*;
-    use craft_anything_testkit as tk;
+    use f_builder_testkit as tk;
     use serde_json::json;
 
     #[test]

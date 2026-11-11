@@ -16,7 +16,7 @@ impl AgentAdapter for OpenCode {
     }
 
     fn check_tool_server(&self, stop: &CancelToken) -> Result<(), ToolError> {
-        cli_can_start(craft_anything_platform::self_cli_path().as_deref(), stop)
+        cli_can_start(f_builder_platform::self_cli_path().as_deref(), stop)
     }
 
     /// `opencode run` takes no MCP flag, and V2 ignores `OPENCODE_CONFIG_CONTENT`: the server
@@ -25,11 +25,11 @@ impl AgentAdapter for OpenCode {
     fn mcp_env(&self, mcp: &McpCommand) -> Result<Option<(&'static str, String)>, ToolError> {
         let content = config_content(mcp);
         let path = std::env::temp_dir().join(config_name(&content));
-        craft_anything_platform::fs::write_atomic_private(&path, content.as_bytes())?;
+        f_builder_platform::fs::write_atomic_private(&path, content.as_bytes())?;
         Ok(Some(("OPENCODE_CONFIG", path.to_string_lossy().into_owned())))
     }
 
-    /// The remote helper is the same `craft-anything-cli` the local check starts; a build must
+    /// The remote helper is the same `f-builder-cli` the local check starts; a build must
     /// not spend hours then find the remote helper missing. A missing program stops with the fix.
     fn check_remote_tool_server(&self, host: &str, stop: &CancelToken) -> Result<(), ToolError> {
         remote_check(host, Some(stop))
@@ -46,7 +46,7 @@ impl AgentAdapter for OpenCode {
         if !output.success {
             return Err(remote_failure(host, &output));
         }
-        Ok(Some(("OPENCODE_CONFIG", format!("~/.cache/craft-anything/{name}"))))
+        Ok(Some(("OPENCODE_CONFIG", format!("~/.cache/f-builder/{name}"))))
     }
 
     /// Discover enabled chat models and thinking variants from the selected local or SSH installation.
@@ -204,7 +204,7 @@ fn config_content(mcp: &McpCommand) -> String {
 fn config_name(content: &str) -> String {
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     std::hash::Hash::hash(content, &mut hash);
-    format!("craft-anything-opencode-{:016x}.json", std::hash::Hasher::finish(&hash))
+    format!("f-builder-opencode-{:016x}.json", std::hash::Hasher::finish(&hash))
 }
 
 /// Every byte as an octal escape for a POSIX `printf` format string, so no byte in `bytes` can
@@ -225,7 +225,7 @@ fn octal_escape(bytes: &[u8]) -> String {
 fn remote_prepare_line(name: &str, content: &str) -> String {
     let escaped = octal_escape(content.as_bytes());
     format!(
-        "command -v craft-anything-cli >/dev/null && mkdir -p \"$HOME/.cache/craft-anything\" && printf '{escaped}' > \"$HOME/.cache/craft-anything/{name}.tmp.$$\" && chmod 600 \"$HOME/.cache/craft-anything/{name}.tmp.$$\" && mv \"$HOME/.cache/craft-anything/{name}.tmp.$$\" \"$HOME/.cache/craft-anything/{name}\""
+        "command -v f-builder-cli >/dev/null && mkdir -p \"$HOME/.cache/f-builder\" && printf '{escaped}' > \"$HOME/.cache/f-builder/{name}.tmp.$$\" && chmod 600 \"$HOME/.cache/f-builder/{name}.tmp.$$\" && mv \"$HOME/.cache/f-builder/{name}.tmp.$$\" \"$HOME/.cache/f-builder/{name}\""
     )
 }
 
@@ -303,7 +303,7 @@ mod tests {
     use super::*;
 
     fn args(builder: bool, options: &BackendOptions) -> Vec<String> {
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec!["mcp".into()], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec!["mcp".into()], notes: None };
         OpenCode.args(&ArgsCx { options, prompt: "make a game", preamble: "PRE ", mcp: &mcp, resume: None, builder, reads_checked: false, question: false })
     }
 
@@ -417,21 +417,21 @@ mod tests {
 
     #[test]
     fn native_runs_get_the_tool_server_from_a_config_file() {
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec!["mcp".into()], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec!["mcp".into()], notes: None };
         let (var, path) = OpenCode.mcp_env(&mcp).unwrap().unwrap();
         assert_eq!(var, "OPENCODE_CONFIG");
         let v: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        assert_eq!(v["mcp"][MCP_NAME]["command"], json!(["craft-anything-cli", "mcp"]));
+        assert_eq!(v["mcp"][MCP_NAME]["command"], json!(["f-builder-cli", "mcp"]));
         let options = BackendOptions { cli_model: Some("test/model".into()), ..Default::default() };
         assert!(OpenCode.check_native_options(&options, None).is_ok());
     }
 
     #[test]
     fn the_tool_server_config_and_name_are_stable() {
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec!["mcp".into(), "--clean-room".into()], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec!["mcp".into(), "--clean-room".into()], notes: None };
         let content = config_content(&mcp);
         assert_eq!(content, config_content(&mcp));
-        assert!(content.contains("craft-anything-cli"));
+        assert!(content.contains("f-builder-cli"));
         assert!(content.contains("--clean-room"));
         assert_eq!(config_name(&content), config_name(&content));
         let other = config_content(&McpCommand { command: "other".into(), args: vec![], notes: None });
@@ -449,7 +449,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn the_remote_line_runs_on_a_posix_shell() {
-        use craft_anything_platform::process::Process;
+        use f_builder_platform::process::Process;
         use std::os::unix::fs::{PermissionsExt, symlink};
 
         let root = tempfile::tempdir().unwrap();
@@ -457,19 +457,19 @@ mod tests {
         let missing_bin = root.path().join("missing-bin");
         std::fs::create_dir(&bin).unwrap();
         std::fs::create_dir(&missing_bin).unwrap();
-        // A fake helper on PATH, so `command -v craft-anything-cli` succeeds or fails on purpose.
-        std::fs::write(bin.join("craft-anything-cli"), "#!/bin/sh\nexit 0\n").unwrap();
-        std::fs::set_permissions(bin.join("craft-anything-cli"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        // A fake helper on PATH, so `command -v f-builder-cli` succeeds or fails on purpose.
+        std::fs::write(bin.join("f-builder-cli"), "#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(bin.join("f-builder-cli"), std::fs::Permissions::from_mode(0o755)).unwrap();
         // Keep both paths isolated from any real helper installed on the test machine.
         for utility in ["mkdir", "chmod", "mv"] {
-            let installed = craft_anything_platform::which(utility).unwrap();
+            let installed = f_builder_platform::which(utility).unwrap();
             let executable = installed.canonicalize().unwrap();
             symlink(&executable, bin.join(utility)).unwrap();
             symlink(&executable, missing_bin.join(utility)).unwrap();
         }
 
         let home = root.path().join("home");
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec!["mcp".into(), "--clean-room".into()], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec!["mcp".into(), "--clean-room".into()], notes: None };
         let content = config_content(&mcp);
         let name = config_name(&content);
         let line = remote_prepare_line(&name, &content);
@@ -489,7 +489,7 @@ mod tests {
         };
         let ok = run(&bin, &home);
         assert!(ok.success, "{}", ok.stderr_text());
-        let target = home.join(".cache/craft-anything").join(&name);
+        let target = home.join(".cache/f-builder").join(&name);
         assert_eq!(std::fs::read(&target).unwrap(), content.as_bytes());
         assert_eq!(std::fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o600);
 
@@ -504,13 +504,13 @@ mod tests {
 
     #[test]
     fn the_remote_line_needs_no_input_and_checks_the_helper_first() {
-        let mcp = McpCommand { command: "craft-anything-cli".into(), args: vec!["mcp".into()], notes: None };
+        let mcp = McpCommand { command: "f-builder-cli".into(), args: vec!["mcp".into()], notes: None };
         let content = config_content(&mcp);
         let name = config_name(&content);
         let line = remote_prepare_line(&name, &content);
-        assert!(line.starts_with("command -v craft-anything-cli "), "{line}");
-        assert!(line.contains("mkdir -p \"$HOME/.cache/craft-anything\""), "{line}");
-        assert!(line.contains(&format!("\"$HOME/.cache/craft-anything/{name}\"")), "{line}");
+        assert!(line.starts_with("command -v f-builder-cli "), "{line}");
+        assert!(line.contains("mkdir -p \"$HOME/.cache/f-builder\""), "{line}");
+        assert!(line.contains(&format!("\"$HOME/.cache/f-builder/{name}\"")), "{line}");
         assert!(line.contains("chmod 600"), "{line}");
         assert!(!line.contains('\n'), "{line}");
         // No byte in the content can end the printf format string: every octet is escaped.
@@ -581,7 +581,7 @@ mod tests {
             for (model, thinking) in [(Some("test/selected"), None), (None, Some(crate::Effort::High)), (Some("test/selected"), Some(crate::Effort::High))] {
                 let selected = BackendOptions { cli_model: model.map(str::to_string), cli_thinking: thinking, ..options.clone() };
                 let error = OpenCode.validate_model(&config, &selected, None, &Stop::default()).unwrap_err();
-                assert_eq!(error.code, craft_anything_evidence::ErrorCode::BadInput);
+                assert_eq!(error.code, f_builder_evidence::ErrorCode::BadInput);
             }
         }
     }

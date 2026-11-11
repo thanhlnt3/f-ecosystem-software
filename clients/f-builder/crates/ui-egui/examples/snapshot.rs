@@ -1,7 +1,7 @@
-//! Render the Craft Anything UI offscreen (no window) and save PNGs of the main screens.
+//! Render the F-Builder UI offscreen (no window) and save PNGs of the main screens.
 //!
 //! ```sh
-//! cargo run -p craft-anything-ui-egui --example snapshot -- --out-dir target/snapshots [--scale 2] [--light] [--only NAME] [--width 1440] [--height 900] [--lang fr]
+//! cargo run -p f-builder-ui-egui --example snapshot -- --out-dir target/snapshots [--scale 2] [--light] [--only NAME] [--width 1440] [--height 900] [--lang fr]
 //! ```
 //!
 //! The README's pictures: `simple-home` → make.png and `project-game` → project-game.png (both
@@ -10,9 +10,9 @@
 //! Scenes: first run (welcome, brain, purpose), Beginner Home, Beginner Ask (with an evidence
 //! card), Experienced workbench, and Home in Studio Light.
 
-use craft_anything_engine::Mode;
-use craft_anything_ui_egui::state::{FirstRunStep, Screen};
-use craft_anything_ui_egui::{CraftApp, demo};
+use f_builder_engine::Mode;
+use f_builder_ui_egui::state::{FirstRunStep, Screen};
+use f_builder_ui_egui::{BuilderApp, demo};
 use std::path::PathBuf;
 
 fn arg(args: &[String], name: &str) -> Option<String> {
@@ -22,15 +22,15 @@ fn arg(args: &[String], name: &str) -> Option<String> {
 /// `--lang`: the UI language for every scene (English when absent).
 static LANG: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
-fn render(out: &std::path::Path, name: &str, w: f32, h: f32, scale: f32, make: impl FnOnce() -> CraftApp + 'static) {
+fn render(out: &std::path::Path, name: &str, w: f32, h: f32, scale: f32, make: impl FnOnce() -> BuilderApp + 'static) {
     let mut harness =
         egui_kittest::Harness::builder().with_size(egui::vec2(w, h)).with_pixels_per_point(scale).with_max_steps(64).wgpu().build_eframe(move |cc| {
-            CraftApp::setup_context(&cc.egui_ctx);
+            BuilderApp::setup_context(&cc.egui_ctx);
             let mut app = make();
             // A made-up folder: the default names the account of whoever renders the pictures.
-            app.settings.projects_dir = Some(PathBuf::from("~/Documents/Craft Anything"));
+            app.settings.projects_dir = Some(PathBuf::from("~/Documents/F-Builder"));
             app.settings.language = LANG.get().cloned().unwrap_or_else(|| "en".into());
-            craft_anything_ui_egui::i18n::set_language(&app.settings.language);
+            f_builder_ui_egui::i18n::set_language(&app.settings.language);
             app
         });
     // Let fonts, SVG icons and fades settle.
@@ -123,10 +123,10 @@ fn main() {
         render(&out, "experienced-hex", w, h, scale, || {
             let mut a = demo::app(demo::engine(Mode::Experienced, true));
             demo::fill_workbench(&mut a);
-            a.state.center = craft_anything_ui_egui::state::CenterTab::Hex;
+            a.state.center = f_builder_ui_egui::state::CenterTab::Hex;
             a.state.views.clear();
-            a.state.right = craft_anything_ui_egui::state::RightTab::Inspector;
-            a.state.bottom = craft_anything_ui_egui::state::BottomTab::Jobs;
+            a.state.right = f_builder_ui_egui::state::RightTab::Inspector;
+            a.state.bottom = f_builder_ui_egui::state::BottomTab::Jobs;
             a
         });
     }
@@ -174,10 +174,10 @@ fn main() {
             let mut a = demo::app(demo::engine(Mode::Beginner, true));
             demo::fill_project(&mut a);
             // What the build took and used (side panel and title bar).
-            let mut u = craft_anything_engine::workspace::ProjectUsage { work_ms: 725_000, ..Default::default() };
+            let mut u = f_builder_engine::workspace::ProjectUsage { work_ms: 725_000, ..Default::default() };
             u.add_turn(1_180_000, 42_000, Some(3.21), true);
             if let Some(root) = a.workspace.as_ref().map(|w| w.root.clone()) {
-                a.usage.insert(root, craft_anything_ui_egui::usage::ProjectClock { saved: u.clone(), since: None });
+                a.usage.insert(root, f_builder_ui_egui::usage::ProjectClock { saved: u.clone(), since: None });
             }
             a.session_usage = u;
             a
@@ -186,10 +186,10 @@ fn main() {
     // Notes sent while it builds, waiting under the conversation until the builder reads them.
     if want("project-notes") {
         render(&out, "project-notes", w, h, scale, || {
-            use craft_anything_ai::rebuild::{RunOptions, RunSet, StandIns};
+            use f_builder_ai::rebuild::{RunOptions, RunSet, StandIns};
             let mut a = demo::app(demo::engine(Mode::Beginner, true));
             demo::fill_project(&mut a);
-            a.state.feed.retain(|i| !matches!(i, craft_anything_ui_egui::state::FeedItem::Ask { .. }));
+            a.state.feed.retain(|i| !matches!(i, f_builder_ui_egui::state::FeedItem::Ask { .. }));
             a.runs = RunSet::new(1).with_starter(StandIns::new().starter());
             if let Some(ws) = a.workspace.clone() {
                 let root = ws.root.clone();
@@ -208,9 +208,9 @@ fn main() {
             let mut a = demo::app(demo::engine(Mode::Beginner, true));
             demo::fill_project(&mut a);
             if let Some(ws) = a.workspace.as_mut() {
-                ws.manifest.status = craft_anything_engine::workspace::Status::Building;
+                ws.manifest.status = f_builder_engine::workspace::Status::Building;
             }
-            a.state.feed.retain(|i| !matches!(i, craft_anything_ui_egui::state::FeedItem::Ask { .. }));
+            a.state.feed.retain(|i| !matches!(i, f_builder_ui_egui::state::FeedItem::Ask { .. }));
             a
         });
     }
@@ -220,7 +220,7 @@ fn main() {
         let mut a = demo::app(demo::engine(Mode::Beginner, true));
         demo::fill_projects(&mut a);
         demo::deep(&mut a);
-        a.state.screen = craft_anything_ui_egui::state::Screen::GameFiles;
+        a.state.screen = f_builder_ui_egui::state::Screen::GameFiles;
         let g = &mut a.state.game;
         g.folder = Some(PathBuf::from("D:/Games/Cave Game"));
         g.archives = vec![
@@ -249,13 +249,13 @@ fn main() {
             .map(|n| json!({"path": format!("CaveGame/Content/Art/UI/{n}.uasset"), "size": 930, "compression": "none"}))
             .collect();
         if asking {
-            g.pending = Some(craft_anything_ui_egui::state::PendingPicture {
+            g.pending = Some(f_builder_ui_egui::state::PendingPicture {
                 archive: g.open.clone().unwrap_or_default(),
                 kind: "unreal_pak".into(),
                 item: json!({"path": "CaveGame/Content/Art/UI/Logo.uasset"}),
                 name: "Logo.png".into(),
             });
-            a.state.modal = Some(craft_anything_ui_egui::state::Modal::GamePermission);
+            a.state.modal = Some(f_builder_ui_egui::state::Modal::GamePermission);
         }
         a
     };
@@ -266,25 +266,25 @@ fn main() {
         render(&out, "game-permission", w, h, scale, move || game_app(true));
     }
     // Game engines: a Unity game picked while Unity isn't here, the steps to get it, and a download.
-    let engine_app = |modal: Option<craft_anything_engines::game::Builder>, downloading: bool| {
-        use craft_anything_engines::game::{Builder, Found, Installed, Inventory, Made};
+    let engine_app = |modal: Option<f_builder_engines::game::Builder>, downloading: bool| {
+        use f_builder_engines::game::{Builder, Found, Installed, Inventory, Made};
         let mut a = demo::app(demo::engine(Mode::Beginner, true));
         demo::fill_projects(&mut a);
-        a.state.make.target = craft_anything_engine::workspace::TargetRef::Local { path: std::env::temp_dir() };
+        a.state.make.target = f_builder_engine::workspace::TargetRef::Local { path: std::env::temp_dir() };
         a.state.make.game = true;
         a.state.make.request = "Recreate this game".into();
         a.state.make.found = Some(Found { engine: Made::Unity, version: Some("2021.3.16f1".into()), clue: "unityplayer.dll".into(), note: None });
         a.game_engines =
             Some(Inventory { engines: vec![Installed { builder: Builder::Rust, version: String::new(), program: "cargo".into() }], ..Default::default() });
         if let Some(b) = modal {
-            a.state.modal = Some(craft_anything_ui_egui::state::Modal::Engine(b));
+            a.state.modal = Some(f_builder_ui_egui::state::Modal::Engine(b));
             a.engine_flow.start_after = true;
         }
         if downloading {
             let id = a.jobs.spawn("Getting Godot", true, |j| {
-                j.report(craft_anything_engine::Progress { fraction: Some(0.42), message: "63 of 150 MB".into() });
+                j.report(f_builder_engine::Progress { fraction: Some(0.42), message: "63 of 150 MB".into() });
                 std::thread::sleep(std::time::Duration::from_secs(30));
-                Ok(craft_anything_ui_egui::Done::Nothing)
+                Ok(f_builder_ui_egui::Done::Nothing)
             });
             a.engine_flow.job = Some((Builder::Godot, id));
         }
@@ -294,14 +294,14 @@ fn main() {
         render(&out, "make-engine", w, h, scale, move || engine_app(None, false));
     }
     if want("engine-unity") {
-        render(&out, "engine-unity", w, h, scale, move || engine_app(Some(craft_anything_engines::game::Builder::Unity), false));
+        render(&out, "engine-unity", w, h, scale, move || engine_app(Some(f_builder_engines::game::Builder::Unity), false));
     }
     if want("assets-offer") {
         render(&out, "assets-offer", w, h, scale, move || {
             let mut a = engine_app(None, false);
-            a.asset_keys = Some([(craft_anything_engines::assets::fal::ID.to_string(), false)].into());
+            a.asset_keys = Some([(f_builder_engines::assets::fal::ID.to_string(), false)].into());
             a.state.make.generate_assets = true;
-            a.state.modal = Some(craft_anything_ui_egui::state::Modal::Assets);
+            a.state.modal = Some(f_builder_ui_egui::state::Modal::Assets);
             a
         });
     }
@@ -334,7 +334,7 @@ fn main() {
             a.settings.engines.store_dir = Some(std::env::temp_dir().join("ca-no-ghidra"));
             a.settings.deep_mode = true;
             a.ghidra.start_after = Some(Box::new(a.state.make.clone()));
-            a.state.modal = Some(craft_anything_ui_egui::state::Modal::Ghidra);
+            a.state.modal = Some(f_builder_ui_egui::state::Modal::Ghidra);
             a
         });
     }
@@ -342,18 +342,18 @@ fn main() {
         render(&out, "settings-engines", w, h, scale, move || {
             let mut a = engine_app(None, false);
             a.state.settings_open = true;
-            a.state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Engines;
+            a.state.settings_tab = f_builder_ui_egui::state::SettingsTab::Engines;
             a
         });
     }
     // Settings → AI: each asset provider's key (none saved yet), and three AIs: one in use, one
     // building, one extracting a game's files; settings-ai-error adds a save that failed.
     let ai_app = move |error: bool| {
-        use craft_anything_ai::{BackendConfig, BackendKind};
+        use f_builder_ai::{BackendConfig, BackendKind};
         let mut a = engine_app(None, false);
         a.state.settings_open = true;
-        a.state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
-        a.asset_keys = Some([(craft_anything_engines::assets::fal::ID.to_string(), false)].into());
+        a.state.settings_tab = f_builder_ui_egui::state::SettingsTab::Ai;
+        a.asset_keys = Some([(f_builder_engines::assets::fal::ID.to_string(), false)].into());
         let b = |name: &str, kind, model: &str| BackendConfig { name: name.into(), kind, model: model.into(), base_url: None, ssh_host: None, enabled: true };
         a.backends = vec![
             b("Claude Code", BackendKind::AgentCli, "claude-code"),
@@ -364,7 +364,7 @@ fn main() {
         a.builder = Some("Claude Code".into());
         a.extractor = Some("Kimi K3.1 Pro (OpenRouter)".into());
         if error {
-            a.toast("Couldn't save C:/Users/me/AppData/Roaming/craft-anything/config.toml: access is denied.", true);
+            a.toast("Couldn't save C:/Users/me/AppData/Roaming/f-builder/config.toml: access is denied.", true);
         }
         a
     };
@@ -375,11 +375,11 @@ fn main() {
         render(&out, "settings-ai-error", w, h, scale, move || ai_app(true));
     }
     if want("engine-godot") {
-        render(&out, "engine-godot", w, h, scale, move || engine_app(Some(craft_anything_engines::game::Builder::Godot), true));
+        render(&out, "engine-godot", w, h, scale, move || engine_app(Some(f_builder_engines::game::Builder::Godot), true));
     }
     if want("project-game") {
         // A finished game: a workspace with what `cargo build` leaves behind (nothing is run).
-        use craft_anything_engine::workspace::{Status, TargetRef, Workspace};
+        use f_builder_engine::workspace::{Status, TargetRef, Workspace};
         let root = out.join("demo-projects");
         let _ = std::fs::remove_dir_all(&root);
         if let Ok(mut ws) = Workspace::create(&root, "Snake", "A snake game", TargetRef::None) {
@@ -393,8 +393,8 @@ fn main() {
             render(&out, "project-game", w, h, scale, move || {
                 let mut a = demo::app(demo::engine(Mode::Beginner, true));
                 a.state.feed = vec![
-                    craft_anything_ui_egui::state::FeedItem::User(craft_anything_ui_egui::state::UserItem::Text("A snake game".into())),
-                    craft_anything_ui_egui::state::FeedItem::Agent {
+                    f_builder_ui_egui::state::FeedItem::User(f_builder_ui_egui::state::UserItem::Text("A snake game".into())),
+                    f_builder_ui_egui::state::FeedItem::Agent {
                         text: "Your snake game is ready: arrow keys to steer, eat the dots to grow, and the speed goes up as you score.".into(),
                         streaming: false,
                     },
@@ -407,7 +407,7 @@ fn main() {
     }
     if want("project-plan") {
         render(&out, "project-plan", w, h, scale, || {
-            use craft_anything_ui_egui::state::{FeedItem, PlanStatus, PlanStep};
+            use f_builder_ui_egui::state::{FeedItem, PlanStatus, PlanStep};
             let step = |text: &str, status| PlanStep { text: text.into(), doing: text.into(), status };
             let mut a = demo::app(demo::engine(Mode::Beginner, true));
             demo::fill_project(&mut a);
@@ -426,7 +426,7 @@ fn main() {
             demo::fill_project(&mut a);
             let text =
                 format!("{}https://example.com/{}", "Make it exactly like the original, with the same menus, weapons and maps. ".repeat(6), "a".repeat(160));
-            a.state.feed.push(craft_anything_ui_egui::state::FeedItem::User(craft_anything_ui_egui::state::UserItem::Text(text)));
+            a.state.feed.push(f_builder_ui_egui::state::FeedItem::User(f_builder_ui_egui::state::UserItem::Text(text)));
             a
         });
     }

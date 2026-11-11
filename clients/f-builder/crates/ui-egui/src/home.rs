@@ -4,9 +4,9 @@
 use crate::i18n::tr;
 use crate::state::{Modal, Screen};
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, Pick, Route, icons, widgets};
-use craft_anything_engine::Consent;
+use crate::{BuilderApp, Pick, Route, icons, widgets};
 use egui::{Margin, RichText, Ui, Vec2};
+use f_builder_engine::Consent;
 use serde_json::json;
 
 /// Tools that open a website, best first.
@@ -47,7 +47,7 @@ pub static TUTORIALS: &[(&str, &str, &str, &[&str])] = &[
     ),
 ];
 
-pub fn show(app: &mut CraftApp, ui: &mut Ui) {
+pub fn show(app: &mut BuilderApp, ui: &mut Ui) {
     // Keep the content width stable while the scrollbar animates in and out.
     let full_w = (ui.available_width() - ui.spacing().scroll.allocated_width()).max(0.0);
     egui::ScrollArea::vertical().scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded).auto_shrink([false, false]).show(ui, |ui| {
@@ -67,7 +67,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
 }
 
 /// Friendly modals (coming soon, website, tutorials).
-pub fn modals(app: &mut CraftApp, ctx: &egui::Context) {
+pub fn modals(app: &mut BuilderApp, ctx: &egui::Context) {
     let Some(modal) = app.state.modal.clone() else {
         // Closed, however it was: the website field is focused again when it next opens.
         ctx.data_mut(|d| d.remove::<bool>(egui::Id::new("website-dialog-focused")));
@@ -75,7 +75,7 @@ pub fn modals(app: &mut CraftApp, ctx: &egui::Context) {
     };
     let t = Tokens::get(ctx);
     let mut close = false;
-    let resp = egui::Modal::new(egui::Id::new("craft-modal"))
+    let resp = egui::Modal::new(egui::Id::new("fbuilder-modal"))
         .frame(egui::Frame::new().fill(t.card).corner_radius(t.r_lg()).inner_margin(Margin::same(24)).stroke(egui::Stroke::new(1.0, t.card_border)))
         .show(ctx, |ui| {
             ui.set_width(440.0);
@@ -178,7 +178,7 @@ pub fn modals(app: &mut CraftApp, ctx: &egui::Context) {
                 Modal::PinRename(root, id) => crate::pins::rename_modal(app, ui, root, *id, &mut close),
                 Modal::PinDelete(root, id) => crate::pins::delete_modal(app, ui, root, *id, &mut close),
                 Modal::About => {
-                    ui.label(theme::heading("Craft Anything", theme::SECTION));
+                    ui.label(theme::heading("F-Builder", theme::SECTION));
                     ui.label(RichText::new(format!("{} {}", tr("Version"), env!("CARGO_PKG_VERSION"))).color(t.text_dim));
                     ui.add_space(12.0);
                     if widgets::primary(ui, "Close").clicked() {
@@ -196,7 +196,7 @@ pub fn modals(app: &mut CraftApp, ctx: &egui::Context) {
 
 /// Close the dialog without choosing (Esc, a click outside). With nothing downloading, the
 /// project waiting on it doesn't start later by itself.
-pub fn dismiss(app: &mut CraftApp) {
+pub fn dismiss(app: &mut BuilderApp) {
     if app.ghidra.job.is_none() {
         app.ghidra.start_after = None;
     }

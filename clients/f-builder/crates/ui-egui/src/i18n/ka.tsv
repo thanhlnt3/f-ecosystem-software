@@ -3,7 +3,7 @@
 OpenCode default	OpenCode-ის ნაგულისხმევი
 Model default	მოდელის ნაგულისხმევი
 About 60 GB, an Epic Games account, and Xcode.	დაახლოებით 60 GB, Epic Games-ის ანგარიში და Xcode.
-About Craft Anything	Craft Anything-ის შესახებ
+About F-Builder	F-Builder-ის შესახებ
 Add another	კიდევ ერთის დამატება
 Add it again, to choose another account's folder for it.	ხელახლა დაამატეთ, რომ მისთვის სხვა ანგარიშის საქაღალდე აირჩიოთ.
 Add Unreal's Linux C++ toolchain	Unreal-ის Linux C++ ხელსაწყოთა ნაკრების დამატება
@@ -15,7 +15,7 @@ Close window	ფანჯრის დახურვა
 Command palette	ბრძანებების პალიტრა
 Context window	კონტექსტის ფანჯარა
 Copy the message	შეტყობინების კოპირება
-Craft Anything on GitHub	Craft Anything GitHub-ზე
+F-Builder on GitHub	F-Builder GitHub-ზე
 Default	ნაგულისხმევი
 Drag to give the plan more or less room; double-click to reset	გადაათრიეთ, რომ გეგმას მეტი ან ნაკლები ადგილი დაუთმოთ; ორმაგი დაწკაპუნებით — ჩამოყრა
 File	ფაილი
@@ -23,7 +23,7 @@ Fold a project's plan	პროექტის გეგმის ჩაკე�
 Fold the plan	გეგმის ჩაკეცვა
 Full screen	სრული ეკრანი
 Help	დახმარება
-Hide Craft Anything	Craft Anything-ის დამალვა
+Hide F-Builder	F-Builder-ის დამალვა
 Hide others	სხვების დამალვა
 Its own sign-in, settings and conversations: another folder is another account. Empty: its usual folder.	საკუთარი შესვლა, პარამეტრები და საუბრები: სხვა საქაღალდე სხვა ანგარიშია. ცარიელი: მისი ჩვეული საქაღალდე.
 Load model options	მოდელის პარამეტრების ჩატვირთვა
@@ -32,7 +32,7 @@ Nothing of this kind was found.	ამ ტიპის არაფერი მ
 Pick its folder, say what you want, then press Start.	აირჩიეთ მისი საქაღალდე, თქვით, რა გინდათ, შემდეგ დააჭირეთ „დაწყებას“.
 Pick your project's folder	აირჩიეთ თქვენი პროექტის საქაღალდე
 Pick your project's folder first.	ჯერ აირჩიეთ თქვენი პროექტის საქაღალდე.
-Quit Craft Anything	Craft Anything-იდან გასვლა
+Quit F-Builder	F-Builder-იდან გასვლა
 Report a problem…	პრობლემის შეტყობინება…
 Run Engine/Build/BatchFiles/Linux/SetupToolchain.sh in the engine folder to install its bundled Clang toolchain. If you built Unreal from source, Setup.sh downloads the native toolchain instead. A system Clang may not match the engine's version.	ძრავის საქაღალდეში გაუშვით Engine/Build/BatchFiles/Linux/SetupToolchain.sh, რომ მასთან ერთად მოწოდებული Clang ხელსაწყოთა ნაკრები დააინსტალიროთ. თუ Unreal საწყისი კოდიდან ააწყვეთ, Setup.sh ამის ნაცვლად ნატიურ ხელსაწყოთა ნაკრებს ჩამოტვირთავს. სისტემის Clang შეიძლება ძრავის ვერსიას არ შეესაბამებოდეს.
 Services	სერვისები
@@ -145,7 +145,7 @@ Add to a running build	მიმდინარე აწყობისთვ�
 Added	დამატებულია
 Added {n} picture(s). The builder uses them from your next change.	დამატებულია სურათი: {n}. შემქმნელი მათ თქვენი შემდეგი ცვლილებიდან გამოიყენებს.
 Address to file offset	მისამართიდან ფაილის წანაცვლებამდე
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	თავის დეკომპილატორს ღრმა რეჟიმს უმატებს. Craft Anything-ს შეუძლია მისი ჩამოტვირთვა და თქვენთვის დაყენება.
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	თავის დეკომპილატორს ღრმა რეჟიმს უმატებს. F-Builder-ს შეუძლია მისი ჩამოტვირთვა და თქვენთვის დაყენება.
 Advanced	დამატებითი
 After installing one, look for it again.	ერთ-ერთის დაინსტალირების შემდეგ ხელახლა მოძებნეთ.
 Agent	აგენტი
@@ -234,7 +234,7 @@ Build with {name} instead	აწყობა {name}-ით, ნაცვლა�
 Build without it	აწყობა მის გარეშე
 Builder's questions:	ამწყობის კითხვები:
 Building	აწყობა მიმდინარეობს
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	ასაწყობად საჭიროა პროგრამირების აგენტი ამ კომპიუტერზე (Claude Code, Codex ან Gemini CLI: დააინსტალირეთ ერთ-ერთი და ერთხელ შედით მასში მის საკუთარ ფანჯარაში) ან AI API გასაღებით. Craft Anything თქვენს ანგარიშს ვერასოდეს ხედავს.
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	ასაწყობად საჭიროა პროგრამირების აგენტი ამ კომპიუტერზე (Claude Code, Codex ან Gemini CLI: დააინსტალირეთ ერთ-ერთი და ერთხელ შედით მასში მის საკუთარ ფანჯარაში) ან AI API გასაღებით. F-Builder თქვენს ანგარიშს ვერასოდეს ხედავს.
 Building needs a coding agent such as Claude Code, or an AI with an API key.	ასაწყობად საჭიროა პროგრამირების აგენტი, მაგალითად Claude Code, ან AI API გასაღებით.
 Builds	აწყობები
 Builds and answers may use it again.	აწყობებმა და პასუხებმა შეიძლება ის ხელახლა გამოიყენონ.
@@ -284,7 +284,7 @@ Choose…	არჩევა…
 Classes	კლასები
 Clean room	სუფთა ოთახი
 Clean room / Deep	სუფთა ოთახი / ღრმა
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	სუფთა ოთახი ორიგინალის კოდს, ფაილებს ან გვერდის წყაროს არასოდეს კითხულობს. ღრმა რეჟიმი მათ Craft Anything-ის ყველა ხელსაწყოთი კითხულობს.
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	სუფთა ოთახი ორიგინალის კოდს, ფაილებს ან გვერდის წყაროს არასოდეს კითხულობს. ღრმა რეჟიმი მათ F-Builder-ის ყველა ხელსაწყოთი კითხულობს.
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	სუფთა ოთახი ორიგინალის კოდს, ფაილებს ან გვერდის წყაროს არასოდეს კითხულობს: ის მუშაობს იმით, რასაც თქვენ ხედავთ. ღრმა მათ ყველა ხელსაწყოთი კითხულობს, და Ghidra-თიც, თუ ის დაყენებულია. ყოველი მიგნება აღრიცხავს, რომელი გამოიყენებოდა.
 Clean room on	სუფთა ოთახი ჩართულია
 Clean room or Deep	სუფთა ოთახი თუ ღრმა
@@ -340,13 +340,13 @@ Couldn't open {}: {}	{}-ის გახსნა ვერ მოხერხ�
 Couldn't start a worker thread: {e}	სამუშაო ნაკადის გაშვება ვერ მოხერხდა: {e}
 Couldn't start it.	გაშვება ვერ მოხერხდა.
 Coverage unknown	დაფარვა უცნობია
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything-ს {engine}-ით აწყობა არ შეუძლია, ამიტომ ყველაზე ახლოს Unity-ა.
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	Craft Anything ან კომპიუტერი მუშაობისას დაიხურა. აქამდე გაკეთებული ყველაფერი შენახულია; „გაგრძელება“ იქიდან განაგრძობს, სადაც შეჩერდა.
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything მის კოდსა და ფაილებს ყველა არსებული ხელსაწყოთი კითხულობს. თქვენი პირადი გამოყენებისთვის.
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything ორიგინალის კოდს, ფაილებსა და გვერდის წყაროს ყველა არსებული ხელსაწყოთი კითხულობს, და Ghidra-თიც, თუ ის დაყენებულია.
-Craft Anything report.md	Craft Anything report.md
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Craft Anything-ის ჩანაწერები, შემოწმებები და ყველაფერი, რაც მან app/-ში ააწყო, წაიშალა. თქვენი საკუთარი ფაილები საქაღალდეში უცვლელად რჩება.
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder-ს {engine}-ით აწყობა არ შეუძლია, ამიტომ ყველაზე ახლოს Unity-ა.
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	F-Builder ან კომპიუტერი მუშაობისას დაიხურა. აქამდე გაკეთებული ყველაფერი შენახულია; „გაგრძელება“ იქიდან განაგრძობს, სადაც შეჩერდა.
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder მის კოდსა და ფაილებს ყველა არსებული ხელსაწყოთი კითხულობს. თქვენი პირადი გამოყენებისთვის.
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder ორიგინალის კოდს, ფაილებსა და გვერდის წყაროს ყველა არსებული ხელსაწყოთი კითხულობს, და Ghidra-თიც, თუ ის დაყენებულია.
+F-Builder report.md	F-Builder report.md
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	F-Builder-ის ჩანაწერები, შემოწმებები და ყველაფერი, რაც მან app/-ში ააწყო, წაიშალა. თქვენი საკუთარი ფაილები საქაღალდეში უცვლელად რჩება.
 Crash dump	ავარიის დამპი
 Create the project	პროექტის შექმნა
 Critical	კრიტიკული
@@ -537,7 +537,7 @@ Hide the console	კონსოლის დამალვა
 High	მაღალი
 Home	მთავარი
 How alike a rebuild must look to the original before refining stops.	რამდენად უნდა ჰგავდეს ხელახალი აწყობა ორიგინალს, სანამ დახვეწა შეჩერდება.
-How closely may Craft Anything look at it?	რამდენად ახლოდან შეუძლია Craft Anything-ს მისი შესწავლა?
+How closely may F-Builder look at it?	რამდენად ახლოდან შეუძლია F-Builder-ს მისი შესწავლა?
 How complete is the rebuild	რამდენად სრულია ხელახალი აწყობა
 How do I open an app?	როგორ გავხსნა აპი?
 How do the window and the page talk to each other?	როგორ ურთიერთობენ ფანჯარა და გვერდი?
@@ -597,7 +597,7 @@ Is there any readable text inside?	არის შიგნით წაკი�
 Is this file safe to open?	უსაფრთხოა ამ ფაილის გახსნა?
 It closed straight away.	მაშინვე დაიხურა.
 It closed straight away. It said:	მაშინვე დაიხურა. მან თქვა:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	ის ამ კომპიუტერზე ჯერ არ არის. Craft Anything-ს შეუძლია ჩამოტვირთოს Ghidra {version} და მისთვის საჭირო Java-ს გაშვების გარემო (დაახლოებით {mb} MB), ორივე გამომცემლების საკონტროლო ჯამებით შეამოწმოს და საკუთარ საქაღალდეში დააყენოს. თქვენს კომპიუტერზე სხვა არაფერი შეიცვლება.
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	ის ამ კომპიუტერზე ჯერ არ არის. F-Builder-ს შეუძლია ჩამოტვირთოს Ghidra {version} და მისთვის საჭირო Java-ს გაშვების გარემო (დაახლოებით {mb} MB), ორივე გამომცემლების საკონტროლო ჯამებით შეამოწმოს და საკუთარ საქაღალდეში დააყენოს. თქვენს კომპიუტერზე სხვა არაფერი შეიცვლება.
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	ის ამ კომპიუტერზე ჯერ არ არის. დააინსტალირეთ Ghidra {version} მისი გამოშვების გვერდიდან, შემდეგ აირჩიეთ მისი საქაღალდე.
 It's already open.	უკვე გახსნილია.
 It's already open. Right-click it to open another copy.	უკვე გახსნილია. მეორე ასლის გასახსნელად მასზე მარჯვენა ღილაკით დაწკაპეთ.
@@ -632,7 +632,7 @@ Last: {what}	ბოლო: {what}
 Launch an app	აპის გაშვება
 Leave a few GB for the rest of your computer.	დატოვეთ რამდენიმე GB თქვენი კომპიუტერის დანარჩენი ნაწილისთვის.
 Leave a path empty to use the managed install. We never need environment variables.	მართული ინსტალაციის გამოსაყენებლად ბილიკი ცარიელი დატოვეთ. გარემოს ცვლადები არასოდეს გვჭირდება.
-Leave empty to use the one Craft Anything sets up.	დატოვეთ ცარიელი, რომ Craft Anything-ის მიერ დაყენებული გამოიყენოს.
+Leave empty to use the one F-Builder sets up.	დატოვეთ ცარიელი, რომ F-Builder-ის მიერ დაყენებული გამოიყენოს.
 Let a project generate assets	პროექტისთვის რესურსების გენერირების დაშვება
 Let's go	დავიწყოთ
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	შემქმნელს საშუალებას აძლევს, თამაშებისთვის შექმნას რეალისტური 3D მოდელები და ტექსტურები, {model} თითო მოდელზე, პროექტზე {budget} ბიუჯეტით.
@@ -762,8 +762,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	ვერაფერი მოიძებნა
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	ჯერ ვერაფერი მოიძებნა. ვეძებთ API გასაღებებს, მოდელების ლოკალურ სერვერებს (Ollama, LM Studio) და აგენტის აპებს, რომლებიც უკვე გაქვთ. სხვა პორტზე ან კომპიუტერზე არსებულის დამატება ქვემოთ მისი მისამართით შეიძლება.
 Nothing inside it is read.	შიგნით არაფერი იკითხება.
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	შიგნით არაფერი იკითხება; Craft Anything მუშაობს იმით, რასაც თქვენ ხედავთ. თქვენი ვერსია საკუთარ გრაფიკას მიიღებს.
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	ორიგინალის შიგნით არაფერი იკითხება: არც მისი კოდი, არც ფაილები, არც გვერდის წყარო. Craft Anything მუშაობს იმით, რასაც თქვენ ხედავთ: სურათებით, გვერდით ისე, როგორც მას ვიზიტორი ხედავს, და მისი მუშაობის დაკვირვებით.
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	შიგნით არაფერი იკითხება; F-Builder მუშაობს იმით, რასაც თქვენ ხედავთ. თქვენი ვერსია საკუთარ გრაფიკას მიიღებს.
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	ორიგინალის შიგნით არაფერი იკითხება: არც მისი კოდი, არც ფაილები, არც გვერდის წყარო. F-Builder მუშაობს იმით, რასაც თქვენ ხედავთ: სურათებით, გვერდით ისე, როგორც მას ვიზიტორი ხედავს, და მისი მუშაობის დაკვირვებით.
 Nothing made yet. What you make shows up here.	ჯერ არაფერი შექმნილა. რასაც შექმნით, აქ გამოჩნდება.
 Nothing matches the filter.	ფილტრს არაფერი შეესაბამება.
 Nothing matches.	დამთხვევა არ არის.
@@ -886,7 +886,7 @@ Plugin command or address	პლაგინის ბრძანება ა�
 Plugin id	პლაგინის id
 Plugin removed.	პლაგინი წაიშალა.
 Plugins	პლაგინები
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	პლაგინები ამატებს ხელსაწყოებს, რომლებსაც Craft Anything საკუთარივით გთავაზობთ: MCP სერვერებს (ბრძანება ან მისამართი; დამატების შემდეგ წაიკითხეთ მათი ხელსაწყოები) ან WebAssembly კომპონენტებს (.wasm ფაილი, რომელიც თქვენს ფაილებსა და ქსელს ვერ ეხება).
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	პლაგინები ამატებს ხელსაწყოებს, რომლებსაც F-Builder საკუთარივით გთავაზობთ: MCP სერვერებს (ბრძანება ან მისამართი; დამატების შემდეგ წაიკითხეთ მათი ხელსაწყოები) ან WebAssembly კომპონენტებს (.wasm ფაილი, რომელიც თქვენს ფაილებსა და ქსელს ვერ ეხება).
 Plugins added here always ask before each call.	აქ დამატებული პლაგინები ყოველი გამოძახების წინ ყოველთვის კითხულობს.
 Plugins read. Their new tools are offered from the next start.	პლაგინები წაკითხულია. მათი ახალი ხელსაწყოები შემდეგი გაშვებიდან იქნება შემოთავაზებული.
 Preserving software that's no longer supported.	პროგრამების შენარჩუნება, რომლებიც აღარ არის მხარდაჭერილი.
@@ -1051,7 +1051,7 @@ Sign in and add the Unity Editor	შედით სისტემაში დ
 Sign in and install Unreal Engine	შედით სისტემაში და დააინსტალირეთ Unreal Engine
 Simple	მარტივი
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	მარტივი: თქვით, რა გინდათ, და ყველაფერს თქვენ ნაცვლად გააკეთებს. დამატებითი: ყველა ხელსაწყო, მტკიცებულებები და ჟურნალები.
-Since Craft Anything opened.	Craft Anything-ის გახსნის შემდეგ.
+Since F-Builder opened.	F-Builder-ის გახსნის შემდეგ.
 Size	ზომა
 Skip setup	დაყენების გამოტოვება
 Smart contract interface	ჭკვიანი კონტრაქტის ინტერფეისი
@@ -1107,14 +1107,14 @@ Take files out of an Unreal pak	Unreal pak-იდან ფაილების
 Take out packed files	შეფუთული ფაილების ამოღება
 Target	სამიზნე
 Targets	სამიზნეები
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	იმ საქაღალდეში უკვე არის {names}, სადაც Craft Anything საკუთარ ფაილებს ინახავს. აირჩიეთ სხვა საქაღალდე ან ჯერ ისინი გადაიტანეთ.
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	იმ საქაღალდეში უკვე არის {names}, სადაც F-Builder საკუთარ ფაილებს ინახავს. აირჩიეთ სხვა საქაღალდე ან ჯერ ისინი გადაიტანეთ.
 That folder is already a project, so it's open now.	ეს საქაღალდე უკვე პროექტია, ამიტომ ის ახლა გახსნილია.
 The Rust toolchain (rustup.rs).	Rust-ის ხელსაწყოთა ნაკრები (rustup.rs).
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	შემქმნელი თავის კითხვებს თავად პასუხობს და ამბობს, რა აირჩია („გადავწყვიტე: …“), რომ შეცვლა შეძლოთ.
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	შემქმნელი თამაშის 3D მოდელებსა და ტექსტურებს ორიგინალური დიზაინების აღწერებიდან ქმნის, თქვენი fal.ai ანგარიშის ხარჯზე. მოდელები დაბალპოლიგონურია, რომ თამაში სწრაფად მუშაობდეს. ტექსტურიანი მოდელი ღირს {model}, სურათი — {picture}. ყოველ პროექტს აქვს {budget} ბიუჯეტი და მის გადაჭარბებამდე გკითხავენ. გასაღები ინახება თქვენი სისტემის გასაღებების საცავში.
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	შემქმნელი მათ კითხულობს (კოდს, შენიშვნებს, სურათებს) და აპს მათ გვერდით ახალ app საქაღალდეში აწყობს. თქვენი ფაილები უცვლელად რჩება.
 The builder will decide its questions and tell you what it chose.	შემქმნელი თავის კითხვებს თავად გადაწყვეტს და გეტყვით, რა აირჩია.
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	შემქმნელი ამ ფაილებზე პირდაპირ მუშაობს და ინახავს იმას, რაც მუშაობს. Craft Anything მათ გვერდით რამდენიმე საკუთარ ჩანაწერს ამატებს.
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	შემქმნელი ამ ფაილებზე პირდაპირ მუშაობს და ინახავს იმას, რაც მუშაობს. F-Builder მათ გვერდით რამდენიმე საკუთარ ჩანაწერს ამატებს.
 The builder's questions	შემქმნელის კითხვები
 The builder's questions come to you as cards, and it waits for your answer.	შემქმნელის კითხვები ბარათებად მოგივათ და ის თქვენს პასუხს დაელოდება.
 The builder's questions will come to you.	შემქმნელის კითხვები თქვენ მოგივათ.
@@ -1230,7 +1230,7 @@ What a program exports	რის ექსპორტს აკეთებს 
 What a program imports	რის იმპორტს აკეთებს პროგრამა
 What are its main parts?	რა არის მისი მთავარი ნაწილები?
 What brings you here?	რამ მოგიყვანათ აქ?
-What can Craft Anything do?	რა შეუძლია Craft Anything-ს?
+What can F-Builder do?	რა შეუძლია F-Builder-ს?
 What data was sent?	რა მონაცემები გაიგზავნა?
 What do you want to look inside?	რის შიგნით გსურთ ჩახედვა?
 What do you want to make?	რისი შექმნა გსურთ?
@@ -1286,7 +1286,7 @@ Window	ფანჯარა
 Window / focus info	ფანჯრის / ფოკუსის ინფორმაცია
 Windows resources	Windows რესურსები
 Wireshark tools check	Wireshark ხელსაწყოების შემოწმება
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	მის გარეშე ღრმა რეჟიმი Craft Anything-ის საკუთარ დეკომპილატორს იყენებს, რომელიც უფრო უხეშია.
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	მის გარეშე ღრმა რეჟიმი F-Builder-ის საკუთარ დეკომპილატორს იყენებს, რომელიც უფრო უხეშია.
 Work on a project you already have	მუშაობა პროექტზე, რომელიც უკვე გაქვთ
 Work on my project	ჩემს პროექტზე მუშაობა
 Work out a copy's size	ასლის ზომის გამოთვლა

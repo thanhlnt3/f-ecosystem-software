@@ -1,4 +1,4 @@
-use craft_anything_formats::{FormatError, unity_bundle};
+use f_builder_formats::{FormatError, unity_bundle};
 
 fn lzma_piece(plain: &[u8], end_marker: bool) -> Vec<u8> {
     let options =
@@ -22,7 +22,7 @@ fn stored_blocks_must_match_the_declared_output_length() {
 #[test]
 fn compressed_blocks_keep_their_exact_length_contract() {
     let plain = b"a small Unity bundle block";
-    let lz4 = craft_anything_testkit::games::lz4_literals(plain);
+    let lz4 = f_builder_testkit::games::lz4_literals(plain);
     for kind in [2, 3] {
         assert_eq!(unity_bundle::decompress(kind, &lz4, plain.len() as u32).unwrap(), plain);
         assert!(unity_bundle::decompress(kind, &lz4, plain.len() as u32 + 1).is_err());

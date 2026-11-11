@@ -2,8 +2,8 @@
 //! matching of source files to the modules of a shipped bundle.
 
 use crate::js_app::{AppGraph, Cancelled, is_script};
-use craft_anything_evidence::sha256_hex;
-use craft_anything_js as js;
+use f_builder_evidence::sha256_hex;
+use f_builder_js as js;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -266,7 +266,7 @@ pub fn build_source_graph(
         g.files.push(f);
     }
     let ids: Vec<(&String, &String)> = g.files.iter().map(|f| (&f.path, &f.sha256)).collect();
-    g.source_graph_id = format!("sg_{}", sha256_hex(craft_anything_evidence::canonical_json(&json!(ids)).as_bytes()));
+    g.source_graph_id = format!("sg_{}", sha256_hex(f_builder_evidence::canonical_json(&json!(ids)).as_bytes()));
     Ok(g)
 }
 
@@ -447,7 +447,7 @@ pub fn diff_source_and_bundle(src: &SourceGraph, app: &AppGraph, max_rows: usize
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::electron as fx;
+    use f_builder_testkit::electron as fx;
 
     #[test]
     fn gitignore_rules() {
@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn sources_match_bundle_modules() {
-        let a = craft_anything_js::analyze("main.js", fx::WEBPACK_BUNDLE, &js::Limits::default());
+        let a = f_builder_js::analyze("main.js", fx::WEBPACK_BUNDLE, &js::Limits::default());
         assert!(!a.bundle.modules.is_empty());
         let app = crate::js_app::tests_support::graph_of(vec![("dist/main.js", fx::WEBPACK_BUNDLE.to_string())]);
         let files = vec![

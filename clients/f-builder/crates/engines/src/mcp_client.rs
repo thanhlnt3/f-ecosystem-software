@@ -1,11 +1,11 @@
-//! A small client for external MCP servers, so their tools can be offered as Craft Anything
+//! A small client for external MCP servers, so their tools can be offered as F-Builder
 //! tools. Two transports implement [`Transport`]: a local server over stdio (newline-delimited
-//! JSON-RPC 2.0), run through `craft_anything_platform::process` like every external program and
+//! JSON-RPC 2.0), run through `f_builder_platform::process` like every external program and
 //! killed when the client is dropped; and a remote server over Streamable HTTP (JSON or
 //! server-sent events in reply to each POST).
 
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::process::{Process, RunningProcess, StdinMode};
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::process::{Process, RunningProcess, StdinMode};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::io::{BufRead, Write};
@@ -94,7 +94,7 @@ impl McpClient {
         let mut client = McpClient { name: name.to_string(), transport, next_id: 1 };
         client.request(
             "initialize",
-            json!({"protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "craft-anything", "version": env!("CARGO_PKG_VERSION")}}),
+            json!({"protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "f-builder", "version": env!("CARGO_PKG_VERSION")}}),
             timeout,
             &|| false,
         )?;
@@ -273,7 +273,8 @@ impl Http {
     fn post(&mut self, msg: &Value, timeout: Duration) -> Result<ureq::http::Response<ureq::Body>, ToolError> {
         let agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
-            .user_agent("CraftAnything")
+            .tls_config(ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::PlatformVerifier).build())
+            .user_agent("FBuilder")
             .timeout_connect(Some(Duration::from_secs(20)))
             .timeout_global(Some(timeout.max(Duration::from_secs(1))))
             .build()
@@ -410,7 +411,7 @@ mod tests {
 
     #[test]
     fn a_missing_server_is_a_clear_error() {
-        let cmd = ServerCommand { command: "craft-anything-no-such-server".into(), args: vec![], env: BTreeMap::new(), cwd: None };
+        let cmd = ServerCommand { command: "f-builder-no-such-server".into(), args: vec![], env: BTreeMap::new(), cwd: None };
         let err = McpClient::start("demo", &cmd, Duration::from_secs(5)).err().unwrap();
         assert!(err.remediation.unwrap_or_default().contains("plugins.mcp"));
     }

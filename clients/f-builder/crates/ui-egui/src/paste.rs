@@ -89,7 +89,7 @@ pub fn picture_wanted(ctx: &egui::Context) -> bool {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_pictures(dir: &Path, keep: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
     let mut clipboard = arboard::Clipboard::new().map_err(|e| format!("{} {e}", crate::i18n::tr("The clipboard can't be read:")))?;
-    let files: Vec<PathBuf> = clipboard.get().file_list().unwrap_or_default().into_iter().filter(|p| craft_anything_engine::workspace::is_picture(p)).collect();
+    let files: Vec<PathBuf> = clipboard.get().file_list().unwrap_or_default().into_iter().filter(|p| f_builder_engine::workspace::is_picture(p)).collect();
     if !files.is_empty() {
         return attachable(files);
     }
@@ -97,13 +97,13 @@ pub fn read_pictures(dir: &Path, keep: &[PathBuf]) -> Result<Vec<PathBuf>, Strin
     let (Ok(width), Ok(height)) = (u32::try_from(image.width), u32::try_from(image.height)) else {
         return Err(crate::i18n::tr("The picture on the clipboard is too large."));
     };
-    craft_anything_engine::workspace::save_pasted_picture(dir, width, height, image.bytes.into_owned(), keep).map(|p| vec![p]).map_err(|e| e.message)
+    f_builder_engine::workspace::save_pasted_picture(dir, width, height, image.bytes.into_owned(), keep).map(|p| vec![p]).map_err(|e| e.message)
 }
 
 /// Copied picture files, if a message can take every one; else which one it can't.
 #[cfg(not(target_arch = "wasm32"))]
 fn attachable(files: Vec<PathBuf>) -> Result<Vec<PathBuf>, String> {
-    use craft_anything_engine::workspace::{attachable_picture, picture_content};
+    use f_builder_engine::workspace::{attachable_picture, picture_content};
     let name = |f: &Path| f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     for f in &files {
         if !attachable_picture(f) {
@@ -239,7 +239,7 @@ mod tests {
         let files = read_pictures(dir.path(), &[]).unwrap();
         assert_eq!(files.len(), 1, "{files:?}");
         let bytes = std::fs::read(&files[0]).unwrap();
-        assert_eq!(craft_anything_engine::tools::web_common::png_dimensions(&bytes).unwrap(), (3, 2));
+        assert_eq!(f_builder_engine::tools::web_common::png_dimensions(&bytes).unwrap(), (3, 2));
         c.set_text("just text").unwrap();
         assert!(read_pictures(dir.path(), &[]).unwrap().is_empty(), "text isn't a picture");
     }

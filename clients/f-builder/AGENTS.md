@@ -1,10 +1,10 @@
 # AGENTS.md: guide for AI agents and contributors
 
-Craft Anything is a native, pure-Rust app that shows anyone how a piece of software works (programs, apps, files,
+F-Builder is a native, pure-Rust app that shows anyone how a piece of software works (programs, apps, files,
 websites, phones) with evidence-backed answers, then helps them rebuild it. It ships a desktop app (egui), a CLI and
-an MCP server, all driven by one engine. Display name **Craft Anything**; machine names `craft-anything-*`; bundle id
-`ai.storyteller.craft-anything`. Standards shared across the Crafting Apps live in `../craftrules` (read its
-`AGENTS.md`); follow them. Repos never share code.
+an MCP server, all driven by one engine. Display name **F-Builder**; machine names `f-builder-*`; bundle id
+`io.github.thanhlnt3.f-builder`. F-Builder is part of F-EcoSystem-Software and is based on Craft Anything 0.6.0
+(see `NOTICE`); the repository's root `AGENTS.md` applies too.
 
 **Original work only:** never copy code, scripts, schemas, names, assets or wording from another project, and
 never name other reverse-engineering products in source, docs, UI or commit messages.
@@ -20,7 +20,7 @@ crates/
   analysis   L2  Analyzers producing evidence (triage, dossiers, trace, compare, app graph, rebuild ledger)
   platform   L2  Native services: owned processes, PTY capture, sandbox, engine store, atomic files
   engines    L3  Optional external engines: Ghidra bridge (Deep mode), adb, CDP, Frida, JADX, Apktool…
-  engine     L4  Session, projects (.cany), workspaces (what the person is making), the inbox
+  engine     L4  Session, projects (.fbproj), workspaces (what the person is making), the inbox
                  (questions/approvals), ToolSpec registry, settings, consent, the tool list
   ai         L5  AI backends (Anthropic, OpenAI, OpenRouter, local, agent CLIs, SSH) + agent loop + crews,
                  and the rebuild workflow (study → build → check → refine)
@@ -28,7 +28,7 @@ crates/
   setup      L5  Connect to coding-agent apps; doctor; uninstall
   ui-egui    L6  The egui interface (Beginner + Experienced). The only crate that may use egui/eframe/winit/rfd.
   testkit        Test helpers and synthetic sample builders
-apps/  craft-anything (desktop) · craft-anything-cli (CLI + `mcp`) · craft-anything-web (browser viewer)
+apps/  f-builder (desktop) · f-builder-cli (CLI + `mcp`) · f-builder-web (browser viewer)
 xtask/ cargo xtask layers | tools [--check] | wasm | secrets [--history] | ci | version [set X.Y.Z]
 ```
 
@@ -36,7 +36,7 @@ Layering is enforced by `cargo xtask layers`. Register new crates in `xtask/src/
 
 ## Golden rules
 
-1. **Never crash** (`../craftrules/standards/never-crash.md`). Hostile input is our main input. No
+1. **Never crash.** Hostile input is our main input. No
    `unwrap`/`expect`/`panic!`/`todo!`/`unimplemented!`/`unreachable!`/indexing on input-derived values in non-test
    code; every production crate root carries the deny attribute. Checked arithmetic, bounded recursion, capped
    allocations. Every crash fix gets a regression test.
@@ -57,11 +57,11 @@ Layering is enforced by `cargo xtask layers`. Register new crates in `xtask/src/
 8. **No secrets, no personal data** in requests, logs, tests or the repo (it is public): no API keys, tokens,
    private keys, `.env` files or local paths, only obvious fakes like `sk-test`. `cargo xtask secrets` checks what
    git would commit (`--history` checks every commit); enable the hook once per clone with
-   `git config core.hooksPath .githooks`. Generic `CraftAnything-dev` User-Agent.
+   `git config core.hooksPath .githooks`. Generic `FBuilder-dev` User-Agent.
 9. **Safe Rust only.** `unsafe_code = "forbid"` everywhere, no exceptions. Prefer pure-Rust crates; any dependency
    must be safe to use from safe code.
 10. **Never crash, never lock up, around other programs.** Every external program (Ghidra, Java, adb, a browser,
-    an agent CLI, ssh, git…) runs through `craft_anything_platform::process` only, never `std::process::Command`
+    an agent CLI, ssh, git…) runs through `f_builder_platform::process` only, never `std::process::Command`
     directly:
     - stdin is closed (or a pipe we write to), never inherited, so nothing can sit waiting at a prompt; ssh gets
       `BatchMode=yes`; tools get their non-interactive flags;
@@ -70,7 +70,7 @@ Layering is enforced by `cargo xtask layers`. Register new crates in `xtask/src/
     - a missing program, non-zero exit, bad output or timeout is a `ToolError` with a plain-English remediation,
       never a panic or a hang;
     - nothing slow ever runs on the UI thread: the UI sends work to background threads and polls results.
-11. **Never lock up on a lock.** Use `craft_anything_platform::sync::Mutex`, never `std::sync::Mutex` (clippy
+11. **Never lock up on a lock.** Use `f_builder_platform::sync::Mutex`, never `std::sync::Mutex` (clippy
     refuses it). It stops a real deadlock as soon as it forms, the waiter's work unwinding to its `catch_unwind` as
     an error; the watchdog reports anything held too long. Long jobs are fine: label the guard (`guard.label(id)`,
     as `Engine::call` does for tools) and they're waited for, not treated as stuck. A guard that isn't bound to a
@@ -81,36 +81,21 @@ Layering is enforced by `cargo xtask layers`. Register new crates in `xtask/src/
 
 These apply to every change by every agent and contributor, whether or not anyone mentions them.
 
-### Roles and ownership
-- `docs/ROADMAP.md` is the plan: each item has an id (`R<milestone>.<n>`), an **owner**, a status and pending
-  changes (`- [ ]` lines). Owners are roles, never people's names: **maintainers** (the project's maintainers
-  steer it; agents may take its unclaimed pending changes, but anything marked **decision** waits for a
-  maintainer) or **open** (anyone may take it).
-- **Claim before you start:** put `— claimed: <name>, branch <branch>` on the pending change and push your branch
-  early (or open a draft PR) so others see it. Never take a change someone else has claimed.
-- Work in the order the roadmap's "Order and dependencies" table gives; an item starts only when its
-  dependencies are done.
-- A person's explicit instruction for a task overrides these rules for that task only; otherwise they apply to
-  every change, without being asked.
+### Plan and workflow in F-Eco
+- The plan is `openspec/changes/add-f-ecosystem-platform/tasks.md` (group 11, `app-builder` spec) at the
+  repository root; F-Builder's open items are mirrored in `docs/ROADMAP.md` (`cargo xtask pending`).
+- Unclear requirements go to the root `QUESTIONS.md`; don't guess.
+- Commit messages end with the co-author line the repository uses.
 
 ### Before you write code
-- Pick work from `docs/ROADMAP.md` only. Don't start an item that is claimed, `blocked`, or waiting on a
-  **decision**, and don't start one whose dependencies aren't done.
-- Claim the pending change first (name + branch, in its own small commit), so no two agents do the same work.
+- Pick work from `tasks.md` group 11 or `docs/ROADMAP.md`.
 - Read the code you'll touch and check STATUS.md and the roadmap for gaps it depends on. If you find new gaps or
   dependencies, add them to the roadmap rather than widening your change.
 
 ### Git workflow
-- Never commit to `main`. Branch from an up-to-date `main` with a standard prefix, then the roadmap id if
-  there is one: `feature/`, `bugfix/`, `hotfix/` (urgent fix to released code), `refactor/`, `docs/`, `test/`
-  or `chore/` (tooling, deps, CI). Example: `feature/r1.1-target-kind`.
-- One roadmap item (or pending change) per PR. Keep PRs small and reviewable. No unrelated refactors or drive-by
-  formatting.
-- Open a PR into `main`. It is **squash-merged**, so the PR title is the commit message: plain English, present
-  tense, what changed for the person or developer.
-- Rebase on `main` before asking for review. Never force-push someone else's branch.
+- Work follows the repository root's workflow (task groups in `tasks.md`, verified, then committed).
+- Before every commit and push, check `git branch --show-current`; push by name.
 - Parallel agents work in their own git worktree and their own `CARGO_TARGET_DIR` (see "Parallel agents" below).
-- Before every commit and push, check `git branch --show-current`; push by name (`git push origin <branch>`).
 
 ### Architecture
 - **Headless first.** Every capability works without the GUI: engine → tools → CLI/MCP, with the GUI as one
@@ -150,7 +135,7 @@ It is part of these rules: read it before your first change (Claude Code loads i
 
 ```sh
 cargo fmt --all
-cargo build -p craft-anything-cli   # if you touched crates/ai: two of its tests start this helper
+cargo build -p f-builder-cli   # if you touched crates/ai: two of its tests start this helper
 cargo test -p <crates you touched>
 cargo clippy -p <crates> --all-targets -- -D warnings
 cargo xtask layers

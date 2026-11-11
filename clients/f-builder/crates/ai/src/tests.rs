@@ -2,7 +2,7 @@
 //! engine runs the tools. No real network.
 
 use super::*;
-use craft_anything_platform::sync::Mutex;
+use f_builder_platform::sync::Mutex;
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
@@ -39,11 +39,11 @@ fn a_saved_opencode_go_backend_gets_one_stable_session_id_at_startup() {
     let keys = || KeyStore::file_only(dir.path().join("ai-keys.toml"));
     // A hub whose session starts from the settings file, as the app and the CLI do.
     let started = |path: &std::path::Path| {
-        let mut session = craft_anything_engine::testing::session();
-        session.settings = craft_anything_engine::Settings::load_from(path);
+        let mut session = f_builder_engine::testing::session();
+        session.settings = f_builder_engine::Settings::load_from(path);
         AiHub::with_stores(Arc::new(Engine::new(session)), path.to_path_buf(), keys())
     };
-    let saved_id = || AiConfig::from_table(&craft_anything_engine::Settings::load_from(&path).ai).unwrap().install_id;
+    let saved_id = || AiConfig::from_table(&f_builder_engine::Settings::load_from(&path).ai).unwrap().install_id;
 
     // A Go backend saved the way an older version did: no id in the file.
     let first = started(&path);
@@ -64,13 +64,13 @@ fn a_saved_opencode_go_backend_gets_one_stable_session_id_at_startup() {
     let other_dir = tempfile::tempdir().unwrap();
     let other_path = other_dir.path().join("config.toml");
     let plain = AiHub::with_stores(
-        Arc::new(Engine::new(craft_anything_engine::testing::session())),
+        Arc::new(Engine::new(f_builder_engine::testing::session())),
         other_path.clone(),
         KeyStore::file_only(other_dir.path().join("ai-keys.toml")),
     );
     add(&plain, "Claude", BackendKind::Anthropic, "https://api.anthropic.com", Some("sk-test"));
     assert!(!plain.ensure_session_id().unwrap());
-    assert!(AiConfig::from_table(&craft_anything_engine::Settings::load_from(&other_path).ai).unwrap().install_id.is_none());
+    assert!(AiConfig::from_table(&f_builder_engine::Settings::load_from(&other_path).ai).unwrap().install_id.is_none());
 }
 
 /// The model list lives at /v1 on the service root, not under the chat path's /openai/v1.
@@ -230,7 +230,7 @@ fn chat_sse(chunks: &[Value]) -> String {
 
 fn hub() -> (AiHub, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    let engine = Arc::new(Engine::new(craft_anything_engine::testing::session()));
+    let engine = Arc::new(Engine::new(f_builder_engine::testing::session()));
     let h = AiHub::with_stores(engine, dir.path().join("config.toml"), KeyStore::file_only(dir.path().join("ai-keys.toml")));
     (h, dir)
 }
@@ -374,13 +374,13 @@ fn opencode_selection_is_validated_saved_and_run_natively_with_our_mcp_server() 
 /// Contention is an error, while an available session retains its actual optional project and remains saveable.
 #[test]
 fn model_context_distinguishes_a_busy_session_from_no_project() {
-    use craft_anything_engine::project::{Project, Purpose};
+    use f_builder_engine::project::{Project, Purpose};
     let (h, dir) = hub();
     let backend =
         BackendConfig { name: "OpenCode".into(), kind: BackendKind::AgentCli, model: "opencode".into(), base_url: None, ssh_host: None, enabled: true };
     h.add_backend(backend.clone(), None).unwrap();
     assert_eq!(h.model_context("OpenCode").unwrap().directory, None);
-    let root = dir.path().join("test.cany");
+    let root = dir.path().join("test.fbproj");
     {
         let mut session = h.engine.session();
         session.open_project(Project::create(&root, "test", Purpose::Education).unwrap()).unwrap();
@@ -398,7 +398,7 @@ fn a_failed_save_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
     // The settings "file" can't be written: its folder is a file.
     std::fs::write(dir.path().join("blocked"), "").unwrap();
-    let engine = Arc::new(Engine::new(craft_anything_engine::testing::session()));
+    let engine = Arc::new(Engine::new(f_builder_engine::testing::session()));
     let h = AiHub::with_stores(engine, dir.path().join("blocked").join("config.toml"), KeyStore::file_only(dir.path().join("ai-keys.toml")));
     let cfg = BackendConfig { name: "Kimi".into(), kind: BackendKind::Openrouter, model: "m".into(), base_url: None, ssh_host: None, enabled: true };
     assert!(h.add_backend(cfg, None).is_err());
@@ -599,7 +599,7 @@ fn copilot_uses_shared_selection_and_rejects_failed_discovery_without_saving() {
             config,
             options: BackendOptions {
                 cli_model: Some("chosen-copilot-model".into()),
-                command: Some("craft-anything-no-such-test-agent".into()),
+                command: Some("f-builder-no-such-test-agent".into()),
                 ..Default::default()
             },
         },
@@ -644,7 +644,7 @@ fn copilot_context_is_saved_without_changing_shared_thinking() {
 #[ignore = "requires Copilot CLI and Node.js; uses an isolated CLI home and a loopback model, never a real account"]
 fn copilot_cli_enforces_mcp_only_and_empty_tool_filters() {
     use crate::cli_agents::{Access, AcpConversation, AgentAdapter, ArgsCx, McpCommand};
-    use craft_anything_platform::Process;
+    use f_builder_platform::Process;
 
     /// Only the child's environment changes: no saved CLI credentials, inherited provider key
     /// or token helper may reach the fixture. The production adapter still supplies its policy.
@@ -670,7 +670,7 @@ fn copilot_cli_enforces_mcp_only_and_empty_tool_filters() {
                 .env("COPILOT_OFFLINE", "true")
                 .env("COPILOT_PROVIDER_BASE_URL", &self.url)
                 .env("COPILOT_PROVIDER_TYPE", "openai")
-                .env("COPILOT_MODEL", "craft-test")
+                .env("COPILOT_MODEL", "fbuilder-test")
                 .env_remove("COPILOT_PROVIDER_API_KEY")
                 .env_remove("COPILOT_PROVIDER_API_KEY_COMMAND")
                 .env_remove("COPILOT_PROVIDERS_CONFIG")
@@ -681,9 +681,9 @@ fn copilot_cli_enforces_mcp_only_and_empty_tool_filters() {
     }
 
     for (access, mut expected) in [
-        (Access::Analyse, vec!["craft-anything-core_target_triage"]),
-        (Access::Build, vec!["craft-anything-core_target_triage"]),
-        (Access::CleanRoomBuild, vec!["craft-anything-core_target_triage"]),
+        (Access::Analyse, vec!["f-builder-core_target_triage"]),
+        (Access::Build, vec!["f-builder-core_target_triage"]),
+        (Access::CleanRoomBuild, vec!["f-builder-core_target_triage"]),
         (Access::Question, vec!["view", "grep", "glob"]),
         (Access::CleanRoomQuestion, Vec::new()),
     ] {
@@ -715,7 +715,7 @@ input.on('line', line => {
             json!({"id":"test", "choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}),
         ]);
         let (url, seen) = mock(vec![(200, "text/event-stream", body)]);
-        let program = std::env::var("CRAFT_TEST_COPILOT").unwrap_or_else(|_| "copilot".into());
+        let program = std::env::var("F_BUILDER_TEST_COPILOT").unwrap_or_else(|_| "copilot".into());
         let mut args = crate::cli_agents::adapters::Copilot.acp_options(&BackendOptions::default(), access);
         args.extend(["--acp".into(), "--stdio".into()]);
         let mcp = McpCommand { command: "node".into(), args: vec![script.display().to_string()], notes: None };
@@ -891,7 +891,7 @@ fn anthropic_streaming_tool_loop_through_the_engine() {
     assert_eq!(r1.header("x-api-key"), Some("sk-test-123"));
     assert_eq!(r1.header("anthropic-version"), Some("2023-06-01"));
     assert_eq!(r1.header("anthropic-beta"), Some("server-side-fallback-2026-07-01"));
-    assert_eq!(r1.header("user-agent"), Some("CraftAnything-dev"));
+    assert_eq!(r1.header("user-agent"), Some("FBuilder-dev"));
     let b = &r1.body;
     assert_eq!(b["model"], "claude-opus-5-5");
     assert_eq!(b["stream"], true);

@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-engines"
-description = "Adapters for optional external engines (Ghidra, adb, Chromium, Frida, JADX…) used by Craft Anything"
+name = "f-builder-engines"
+description = "Adapters for optional external engines (Ghidra, adb, Chromium, Frida, JADX…) used by F-Builder"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,16 +10,19 @@ publish = false
 workspace = true
 
 [dependencies]
-craft-anything-evidence = { workspace = true }
-craft-anything-platform = { workspace = true }
-craft-anything-formats = { workspace = true }
+f-builder-evidence = { workspace = true }
+f-builder-platform = { workspace = true }
+f-builder-formats = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 thiserror = { workspace = true }
-ureq = "3"
+# Kho chứng thư của hệ điều hành (platform-verifier), không kèm webpki-roots: license của nó
+# (CDLA-Permissive-2.0) không có trong danh sách của F-Eco. `_ring` là nhà cung cấp mật mã mà
+# tính năng `rustls` mặc định của ureq vẫn dùng.
+ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "_ring", "platform-verifier", "gzip"] }
 # The same version the engine crate uses (fal.ai sends files as base64 in some answers).
 base64 = "0.22"
 # The WebSocket handshake of the CDP client.
@@ -34,4 +37,4 @@ wasm-plugins = ["dep:wasmtime"]
 
 [dev-dependencies]
 tempfile = "3"
-craft-anything-testkit = { workspace = true }
+f-builder-testkit = { workspace = true }

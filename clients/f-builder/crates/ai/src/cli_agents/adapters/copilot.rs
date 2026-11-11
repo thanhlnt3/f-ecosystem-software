@@ -4,7 +4,7 @@
 use super::*;
 
 /// Copilot's ACP-only adapter. Unsupported connection modes fail instead of falling back to
-/// a CLI invocation that has no way to ask Craft Anything for approval.
+/// a CLI invocation that has no way to ask F-Builder for approval.
 pub struct Copilot;
 
 impl AgentAdapter for Copilot {
@@ -71,7 +71,7 @@ impl AgentAdapter for Copilot {
     }
 
     fn check_tool_server(&self, stop: &CancelToken) -> Result<(), ToolError> {
-        cli_can_start(craft_anything_platform::self_cli_path().as_deref(), stop)
+        cli_can_start(f_builder_platform::self_cli_path().as_deref(), stop)
     }
 
     fn acp_options(&self, options: &BackendOptions, access: Access) -> Vec<String> {
@@ -114,7 +114,7 @@ impl AgentAdapter for Copilot {
         if options.args.is_empty() {
             Ok(())
         } else {
-            Err(ToolError::invalid("Extra Copilot CLI arguments could bypass Craft Anything's tool restrictions.")
+            Err(ToolError::invalid("Extra Copilot CLI arguments could bypass F-Builder's tool restrictions.")
                 .with_remediation("Remove this backend's extra arguments. Set its program, cli_model and effort through the backend options instead."))
         }
     }
@@ -133,7 +133,7 @@ impl AgentAdapter for Copilot {
     }
 
     fn sign_in_fix(&self) -> Option<String> {
-        Some("Sign in separately in a terminal with `copilot login`, then try again. If authentication still fails, restart Craft Anything. Copilot CLI manages your credentials.".into())
+        Some("Sign in separately in a terminal with `copilot login`, then try again. If authentication still fails, restart F-Builder. Copilot CLI manages your credentials.".into())
     }
 }
 
@@ -155,7 +155,7 @@ fn catalogue(metadata: &super::super::acp::ModelMetadata, options: &BackendOptio
 /// the same catalogues as the MCP server so new built-ins aren't lost to a handwritten list.
 /// Runtime plugin tools stay out until their exposure has its own restriction test.
 fn mcp_tools() -> String {
-    let specs = craft_anything_engine::tools::all().into_iter().chain(crate::tools());
+    let specs = f_builder_engine::tools::all().into_iter().chain(crate::tools());
     let mut names: Vec<String> = specs.map(|spec| format!("{MCP_NAME}-{}", spec.id)).collect();
     names.extend(["list_toolsets", "enable_toolset"].map(|name| format!("{MCP_NAME}-{name}")));
     names.sort();
@@ -223,7 +223,7 @@ mod tests {
         assert!(args.contains(&"--secret-env-vars=GH_TOKEN".to_string()));
         assert!(!args.iter().any(|arg| arg.starts_with("--allow-all")));
         let fix = Copilot.sign_in_fix().unwrap();
-        assert!(fix.contains("copilot login") && fix.contains("restart Craft Anything"));
+        assert!(fix.contains("copilot login") && fix.contains("restart F-Builder"));
     }
 
     #[test]
@@ -231,10 +231,10 @@ mod tests {
         for access in [Access::Analyse, Access::Build, Access::CleanRoomBuild] {
             let args = Copilot.acp_options(&BackendOptions::default(), access);
             let tools = args.iter().find_map(|arg| arg.strip_prefix("--available-tools=")).unwrap();
-            assert!(tools.split(',').all(|tool| tool.starts_with("craft-anything-")));
-            assert!(tools.split(',').any(|tool| tool == "craft-anything-build_file_write"));
-            assert!(tools.split(',').any(|tool| tool == "craft-anything-enable_toolset"));
-            assert!(args.contains(&"--allow-tool=craft-anything".to_string()));
+            assert!(tools.split(',').all(|tool| tool.starts_with("f-builder-")));
+            assert!(tools.split(',').any(|tool| tool == "f-builder-build_file_write"));
+            assert!(tools.split(',').any(|tool| tool == "f-builder-enable_toolset"));
+            assert!(args.contains(&"--allow-tool=f-builder".to_string()));
             assert!(args.contains(&"--no-custom-instructions".to_string()));
         }
     }

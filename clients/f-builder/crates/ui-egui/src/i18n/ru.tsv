@@ -95,7 +95,7 @@ Add to a running build	Добавить к запущенной сборке
 Added	Добавлено
 Added {n} picture(s). The builder uses them from your next change.	Добавлено изображений: {n}. Конструктор использует их при следующем изменении.
 Address to file offset	Адрес в смещение файла
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	Добавляет свой декомпилятор в режим «Глубокий». Craft Anything может скачать и настроить его для вас.
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	Добавляет свой декомпилятор в режим «Глубокий». F-Builder может скачать и настроить его для вас.
 Advanced	Расширенный
 After installing one, look for it again.	После установки одного из них повторите поиск.
 Agent	Агент
@@ -186,7 +186,7 @@ Build with {name} instead	Собрать с помощью {name} вместо �
 Build without it	Собрать без этого
 Builder's questions:	Вопросы конструктора:
 Building	Сборка
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	Для сборки нужен агент кодирования на этом компьютере (Claude Code, Codex или Gemini CLI: установите его и один раз войдите в нём в отдельном окне) или ИИ с ключом API. Craft Anything никогда не видит ваш аккаунт.
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	Для сборки нужен агент кодирования на этом компьютере (Claude Code, Codex или Gemini CLI: установите его и один раз войдите в нём в отдельном окне) или ИИ с ключом API. F-Builder никогда не видит ваш аккаунт.
 Building needs a coding agent such as Claude Code, or an AI with an API key.	Для сборки нужен агент кодирования, например Claude Code, или ИИ с ключом API.
 Builds	Сборки
 Builds and answers may use it again.	Сборки и ответы могут использовать его снова.
@@ -238,7 +238,7 @@ Classes	Классы
 Claude Code folder (CLAUDE_CONFIG_DIR)	Папка Claude Code (CLAUDE_CONFIG_DIR)
 Clean room	Чистая комната
 Clean room / Deep	Чистая комната / Глубокий
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	Режим «Чистая комната» никогда не читает код, файлы или исходник страницы оригинала. Режим «Глубокий» читает их всеми инструментами Craft Anything.
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	Режим «Чистая комната» никогда не читает код, файлы или исходник страницы оригинала. Режим «Глубокий» читает их всеми инструментами F-Builder.
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	Режим «Чистая комната» никогда не читает код, файлы или исходник страницы оригинала: он работает с тем, что вы можете увидеть. «Глубокий» читает их всеми инструментами, а также Ghidra, если он установлен. Каждая находка записывает, что использовалось.
 Clean room on	Включена чистая комната
 Clean room or Deep	Чистая комната или Глубокий
@@ -295,13 +295,13 @@ Couldn't open {}: {}	Не удалось открыть {}: {}
 Couldn't start a worker thread: {e}	Не удалось запустить рабочий поток: {e}
 Couldn't start it.	Не удалось запустить.
 Coverage unknown	Покрытие неизвестно
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything не может собирать с помощью {engine}, поэтому Unity — ближайшее совпадение.
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	Craft Anything или компьютер закрылись во время работы. Всё сделанное до сих пор сохранено; «Продолжить» продолжит с того места, где остановилось.
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything читает его код и файлы всеми имеющимися инструментами. Для вашего личного использования.
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything читает код, файлы и исходник страницы оригинала всеми имеющимися инструментами, а также Ghidra, если он установлен.
-Craft Anything report.md	Craft Anything report.md
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Записи Craft Anything, проверки и всё, что он собрал в app/, удалены. Ваши собственные файлы в папке остаются как есть.
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder не может собирать с помощью {engine}, поэтому Unity — ближайшее совпадение.
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	F-Builder или компьютер закрылись во время работы. Всё сделанное до сих пор сохранено; «Продолжить» продолжит с того места, где остановилось.
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder читает его код и файлы всеми имеющимися инструментами. Для вашего личного использования.
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder читает код, файлы и исходник страницы оригинала всеми имеющимися инструментами, а также Ghidra, если он установлен.
+F-Builder report.md	F-Builder report.md
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Записи F-Builder, проверки и всё, что он собрал в app/, удалены. Ваши собственные файлы в папке остаются как есть.
 Crash dump	Дамп сбоя
 Create the project	Создать проект
 Critical	Критический
@@ -494,7 +494,7 @@ Hide the console	Скрыть консоль
 High	Высокий
 Home	Главная
 How alike a rebuild must look to the original before refining stops.	Насколько похожей пересборка должна быть на оригинал, прежде чем уточнение остановится.
-How closely may Craft Anything look at it?	Насколько подробно Craft Anything может его изучать?
+How closely may F-Builder look at it?	Насколько подробно F-Builder может его изучать?
 How complete is the rebuild	Насколько полна пересборка
 How do I open an app?	Как открыть приложение?
 How do the window and the page talk to each other?	Как общаются окно и страница?
@@ -554,7 +554,7 @@ Is there any readable text inside?	Есть ли внутри читаемый �
 Is this file safe to open?	Безопасно ли открывать этот файл?
 It closed straight away.	Оно сразу закрылось.
 It closed straight away. It said:	Оно сразу закрылось. Оно сказало:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Его ещё нет на этом компьютере. Craft Anything может скачать Ghidra {version} и нужную ей среду выполнения Java (около {mb} МБ), проверить обе по контрольным суммам издателей и настроить их в собственной папке. Ничего другого на вашем компьютере не изменится.
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	Его ещё нет на этом компьютере. F-Builder может скачать Ghidra {version} и нужную ей среду выполнения Java (около {mb} МБ), проверить обе по контрольным суммам издателей и настроить их в собственной папке. Ничего другого на вашем компьютере не изменится.
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	Его ещё нет на этом компьютере. Установите Ghidra {version} со страницы релиза, затем выберите его папку.
 It's already open.	Оно уже открыто.
 It's already open. Right-click it to open another copy.	Оно уже открыто. Щёлкните правой кнопкой, чтобы открыть ещё одну копию.
@@ -599,7 +599,7 @@ Last: {what}	Последнее: {what}
 Launch an app	Запустить приложение
 Leave a few GB for the rest of your computer.	Оставьте несколько ГБ для остальной части компьютера.
 Leave a path empty to use the managed install. We never need environment variables.	Оставьте путь пустым, чтобы использовать управляемую установку. Переменные среды нам не нужны.
-Leave empty to use the one Craft Anything sets up.	Оставьте пустым, чтобы использовать тот, который настраивает Craft Anything.
+Leave empty to use the one F-Builder sets up.	Оставьте пустым, чтобы использовать тот, который настраивает F-Builder.
 Let a project generate assets	Разрешить проекту генерировать ресурсы
 Let's go	Поехали
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	Позволяет конструктору создавать реалистичные 3D-модели и текстуры для игр, {model} модель, с бюджетом {budget} на проект.
@@ -733,8 +733,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	Ничего не найдено
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	Пока ничего не найдено. Мы ищем ключи API, локальные серверы моделей (Ollama, LM Studio) и приложения-агенты, которые у вас уже есть. Сервер на другом порту или другом компьютере можно добавить по адресу ниже.
 Nothing inside it is read.	Внутри ничего не читается.
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	Внутри ничего не читается; Craft Anything работает с тем, что вы можете увидеть. Ваша версия получит собственную графику.
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Внутри оригинала ничего не читается: ни код, ни файлы, ни исходник страницы. Craft Anything работает с тем, что вы можете увидеть: изображениями, страницей глазами посетителя и наблюдением за её работой.
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	Внутри ничего не читается; F-Builder работает с тем, что вы можете увидеть. Ваша версия получит собственную графику.
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	Внутри оригинала ничего не читается: ни код, ни файлы, ни исходник страницы. F-Builder работает с тем, что вы можете увидеть: изображениями, страницей глазами посетителя и наблюдением за её работой.
 Nothing made yet. What you make shows up here.	Пока ничего не сделано. То, что вы создаёте, появляется здесь.
 Nothing matches the filter.	Ничего не совпадает с фильтром.
 Nothing matches.	Совпадений нет.
@@ -862,7 +862,7 @@ Plugin command or address	Команда или адрес плагина
 Plugin id	Идентификатор плагина
 Plugin removed.	Плагин удалён.
 Plugins	Плагины
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Плагины добавляют инструменты, которые Craft Anything предлагает как свои: MCP-серверы (команда или адрес; прочитайте их инструменты после добавления) или компоненты WebAssembly (файл .wasm, который не может обращаться к вашим файлам или сети).
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	Плагины добавляют инструменты, которые F-Builder предлагает как свои: MCP-серверы (команда или адрес; прочитайте их инструменты после добавления) или компоненты WebAssembly (файл .wasm, который не может обращаться к вашим файлам или сети).
 Plugins added here always ask before each call.	Плагины, добавленные здесь, всегда спрашивают перед каждым вызовом.
 Plugins read. Their new tools are offered from the next start.	Плагины прочитаны. Их новые инструменты будут предложены со следующего запуска.
 Preserving software that's no longer supported.	Сохранение программного обеспечения, которое больше не поддерживается.
@@ -1033,7 +1033,7 @@ Sign in and add the Unity Editor	Войдите и добавьте Unity Editor
 Sign in and install Unreal Engine	Войдите и установите Unreal Engine
 Simple	Простой
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	Простой: скажите, что хотите, и это сделают за вас. Расширенный: все инструменты, доказательства и журналы.
-Since Craft Anything opened.	С момента открытия Craft Anything.
+Since F-Builder opened.	С момента открытия F-Builder.
 Size	Размер
 Skip setup	Пропустить настройку
 Smart contract interface	Интерфейс смарт-контракта
@@ -1090,14 +1090,14 @@ Take files out of an Unreal pak	Извлечь файлы из пака Unreal
 Take out packed files	Извлечь упакованные файлы
 Target	Цель
 Targets	Цели
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	В этой папке уже есть {names}, где Craft Anything хранит свои файлы. Выберите другую папку или сначала переместите их.
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	В этой папке уже есть {names}, где F-Builder хранит свои файлы. Выберите другую папку или сначала переместите их.
 That folder is already a project, so it's open now.	Эта папка уже является проектом, поэтому она сейчас открыта.
 The Rust toolchain (rustup.rs).	Инструментарий Rust (rustup.rs).
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	Конструктор отвечает на свои вопросы и сообщает, что выбрал («Я решил: …»), чтобы вы могли это изменить.
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	Конструктор создаёт 3D-модели и текстуры игры по описаниям оригинальных дизайнов, оплачивая с вашего аккаунта fal.ai. Модели низкополигональные, чтобы игра работала быстро. Текстурированная модель стоит {model}, а изображение {picture}. У каждого проекта бюджет {budget}, и вас спрашивают, прежде чем его превысить. Ключ хранится в системной связке ключей.
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	Конструктор читает их (код, заметки, изображения) и собирает приложение в новой папке приложения рядом с ними. Ваши файлы остаются как есть.
 The builder will decide its questions and tell you what it chose.	Конструктор сам решит свои вопросы и сообщит, что выбрал.
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	Конструктор работает с этими файлами напрямую и сохраняет то, что работает. Craft Anything добавляет рядом несколько собственных записей.
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	Конструктор работает с этими файлами напрямую и сохраняет то, что работает. F-Builder добавляет рядом несколько собственных записей.
 The builder's questions	Вопросы конструктора
 The builder's questions come to you as cards, and it waits for your answer.	Вопросы конструктора приходят к вам в виде карточек, и он ждёт вашего ответа.
 The builder's questions will come to you.	Вопросы конструктора придут к вам.
@@ -1213,7 +1213,7 @@ What a program exports	Что экспортирует программа
 What a program imports	Что импортирует программа
 What are its main parts?	Каковы его основные части?
 What brings you here?	Что привело вас сюда?
-What can Craft Anything do?	Что может Craft Anything?
+What can F-Builder do?	Что может F-Builder?
 What data was sent?	Какие данные были отправлены?
 What do you want to look inside?	Что вы хотите изучить изнутри?
 What do you want to make?	Что вы хотите создать?
@@ -1268,7 +1268,7 @@ Why we ask	Зачем мы спрашиваем
 Window / focus info	Сведения об окне / фокусе
 Windows resources	Ресурсы Windows
 Wireshark tools check	Проверка инструментов Wireshark
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	Без него режим «Глубокий» использует собственный декомпилятор Craft Anything, который грубее.
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	Без него режим «Глубокий» использует собственный декомпилятор F-Builder, который грубее.
 Work out a copy's size	Вычислить размер копии
 Work out what an installed app is built on	Выяснить, на чём построено установленное приложение
 Workbench	Рабочее место
@@ -1430,12 +1430,12 @@ View	Вид
 Window	Окно
 Help	Справка
 Command palette	Палитра команд
-Craft Anything on GitHub	Craft Anything на GitHub
+F-Builder on GitHub	F-Builder на GitHub
 Report a problem…	Сообщить о проблеме…
-Quit Craft Anything	Завершить Craft Anything
-About Craft Anything	О программе Craft Anything
+Quit F-Builder	Завершить F-Builder
+About F-Builder	О программе F-Builder
 Services	Службы
-Hide Craft Anything	Скрыть Craft Anything
+Hide F-Builder	Скрыть F-Builder
 Hide others	Скрыть остальные
 Show all	Показать все
 Close window	Закрыть окно

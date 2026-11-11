@@ -274,7 +274,7 @@ mod tests {
     use super::*;
 
     fn sample(flags: u8) -> Vec<u8> {
-        craft_anything_testkit::games::unreal_utoc(flags, NONE)
+        f_builder_testkit::games::unreal_utoc(flags, NONE)
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod tests {
         }
         // A directory that loops back to its parent is visited once.
         for sibling in [1, 2, 7] {
-            let t = toc(&craft_anything_testkit::games::unreal_utoc(0x9, sibling)).unwrap();
+            let t = toc(&f_builder_testkit::games::unreal_utoc(0x9, sibling)).unwrap();
             assert_eq!(files(&t, 10).unwrap().2, 3, "sibling {sibling}");
         }
     }

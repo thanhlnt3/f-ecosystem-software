@@ -6,8 +6,8 @@
 //! through [`journal::scrubbed_line`]: commands can carry keys, and the log is a file people share.
 
 use super::*;
-use craft_anything_engine::journal;
-use craft_anything_engine::workspace::{ACTIVITY_LOG, ACTIVITY_LOG_OLD};
+use f_builder_engine::journal;
+use f_builder_engine::workspace::{ACTIVITY_LOG, ACTIVITY_LOG_OLD};
 use std::collections::VecDeque;
 use std::io::Write;
 use std::ops::Range;
@@ -344,7 +344,7 @@ impl ActivityFile {
             let mut file = options.open(&path)?;
             self.written = file.metadata()?.len();
             let (_, date, time) = journal::now_utc();
-            let head = format!("--- Craft Anything {}: a run started {date} {time} UTC ---\n", env!("CARGO_PKG_VERSION"));
+            let head = format!("--- F-Builder {}: a run started {date} {time} UTC ---\n", env!("CARGO_PKG_VERSION"));
             file.write_all(head.as_bytes())?;
             self.file = Some(file);
         }

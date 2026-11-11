@@ -1,6 +1,6 @@
-use craft_anything_formats::bun_program::BunProgram;
-use craft_anything_formats::packed::PackedFormat;
-use craft_anything_testkit::packed::{BunModule, bun_appended, bun_graph, bun_module};
+use f_builder_formats::bun_program::BunProgram;
+use f_builder_formats::packed::PackedFormat;
+use f_builder_testkit::packed::{BunModule, bun_appended, bun_graph, bun_module};
 
 #[test]
 fn reports_stored_text_encodings_without_transcoding_bytes() {

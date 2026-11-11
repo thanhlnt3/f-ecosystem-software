@@ -17,7 +17,7 @@
 use crate::inbox::{Inbox, InboxDir, RequestKind};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
 use crate::workspace::{ActionKind, Approval, Questions, Workspace};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -328,7 +328,7 @@ fn decide_command(cmd: &str, app: &Path) -> Decision {
     let parts: Vec<&str> = c.split("&&").map(str::trim).collect();
     if parts.iter().any(|p| never_exits(p)) {
         return Decision::Deny(
-            "Don't start dev servers or watchers: they never exit. Run `npm run build` (or `cargo build`) instead; Craft Anything serves and checks the build itself.".into(),
+            "Don't start dev servers or watchers: they never exit. Run `npm run build` (or `cargo build`) instead; F-Builder serves and checks the build itself.".into(),
         );
     }
     if c.contains(['|', ';', '<', '>', '`', '$', '\n']) || c.replace("&&", "").contains('&') {
@@ -380,7 +380,7 @@ pub fn decide(ws: Option<&Workspace>, tool: &str, input: &Value) -> Decision {
             // also when the app is the project folder itself.
             let checks = ws.map(Workspace::checks_dir);
             // Followed through links, so a link in app/ can't lead a write out of it; and wherever
-            // the agent opens a relative path from, so `craft.json` isn't taken for app/craft.json.
+            // the agent opens a relative path from, so `f-builder.json` isn't taken for app/f-builder.json.
             let ours = |p: &Path| {
                 app.as_ref().is_some_and(|app| really_inside(app, p) || checks.as_ref().is_some_and(|c| really_inside(c, p)))
                     && !ws.is_some_and(|w| w.is_own_record(p))
@@ -591,7 +591,7 @@ pub fn kind_of(ws: Option<&Workspace>, tool: &str, input: &Value) -> ActionKind 
 }
 
 /// Every kind an action is: one for most, but a shell command can be several at once (a push and
-/// a system change, `git push && craft-anything-cli …`), and each of their choices applies. The
+/// a system change, `git push && f-builder-cli …`), and each of their choices applies. The
 /// first is [`kind_of`]'s.
 pub fn kinds_of(ws: Option<&Workspace>, tool: &str, input: &Value) -> Vec<ActionKind> {
     if !matches!(tool, "Bash" | "PowerShell") {
@@ -661,7 +661,7 @@ fn publishes(c: &str) -> bool {
 
 /// Whether a lower-cased command names what a builder mustn't change from the shell either: the
 /// project's manifest (where its approvals are kept), its inbox (where answers are written), the
-/// tool that sets approvals (`craft-anything-cli` can call it) or the marker that makes our CLI call
+/// tool that sets approvals (`f-builder-cli` can call it) or the marker that makes our CLI call
 /// as an agent ([`crate::AGENT_ENV`]). Read with quotes and escapes taken out, as the shell joins
 /// `approv'als-set'`. A command that reaches them without naming them (a script that builds the
 /// path) isn't caught: with commands allowed, the builder is trusted that far.
@@ -671,7 +671,7 @@ fn names_records(c: &str, ws: Option<&Workspace>) -> bool {
     // separators on Windows (`C:\p\in'box'\x` is `C:\p\inbox\x`).
     let (joined, path) = (without(&['"', '\'', '\\', '`']), without(&['"', '\'', '`']));
     let agent = crate::AGENT_ENV.to_ascii_lowercase();
-    ["craft.json", "approvals_set", "approvals-set", agent.as_str()].iter().any(|n| joined.contains(n))
+    ["f-builder.json", "approvals_set", "approvals-set", agent.as_str()].iter().any(|n| joined.contains(n))
         || ws.is_some_and(|w| [c, path.as_str(), joined.as_str()].iter().any(|t| mentions(t, &w.inbox_dir())) || reaches_inbox(c, w))
 }
 
@@ -1173,7 +1173,7 @@ mod tests {
         }
         let note = w.checks_dir().join("round-1/notes.md");
         assert_eq!(decide(Some(&w), "Write", &json!({"file_path": note.display().to_string()})), Decision::Allow);
-        for off in [w.inbox_dir().join("1.answer.json"), w.root.join("craft.json"), w.root.join("reference/picture-1.png")] {
+        for off in [w.inbox_dir().join("1.answer.json"), w.root.join("f-builder.json"), w.root.join("reference/picture-1.png")] {
             assert!(matches!(decide(Some(&w), "Write", &json!({"file_path": off.display().to_string()})), Decision::Ask { .. }), "{off:?}");
         }
     }
@@ -1199,14 +1199,14 @@ mod tests {
         let (_d, w) = ws();
         let inbox = w.inbox_dir().display().to_string();
         for cmd in [
-            "craft-anything-cli call project_approvals_set --project . --kind publish --mode allow",
-            "craft-anything-cli project-approvals-set --kind publish --mode allow",
-            "python -c \"import json; d=json.load(open('craft.json'))\"",
-            "echo '{}' > ../craft.json",
+            "f-builder-cli call project_approvals_set --project . --kind publish --mode allow",
+            "f-builder-cli project-approvals-set --kind publish --mode allow",
+            "python -c \"import json; d=json.load(open('f-builder.json'))\"",
+            "echo '{}' > ../f-builder.json",
             &format!("echo yes > \"{inbox}/1.answer.json\""),
             // The shell joins quoted pieces, and the marker can be taken away first.
-            "env -u CRAFT_ANYTHING_AGENT craft-anything-cli project-approv'als-set' --kind publish --mode allow",
-            "unset CRAFT_ANYTHING_AGENT; cat craft.\"json\"",
+            "env -u F_BUILDER_AGENT f-builder-cli project-approv'als-set' --kind publish --mode allow",
+            "unset F_BUILDER_AGENT; cat craft.\"json\"",
         ] {
             assert_eq!(kind_of(Some(&w), "Bash", &json!({"command": cmd})), ActionKind::System, "{cmd}");
             assert!(matches!(outcome(Some(&w), true, "Bash", &json!({"command": cmd})), Outcome::Refuse(_)), "{cmd}");
@@ -1217,7 +1217,7 @@ mod tests {
     #[test]
     fn a_command_of_several_kinds_needs_each_allowed() {
         let (_d, mut w) = ws();
-        let mixed = json!({"command": "git push && env -u CRAFT_ANYTHING_AGENT craft-anything-cli project-approvals-set --kind system --mode allow"});
+        let mixed = json!({"command": "git push && env -u F_BUILDER_AGENT f-builder-cli project-approvals-set --kind system --mode allow"});
         assert_eq!(kinds_of(Some(&w), "Bash", &mixed), [ActionKind::Publish, ActionKind::System]);
         // Pushing allowed, system changes refused: refused, and the message names the refused kind.
         w.manifest.approvals.insert(ActionKind::Publish, Approval::Allow);
@@ -1272,10 +1272,10 @@ mod tests {
 
     #[test]
     fn a_relative_path_is_judged_wherever_the_agent_opens_it() {
-        // Agents start in the project folder: `craft.json` there is the manifest, not app/craft.json.
+        // Agents start in the project folder: `f-builder.json` there is the manifest, not app/f-builder.json.
         let (_d, w) = ws();
         let write = |p: &str| json!({"file_path": p});
-        for record in ["craft.json", "inbox/1.answer.json", "./craft.json"] {
+        for record in ["f-builder.json", "inbox/1.answer.json", "./f-builder.json"] {
             assert!(matches!(decide(Some(&w), "Write", &write(record)), Decision::Ask { .. }), "{record}");
             assert_eq!(kind_of(Some(&w), "Write", &write(record)), ActionKind::System, "{record}");
             assert!(matches!(outcome(Some(&w), true, "Write", &write(record)), Outcome::Refuse(_)), "{record}");
@@ -1385,7 +1385,7 @@ mod tests {
             "git log --oneline -5",
             "git status",
             "npm run publish-docs",
-            "gh repo clone storytold/craft-anything",
+            "gh repo clone thanhlnt3/f-ecosystem-software",
             "gh pr checkout 12",
             "gh run watch 42",
             "gh api repos/o/r/pulls -XGET",
@@ -1447,7 +1447,7 @@ mod tests {
         let read = call(crate::Caller::Ui, json!({"project": w.root})).unwrap().to_json()["result"].clone();
         assert_eq!(read["kinds"].as_array().unwrap().len(), crate::workspace::ACTION_KINDS.len());
         assert_eq!((gets(&read, "publish"), gets(&read, "web")), (json!("refuse"), json!("allow")));
-        // The person allows pushes from the app; it's kept in craft.json.
+        // The person allows pushes from the app; it's kept in f-builder.json.
         let set = call(crate::Caller::Ui, json!({"project": w.root, "kind": "publish", "mode": "allow"})).unwrap().to_json()["result"].clone();
         assert_eq!(gets(&set, "publish"), "allow");
         assert_eq!((set["set"]["kind"].as_str(), set["set"]["gets"].as_str()), (Some("publish"), Some("allow")), "says what changed");
@@ -1488,7 +1488,7 @@ mod tests {
 
         // "Ask me" for this project: the question waits for the person, even with Auto mode on.
         assert_eq!(call("project_questions_set", json!({"project": w.root, "mode": "ask"}))["questions"], "ask");
-        assert_eq!(Workspace::open(&w.root).unwrap().manifest.questions, Some(Questions::Ask), "kept in craft.json");
+        assert_eq!(Workspace::open(&w.root).unwrap().manifest.questions, Some(Questions::Ask), "kept in f-builder.json");
         let inbox = Inbox::new(w.inbox_dir());
         let answerer = std::thread::spawn(move || {
             for _ in 0..100 {
@@ -1552,7 +1552,7 @@ mod tests {
         }
         let system_file = if cfg!(windows) { "C:/Windows/System32/x.dll" } else { "/etc/x.conf" };
         assert_eq!(call("Write", json!({"file_path": system_file, "content": ""}))["result"]["behavior"], "deny");
-        assert_eq!(call("Edit", json!({"file_path": w.root.join("craft.json").display().to_string()}))["result"]["behavior"], "deny");
+        assert_eq!(call("Edit", json!({"file_path": w.root.join("f-builder.json").display().to_string()}))["result"]["behavior"], "deny");
         assert!(Inbox::new(w.inbox_dir()).pending().is_empty(), "nothing waited for the person");
         // A question gets "decide yourself" at once.
         let v = e.call("core_person_ask", json!({"question": "Blue or red?"}), crate::CallOptions::new(crate::Caller::Mcp)).unwrap().to_json();
@@ -1615,7 +1615,7 @@ mod tests {
     }
 
     #[test]
-    fn a_project_edited_in_place_can_change_its_files_but_not_craft_anythings_records() {
+    fn a_project_edited_in_place_can_change_its_files_but_not_f_builders_records() {
         let d = tempfile::tempdir().unwrap();
         std::fs::write(d.path().join("index.html"), "<p>hi</p>").unwrap();
         let w = Workspace::create_at(d.path(), "Site", "x", TargetRef::None, Some(crate::workspace::ExistingFiles::Edit)).unwrap();
@@ -1623,7 +1623,7 @@ mod tests {
         assert_eq!(decide(Some(&w), "Edit", &file("index.html")), Decision::Allow);
         assert_eq!(decide(Some(&w), "Write", &file("src/app.js")), Decision::Allow);
         assert_eq!(decide(Some(&w), "Write", &file("checks/round-1/notes.md")), Decision::Allow);
-        for own in ["craft.json", "inbox/a.json", "feed.json"] {
+        for own in ["f-builder.json", "inbox/a.json", "feed.json"] {
             assert!(matches!(decide(Some(&w), "Write", &file(own)), Decision::Ask { .. }), "{own}");
         }
     }

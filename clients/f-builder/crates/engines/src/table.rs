@@ -1,4 +1,4 @@
-//! The external engine table: one typed entry per optional program Craft Anything can use.
+//! The external engine table: one typed entry per optional program F-Builder can use.
 //!
 //! Everything about an engine lives in its entry: the id, the name people see, the executables to
 //! look for on each OS, standard install folders, what it is needed for, and how it gets installed
@@ -99,7 +99,7 @@ pub struct ExternalEngine {
     pub id: &'static str,
     /// The name people see ("Install {name} from Settings → Engines").
     pub name: &'static str,
-    /// What Craft Anything uses it for, in a few plain words.
+    /// What F-Builder uses it for, in a few plain words.
     pub needed_for: &'static str,
     /// Executable names on macOS and Linux, preferred first.
     pub exes: &'static [&'static str],

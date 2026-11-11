@@ -1,6 +1,6 @@
-//! An example Craft Anything check plugin: `readme_says_how_to_run` passes when the build has a
+//! An example F-Builder check plugin: `readme_says_how_to_run` passes when the build has a
 //! README.md at its root that tells a person how to start it. It implements
-//! `craft-anything:plugin/checks` from `crates/engines/wit/plugin.wit`, imports nothing, and asks
+//! `f-builder:plugin/checks` from `crates/engines/wit/plugin.wit`, imports nothing, and asks
 //! only for `.md` files' text.
 
 use serde_json::{Value, json};
@@ -15,7 +15,7 @@ struct Plugin;
 /// Words that show the README says how to start the result.
 const RUN_WORDS: &[&str] = &["run", "start", "open", "play", "launch", "npm ", "cargo ", "python", "./"];
 
-impl exports::craft_anything::plugin::checks::Guest for Plugin {
+impl exports::f_builder::plugin::checks::Guest for Plugin {
     fn describe() -> String {
         json!([{
             "name": "readme_says_how_to_run",

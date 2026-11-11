@@ -4,8 +4,8 @@
 
 use crate::settings::Settings;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_engines::game::{self, Builder};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_engines::game::{self, Builder};
+use f_builder_evidence::{ErrorCode, ToolError};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -27,7 +27,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ToolSpec {
             id: "engines_install",
             title: "Install an engine",
-            summary: "Download and install an engine into Craft Anything's own folder: `ghidra` (Deep mode, with its Java), `godot`, or any engine with a pinned download (`adb`, `jadx`…). Every download is checked against its published SHA-256. Unity and Unreal need their vendors' installers and accounts: on Windows the installer (Unity Hub, the Epic Games Launcher) is downloaded, its publisher checked, and opened for the person; elsewhere they get the download page.",
+            summary: "Download and install an engine into F-Builder's own folder: `ghidra` (Deep mode, with its Java), `godot`, or any engine with a pinned download (`adb`, `jadx`…). Every download is checked against its published SHA-256. Unity and Unreal need their vendors' installers and accounts: on Windows the installer (Unity Hub, the Epic Games Launcher) is downloaded, its publisher checked, and opened for the person; elsewhere they get the download page.",
             beginner: "Installs a helper program for you.",
             toolset: Toolset::Setup,
             effects: Effects::ACCESSES_NETWORK.union(Effects::WRITES_FILESYSTEM).union(Effects::LAUNCHES_PROCESS),
@@ -83,7 +83,7 @@ pub fn specs() -> Vec<ToolSpec> {
             id: "plugins_add",
             title: "Add a plugin",
             summary: "Add an external MCP server as a plugin ([[plugins.mcp]] in config.toml): an id, and either a command (a local server, with args, env and cwd) or a url (a remote https server, with headers). A plugin added here always asks before each call. replace overwrites a plugin with the same id. Run plugins_refresh next to read its tools.",
-            beginner: "Adds an add-on: another program or server whose tools Craft Anything can use.",
+            beginner: "Adds an add-on: another program or server whose tools F-Builder can use.",
             toolset: Toolset::Setup,
             effects: Effects::WRITES_FILESYSTEM.union(Effects::MUTATES_SESSION),
             requires: Requires::Nothing,
@@ -134,11 +134,8 @@ fn engines_app_open(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Tool
         return Err(ToolError::new(ErrorCode::NotFound, format!("{} isn't installed on this computer.", p.app))
             .with_remediation("Install it first (engines_install unity or unreal)."));
     };
-    let launch = if path.extension().is_some_and(|e| e == "app") {
-        craft_anything_platform::Launch::new("open").arg(&path)
-    } else {
-        craft_anything_platform::Launch::new(&path)
-    };
+    let launch =
+        if path.extension().is_some_and(|e| e == "app") { f_builder_platform::Launch::new("open").arg(&path) } else { f_builder_platform::Launch::new(&path) };
     launch.label(p.app.clone()).start()?;
     Ok(ToolOutput::Value(json!({"opened": path.display().to_string()})))
 }
@@ -385,7 +382,7 @@ pub struct SetParams {
 fn engines_list(ctx: &mut Ctx<'_>, _params: Value) -> Result<ToolOutput, ToolError> {
     let s = &ctx.session.settings;
     let store = s.engine_store_dir();
-    let engines: Vec<Value> = craft_anything_engines::ENGINES
+    let engines: Vec<Value> = f_builder_engines::ENGINES
         .iter()
         .map(|e| {
             json!({
@@ -423,7 +420,7 @@ fn engines_install(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolE
     let id = p.engine.trim().to_ascii_lowercase();
     let store = ctx.session.settings.engine_store_dir();
     let c = ctx.cancel.clone();
-    let cancel: craft_anything_platform::process::Cancel = Arc::new(move || c.is_cancelled());
+    let cancel: f_builder_platform::process::Cancel = Arc::new(move || c.is_cancelled());
     let mb = |n: u64| n / (1024 * 1024);
     let path = match id.as_str() {
         "ghidra" => {
@@ -431,7 +428,7 @@ fn engines_install(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolE
                 let fraction = total.filter(|t| *t > 0).map(|t| got as f32 / t as f32);
                 ctx.report(fraction, format!("{what}: {} of {} MB", mb(got), total.map_or("?".into(), |t| mb(t).to_string())));
             };
-            craft_anything_engines::ghidra::get::install(&store, Some(cancel), &progress)?
+            f_builder_engines::ghidra::get::install(&store, Some(cancel), &progress)?
         }
         "godot" => {
             let progress = |got: u64, total: Option<u64>| {
@@ -460,7 +457,7 @@ fn engines_install(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolE
         }
         other => {
             let report = |m: &str| ctx.report(None, m.to_string());
-            craft_anything_engines::install::install(other, &store, None, Some(cancel), &report)?.install_dir
+            f_builder_engines::install::install(other, &store, None, Some(cancel), &report)?.install_dir
         }
     };
     Ok(ToolOutput::Value(json!({"installed": id, "path": path.display().to_string()})))

@@ -1,4 +1,4 @@
-//! The Craft Anything MCP server: newline-delimited JSON-RPC 2.0 over stdio.
+//! The F-Builder MCP server: newline-delimited JSON-RPC 2.0 over stdio.
 //!
 //! - `tools/list` shows the Core toolset plus any toolsets the client enabled with the
 //!   `enable_toolset` meta-tool (`--all-tools` shows everything); enabling sends
@@ -17,10 +17,10 @@
 
 pub mod prompts;
 
-use craft_anything_engine::tools::investigation_tools;
-use craft_anything_engine::{CallOptions, Caller, CancelToken, Consent, Effects, Engine, Progress, ToolOutput, Toolset};
-use craft_anything_evidence::{ErrorCode, ToolError, is_evidence_id};
-use craft_anything_platform::sync::Mutex;
+use f_builder_engine::tools::investigation_tools;
+use f_builder_engine::{CallOptions, Caller, CancelToken, Consent, Effects, Engine, Progress, ToolOutput, Toolset};
+use f_builder_evidence::{ErrorCode, ToolError, is_evidence_id};
+use f_builder_platform::sync::Mutex;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::{BufRead, Write};
@@ -31,7 +31,7 @@ use std::time::{Duration, Instant};
 
 /// Protocol versions we speak, newest first.
 pub const PROTOCOL_VERSIONS: &[&str] = &["2025-06-18", "2025-03-26", "2024-11-05"];
-pub const SERVER_NAME: &str = "craft-anything";
+pub const SERVER_NAME: &str = "f-builder";
 /// Default response budget (bytes of one JSON-RPC response line).
 pub const DEFAULT_MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 /// Smallest budget accepted from the environment.
@@ -43,7 +43,7 @@ pub const CLAUDE_CODE_RESPONSE_BYTES: usize = 80 * 1024;
 /// Longest accepted request line.
 const MAX_REQUEST_BYTES: usize = 64 * 1024 * 1024;
 
-const INSTRUCTIONS: &str = "Craft Anything shows how software works, with evidence. Start with core_investigation_show and core_session_show. \
+const INSTRUCTIONS: &str = "F-Builder shows how software works, with evidence. Start with core_investigation_show and core_session_show. \
 Open a target with core_target_open (absolute path), then use focused tools; ask for summaries first and page for detail. \
 Only the Essentials toolset is listed at first: call list_toolsets and enable_toolset to add native, Android, web and other tools. \
 Keep the investigation memory current (core_brief_write, core_plan_update, core_hypothesis_record, core_finding_record with evidence ids, core_handoff_write at the end of each turn). \
@@ -90,11 +90,11 @@ impl Default for ServerOptions {
 
 impl ServerOptions {
     /// Defaults plus environment flags:
-    /// - `CRAFT_ANYTHING_MCP_ALL_TOOLS=1`
-    /// - `CRAFT_ANYTHING_MCP_RESTRICTED=1`
-    /// - `CRAFT_ANYTHING_MCP_ALLOW_WEB=1`
-    /// - `CRAFT_ANYTHING_MCP_ALLOW_CAPTURE=1`
-    /// - `CRAFT_ANYTHING_MCP_MAX_RESPONSE_BYTES`
+    /// - `F_BUILDER_MCP_ALL_TOOLS=1`
+    /// - `F_BUILDER_MCP_RESTRICTED=1`
+    /// - `F_BUILDER_MCP_ALLOW_WEB=1`
+    /// - `F_BUILDER_MCP_ALLOW_CAPTURE=1`
+    /// - `F_BUILDER_MCP_MAX_RESPONSE_BYTES`
     pub fn from_env() -> Self {
         Self::from_env_vars(|k| std::env::var(k).ok())
     }
@@ -103,19 +103,19 @@ impl ServerOptions {
     pub fn from_env_vars<F: Fn(&str) -> Option<String>>(lookup: F) -> Self {
         let mut o = ServerOptions::default();
         let is_truthy = |k: &str| lookup(k).is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
-        if is_truthy("CRAFT_ANYTHING_MCP_ALL_TOOLS") {
+        if is_truthy("F_BUILDER_MCP_ALL_TOOLS") {
             o.all_tools = true;
         }
-        if is_truthy("CRAFT_ANYTHING_MCP_RESTRICTED") {
+        if is_truthy("F_BUILDER_MCP_RESTRICTED") {
             o.restricted = true;
         }
-        if is_truthy("CRAFT_ANYTHING_MCP_ALLOW_WEB") {
+        if is_truthy("F_BUILDER_MCP_ALLOW_WEB") {
             o.allow_web = true;
         }
-        if is_truthy("CRAFT_ANYTHING_MCP_ALLOW_CAPTURE") {
+        if is_truthy("F_BUILDER_MCP_ALLOW_CAPTURE") {
             o.allow_capture = true;
         }
-        if let Some(n) = lookup("CRAFT_ANYTHING_MCP_MAX_RESPONSE_BYTES").and_then(|v| v.trim().parse::<usize>().ok()) {
+        if let Some(n) = lookup("F_BUILDER_MCP_MAX_RESPONSE_BYTES").and_then(|v| v.trim().parse::<usize>().ok()) {
             o.max_response_bytes = n.max(MIN_MAX_RESPONSE_BYTES);
             o.budget_for_client = false;
         }
@@ -342,7 +342,7 @@ impl Server {
                 "completions": {},
                 "logging": {},
             },
-            "serverInfo": {"name": SERVER_NAME, "title": "Craft Anything", "version": env!("CARGO_PKG_VERSION")},
+            "serverInfo": {"name": SERVER_NAME, "title": "F-Builder", "version": env!("CARGO_PKG_VERSION")},
             "instructions": INSTRUCTIONS,
         })
     }
@@ -370,7 +370,7 @@ impl Server {
             (machine, "Start the MCP server without --restricted to allow tools that act on the machine.")
         };
         off.then(|| {
-            ToolError::new(craft_anything_evidence::ErrorCode::FeatureMissing, format!("{} is turned off in restricted mode.", spec.id))
+            ToolError::new(f_builder_evidence::ErrorCode::FeatureMissing, format!("{} is turned off in restricted mode.", spec.id))
                 .with_remediation(way_back)
                 .with_details(json!({"reason": "restricted_mode", "tool": spec.id}))
         })
@@ -383,11 +383,11 @@ impl Server {
     /// Whether a tool is on this connection's list: its toolset is shown and, in Clean room, it's
     /// one Clean room runs (the rest would only be refused). In restricted mode, tools that act on
     /// the machine or reach the network without allowance are omitted.
-    fn listed(&self, s: &craft_anything_engine::ToolSpec, clean: bool) -> bool {
+    fn listed(&self, s: &f_builder_engine::ToolSpec, clean: bool) -> bool {
         if self.restricted_refusal(s.id).is_some() {
             return false;
         }
-        self.visible(s.toolset) && (!clean || craft_anything_engine::clean_room::allows(s.id))
+        self.visible(s.toolset) && (!clean || f_builder_engine::clean_room::allows(s.id))
     }
 
     fn tools_list(&self) -> Value {
@@ -546,9 +546,9 @@ impl Server {
         let opts = |c: Consent| CallOptions::new(Caller::Mcp).with_consent(c).with_cancel(token.clone()).with_progress(&progress);
         match self.engine.call(name, args.clone(), opts(consent)) {
             // With an inbox, the person approves in the app instead of the call failing.
-            Err(e) if e.code == craft_anything_evidence::ErrorCode::ConsentRequired => match self.ask_consent(name, &e.message, token) {
+            Err(e) if e.code == f_builder_evidence::ErrorCode::ConsentRequired => match self.ask_consent(name, &e.message, token) {
                 Some(true) => self.engine.call(name, args, opts(Consent::Granted)),
-                Some(false) => Err(ToolError::new(craft_anything_evidence::ErrorCode::ConsentRequired, "the person declined this action")
+                Some(false) => Err(ToolError::new(f_builder_evidence::ErrorCode::ConsentRequired, "the person declined this action")
                     .with_remediation("Continue without it, or explain why it's needed and ask again.")),
                 None => Err(e),
             },
@@ -563,16 +563,15 @@ impl Server {
     /// `allowed_actions` as `tool:<id>`), and a tool the person already always allowed isn't asked
     /// about again (#563: it was asked every time, whatever was chosen).
     fn ask_consent(&self, name: &str, why: &str, token: &CancelToken) -> Option<bool> {
-        let dir = self.engine.session().ext.get::<craft_anything_engine::inbox::InboxDir>()?;
-        let inbox = craft_anything_engine::inbox::Inbox::new(dir.0.clone());
+        let dir = self.engine.session().ext.get::<f_builder_engine::inbox::InboxDir>()?;
+        let inbox = f_builder_engine::inbox::Inbox::new(dir.0.clone());
         let kind = format!("tool:{name}");
-        let mut project = dir.0.parent().and_then(|root| craft_anything_engine::workspace::Workspace::open(root).ok());
+        let mut project = dir.0.parent().and_then(|root| f_builder_engine::workspace::Workspace::open(root).ok());
         if project.as_ref().is_some_and(|p| p.manifest.allowed_actions.contains(&kind)) {
             return Some(true);
         }
         let title = self.engine.registry().get(name).map(|s| s.title).unwrap_or(name);
-        let id =
-            inbox.post(craft_anything_engine::inbox::RequestKind::Approval, &format!("Allow: {title}"), why, Vec::new(), false, Some(kind.clone())).ok()?;
+        let id = inbox.post(f_builder_engine::inbox::RequestKind::Approval, &format!("Allow: {title}"), why, Vec::new(), false, Some(kind.clone())).ok()?;
         let answer = inbox.wait(&id, Duration::from_secs(30 * 60), &|| token.is_cancelled());
         let allowed = answer.as_ref().and_then(|a| a.allow).unwrap_or(false);
         if allowed
@@ -608,7 +607,7 @@ impl Server {
     /// it as a protocol message (a coding agent's permission prompt). Matched on the tool's own id,
     /// so its CLI name is covered too.
     fn raw_value(&self, name: &str) -> bool {
-        self.engine.registry().canonical(name) == Some(craft_anything_engine::tools::interaction_tools::APPROVE_TOOL)
+        self.engine.registry().canonical(name) == Some(f_builder_engine::tools::interaction_tools::APPROVE_TOOL)
     }
 
     /// The tool declares that its results carry content from the target.

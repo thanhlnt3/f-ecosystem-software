@@ -1,5 +1,5 @@
-use craft_anything_formats::pe;
-use craft_anything_testkit::packed::{pe_rcdata, pe_section};
+use f_builder_formats::pe;
+use f_builder_testkit::packed::{pe_rcdata, pe_section};
 
 fn set_directory_size(data: &mut [u8], size: u32) {
     let headers = pe::headers(data).unwrap();

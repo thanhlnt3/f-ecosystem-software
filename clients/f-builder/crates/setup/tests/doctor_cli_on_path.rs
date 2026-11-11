@@ -1,10 +1,10 @@
-use craft_anything_setup::{Check, CheckStatus, DoctorRequest, Host, doctor};
+use f_builder_setup::{Check, CheckStatus, DoctorRequest, Host, doctor};
 use std::path::{Path, PathBuf};
 
 const TEST: &str = "a_registration_by_bare_name_is_looked_up_on_path";
 /// Set when this test runs itself again with a chosen PATH; holds the test's home folder.
-const INNER_HOME: &str = "CRAFT_ANYTHING_TEST_DOCTOR_HOME";
-const INNER_CLI: &str = "CRAFT_ANYTHING_TEST_DOCTOR_CLI";
+const INNER_HOME: &str = "F_BUILDER_TEST_DOCTOR_HOME";
+const INNER_CLI: &str = "F_BUILDER_TEST_DOCTOR_CLI";
 
 /// Doctor's verdict on Claude Code's registration, worked out in a copy of this test started with
 /// only `path_dir` on PATH, in the CLI's folder. Home and the local app folder point into the
@@ -32,8 +32,8 @@ fn registration(home: &Path, cli: &Path, path_dir: &Path) -> Check {
     serde_json::from_str(line).unwrap()
 }
 
-/// A registration may name the CLI by its bare name, as `claude mcp add -s user craft-anything --
-/// craft-anything-cli mcp` writes it. The app finds it on PATH, and so does doctor now instead of
+/// A registration may name the CLI by its bare name, as `claude mcp add -s user f-builder --
+/// f-builder-cli mcp` writes it. The app finds it on PATH, and so does doctor now instead of
 /// calling it missing. With nothing on PATH it is still missing, even when doctor runs in the
 /// CLI's own folder.
 #[test]
@@ -52,16 +52,16 @@ fn a_registration_by_bare_name_is_looked_up_on_path() {
     let empty = home.join("empty");
     std::fs::create_dir_all(&bin).unwrap();
     std::fs::create_dir_all(&empty).unwrap();
-    let cli = bin.join(if cfg!(windows) { "craft-anything-cli.exe" } else { "craft-anything-cli" });
+    let cli = bin.join(if cfg!(windows) { "f-builder-cli.exe" } else { "f-builder-cli" });
     std::fs::write(&cli, "").unwrap();
     // A file by the bare name itself, which a check of the current folder would take.
-    std::fs::write(bin.join("craft-anything-cli"), "").unwrap();
+    std::fs::write(bin.join("f-builder-cli"), "").unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
         std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
-    std::fs::write(home.join(".claude.json"), r#"{"mcpServers": {"craft-anything": {"command": "craft-anything-cli", "args": ["mcp"]}}}"#).unwrap();
+    std::fs::write(home.join(".claude.json"), r#"{"mcpServers": {"f-builder": {"command": "f-builder-cli", "args": ["mcp"]}}}"#).unwrap();
 
     let on_path = registration(home, &cli, &bin);
     assert_ne!(on_path.status, CheckStatus::Fail, "{on_path:?}");

@@ -1,7 +1,7 @@
-use craft_anything_formats::zip;
+use f_builder_formats::zip;
 
 fn archive(extra: &[u8], sentinel: usize) -> Vec<u8> {
-    let mut data = craft_anything_testkit::electron::zip_stored(&[("a", b"x")]);
+    let mut data = f_builder_testkit::electron::zip_stored(&[("a", b"x")]);
     let central = data.windows(4).position(|w| w == b"PK\x01\x02").unwrap();
     let end = data.len() - 22;
     data[central + sentinel..central + sentinel + 4].copy_from_slice(&u32::MAX.to_le_bytes());

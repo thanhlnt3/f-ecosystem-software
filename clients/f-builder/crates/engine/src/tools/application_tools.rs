@@ -6,12 +6,12 @@
 use super::artifact_tools::{WalkOptions, abs_path, env, inventory_path, is_path_input, recorded_inventory, resolve_evidence_input, walk_dir};
 use super::js_tools::load_graph;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_analysis::js_inventory::{InvLimits, Inventory};
-use craft_anything_analysis::js_ledger::{Binding, Review, build_ledger, evaluate_coverage};
-use craft_anything_analysis::js_source::{SourceGraph, build_source_graph, diff_source_and_bundle};
-use craft_anything_analysis::js_trace::{Direction, SeedKind, find_seeds, follow_feature, trace_semantics};
-use craft_anything_analysis::{js_compare, js_projection};
-use craft_anything_evidence::{Confidence, Coverage, CoverageStatus, EvidenceBuilder, Limitation, Location, Subject, ToolError};
+use f_builder_analysis::js_inventory::{InvLimits, Inventory};
+use f_builder_analysis::js_ledger::{Binding, Review, build_ledger, evaluate_coverage};
+use f_builder_analysis::js_source::{SourceGraph, build_source_graph, diff_source_and_bundle};
+use f_builder_analysis::js_trace::{Direction, SeedKind, find_seeds, follow_feature, trace_semantics};
+use f_builder_analysis::{js_compare, js_projection};
+use f_builder_evidence::{Confidence, Coverage, CoverageStatus, EvidenceBuilder, Limitation, Location, Subject, ToolError};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -436,7 +436,7 @@ fn source_graph_from_path(ctx: &Ctx<'_>, p: &ImportSourceParams) -> Result<Sourc
     }
     let label = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let cancel = ctx.cancel.clone();
-    build_source_graph(&label, &files, w.ignored, w.truncated || over, &craft_anything_js::Limits::default(), &move || cancel.is_cancelled())
+    build_source_graph(&label, &files, w.ignored, w.truncated || over, &f_builder_js::Limits::default(), &move || cancel.is_cancelled())
         .map_err(|_| ToolError::cancelled())
 }
 
@@ -454,7 +454,7 @@ fn app_source_import(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Too
     .result(serde_json::to_value(&g).map_err(|e| ToolError::internal(e.to_string()))?)
     .summary(summary)
     .confidence(Confidence::Observed)
-    .authority(craft_anything_evidence::Authority::Reasoning)
+    .authority(f_builder_evidence::Authority::Reasoning)
     .coverage(Coverage {
         status: if g.truncated { CoverageStatus::Partial } else { CoverageStatus::Complete },
         examined: Some(g.files.len() as u64),
@@ -621,7 +621,7 @@ fn app_ledger_build(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Tool
         .iter()
         .map(|b| Binding {
             expectation_id: b.expectation_id.clone(),
-            owner: craft_anything_analysis::js_ledger::Owner {
+            owner: f_builder_analysis::js_ledger::Owner {
                 module_path: b.owner.module_path.clone(),
                 symbol: b.owner.symbol.clone(),
                 impl_sha256: b.owner.impl_sha256.clone(),
@@ -630,9 +630,9 @@ fn app_ledger_build(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Tool
             cases: b
                 .cases
                 .iter()
-                .map(|c| craft_anything_analysis::js_ledger::Case { kind: c.kind.clone(), evidence_id: c.evidence_id.clone(), strength: c.strength.clone() })
+                .map(|c| f_builder_analysis::js_ledger::Case { kind: c.kind.clone(), evidence_id: c.evidence_id.clone(), strength: c.strength.clone() })
                 .collect(),
-            verifier: b.verifier.as_ref().map(|v| craft_anything_analysis::js_ledger::Verifier {
+            verifier: b.verifier.as_ref().map(|v| f_builder_analysis::js_ledger::Verifier {
                 command: v.command.clone(),
                 strength: v.strength.clone(),
                 status: v.status.clone(),
@@ -768,8 +768,8 @@ fn harmony_app_graph_build(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutpu
 #[cfg(test)]
 mod tests {
     use crate::{CallOptions, Caller, Engine};
-    use craft_anything_evidence::ToolError;
-    use craft_anything_testkit::electron as fx;
+    use f_builder_evidence::ToolError;
+    use f_builder_testkit::electron as fx;
     use serde_json::{Value, json};
 
     fn call(e: &Engine, id: &str, p: Value) -> Result<Value, ToolError> {

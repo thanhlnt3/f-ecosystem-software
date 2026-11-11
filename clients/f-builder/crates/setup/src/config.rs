@@ -2,7 +2,7 @@
 
 use crate::clients::{Client, Format, SERVER_NAME, Shape, is_owned_entry};
 use crate::yaml;
-use craft_anything_formats::jsonc;
+use f_builder_formats::jsonc;
 use serde_json::Value;
 
 /// Parse the whole config to JSON-like data. An empty file is `{}` unless the client forbids it.
@@ -224,7 +224,7 @@ mod tests {
     fn toml_merge_preserves_comments() {
         let c = client("codex");
         let text = "# Codex settings\nmodel = \"x\" # pick one\n\n[mcp_servers.other]\ncommand = \"o\" # theirs\n";
-        let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
+        let e = c.desired_entry(&["/b/f-builder-cli".into(), "mcp".into()]);
         let new = set_entry(&c, text, &e).unwrap();
         assert!(new.contains("# Codex settings") && new.contains("# pick one") && new.contains("# theirs"));
         assert_eq!(read_entry(&c, &new).unwrap(), Some(e.clone()));
@@ -241,12 +241,12 @@ mod tests {
     #[test]
     fn a_codex_entry_keeps_the_persons_own_settings_when_it_gains_the_approval() {
         let c = client("codex");
-        let text = "[mcp_servers.craft-anything]\ncommand = \"/old/craft-anything-cli\"\nargs = [\"mcp\"]\nenabled_tools = [\"core_a\"] # mine\ntools = { other = { approval_mode = \"prompt\" } }\n\n[mcp_servers.craft-anything.env]\nK = \"v\"\n";
-        let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
+        let text = "[mcp_servers.f-builder]\ncommand = \"/old/f-builder-cli\"\nargs = [\"mcp\"]\nenabled_tools = [\"core_a\"] # mine\ntools = { other = { approval_mode = \"prompt\" } }\n\n[mcp_servers.f-builder.env]\nK = \"v\"\n";
+        let e = c.desired_entry(&["/b/f-builder-cli".into(), "mcp".into()]);
         assert!(!c.entry_is_current(&read_entry(&c, text).unwrap().unwrap(), &e));
         let new = set_entry(&c, text, &e).unwrap();
         let got = read_entry(&c, &new).unwrap().unwrap();
-        assert_eq!(got["command"], "/b/craft-anything-cli");
+        assert_eq!(got["command"], "/b/f-builder-cli");
         assert_eq!(got["enabled_tools"][0], "core_a");
         assert_eq!(got["env"]["K"], "v");
         assert_eq!(got["tools"]["other"]["approval_mode"], "prompt", "their other approvals stay");
@@ -262,8 +262,8 @@ mod tests {
     #[test]
     fn a_foreign_codex_entry_is_replaced_and_a_disabled_one_is_noticed() {
         let c = client("codex");
-        let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
-        let foreign = "[mcp_servers.craft-anything]\nurl = \"https://example.test/mcp\"\n";
+        let e = c.desired_entry(&["/b/f-builder-cli".into(), "mcp".into()]);
+        let foreign = "[mcp_servers.f-builder]\nurl = \"https://example.test/mcp\"\n";
         let got = read_entry(&c, &set_entry(&c, foreign, &e).unwrap()).unwrap().unwrap();
         assert!(got.get("url").is_none(), "{got}");
         assert_eq!(got, e);
@@ -276,11 +276,11 @@ mod tests {
     #[test]
     fn an_inline_codex_entry_keeps_the_persons_own_settings() {
         let c = client("codex");
-        let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
-        let text = "[mcp_servers]\ncraft-anything = { command = \"/old/craft-anything-cli\", args = [\"mcp\"], enabled = false, disabled_tools = [\"x\"] }\n";
+        let e = c.desired_entry(&["/b/f-builder-cli".into(), "mcp".into()]);
+        let text = "[mcp_servers]\nf-builder = { command = \"/old/f-builder-cli\", args = [\"mcp\"], enabled = false, disabled_tools = [\"x\"] }\n";
         let new = set_entry(&c, text, &e).unwrap();
         let got = read_entry(&c, &new).unwrap().unwrap();
-        assert_eq!(got["command"], "/b/craft-anything-cli");
+        assert_eq!(got["command"], "/b/f-builder-cli");
         assert_eq!(got["enabled"], false);
         assert_eq!(got["disabled_tools"][0], "x");
         assert_eq!(got["tools"]["rebuild_start"]["approval_mode"], "approve");
@@ -291,16 +291,16 @@ mod tests {
     #[test]
     fn comments_on_our_codex_entry_and_its_tools_table_stay() {
         let c = client("codex");
-        let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
-        let inline = "[mcp_servers]\ncraft-anything = { command = \"/old/craft-anything-cli\", args = [\"mcp\"], enabled = false } # mine\n";
+        let e = c.desired_entry(&["/b/f-builder-cli".into(), "mcp".into()]);
+        let inline = "[mcp_servers]\nf-builder = { command = \"/old/f-builder-cli\", args = [\"mcp\"], enabled = false } # mine\n";
         let new = set_entry(&c, inline, &e).unwrap();
         assert!(new.contains("# mine"), "{new}");
         let got = read_entry(&c, &new).unwrap().unwrap();
-        assert_eq!((got["enabled"].clone(), got["command"].clone()), (Value::Bool(false), Value::from("/b/craft-anything-cli")));
+        assert_eq!((got["enabled"].clone(), got["command"].clone()), (Value::Bool(false), Value::from("/b/f-builder-cli")));
         assert_eq!(got["tools"]["rebuild_start"]["approval_mode"], "approve");
         assert_eq!(set_entry(&c, &new, &e).unwrap(), new);
 
-        let table = "[mcp_servers.craft-anything]\ncommand = \"/old/craft-anything-cli\" # the program\nargs = [\"mcp\"]\n\n# about tools\n[mcp_servers.craft-anything.tools]\n# keep me\nother = { approval_mode = \"prompt\" } # theirs\n";
+        let table = "[mcp_servers.f-builder]\ncommand = \"/old/f-builder-cli\" # the program\nargs = [\"mcp\"]\n\n# about tools\n[mcp_servers.f-builder.tools]\n# keep me\nother = { approval_mode = \"prompt\" } # theirs\n";
         let new = set_entry(&c, table, &e).unwrap();
         for note in ["# the program", "# about tools", "# keep me", "# theirs"] {
             assert!(new.contains(note), "{note} lost:\n{new}");
@@ -315,10 +315,10 @@ mod tests {
     #[test]
     fn a_comment_above_a_key_stays_when_its_value_changes() {
         let c = client("codex");
-        let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
-        let text = "[mcp_servers.craft-anything]\n# the program\ncommand = \"/old/craft-anything-cli\"\nargs = [\"mcp\"]\n# how long to wait\nstartup_timeout_sec = 10\n";
+        let e = c.desired_entry(&["/b/f-builder-cli".into(), "mcp".into()]);
+        let text = "[mcp_servers.f-builder]\n# the program\ncommand = \"/old/f-builder-cli\"\nargs = [\"mcp\"]\n# how long to wait\nstartup_timeout_sec = 10\n";
         let new = set_entry(&c, text, &e).unwrap();
-        assert!(new.contains("# the program\ncommand = \"/b/craft-anything-cli\""), "{new}");
+        assert!(new.contains("# the program\ncommand = \"/b/f-builder-cli\""), "{new}");
         assert!(new.contains("# how long to wait\nstartup_timeout_sec = 30"), "{new}");
         assert_eq!(set_entry(&c, &new, &e).unwrap(), new, "a second run changes nothing");
     }
@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn grok_enables_disabled_server() {
         let c = client("grok_build");
-        let text = "disabled_mcp_servers = [\"craft-anything\", \"x\"]\n";
+        let text = "disabled_mcp_servers = [\"f-builder\", \"x\"]\n";
         assert!(is_disabled(&c, text));
         let new = set_entry(&c, text, &json!({"command": "c", "args": ["mcp"]})).unwrap();
         assert!(!is_disabled(&c, &new));
@@ -341,6 +341,6 @@ mod tests {
         let z = client("zcode");
         let new = set_entry(&z, "", &json!({"command": "c"})).unwrap();
         assert_eq!(read_entry(&z, &new).unwrap(), Some(json!({"command": "c"})));
-        assert_eq!(parse(&z, &new).unwrap()["mcp"]["servers"]["craft-anything"]["command"], "c");
+        assert_eq!(parse(&z, &new).unwrap()["mcp"]["servers"]["f-builder"]["command"], "c");
     }
 }

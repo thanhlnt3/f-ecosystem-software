@@ -2,8 +2,8 @@
 //! asset budget from settings and whether assets may be generated. Shared by the CLI's `rebuild` and the `rebuild_start` tool.
 
 use super::*;
-use craft_anything_engine::Settings;
-use craft_anything_engine::workspace::{ExistingFiles, suggest_name};
+use f_builder_engine::Settings;
+use f_builder_engine::workspace::{ExistingFiles, suggest_name};
 
 /// Where a new project goes.
 #[derive(Debug, Clone, Copy, Default)]
@@ -58,7 +58,7 @@ pub fn new_project(
         Place::Projects => Workspace::create(&settings.projects_dir(), &name, request, target_ref)?,
         Place::In(dir) => Workspace::create(dir, &name, request, target_ref)?,
         Place::At(folder, existing) => {
-            if folder.join(craft_anything_engine::workspace::MANIFEST).is_file() {
+            if folder.join(f_builder_engine::workspace::MANIFEST).is_file() {
                 Workspace::open(folder)?
             } else {
                 Workspace::create_at(folder, &name, request, target_ref, existing)?

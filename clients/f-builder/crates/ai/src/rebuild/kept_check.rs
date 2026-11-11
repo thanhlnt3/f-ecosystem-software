@@ -6,7 +6,7 @@
 
 use super::kinds::{TargetKind, plugin_ids};
 use super::*;
-use craft_anything_engine::workspace::progress::CheckedBuild;
+use f_builder_engine::workspace::progress::CheckedBuild;
 
 /// The run's kept round, and the scan cache its digests reuse.
 #[derive(Default)]
@@ -16,7 +16,7 @@ pub(super) struct KeptChecks {
 }
 
 impl KeptChecks {
-    /// Start from the round `progress` kept, when `craft.json` still has it.
+    /// Start from the round `progress` kept, when `f-builder.json` still has it.
     pub(super) fn from_saved(progress: &BuildProgress, ws: &Workspace) -> KeptChecks {
         let kept = progress.checked.as_ref().and_then(|c| {
             let last = ws.manifest.checks.last()?.round;

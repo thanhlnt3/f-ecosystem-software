@@ -118,12 +118,12 @@ impl Worker {
                 if !console && runtime && program.is_file() && is_program(&program) {
                     notes.push_str(&self.picture_window(ws, &program, &capture)?);
                 }
-                craft_anything_engine::project::write_atomic(&capture.join("README.md"), notes.as_bytes())?;
+                f_builder_engine::project::write_atomic(&capture.join("README.md"), notes.as_bytes())?;
             }
             TargetRef::None => {
                 let capture = ws.capture_dir();
                 std::fs::create_dir_all(&capture).map_err(|e| ToolError::io(capture.display(), e))?;
-                craft_anything_engine::project::write_atomic(&capture.join("README.md"), b"# No target\n\nBuild from the request alone.\n")?;
+                f_builder_engine::project::write_atomic(&capture.join("README.md"), b"# No target\n\nBuild from the request alone.\n")?;
             }
         }
         Ok(())
@@ -148,7 +148,7 @@ impl Worker {
                 Err(e) => format!("{tool} didn't work: {}\n", e.message),
             });
         }
-        craft_anything_engine::project::write_atomic(&ws.capture_dir().join(HOW_IT_WORKS), notes.as_bytes())
+        f_builder_engine::project::write_atomic(&ws.capture_dir().join(HOW_IT_WORKS), notes.as_bytes())
     }
 
     /// Clean room: nothing inside the original is read (no files, folder or code). When Settings
@@ -166,7 +166,7 @@ impl Worker {
         if runtime && path.is_file() && is_program(path) {
             notes.push_str(&self.picture_window(ws, path, &capture)?);
         }
-        craft_anything_engine::project::write_atomic(&capture.join("README.md"), notes.as_bytes())
+        f_builder_engine::project::write_atomic(&capture.join("README.md"), notes.as_bytes())
     }
 
     /// Runtime study (Settings): start the program once and picture its window into capture/, for
@@ -208,7 +208,7 @@ impl Worker {
         }
         if !kept.is_empty() {
             let json = serde_json::to_vec_pretty(&kept).map_err(|e| ToolError::internal(e.to_string()))?;
-            craft_anything_engine::project::write_atomic(&capture.join(kinds::website::ROUTES_FILE), &json)?;
+            f_builder_engine::project::write_atomic(&capture.join(kinds::website::ROUTES_FILE), &json)?;
         }
         Ok(())
     }
@@ -261,7 +261,7 @@ impl Worker {
             .name("ghidra-prepare".into())
             .spawn(move || {
                 let result = std::fs::read(&program).map_err(|e| e.to_string()).and_then(|bytes| {
-                    let sha = craft_anything_evidence::sha256_hex(&bytes);
+                    let sha = f_builder_evidence::sha256_hex(&bytes);
                     // Said in the feed (once per change), so a wait for an earlier analysis shows.
                     let last = Mutex::new(String::new());
                     let said = |m: &str| {
@@ -271,7 +271,7 @@ impl Worker {
                             emit_event(&feed, &events, &wake, RunEvent::Step { step: Step::Study, text: m.to_string() });
                         }
                     };
-                    craft_anything_engine::tools::deep::prepare(&settings, &bytes, &sha, &said)
+                    f_builder_engine::tools::deep::prepare(&settings, &bytes, &sha, &said)
                 });
                 if let Err(e) = &result {
                     log::warn!("Ghidra's analysis of {} failed: {e}", program.display());

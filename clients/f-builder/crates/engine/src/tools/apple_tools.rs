@@ -8,8 +8,8 @@ use super::native_common::{page, spec};
 use super::static_input::{self, Input, builder, format_err};
 use crate::target::TargetKind;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, Subject, ToolError, sha256_hex};
-use craft_anything_formats::{car, codesign, keyed_archive, macho_deps, nib, plist, swift_demangle, verify};
+use f_builder_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, Subject, ToolError, sha256_hex};
+use f_builder_formats::{car, codesign, keyed_archive, macho_deps, nib, plist, swift_demangle, verify};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -370,7 +370,7 @@ fn apple_macho_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Tool
     let inp = macho_input(ctx, p.path.as_deref())?;
     let (slices, pick, bytes, deps) = slice_of(&inp, p.architecture.as_deref())?;
     let mut lims = vec![Limitation::new("static_only", "Read from the file only; nothing was loaded or run.")];
-    let bin = match craft_anything_formats::parse_binary(bytes) {
+    let bin = match f_builder_formats::parse_binary(bytes) {
         Ok(b) => Some(b),
         Err(e) => {
             lims.push(Limitation::new("symbols_unavailable", format!("imports and exports could not be read: {e}")));
@@ -1381,12 +1381,12 @@ fn apple_dylibs_resolve(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
 mod tests {
     use super::super::native_common::test_support::{call, call_err, engine_with};
     use crate::Engine;
-    use craft_anything_formats::codesign;
-    use craft_anything_testkit::apple as fx;
+    use f_builder_formats::codesign;
+    use f_builder_testkit::apple as fx;
     use serde_json::json;
 
     fn tmp(name: &str, bytes: &[u8]) -> String {
-        craft_anything_testkit::temp_file(name, bytes).to_string_lossy().into_owned()
+        f_builder_testkit::temp_file(name, bytes).to_string_lossy().into_owned()
     }
 
     #[test]
@@ -1427,7 +1427,7 @@ mod tests {
         assert!(special.iter().any(|s| s["what"] == "requirements" && s["status"] == "mismatch"));
         assert!(special.iter().any(|s| s["what"] == "info-plist" && s["status"] == "absent"));
         assert!(r["summary"].as_str().unwrap().contains("do NOT match"));
-        let unsigned = engine_with("plain", &craft_anything_testkit::macho64());
+        let unsigned = engine_with("plain", &f_builder_testkit::macho64());
         let u = call(&unsigned, "apple_signature_show", json!({}));
         assert_eq!(u["result"]["signed"], false);
     }
@@ -1693,8 +1693,8 @@ mod tests {
 
         let main = fx::macho_min(fx::CPU_ARM64, 2, &[], &[]);
         let helper = |cpu| fx::macho_min(cpu, 2, &[fx::lc_rpath("@executable_path/../Frameworks"), fx::lc_dylib(0xc, "@rpath/OnlyHelper.dylib")], &[]);
-        let universal = craft_anything_testkit::macho_fat(&[helper(fx::CPU_ARM64), helper(fx::CPU_X86_64)]);
-        let library = craft_anything_testkit::macho_fat(&[
+        let universal = f_builder_testkit::macho_fat(&[helper(fx::CPU_ARM64), helper(fx::CPU_X86_64)]);
+        let library = f_builder_testkit::macho_fat(&[
             fx::macho_min(fx::CPU_ARM64, 6, &[fx::lc_dylib(0xd, "@rpath/OnlyHelper.dylib")], &[]),
             fx::macho_min(fx::CPU_X86_64, 6, &[fx::lc_dylib(0xd, "@rpath/OnlyHelper.dylib")], &[]),
         ]);

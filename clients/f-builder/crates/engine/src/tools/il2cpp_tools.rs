@@ -4,9 +4,9 @@
 use super::native_common::{DEFAULT_LIMIT, MAX_LIMIT, params_json, spec};
 use super::static_input::{builder, load_path};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, ErrorCode, Limitation, Location, ToolError};
-use craft_anything_formats::entropy;
-use craft_anything_formats::il2cpp::{self, Metadata, Reading};
+use f_builder_evidence::{Authority, Confidence, Coverage, ErrorCode, Limitation, Location, ToolError};
+use f_builder_formats::entropy;
+use f_builder_formats::il2cpp::{self, Metadata, Reading};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -300,7 +300,7 @@ fn game_unity_code_names_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOu
 mod tests {
     use super::super::native_common::test_support::{call, call_err};
     use crate::Engine;
-    use craft_anything_testkit::games::{Il2cppSample, il2cpp_metadata};
+    use f_builder_testkit::games::{Il2cppSample, il2cpp_metadata};
     use serde_json::{Value, json};
     use std::path::Path;
 

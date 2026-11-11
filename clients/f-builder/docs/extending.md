@@ -1,8 +1,8 @@
-# Extending Craft Anything
+# Extending F-Builder
 
 Every part people tend to change sits behind a seam: a trait or a table with built-in entries and one
 place to add yours. Follow `AGENTS.md` (never crash, layers, external programs through
-`craft_anything_platform::process`) and give each addition tests.
+`f_builder_platform::process`) and give each addition tests.
 
 | You want to add | Where | How |
 |---|---|---|
@@ -22,7 +22,7 @@ place to add yours. Follow `AGENTS.md` (never crash, layers, external programs t
 ## Plugins: external MCP servers
 
 Any MCP server, local (stdio) or remote (Streamable HTTP), can add tools without changing code.
-Add it in Settings → Plugins, with `plugins_add` (`craft-anything-cli plugins-add --id notes
+Add it in Settings → Plugins, with `plugins_add` (`f-builder-cli plugins-add --id notes
 --command notes-mcp --args '["--stdio"]'`), or list it in `config.toml`. A plugin added through the tool
 or the app always asks before each call; `plugins_remove` takes one away.
 
@@ -42,7 +42,7 @@ url = "https://mcp.example.com/mcp"   # https, or http:// to this computer
 headers = { Authorization = "Bearer …" }
 ```
 
-Then `craft-anything-cli plugins-refresh --allow-run` starts it once and caches its tool list; from
+Then `f-builder-cli plugins-refresh --allow-run` starts it once and caches its tool list; from
 the next start its tools are offered everywhere, in a toolset of their own (MCP agents enable it with
 `enable_toolset`). `plugins-list` shows what's configured and cached.
 
@@ -61,7 +61,7 @@ the next start its tools are offered everywhere, in a toolset of their own (MCP 
 ## Plugins: WASM components
 
 A build with `--features wasm-plugins` (it compiles wasmtime, so it's off by default) also loads
-WASM components. A component exports `craft-anything:plugin/tools` from
+WASM components. A component exports `f-builder:plugin/tools` from
 [`crates/engines/wit/plugin.wit`](../crates/engines/wit/plugin.wit): `describe` returns its tools
 (name, title, description, input schema) as JSON, and `call(name, input)` answers
 `{"ok": …}` or `{"error": "…"}`. List it in `config.toml`:
@@ -72,7 +72,7 @@ id = "wordtools"        # its toolset id; its tools become wordtools_<tool>
 path = "C:/plugins/wordtools.wasm"
 ```
 
-- It may also (or instead) export `craft-anything:plugin/checks`: ways of judging a build, run
+- It may also (or instead) export `f-builder:plugin/checks`: ways of judging a build, run
   after the built-in checks of each round for the kinds of project they name. A check gets the
   build as JSON (every file's path and size, plus the text of the extensions it asks for) and
   answers passed, an optional 0-100 similarity and a summary; a failed one is shown to the builder
@@ -87,15 +87,15 @@ path = "C:/plugins/wordtools.wasm"
 
 ### Plugin API versions
 
-The plugin API is `package craft-anything:plugin@<version>` in `plugin.wit`, versioned with semver;
+The plugin API is `package f-builder:plugin@<version>` in `plugin.wit`, versioned with semver;
 a plugin exports the interfaces at the version it was built against
-(`craft-anything:plugin/tools@0.1.0`).
+(`f-builder:plugin/tools@0.1.0`).
 
 - **Compatible means the same major version, and while it's 0.x the same minor too** (0.1.0 and
-  0.1.7 work together; 0.2.0 doesn't). Craft Anything loads a compatible plugin whatever its patch
-  version, and refuses an incompatible one by name ("exports … for API 0.2.0; this Craft Anything
+  0.1.7 work together; 0.2.0 doesn't). F-Builder loads a compatible plugin whatever its patch
+  version, and refuses an incompatible one by name ("exports … for API 0.2.0; this F-Builder
   speaks 0.1.0") instead of silently skipping it.
-- **A patch version only adds optional JSON fields**: in what a plugin returns (Craft Anything
+- **A patch version only adds optional JSON fields**: in what a plugin returns (F-Builder
   ignores fields it doesn't know) and in what it's given (plugins must ignore unknown fields too).
 - **A minor version (while 0.x) or a major one** is anything else: a new or changed function, a
   field that becomes required, a changed meaning. The host's `API_VERSION`

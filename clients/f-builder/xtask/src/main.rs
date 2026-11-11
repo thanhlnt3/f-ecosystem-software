@@ -13,22 +13,22 @@ mod status;
 /// Workspace crates and their layer. A crate may depend only on strictly lower layers
 /// (L0 format crates depend on nothing in the workspace).
 const LAYERS: &[(&str, u8)] = &[
-    ("craft-anything-evidence", 0),
-    ("craft-anything-formats", 0),
-    ("craft-anything-disasm", 1),
-    ("craft-anything-js", 1),
-    ("craft-anything-analysis", 2),
-    ("craft-anything-platform", 2),
-    ("craft-anything-engines", 3),
-    ("craft-anything-engine", 4),
-    ("craft-anything-ai", 5),
-    ("craft-anything-mcp", 5),
-    ("craft-anything-setup", 5),
-    ("craft-anything-ui-egui", 6),
+    ("f-builder-evidence", 0),
+    ("f-builder-formats", 0),
+    ("f-builder-disasm", 1),
+    ("f-builder-js", 1),
+    ("f-builder-analysis", 2),
+    ("f-builder-platform", 2),
+    ("f-builder-engines", 3),
+    ("f-builder-engine", 4),
+    ("f-builder-ai", 5),
+    ("f-builder-mcp", 5),
+    ("f-builder-setup", 5),
+    ("f-builder-ui-egui", 6),
 ];
 
 /// Crates that must build for wasm32-unknown-unknown (static analysis in the browser).
-const WASM_CRATES: &[&str] = &["craft-anything-evidence", "craft-anything-formats", "craft-anything-disasm", "craft-anything-js", "craft-anything-analysis"];
+const WASM_CRATES: &[&str] = &["f-builder-evidence", "f-builder-formats", "f-builder-disasm", "f-builder-js", "f-builder-analysis"];
 
 /// UI toolkits only the UI layer may use.
 const UI_ONLY: &[&str] = &["egui", "eframe", "winit", "rfd", "egui_extras", "egui_kittest"];
@@ -62,8 +62,8 @@ fn main() -> ExitCode {
                 && run("cargo", &["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])
                 && run("cargo", &["test", "--workspace"])
                 // The off-by-default WASM plugin host, built and tested on its own.
-                && run("cargo", &["clippy", "-p", "craft-anything-engine", "--features", "wasm-plugins", "--all-targets", "--", "-D", "warnings"])
-                && run("cargo", &["test", "-p", "craft-anything-engine", "--features", "wasm-plugins"])
+                && run("cargo", &["clippy", "-p", "f-builder-engine", "--features", "wasm-plugins", "--all-targets", "--", "-D", "warnings"])
+                && run("cargo", &["test", "-p", "f-builder-engine", "--features", "wasm-plugins"])
                 && tools(&root, true)
                 && schemas(&root, true)
                 && wasm()
@@ -175,8 +175,8 @@ const APP_LAYER: u8 = 7;
 /// Apps that are user interfaces of their own. The browser viewer can't build on the UI crate
 /// (it pulls in native-only crates), so it draws with egui directly and may use only the
 /// wasm-safe crates.
-const UI_APPS: &[&str] = &["craft-anything", "craft-anything-web"];
-const WASM_APPS: &[&str] = &["craft-anything-web"];
+const UI_APPS: &[&str] = &["f-builder", "f-builder-web"];
+const WASM_APPS: &[&str] = &["f-builder-web"];
 
 fn layers(root: &Path) -> bool {
     let layer: BTreeMap<&str, u8> = LAYERS.iter().copied().collect();
@@ -191,7 +191,7 @@ fn layers(root: &Path) -> bool {
     }
     for (is_app, manifest) in manifests {
         let (name, deps) = manifest_deps(&manifest);
-        if name == "craft-anything-testkit" {
+        if name == "f-builder-testkit" {
             continue;
         }
         let mine = if is_app {
@@ -203,7 +203,7 @@ fn layers(root: &Path) -> bool {
             ok = false;
             continue;
         };
-        let ui_allowed = mine == 6 || (is_app && (UI_APPS.contains(&name.as_str()) || deps.iter().any(|d| d == "craft-anything-ui-egui")));
+        let ui_allowed = mine == 6 || (is_app && (UI_APPS.contains(&name.as_str()) || deps.iter().any(|d| d == "f-builder-ui-egui")));
         for d in &deps {
             if let Some(&theirs) = layer.get(d.as_str())
                 && theirs >= mine
@@ -219,8 +219,8 @@ fn layers(root: &Path) -> bool {
                 eprintln!("layers: browser app {name} depends on {d}, which doesn't build for wasm");
                 ok = false;
             }
-            if is_app && d == "craft-anything-testkit" {
-                eprintln!("layers: app {name} depends on craft-anything-testkit; use it as a dev-dependency only");
+            if is_app && d == "f-builder-testkit" {
+                eprintln!("layers: app {name} depends on f-builder-testkit; use it as a dev-dependency only");
                 ok = false;
             }
         }
@@ -234,7 +234,7 @@ fn layers(root: &Path) -> bool {
     ok
 }
 
-/// Golden rule 10: every external program goes through `craft_anything_platform::process`, so
+/// Golden rule 10: every external program goes through `f_builder_platform::process`, so
 /// `std::process::Command` may appear only in crates/platform, xtask and test code (`tests/`
 /// folders, and everything after a file's first `#[cfg(test)]` / `#[cfg(all(test, …))]`).
 fn process_calls_only_in_platform(root: &Path) -> bool {
@@ -267,7 +267,7 @@ fn process_calls_only_in_platform(root: &Path) -> bool {
             let direct = code.split("std::process::").skip(1).any(|rest| rest.split(|c: char| !c.is_alphanumeric() && c != '_').any(|w| w == "Command"));
             if !code.starts_with("//") && (direct || code.contains("process::Command::new")) {
                 let rel = f.strip_prefix(root).unwrap_or(&f).display().to_string();
-                eprintln!("layers: {rel}:{}: runs a program with std::process::Command; use craft_anything_platform::process (golden rule 10)", i + 1);
+                eprintln!("layers: {rel}:{}: runs a program with std::process::Command; use f_builder_platform::process (golden rule 10)", i + 1);
                 ok = false;
             }
         }
@@ -325,8 +325,8 @@ fn ui_has_no_side_effects(root: &Path) -> bool {
 }
 
 fn tools(root: &Path, check: bool) -> bool {
-    let registry = craft_anything_engine::Registry::with_all_tools();
-    let report = craft_anything_engine::tool_list::report(&registry);
+    let registry = f_builder_engine::Registry::with_all_tools();
+    let report = f_builder_engine::tool_list::report(&registry);
     let n = registry.all().len();
     let path = root.join("docs").join("tools.md");
     if check {
@@ -356,10 +356,10 @@ fn tools(root: &Path, check: bool) -> bool {
 fn schemas(root: &Path, check: bool) -> bool {
     let dir = root.join("docs").join("schemas");
     let files = [
-        ("craft.schema.json", craft_anything_engine::workspace::manifest_schema()),
-        ("build-progress.schema.json", craft_anything_engine::workspace::progress::build_progress_schema()),
-        ("mechanics.schema.json", craft_anything_engine::mechanics::mechanics_schema()),
-        ("self-test.schema.json", craft_anything_engine::self_test::self_test_schema()),
+        ("f-builder.schema.json", f_builder_engine::workspace::manifest_schema()),
+        ("build-progress.schema.json", f_builder_engine::workspace::progress::build_progress_schema()),
+        ("mechanics.schema.json", f_builder_engine::mechanics::mechanics_schema()),
+        ("self-test.schema.json", f_builder_engine::self_test::self_test_schema()),
     ];
     let mut ok = true;
     for (name, schema) in files {
@@ -491,11 +491,16 @@ fn pending(root: &Path, count_only: bool) -> bool {
 mod tests {
     use super::workspace_root;
 
+    /// F-Builder is based on Craft Anything (MIT OR Apache-2.0): the README names its origin and the
+    /// NOTICE keeps the original one, and neither ships the ArtCraft brand files.
     #[test]
-    fn readme_status_does_not_list_first_public_release_as_next() {
-        let readme = std::fs::read_to_string(workspace_root().join("README.md")).unwrap();
-        let status = readme.split("\n## Status").nth(1).unwrap();
-        let status = status.split("\n**Responsible use.**").next().unwrap().replace("\n> ", " ");
-        assert!(!status.contains("**Next:** the first public release"), "{status}");
+    fn readme_and_notice_credit_the_origin_without_its_brand() {
+        let root = workspace_root();
+        let readme = std::fs::read_to_string(root.join("README.md")).unwrap();
+        assert!(readme.contains("Craft Anything 0.6.0") && readme.contains("NOTICE"), "README must name its origin");
+        let notice = std::fs::read_to_string(root.join("NOTICE")).unwrap();
+        assert!(notice.starts_with("F-Builder\n"), "F-Builder's notice comes first");
+        assert!(notice.contains("Copyright (c) 2026 ArtCraft Team and the Craft Anything contributors."), "original NOTICE kept");
+        assert!(!root.join("docs/brand").exists(), "the ArtCraft brand files are not part of F-Builder");
     }
 }

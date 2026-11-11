@@ -3,8 +3,8 @@
 
 use crate::config::{CliContext, CliReasoningEffort};
 use crate::{AiConfig, BackendConfig, BackendKind};
-use craft_anything_engine::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::ToolError;
+use f_builder_engine::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
+use f_builder_evidence::ToolError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -144,13 +144,13 @@ mod tests {
 
     #[test]
     fn cancelled_context_discovery_stops_before_starting_a_cli() {
-        let cancel = craft_anything_engine::CancelToken::default();
+        let cancel = f_builder_engine::CancelToken::default();
         cancel.cancel();
         let stop = crate::model::Stop::for_tool(cancel);
         let config =
             BackendConfig { name: "Test Copilot".into(), kind: BackendKind::AgentCli, model: "copilot".into(), base_url: None, ssh_host: None, enabled: true };
-        let options = crate::BackendOptions { command: Some("craft-anything-no-such-test-agent".into()), ..Default::default() };
-        assert_eq!(crate::cli_agents::acp_model_tuning(&config, &options, &stop).unwrap_err().code, craft_anything_evidence::ErrorCode::Cancelled);
+        let options = crate::BackendOptions { command: Some("f-builder-no-such-test-agent".into()), ..Default::default() };
+        assert_eq!(crate::cli_agents::acp_model_tuning(&config, &options, &stop).unwrap_err().code, f_builder_evidence::ErrorCode::Cancelled);
     }
 
     #[test]
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn context_tools_preserve_shared_thinking_and_refuse_stale_model_edits() {
         use crate::{BackendEntry, BackendOptions};
-        use craft_anything_engine::{CallOptions, Caller, Engine, Session};
+        use f_builder_engine::{CallOptions, Caller, Engine, Session};
         let directory = tempfile::tempdir().unwrap();
         let mut session = Session::isolated(directory.path());
         let mut config = AiConfig::default();

@@ -11,7 +11,7 @@ try {
   Add-Type -MemberDefinition @'
 [DllImport("user32.dll", CharSet = CharSet.Auto)]
 public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-'@ -Name NativeMethods -Namespace CraftAnything -ErrorAction SilentlyContinue
+'@ -Name NativeMethods -Namespace FBuilder -ErrorAction SilentlyContinue
 } catch { }
 # The proxies that make Win32 and WinForms controls real buttons, boxes and checkboxes (with their
 # password flag) aren't loaded on their own here; registering them needs UI Automation started.
@@ -109,7 +109,7 @@ function Act($el, $action) {
           $ct = $el.Current.ControlType
           $hwnd = [IntPtr]$el.Current.NativeWindowHandle
           if ($hwnd -ne [IntPtr]::Zero -and ($ct -eq [System.Windows.Automation.ControlType]::Button -or $ct -eq [System.Windows.Automation.ControlType]::CheckBox)) {
-            [void][CraftAnything.NativeMethods]::PostMessage($hwnd, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+            [void][FBuilder.NativeMethods]::PostMessage($hwnd, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
             return 'dispatched'
           }
           throw

@@ -1,4 +1,4 @@
-use craft_anything_formats::{bytes::Reader, dex, java_class};
+use f_builder_formats::{bytes::Reader, dex, java_class};
 
 fn class_string(encoded: &[u8]) -> String {
     let mut bytes = vec![0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 52, 0, 2, 1];

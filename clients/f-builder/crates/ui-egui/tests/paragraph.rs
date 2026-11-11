@@ -1,12 +1,12 @@
 //! Inline glossary hints survive shaping a whole paragraph, including Unicode before the term.
-use craft_anything_engine::{Mode, feed::FeedItem};
-use craft_anything_ui_egui::{CraftApp, demo};
 use egui_kittest::{Harness, kittest::Queryable};
+use f_builder_engine::{Mode, feed::FeedItem};
+use f_builder_ui_egui::{BuilderApp, demo};
 
 #[test]
 fn a_formatted_glossary_word_after_unicode_still_has_its_hover_hint() {
     let mut h = Harness::builder().with_size(egui::vec2(1280.0, 820.0)).build_eframe(|cc| {
-        CraftApp::setup_context(&cc.egui_ctx);
+        BuilderApp::setup_context(&cc.egui_ctx);
         let mut app = demo::app(demo::engine(Mode::Beginner, true));
         demo::fill_project(&mut app);
         app.state.feed = vec![FeedItem::Agent { text: "ação **IPC** e `source.rs`".into(), streaming: false }];

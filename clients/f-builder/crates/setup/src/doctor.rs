@@ -42,7 +42,7 @@ impl Check {
 pub struct DoctorRequest {
     /// Only these clients (ids); empty = every detected client.
     pub clients: Vec<String>,
-    /// The CLI to check and self-test; defaults to this machine's `craft-anything-cli`.
+    /// The CLI to check and self-test; defaults to this machine's `f-builder-cli`.
     pub cli_path: Option<PathBuf>,
     /// Checks computed elsewhere (e.g. AI backend reachability from the CLI).
     pub extra: Vec<Check>,
@@ -71,15 +71,14 @@ pub fn doctor(host: &Host, req: &DoctorRequest) -> DoctorReport {
     let mut checks = Vec::new();
 
     // The CLI binary.
-    let cli = req.cli_path.clone().or_else(craft_anything_platform::self_cli_path);
+    let cli = req.cli_path.clone().or_else(f_builder_platform::self_cli_path);
     match &cli {
-        Some(p) if p.is_file() => checks.push(Check::new("binary", CheckStatus::Ok, format!("craft-anything-cli is at {}", p.display()))),
-        Some(p) => checks.push(Check::new("binary", CheckStatus::Fail, format!("{} does not exist.", p.display())).fix("Reinstall Craft Anything.")),
-        None => checks.push(
-            Check::new("binary", CheckStatus::Fail, "craft-anything-cli was not found.").fix("Install Craft Anything; the CLI ships next to the desktop app."),
-        ),
+        Some(p) if p.is_file() => checks.push(Check::new("binary", CheckStatus::Ok, format!("f-builder-cli is at {}", p.display()))),
+        Some(p) => checks.push(Check::new("binary", CheckStatus::Fail, format!("{} does not exist.", p.display())).fix("Reinstall F-Builder.")),
+        None => checks
+            .push(Check::new("binary", CheckStatus::Fail, "f-builder-cli was not found.").fix("Install F-Builder; the CLI ships next to the desktop app.")),
     }
-    let on_path = craft_anything_platform::which_all("craft-anything-cli");
+    let on_path = f_builder_platform::which_all("f-builder-cli");
     if on_path.len() > 1 {
         let list: Vec<String> = on_path.iter().map(|p| p.display().to_string()).collect();
         checks.push(
@@ -102,7 +101,7 @@ pub fn doctor(host: &Host, req: &DoctorRequest) -> DoctorReport {
         if !skill_dirs.contains(&c.skills_dir) {
             skill_dirs.push(c.skills_dir.clone());
         }
-        let setup_cmd = format!("craft-anything-cli setup --client {}", c.id);
+        let setup_cmd = format!("f-builder-cli setup --client {}", c.id);
         let text = match std::fs::read_to_string(&c.config) {
             Ok(t) => t,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -123,7 +122,7 @@ pub fn doctor(host: &Host, req: &DoctorRequest) -> DoctorReport {
                     .fix(setup_cmd)
             }
             Ok(Some(e)) if !is_owned_entry(&e) => {
-                Check::new(name, CheckStatus::Warn, format!("{} has a \"craft-anything\" entry that doesn't launch craft-anything-cli.", c.display))
+                Check::new(name, CheckStatus::Warn, format!("{} has a \"f-builder\" entry that doesn't launch f-builder-cli.", c.display))
                     .fix(format!("{setup_cmd} (replaces it)"))
             }
             Ok(Some(e)) => {
@@ -132,15 +131,15 @@ pub fn doctor(host: &Host, req: &DoctorRequest) -> DoctorReport {
                 // install folders), not in doctor's own folder.
                 let program_ok = entry_command(&e).and_then(|v| v.into_iter().next()).is_some_and(|p| {
                     let path = Path::new(&p);
-                    if path.components().count() == 1 { craft_anything_platform::which(&p).is_some() } else { path.is_file() }
+                    if path.components().count() == 1 { f_builder_platform::which(&p).is_some() } else { path.is_file() }
                 });
                 if config::is_disabled(c, &text) {
-                    Check::new(name, CheckStatus::Warn, format!("{} lists Craft Anything as disabled.", c.display)).fix(setup_cmd)
+                    Check::new(name, CheckStatus::Warn, format!("{} lists F-Builder as disabled.", c.display)).fix(setup_cmd)
                 } else if config::entry_turned_off(c, &text) {
-                    Check::new(name, CheckStatus::Warn, format!("{} has Craft Anything turned off (enabled = false).", c.display))
-                        .fix(format!("Set enabled = true (or remove it) under [mcp_servers.craft-anything] in {}.", c.config.display()))
+                    Check::new(name, CheckStatus::Warn, format!("{} has F-Builder turned off (enabled = false).", c.display))
+                        .fix(format!("Set enabled = true (or remove it) under [mcp_servers.f-builder] in {}.", c.config.display()))
                 } else if !program_ok {
-                    Check::new(name, CheckStatus::Fail, format!("{} points to a craft-anything-cli that no longer exists.", c.display)).fix(setup_cmd)
+                    Check::new(name, CheckStatus::Fail, format!("{} points to a f-builder-cli that no longer exists.", c.display)).fix(setup_cmd)
                 } else if desired.as_ref().is_some_and(|d| c.entry_is_current(&e, d)) {
                     Check::new(name, CheckStatus::Ok, format!("{} is connected.", c.display))
                 } else {
@@ -155,17 +154,17 @@ pub fn doctor(host: &Host, req: &DoctorRequest) -> DoctorReport {
     for d in &skill_dirs {
         let name = format!("skill:{}", d.display());
         checks.push(match skill::inspect(d) {
-            SkillState::Current => Check::new(name, CheckStatus::Ok, "The Craft Anything skill is installed and current."),
-            SkillState::Outdated => Check::new(name, CheckStatus::Warn, "The Craft Anything skill is out of date.").fix("craft-anything-cli setup --yes"),
-            SkillState::Missing => Check::new(name, CheckStatus::Info, "The Craft Anything skill isn't installed here.").fix("craft-anything-cli setup --yes"),
-            SkillState::Foreign => Check::new(name, CheckStatus::Warn, "Another skill uses the craft-anything folder name."),
+            SkillState::Current => Check::new(name, CheckStatus::Ok, "The F-Builder skill is installed and current."),
+            SkillState::Outdated => Check::new(name, CheckStatus::Warn, "The F-Builder skill is out of date.").fix("f-builder-cli setup --yes"),
+            SkillState::Missing => Check::new(name, CheckStatus::Info, "The F-Builder skill isn't installed here.").fix("f-builder-cli setup --yes"),
+            SkillState::Foreign => Check::new(name, CheckStatus::Warn, "Another skill uses the f-builder folder name."),
         });
     }
 
     // Optional engines.
     if req.engines {
         let java_home = std::env::var_os("JAVA_HOME").map(PathBuf::from);
-        checks.extend(engine_checks(&craft_anything_engine::Settings::load(), java_home.as_deref()));
+        checks.extend(engine_checks(&f_builder_engine::Settings::load(), java_home.as_deref()));
     }
 
     // MCP self-test.
@@ -184,10 +183,10 @@ pub fn doctor(host: &Host, req: &DoctorRequest) -> DoctorReport {
 /// its launcher looks ([`java_in_use`]): that needn't be the Java on PATH that `engine:java`
 /// reports. `inherited` is this program's `JAVA_HOME`.
 ///
-/// [`java_in_use`]: craft_anything_engines::ghidra::get::java_in_use
-fn engine_checks(settings: &craft_anything_engine::Settings, inherited: Option<&Path>) -> Vec<Check> {
+/// [`java_in_use`]: f_builder_engines::ghidra::get::java_in_use
+fn engine_checks(settings: &f_builder_engine::Settings, inherited: Option<&Path>) -> Vec<Check> {
     let mut checks = Vec::new();
-    for e in craft_anything_engines::ENGINES {
+    for e in f_builder_engines::ENGINES {
         let name = format!("engine:{}", e.id);
         checks.push(match settings.engine_path(e.id) {
             Some(p) => Check::new(name, CheckStatus::Ok, format!("{}: {}", e.name, p.display())),
@@ -195,7 +194,7 @@ fn engine_checks(settings: &craft_anything_engine::Settings, inherited: Option<&
         });
     }
     if let Some(launcher) = settings.ghidra_launcher() {
-        use craft_anything_engines::ghidra::get::{GhidraJava, java_in_use};
+        use f_builder_engines::ghidra::get::{GhidraJava, java_in_use};
         let name = "engine:ghidra-java";
         let set = settings.ghidra_java();
         let fix = "Set Ghidra's Java folder in Settings → Engines, or install Java 21 or newer.";
@@ -234,7 +233,7 @@ fn engine_checks(settings: &craft_anything_engine::Settings, inherited: Option<&
 pub fn mcp_self_test(program: &str, args: &[String], timeout: Duration) -> Check {
     let name = "mcp:self-test";
     let reqs = [
-        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "craft-anything-doctor", "version": env!("CARGO_PKG_VERSION")}}}),
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "f-builder-doctor", "version": env!("CARGO_PKG_VERSION")}}}),
         json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
         json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
     ];
@@ -243,18 +242,18 @@ pub fn mcp_self_test(program: &str, args: &[String], timeout: Duration) -> Check
         input.push_str(&r.to_string());
         input.push('\n');
     }
-    let out = match craft_anything_platform::Process::new(program)
+    let out = match f_builder_platform::Process::new(program)
         .args(args)
         .stdin_bytes(input.into_bytes())
         .timeout(timeout)
         .stdout_cap(32 * 1024 * 1024)
-        .label("craft-anything-cli mcp")
+        .label("f-builder-cli mcp")
         .run()
     {
         Ok(o) => o,
         Err(e) => {
             return Check::new(name, CheckStatus::Fail, format!("The MCP server didn't answer: {}", e.message))
-                .fix(e.remediation.unwrap_or_else(|| "Run this in a terminal to see the error: craft-anything-cli mcp".into()));
+                .fix(e.remediation.unwrap_or_else(|| "Run this in a terminal to see the error: f-builder-cli mcp".into()));
         }
     };
     let mut init = None;
@@ -269,11 +268,11 @@ pub fn mcp_self_test(program: &str, args: &[String], timeout: Duration) -> Check
     }
     let Some(init) = init else {
         return Check::new(name, CheckStatus::Fail, "The MCP server sent no reply to initialize.")
-            .fix("Run this in a terminal to see the error: craft-anything-cli mcp");
+            .fix("Run this in a terminal to see the error: f-builder-cli mcp");
     };
     let server = init["result"]["serverInfo"]["name"].as_str().unwrap_or_default();
     let protocol = init["result"]["protocolVersion"].as_str().unwrap_or_default();
-    if server != "craft-anything" || protocol.is_empty() {
+    if server != "f-builder" || protocol.is_empty() {
         return Check::new(name, CheckStatus::Fail, format!("Unexpected initialize reply (server {server:?}, protocol {protocol:?})."));
     }
     let tools: Vec<&str> =
@@ -282,8 +281,8 @@ pub fn mcp_self_test(program: &str, args: &[String], timeout: Duration) -> Check
         return Check::new(name, CheckStatus::Fail, "The MCP server listed no tools.");
     }
     // The session tool under any name a client may report it by.
-    let registry = craft_anything_engine::registry::Registry::with_all_tools();
-    let session = craft_anything_engine::tools::session_tools::SESSION_TOOL;
+    let registry = f_builder_engine::registry::Registry::with_all_tools();
+    let session = f_builder_engine::tools::session_tools::SESSION_TOOL;
     if !tools.iter().any(|t| registry.canonical(t) == Some(session)) {
         return Check::new(name, CheckStatus::Fail, format!("The MCP server's tool list is missing {session}."));
     }
@@ -307,7 +306,7 @@ mod engine_check_tests {
     #[test]
     fn doctor_names_the_java_ghidra_runs_on() {
         let dir = tempfile::tempdir().unwrap();
-        let mut s = craft_anything_engine::Settings::default();
+        let mut s = f_builder_engine::Settings::default();
         s.engines.store_dir = Some(dir.path().join("engines"));
         s.engines.only_configured = true;
         assert!(ghidra_java(&engine_checks(&s, None)).is_none(), "nothing to say without Ghidra");
@@ -391,15 +390,15 @@ mod tests {
 
     #[test]
     fn self_test_against_fake_servers() {
-        let good = r#"cat >/dev/null; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"craft-anything","version":"0"}}}'; echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"core_session_show"}]}}'"#;
+        let good = r#"cat >/dev/null; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"f-builder","version":"0"}}}'; echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"core_session_show"}]}}'"#;
         assert_eq!(sh(good).status, CheckStatus::Ok);
         let wrong = r#"echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"x","serverInfo":{"name":"other"}}}'"#;
         assert_eq!(sh(wrong).status, CheckStatus::Fail);
         assert_eq!(sh("echo nonsense").status, CheckStatus::Fail);
-        let no_tools = r#"echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"1","serverInfo":{"name":"craft-anything"}}}'"#;
+        let no_tools = r#"echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"1","serverInfo":{"name":"f-builder"}}}'"#;
         assert_eq!(sh(no_tools).status, CheckStatus::Fail);
         let hang = mcp_self_test("sleep", &["30".to_string()], Duration::from_millis(300));
         assert_eq!(hang.status, CheckStatus::Fail);
-        assert_eq!(mcp_self_test("/no/such/craft-anything-cli", &[], Duration::from_secs(1)).status, CheckStatus::Fail);
+        assert_eq!(mcp_self_test("/no/such/f-builder-cli", &[], Duration::from_secs(1)).status, CheckStatus::Fail);
     }
 }

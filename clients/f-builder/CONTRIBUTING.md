@@ -12,7 +12,7 @@ In short:
   title is the commit message: plain English, what changed for the person or developer.
 - **Where things go:** [docs/extending.md](docs/extending.md) (tools, target kinds, checks, coding
   agents, engines, plugins).
-- **Never crash, safe Rust only, every external program through `craft_anything_platform::process`,
+- **Never crash, safe Rust only, every external program through `f_builder_platform::process`,
   no secrets or personal data anywhere.** Everything is our own work: no code, names or wording copied from other projects.
 
 Before you ask for review:

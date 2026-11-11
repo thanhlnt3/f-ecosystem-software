@@ -1,6 +1,6 @@
 //! A safe adapter around the user's `adb` (Android Debug Bridge).
 //!
-//! Everything here runs `adb` through [`craft_anything_platform::process`]: stdin closed, wall and
+//! Everything here runs `adb` through [`f_builder_platform::process`]: stdin closed, wall and
 //! idle deadlines, capped output drained on threads, and the process group killed on timeout, cancel
 //! or drop. Nothing user-supplied is ever interpolated into a shell string:
 //!
@@ -12,8 +12,8 @@
 //! Parsers turn `adb` output into typed structures; they are bounded (line count and line length are
 //! capped) and never panic on hostile output.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::process::{Cancel, Output, Process};
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::process::{Cancel, Output, Process};
 use serde::Serialize;
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -160,7 +160,7 @@ fn adb_failed(what: &str, out: &Output) -> ToolError {
     ToolError::new(ErrorCode::ProgramFailed, format!("{what} failed: {msg}"))
         .with_remediation(format!(
             "Check the device is connected and authorised (`adb devices`). What adb printed last:\n{}",
-            craft_anything_platform::process::output_excerpt(&tail)
+            f_builder_platform::process::output_excerpt(&tail)
         ))
         .with_details(serde_json::json!({"exit_code": out.code, "stderr_tail": tail}))
 }

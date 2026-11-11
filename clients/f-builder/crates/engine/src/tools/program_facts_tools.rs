@@ -6,14 +6,14 @@ use super::native_common::{CtxControl, disasm_err, native, page, params_json, se
 use super::static_input::{self, builder, format_err};
 use super::{Detail, detailed};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_analysis::function_match::{self, BodyStatus, MatchMethod, MatchResult, MatchedPair};
-use craft_anything_disasm::pseudo::lift;
-use craft_anything_disasm::{Image, Limits, Program};
-use craft_anything_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, ToolError};
-use craft_anything_formats::authenticode::{self, CertTable, HashStatus, SignatureReport};
-use craft_anything_formats::verify::Verified;
-use craft_anything_formats::{Binary, Format, ai_model, elf, macho_deps, parse_binary, pe};
-use craft_anything_platform::fs::write_atomic;
+use f_builder_analysis::function_match::{self, BodyStatus, MatchMethod, MatchResult, MatchedPair};
+use f_builder_disasm::pseudo::lift;
+use f_builder_disasm::{Image, Limits, Program};
+use f_builder_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, ToolError};
+use f_builder_formats::authenticode::{self, CertTable, HashStatus, SignatureReport};
+use f_builder_formats::verify::Verified;
+use f_builder_formats::{Binary, Format, ai_model, elf, macho_deps, parse_binary, pe};
+use f_builder_platform::fs::write_atomic;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -667,7 +667,7 @@ fn formats_ai_weights_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutpu
     }
     let input = static_input::load_prefix(ctx, p.path.as_deref(), p.max_header_bytes)?;
     let mut r = ai_model::parse(&input.bytes, input.file_size).map_err(|e| match e {
-        craft_anything_formats::FormatError::TooLarge(m) => {
+        f_builder_formats::FormatError::TooLarge(m) => {
             ToolError::new(ErrorCode::OverLimit, format!("Couldn't read this model's header: {m}")).with_remediation("Raise max_header_bytes (up to 4 GiB).")
         }
         other => format_err(other, "a GGUF or safetensors model"),
@@ -900,7 +900,7 @@ fn app_builds_line_up(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, To
 // Writing pseudo-C across runs
 
 /// The state file's name inside an export folder.
-pub const EXPORT_STATE_FILE: &str = "craft-pseudocode-export.json";
+pub const EXPORT_STATE_FILE: &str = "fbuilder-pseudocode-export.json";
 /// The state file's format version.
 const EXPORT_STATE_VERSION: u32 = 1;
 /// Save the state at least this often, so a crash costs little repeated work.
@@ -1129,8 +1129,8 @@ mod tests {
     use super::super::native_common::test_support::{call, call_err, engine_with};
     use super::*;
     use crate::{CallOptions, Caller, Engine};
-    use craft_anything_testkit::program_facts as pf;
-    use craft_anything_testkit::temp_file;
+    use f_builder_testkit::program_facts as pf;
+    use f_builder_testkit::temp_file;
 
     fn engine() -> Engine {
         Engine::new(crate::testing::session())
@@ -1202,7 +1202,7 @@ mod tests {
         assert_eq!(v["result"]["exports"][0]["version"], "LIB_1.0");
         assert_eq!(v["result"]["exports"][1]["binding"], "weak");
 
-        let p = temp_file("m", &craft_anything_testkit::macho64());
+        let p = temp_file("m", &f_builder_testkit::macho64());
         let v = call(&e, "native_library_calls_list", json!({"path": p}));
         assert!(v["result"]["imports"].as_array().unwrap().iter().any(|i| i["name"].as_str().unwrap().contains("puts")), "{v}");
         assert!(v["result"]["libraries"].as_array().unwrap().iter().any(|l| l["name"].as_str().unwrap().contains("libSystem")), "{v}");
@@ -1250,7 +1250,7 @@ mod tests {
 
         // Changed after signing.
         let mut tampered = pf::signed_pe();
-        let at = craft_anything_formats::pe::headers(&tampered).unwrap().rva_to_offset(0x1000).unwrap();
+        let at = f_builder_formats::pe::headers(&tampered).unwrap().rva_to_offset(0x1000).unwrap();
         tampered[at] ^= 0x55;
         let p = temp_file("tampered.exe", &tampered);
         let v = call(&e, "native_publisher_show", json!({"path": p}));
@@ -1492,8 +1492,8 @@ mod tests {
 
     #[test]
     fn matching_works_on_arm64_and_says_when_processors_differ() {
-        let (arm, _) = craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::Aarch64, true);
-        let (x64, _) = craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::X86_64, true);
+        let (arm, _) = f_builder_testkit::elf64(f_builder_testkit::ElfArch::Aarch64, true);
+        let (x64, _) = f_builder_testkit::elf64(f_builder_testkit::ElfArch::X86_64, true);
         let (ap, xp) = (temp_file("arm.elf", &arm), temp_file("x64.elf", &x64));
         let e = engine();
         let v = call(&e, "app_builds_line_up", json!({"left": ap, "right": ap}));
@@ -1525,7 +1525,7 @@ mod tests {
         let (l, r) = two_builds();
         let rp = temp_file("good.elf", &r);
         let e = engine();
-        for (i, m) in craft_anything_testkit::mutations(&l).into_iter().enumerate().take(40) {
+        for (i, m) in f_builder_testkit::mutations(&l).into_iter().enumerate().take(40) {
             let p = temp_file(&format!("m{i}.elf"), &m);
             let _ = e.call("app_builds_line_up", json!({"left": p, "right": rp}), CallOptions::new(Caller::Mcp));
         }
@@ -1539,7 +1539,7 @@ mod tests {
 
     #[test]
     fn export_runs_in_parts_and_does_not_repeat_work() {
-        let (bytes, _) = craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::X86_64, true);
+        let (bytes, _) = f_builder_testkit::elf64(f_builder_testkit::ElfArch::X86_64, true);
         let e = engine_with("prog", &bytes);
         let tmp = tempfile::tempdir().unwrap();
         let folder = tmp.path().join("out");
@@ -1589,8 +1589,8 @@ mod tests {
 
     #[test]
     fn export_refuses_another_target_and_other_peoples_folders() {
-        let (a, _) = craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::X86_64, true);
-        let (b, _) = craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::Aarch64, true);
+        let (a, _) = f_builder_testkit::elf64(f_builder_testkit::ElfArch::X86_64, true);
+        let (b, _) = f_builder_testkit::elf64(f_builder_testkit::ElfArch::Aarch64, true);
         let tmp = tempfile::tempdir().unwrap();
         let folder = tmp.path().join("out");
         let e = engine_with("a", &a);
@@ -1630,7 +1630,7 @@ mod tests {
 
     #[test]
     fn export_stops_at_its_time_limit_and_when_cancelled() {
-        let (bytes, _) = craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::X86_64, true);
+        let (bytes, _) = f_builder_testkit::elf64(f_builder_testkit::ElfArch::X86_64, true);
         let e = engine_with("prog", &bytes);
         let tmp = tempfile::tempdir().unwrap();
         let folder = tmp.path().join("out");

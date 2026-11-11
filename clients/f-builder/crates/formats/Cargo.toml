@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-formats"
-description = "Pure, standalone file-format parsers for Craft Anything (no workspace dependencies)"
+name = "f-builder-formats"
+description = "Pure, standalone file-format parsers for F-Builder (no workspace dependencies)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -30,4 +30,4 @@ bzip2-rs = "0.1"
 ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-craft-anything-testkit = { workspace = true }
+f-builder-testkit = { workspace = true }

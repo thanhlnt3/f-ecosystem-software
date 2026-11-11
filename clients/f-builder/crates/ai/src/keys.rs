@@ -2,20 +2,20 @@
 //! usual environment variables. Keys are never logged or written to project files.
 
 use crate::BackendKind;
-use craft_anything_engine::tools::asset_tools::AssetKeys;
-use craft_anything_engines::assets::{AssetProvider, AssetProviders};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_engine::tools::asset_tools::AssetKeys;
+use f_builder_engines::assets::{AssetProvider, AssetProviders};
+use f_builder_evidence::{ErrorCode, ToolError};
 use std::path::PathBuf;
 use std::time::Duration;
 
 /// Service name in the OS keychain.
-pub const SERVICE: &str = "ai.storyteller.craft-anything";
+pub const SERVICE: &str = "io.github.thanhlnt3.f-builder";
 /// Set to `1` to skip the OS keychain (tests, headless servers).
-pub const NO_KEYCHAIN_ENV: &str = "CRAFT_ANYTHING_NO_KEYCHAIN";
+pub const NO_KEYCHAIN_ENV: &str = "F_BUILDER_NO_KEYCHAIN";
 /// The keychain can block (a locked desktop keyring); never wait longer than this.
 const KEYCHAIN_TIMEOUT: Duration = Duration::from_secs(3);
 
-const FILE_HEADER: &str = "# Craft Anything AI keys: FALLBACK STORE.\n# These keys are here because no OS keychain was available when they were saved.\n# This file is readable only by you (0600). Delete a line to forget a key.\n";
+const FILE_HEADER: &str = "# F-Builder AI keys: FALLBACK STORE.\n# These keys are here because no OS keychain was available when they were saved.\n# This file is readable only by you (0600). Delete a line to forget a key.\n";
 
 /// Where the fal.ai key for generated game assets is stored.
 pub const FAL_KEY: &str = "assets:fal";
@@ -40,7 +40,7 @@ pub fn asset_keys(store: &KeyStore, providers: &AssetProviders) -> AssetKeys {
 /// After a key changed: keys a run already loaded into `session` follow, so a removed one stops being
 /// spent at once. A session with none loaded stays that way. Reads the keychain, so call it off the UI
 /// thread; a tool passes the session it holds, because locking it again would wait forever.
-pub fn refresh_loaded(session: &mut craft_anything_engine::Session, store: &KeyStore) {
+pub fn refresh_loaded(session: &mut f_builder_engine::Session, store: &KeyStore) {
     if session.ext.get::<AssetKeys>().is_some() {
         let providers = session.ext.get::<AssetProviders>().map(|p| p.as_ref().clone()).unwrap_or_default();
         session.ext.insert(std::sync::Arc::new(asset_keys(store, &providers)));
@@ -49,7 +49,7 @@ pub fn refresh_loaded(session: &mut craft_anything_engine::Session, store: &KeyS
 
 /// The fal.ai key for game assets: stored, else fal's environment variable.
 pub fn fal_key(store: &KeyStore) -> Option<String> {
-    asset_key(store, &craft_anything_engines::assets::fal::Fal::default())
+    asset_key(store, &f_builder_engines::assets::fal::Fal::default())
 }
 
 /// The environment variable conventionally holding a key for this kind.
@@ -74,7 +74,7 @@ impl KeyStore {
     /// The default store: keychain + `<config dir>/ai-keys.toml`.
     pub fn system() -> Self {
         let no_chain = std::env::var(NO_KEYCHAIN_ENV).is_ok_and(|v| v == "1");
-        KeyStore { file: craft_anything_engine::settings::config_dir().join("ai-keys.toml"), use_keychain: !no_chain }
+        KeyStore { file: f_builder_engine::settings::config_dir().join("ai-keys.toml"), use_keychain: !no_chain }
     }
 
     /// A file-only store (tests).
@@ -105,7 +105,7 @@ impl KeyStore {
 
     fn write_file(&self, t: &toml::Table) -> Result<(), ToolError> {
         let body = toml::to_string(t).map_err(|e| ToolError::internal(e.to_string()))?;
-        craft_anything_platform::write_atomic_private(&self.file, format!("{FILE_HEADER}{body}").as_bytes())
+        f_builder_platform::write_atomic_private(&self.file, format!("{FILE_HEADER}{body}").as_bytes())
     }
 
     /// The stored key for a backend (keychain, then fallback file).
@@ -219,7 +219,7 @@ mod tests {
         fn name(&self) -> &'static str {
             "Other"
         }
-        fn generate(&self, _key: &str, _req: &craft_anything_engines::assets::AssetRequest) -> Result<craft_anything_engines::assets::Generated, ToolError> {
+        fn generate(&self, _key: &str, _req: &f_builder_engines::assets::AssetRequest) -> Result<f_builder_engines::assets::Generated, ToolError> {
             Err(ToolError::invalid("not here"))
         }
     }
@@ -251,7 +251,7 @@ mod tests {
         let mut providers = AssetProviders::built_in();
         providers.register(std::sync::Arc::new(Other));
         s.set(&asset_key_name("other"), "o-1").unwrap();
-        let mut session = craft_anything_engine::testing::session();
+        let mut session = f_builder_engine::testing::session();
         session.ext.insert(std::sync::Arc::new(providers));
         refresh_loaded(&mut session, &s);
         assert!(session.ext.get::<AssetKeys>().is_none(), "no run loaded any");
@@ -269,7 +269,7 @@ mod tests {
     fn an_ai_whose_key_cannot_be_removed_stays_to_try_again() {
         let d = tempfile::tempdir().unwrap();
         let file = d.path().join("keys.toml");
-        let engine = std::sync::Arc::new(craft_anything_engine::Engine::new(craft_anything_engine::testing::session()));
+        let engine = std::sync::Arc::new(f_builder_engine::Engine::new(f_builder_engine::testing::session()));
         let hub = crate::AiHub::with_stores(engine, d.path().join("settings.toml"), KeyStore::file_only(file.clone()));
         let mut cfg = hub.config();
         cfg.upsert(crate::BackendEntry {
@@ -320,7 +320,7 @@ mod tests {
         assert_eq!(s.set("Claude", "sk-test").unwrap(), "file");
         assert_eq!(s.get("Claude").as_deref(), Some("sk-test"));
         let text = std::fs::read_to_string(dir.path().join("ai-keys.toml")).unwrap();
-        assert!(text.starts_with("# Craft Anything AI keys: FALLBACK STORE."));
+        assert!(text.starts_with("# F-Builder AI keys: FALLBACK STORE."));
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;

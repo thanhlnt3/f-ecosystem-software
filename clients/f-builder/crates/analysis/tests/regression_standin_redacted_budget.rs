@@ -1,4 +1,4 @@
-use craft_anything_analysis::standin::{BodyLeftOut, BuildOptions, StandIn, build_from_bytes};
+use f_builder_analysis::standin::{BodyLeftOut, BuildOptions, StandIn, build_from_bytes};
 use serde_json::json;
 
 fn capture(bodies: &[&str], max_body: usize, max_total: usize) -> StandIn {

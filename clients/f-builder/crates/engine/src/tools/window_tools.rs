@@ -4,8 +4,8 @@
 
 use super::web_common::{Image, encode_png, png_artifact};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Confidence, Coverage, ErrorCode, EvidenceBuilder, Location, Subject, ToolError};
-use craft_anything_platform::process::Process;
+use f_builder_evidence::{Confidence, Coverage, ErrorCode, EvidenceBuilder, Location, Subject, ToolError};
+use f_builder_platform::process::Process;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -77,10 +77,10 @@ fn native_window_capture(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
         return Err(ToolError::invalid("working_directory must be an existing absolute directory"));
     }
     // Refused before the program starts where no picture can be taken.
-    if !craft_anything_platform::window::SUPPORTED {
-        return Err(craft_anything_platform::window::unsupported());
+    if !f_builder_platform::window::SUPPORTED {
+        return Err(f_builder_platform::window::unsupported());
     }
-    craft_anything_platform::window::check_can_see_windows()?;
+    f_builder_platform::window::check_can_see_windows()?;
     let wait = Duration::from_secs(p.wait_secs.unwrap_or(8).clamp(1, 120));
     let dir = p.working_directory.unwrap_or_else(|| p.program.parent().map(PathBuf::from).unwrap_or_default());
     let cancel = ctx.cancel.clone();
@@ -116,7 +116,7 @@ fn native_window_capture(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
                     if ctx.cancel.is_cancelled() {
                         return Err(ToolError::cancelled());
                     }
-                    craft_anything_platform::window::capture_window(pid, None)
+                    f_builder_platform::window::capture_window(pid, None)
                 },
             )
         },
@@ -125,7 +125,7 @@ fn native_window_capture(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
     )
     // A launcher hands over to a program that isn't its child: last, its name finds the window.
     .or_else(|e| match e.code {
-        ErrorCode::NotFound => craft_anything_platform::window::capture_window(running.pid(), name.as_deref()).map(|shot| (running.pid(), shot)),
+        ErrorCode::NotFound => f_builder_platform::window::capture_window(running.pid(), name.as_deref()).map(|shot| (running.pid(), shot)),
         _ => Err(e),
     });
     // Read while it still runs; a tree that can't be read is only left out.
@@ -209,7 +209,7 @@ mod tests {
             );
         }
         // Where windows can't be pictured, nothing is started.
-        if !craft_anything_platform::window::SUPPORTED {
+        if !f_builder_platform::window::SUPPORTED {
             let err = e.call("native_window_capture", json!({"program": exe}), CallOptions::new(Caller::Mcp).with_consent(Consent::Granted)).unwrap_err();
             assert_eq!(err.code, ErrorCode::FeatureMissing);
         }

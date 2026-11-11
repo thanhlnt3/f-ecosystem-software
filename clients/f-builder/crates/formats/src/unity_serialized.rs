@@ -348,7 +348,7 @@ mod tests {
 
     #[test]
     fn reads_a_version_22_file_and_names_its_objects() {
-        let file = craft_anything_testkit::games::unity_assets();
+        let file = f_builder_testkit::games::unity_assets();
         let h = header(&file[..HEADER_READ], file.len() as u64).unwrap();
         assert_eq!((h.version, h.big_endian, h.metadata_offset), (22, false, 48));
         let m = metadata(&file[..(h.metadata_offset + h.metadata_size) as usize], &h).unwrap();
@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn refuses_what_it_cannot_read() {
-        let file = craft_anything_testkit::games::unity_assets();
+        let file = f_builder_testkit::games::unity_assets();
         assert!(header(&file[..HEADER_READ], file.len() as u64 + 1).is_err(), "sizes must match the file");
         assert!(header(&[0; HEADER_READ], 100).is_err());
         let mut old = file.clone();

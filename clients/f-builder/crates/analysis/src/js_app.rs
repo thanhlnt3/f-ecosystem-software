@@ -4,9 +4,9 @@
 //!
 //! Pure: the caller supplies file bytes (from an ASAR, folder or ZIP). Nothing is executed.
 
-use craft_anything_evidence::sha256_hex;
-use craft_anything_js::html::{HtmlFacts, scan_html};
-use craft_anything_js::{self as js, ModuleFacts, PrefValue};
+use f_builder_evidence::sha256_hex;
+use f_builder_js::html::{HtmlFacts, scan_html};
+use f_builder_js::{self as js, ModuleFacts, PrefValue};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
@@ -412,7 +412,7 @@ pub fn analyze_application(input: &AppInput, opts: &AppOptions, cancelled: &dyn 
             let h = scan_html(&text);
             for (n, s) in h.scripts.iter().enumerate() {
                 if let Some((a, z)) = s.inline {
-                    let code = craft_anything_js::util::slice(&text, a, z);
+                    let code = f_builder_js::util::slice(&text, a, z);
                     let name = format!("{}#inline-{n}", f.path);
                     let an = js::analyze(&name, code, &opts.limits);
                     let code_sha256 = Some(sha256_hex(code.as_bytes()));
@@ -928,7 +928,7 @@ pub fn analyze_application(input: &AppInput, opts: &AppOptions, cancelled: &dyn 
         let mut r = SourceMapRef { script: a.path.clone(), url: url.chars().take(256).collect(), ..Default::default() };
         let map_bytes: Option<Vec<u8>> = if url.starts_with("data:") {
             r.inline = true;
-            craft_anything_formats::sourcemap::decode_data_url(url)
+            f_builder_formats::sourcemap::decode_data_url(url)
         } else {
             let p = join_rel(dir_of(&a.path), url);
             r.resolved = p.clone();
@@ -936,7 +936,7 @@ pub fn analyze_application(input: &AppInput, opts: &AppOptions, cancelled: &dyn 
         };
         if let Some(bytes) = map_bytes {
             r.present = true;
-            if let Ok(map) = craft_anything_formats::sourcemap::parse(&bytes, craft_anything_formats::sourcemap::Limits::default()) {
+            if let Ok(map) = f_builder_formats::sourcemap::parse(&bytes, f_builder_formats::sourcemap::Limits::default()) {
                 r.sources = map.all_sources().into_iter().take(5000).collect();
                 r.sources_with_content = map.sources_content.iter().filter(|c| c.is_some()).count();
             }
@@ -1079,13 +1079,13 @@ pub fn graph_id(nodes: &[Node], edges: &[Edge]) -> String {
     let mut es: Vec<&Edge> = edges.iter().collect();
     es.sort();
     let v = json!({"nodes": ids, "edges": es});
-    format!("ag_{}", sha256_hex(craft_anything_evidence::canonical_json(&v).as_bytes()))
+    format!("ag_{}", sha256_hex(f_builder_evidence::canonical_json(&v).as_bytes()))
 }
 
 #[cfg(test)]
 pub(crate) mod tests_support {
     use super::*;
-    use craft_anything_testkit::electron as fx;
+    use f_builder_testkit::electron as fx;
 
     pub fn graph_of(files: Vec<(&str, String)>) -> AppGraph {
         let files = files.into_iter().map(|(p, c)| AppFile { path: p.into(), bytes: c.into_bytes() }).collect::<Vec<_>>();
@@ -1103,7 +1103,7 @@ pub(crate) mod tests_support {
 mod tests {
     use super::tests_support::notes_graph;
     use super::*;
-    use craft_anything_testkit::electron as fx;
+    use f_builder_testkit::electron as fx;
 
     #[test]
     fn notes_app_graph() {

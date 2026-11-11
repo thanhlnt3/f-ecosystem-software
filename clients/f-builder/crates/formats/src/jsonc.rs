@@ -527,17 +527,17 @@ mod tests {
     #[test]
     fn insert_keeps_comments_and_reparses() {
         let d = parse(FIXTURE, false).unwrap();
-        let new = d.set(&["mcpServers", "craft-anything"], &json!({"command": "/x/craft-anything-cli", "args": ["mcp"]})).unwrap();
+        let new = d.set(&["mcpServers", "f-builder"], &json!({"command": "/x/f-builder-cli", "args": ["mcp"]})).unwrap();
         assert!(new.contains("// keep me") && new.contains("/* theme */") && new.contains("// user settings"));
         let d2 = parse(&new, false).unwrap();
-        assert_eq!(d2.get(&["mcpServers", "craft-anything", "args"]), Some(json!(["mcp"])));
+        assert_eq!(d2.get(&["mcpServers", "f-builder", "args"]), Some(json!(["mcp"])));
         assert_eq!(d2.get(&["mcpServers", "other", "command"]), Some(json!("x")));
         // replace in place
-        let new2 = d2.set(&["mcpServers", "craft-anything"], &json!({"command": "y"})).unwrap();
+        let new2 = d2.set(&["mcpServers", "f-builder"], &json!({"command": "y"})).unwrap();
         let d3 = parse(&new2, false).unwrap();
-        assert_eq!(d3.get(&["mcpServers", "craft-anything"]), Some(json!({"command": "y"})));
+        assert_eq!(d3.get(&["mcpServers", "f-builder"]), Some(json!({"command": "y"})));
         // remove restores the original exactly
-        assert_eq!(d3.remove(&["mcpServers", "craft-anything"]).unwrap(), FIXTURE);
+        assert_eq!(d3.remove(&["mcpServers", "f-builder"]).unwrap(), FIXTURE);
     }
 
     #[test]

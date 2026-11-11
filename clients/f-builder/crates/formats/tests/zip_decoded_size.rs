@@ -1,4 +1,4 @@
-use craft_anything_formats::zip::{self, ZipEntry, ZipError};
+use f_builder_formats::zip::{self, ZipEntry, ZipError};
 
 fn deflated(body: &[u8]) -> (Vec<u8>, ZipEntry) {
     let compressed = miniz_oxide::deflate::compress_to_vec(body, 6);
@@ -33,7 +33,7 @@ fn decoded_length_must_match_the_directory_even_when_the_crc_matches() {
 
 #[test]
 fn stored_length_must_also_match_the_directory() {
-    let data = craft_anything_testkit::electron::zip_stored(&[("payload", b"hello")]);
+    let data = f_builder_testkit::electron::zip_stored(&[("payload", b"hello")]);
     let mut entry = zip::parse(&data, 10).unwrap().entries.remove(0);
     entry.uncompressed_size = 4;
     assert!(matches!(zip::read_entry(&data, &entry, 100), Err(ZipError::Corrupt(_))));

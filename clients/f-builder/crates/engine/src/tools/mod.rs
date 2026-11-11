@@ -16,7 +16,7 @@
 //! error, whenever the result is a retained evidence record.
 
 use crate::session::Session;
-use craft_anything_evidence::{Environment, EvidenceBuilder, ToolError};
+use f_builder_evidence::{Environment, EvidenceBuilder, ToolError};
 
 pub mod investigation_tools;
 // Readable Markdown/HTML investigation reports from findings + evidence.
@@ -188,7 +188,7 @@ pub enum Detail {
 /// body (counts, a headline figure…); pass `Value::Null` for none.
 pub fn detailed(
     ctx: &mut crate::tool::Ctx<'_>,
-    e: craft_anything_evidence::Evidence,
+    e: f_builder_evidence::Evidence,
     detail: Detail,
     extras: serde_json::Value,
 ) -> Result<crate::tool::ToolOutput, ToolError> {

@@ -5,8 +5,8 @@ use super::artifact_tools::{create_absent_dir, safe_components, write_new_file};
 use super::native_common::{DEFAULT_LIMIT, page, params_json, spec};
 use super::static_input::{builder, format_err, load};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, ToolError, sha256_hex};
-use craft_anything_formats::packed::{self, PackedEntry, PackedFormat, READERS};
+use f_builder_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, ToolError, sha256_hex};
+use f_builder_formats::packed::{self, PackedEntry, PackedFormat, READERS};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -253,8 +253,8 @@ fn core_packed_files_unpack(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_formats::FormatError;
-    use craft_anything_formats::packed::{Compression, PackedListing};
+    use f_builder_formats::FormatError;
+    use f_builder_formats::packed::{Compression, PackedListing};
 
     struct Plain;
     impl PackedFormat for Plain {
@@ -276,8 +276,8 @@ mod tests {
         PackedEntry { path: path.into(), offset, stored_size, size: None, compression: Compression::None, kind: None }
     }
 
-    fn pack_files() -> Vec<craft_anything_testkit::games::GodotFile<'static>> {
-        use craft_anything_testkit::games::GodotFile;
+    fn pack_files() -> Vec<f_builder_testkit::games::GodotFile<'static>> {
+        use f_builder_testkit::games::GodotFile;
         vec![
             GodotFile { path: "res://project.binary", data: b"settings", flags: 0, md5: [7; 16] },
             GodotFile { path: "res://scenes/main.tscn", data: b"[gd_scene]", flags: 0, md5: [0; 16] },
@@ -289,7 +289,7 @@ mod tests {
     #[test]
     fn a_godot_pack_lists_and_extracts_through_the_tools() {
         use super::super::native_common::test_support::call;
-        use craft_anything_testkit::games::{godot_embedded, godot_pck, godot_pck_at};
+        use f_builder_testkit::games::{godot_embedded, godot_pck, godot_pck_at};
         let e = crate::Engine::new(crate::testing::session());
         for (format, embed) in [(1, false), (2, false), (3, false), (1, true), (2, true), (3, true)] {
             let dir = tempfile::tempdir().unwrap();
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn a_pack_whose_table_is_encrypted_says_so_in_its_summary() {
         use super::super::native_common::test_support::call;
-        use craft_anything_testkit::games::godot_pck;
+        use f_builder_testkit::games::godot_pck;
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("game.pck");
         std::fs::write(&path, godot_pck(2, 3, &pack_files())).unwrap();
@@ -334,7 +334,7 @@ mod tests {
     #[test]
     fn a_member_called_manifest_json_is_kept() {
         use super::super::native_common::test_support::call;
-        use craft_anything_testkit::games::{GodotFile, godot_pck};
+        use f_builder_testkit::games::{GodotFile, godot_pck};
         let e = crate::Engine::new(crate::testing::session());
         let cases: [(&[GodotFile<'static>], &str); 2] = [
             (&[GodotFile { path: "res://manifest.json", data: b"mine", flags: 0, md5: [0; 16] }], "manifest-1.json"),

@@ -1,6 +1,6 @@
 //! Minimal, comment-preserving edits to a YAML file's top-level `<table>:` mapping.
 //!
-//! We only ever add, replace or remove one child block (`  craft-anything:` and the lines indented
+//! We only ever add, replace or remove one child block (`  f-builder:` and the lines indented
 //! under it) inside one top-level block mapping. Everything else is left byte-for-byte. Every
 //! result is re-parsed with a real YAML parser before it is written.
 
@@ -316,31 +316,31 @@ mod tests {
 
     #[test]
     fn insert_replace_remove_preserve_comments() {
-        let entry = json!({"command": "/opt/craft-anything-cli", "args": ["mcp"], "enabled": true});
-        let new = set(FIXTURE, "mcp_servers", "craft-anything", &entry).unwrap();
+        let entry = json!({"command": "/opt/f-builder-cli", "args": ["mcp"], "enabled": true});
+        let new = set(FIXTURE, "mcp_servers", "f-builder", &entry).unwrap();
         assert!(new.contains("# a friend") && new.contains("# tail comment") && new.contains("model: big # inline"));
         let v = parse(&new).unwrap();
-        assert_eq!(v["mcp_servers"]["craft-anything"], entry);
+        assert_eq!(v["mcp_servers"]["f-builder"], entry);
         assert_eq!(v["mcp_servers"]["other"]["command"], "x");
         assert_eq!(v["skills"], "on");
         let changed = json!({"command": "/new", "args": ["mcp"], "enabled": true});
-        let new2 = set(&new, "mcp_servers", "craft-anything", &changed).unwrap();
-        assert_eq!(parse(&new2).unwrap()["mcp_servers"]["craft-anything"], changed);
-        assert_eq!(new2.matches("craft-anything").count(), 1);
-        assert_eq!(remove(&new2, "mcp_servers", "craft-anything").unwrap(), FIXTURE);
-        assert!(remove(FIXTURE, "mcp_servers", "craft-anything").is_none());
+        let new2 = set(&new, "mcp_servers", "f-builder", &changed).unwrap();
+        assert_eq!(parse(&new2).unwrap()["mcp_servers"]["f-builder"], changed);
+        assert_eq!(new2.matches("f-builder").count(), 1);
+        assert_eq!(remove(&new2, "mcp_servers", "f-builder").unwrap(), FIXTURE);
+        assert!(remove(FIXTURE, "mcp_servers", "f-builder").is_none());
     }
 
     #[test]
     fn creates_table_and_handles_flow_style() {
         let e = json!({"command": "c", "args": []});
-        let new = set("", "mcp_servers", "craft-anything", &e).unwrap();
-        assert_eq!(parse(&new).unwrap()["mcp_servers"]["craft-anything"], e);
-        let new = set("a: 1\n", "mcp_servers", "craft-anything", &e).unwrap();
+        let new = set("", "mcp_servers", "f-builder", &e).unwrap();
+        assert_eq!(parse(&new).unwrap()["mcp_servers"]["f-builder"], e);
+        let new = set("a: 1\n", "mcp_servers", "f-builder", &e).unwrap();
         assert_eq!(parse(&new).unwrap()["a"], 1);
-        let new = set("mcp_servers: {}\n", "mcp_servers", "craft-anything", &e).unwrap();
-        assert_eq!(parse(&new).unwrap()["mcp_servers"]["craft-anything"], e);
-        assert!(set("mcp_servers: {a: 1}\n", "mcp_servers", "craft-anything", &e).is_err());
+        let new = set("mcp_servers: {}\n", "mcp_servers", "f-builder", &e).unwrap();
+        assert_eq!(parse(&new).unwrap()["mcp_servers"]["f-builder"], e);
+        assert!(set("mcp_servers: {a: 1}\n", "mcp_servers", "f-builder", &e).is_err());
         assert!(set("a: [", "mcp_servers", "x", &e).is_err());
         assert!(parse("- 1\n").is_err());
     }
@@ -351,26 +351,26 @@ mod tests {
 
     #[test]
     fn a_crlf_file_stays_crlf_and_unrelated_lines_are_byte_identical() {
-        let entry = json!({"command": "/opt/craft-anything-cli", "args": ["mcp"], "enabled": true});
+        let entry = json!({"command": "/opt/f-builder-cli", "args": ["mcp"], "enabled": true});
         let text = crlf(FIXTURE);
-        let new = set(&text, "mcp_servers", "craft-anything", &entry).unwrap();
+        let new = set(&text, "mcp_servers", "f-builder", &entry).unwrap();
         // No bare LF anywhere: every line ends CRLF, ours included.
         assert_eq!(new.matches('\n').count(), new.matches("\r\n").count(), "{new:?}");
         // Without our block the file is exactly what it was.
-        assert_eq!(remove(&new, "mcp_servers", "craft-anything").unwrap(), text);
+        assert_eq!(remove(&new, "mcp_servers", "f-builder").unwrap(), text);
         // Every original line is still there, unchanged.
         for l in text.split_inclusive('\n') {
             assert!(new.contains(l), "{l:?} lost in {new:?}");
         }
-        assert_eq!(parse(&new).unwrap()["mcp_servers"]["craft-anything"], entry);
+        assert_eq!(parse(&new).unwrap()["mcp_servers"]["f-builder"], entry);
         // A second run changes nothing.
-        assert_eq!(set(&new, "mcp_servers", "craft-anything", &entry).unwrap(), new);
+        assert_eq!(set(&new, "mcp_servers", "f-builder", &entry).unwrap(), new);
         // A new table in a CRLF file, and a file with no final newline.
-        let added = set("a: 1\r\nb: 2", "mcp_servers", "craft-anything", &entry).unwrap();
+        let added = set("a: 1\r\nb: 2", "mcp_servers", "f-builder", &entry).unwrap();
         assert_eq!(added.matches('\n').count(), added.matches("\r\n").count(), "{added:?}");
         assert!(added.starts_with("a: 1\r\nb: 2\r\nmcp_servers:\r\n"), "{added:?}");
         // A last line cut off after its CR gets its LF back, not "\r\r\n".
-        let cut = set("a: 1\r\nb: 2\r", "mcp_servers", "craft-anything", &entry).unwrap();
+        let cut = set("a: 1\r\nb: 2\r", "mcp_servers", "f-builder", &entry).unwrap();
         assert!(cut.starts_with("a: 1\r\nb: 2\r\nmcp_servers:\r\n"), "{cut:?}");
         assert!(!cut.contains("\r\r"), "{cut:?}");
     }
@@ -378,11 +378,11 @@ mod tests {
     #[test]
     fn an_lf_file_stays_lf_and_mixed_endings_are_kept_per_line() {
         let entry = json!({"command": "c", "args": ["mcp"], "enabled": true});
-        let new = set(FIXTURE, "mcp_servers", "craft-anything", &entry).unwrap();
+        let new = set(FIXTURE, "mcp_servers", "f-builder", &entry).unwrap();
         assert!(!new.contains('\r'), "{new:?}");
         let mixed = "# top\r\nmodel: big\nmcp_servers:\r\n  other:\n    command: x\r\n";
-        let new = set(mixed, "mcp_servers", "craft-anything", &entry).unwrap();
-        assert!(new.starts_with("# top\r\nmodel: big\nmcp_servers:\r\n  other:\n    command: x\r\n  craft-anything:"), "{new:?}");
-        assert_eq!(remove(&new, "mcp_servers", "craft-anything").unwrap(), mixed);
+        let new = set(mixed, "mcp_servers", "f-builder", &entry).unwrap();
+        assert!(new.starts_with("# top\r\nmodel: big\nmcp_servers:\r\n  other:\n    command: x\r\n  f-builder:"), "{new:?}");
+        assert_eq!(remove(&new, "mcp_servers", "f-builder").unwrap(), mixed);
     }
 }

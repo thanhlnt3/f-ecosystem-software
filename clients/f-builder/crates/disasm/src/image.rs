@@ -3,7 +3,7 @@
 
 use crate::DisasmError;
 use crate::decode::{Insn, Mode, decode};
-use craft_anything_formats::{Arch, Binary, Format};
+use f_builder_formats::{Arch, Binary, Format};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -34,7 +34,7 @@ pub fn mode_for(bin: &Binary) -> Option<Mode> {
 impl Image {
     /// Parse any supported container.
     pub fn parse(data: Arc<[u8]>) -> Result<Image, DisasmError> {
-        let bin = craft_anything_formats::parse_binary(&data).map_err(DisasmError::Format)?;
+        let bin = f_builder_formats::parse_binary(&data).map_err(DisasmError::Format)?;
         Ok(Image::from_binary(data, bin))
     }
 
@@ -45,7 +45,7 @@ impl Image {
 
     /// A DOS .COM program (16-bit, loaded at 0x100).
     pub fn dos_com(data: Arc<[u8]>) -> Result<Image, DisasmError> {
-        let bin = craft_anything_formats::dos::com_binary(&data).map_err(DisasmError::Format)?;
+        let bin = f_builder_formats::dos::com_binary(&data).map_err(DisasmError::Format)?;
         Ok(Image::from_binary(data, bin))
     }
 

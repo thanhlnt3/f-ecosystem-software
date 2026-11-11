@@ -7,3 +7,10 @@
 # reason = "Chạy thành dịch vụ quét riêng, không phân phối cho người dùng"
 # reviewer = "Họ tên"
 # date = "2026-11-09"
+
+[[exception]]
+license = "Ubuntu-font-1.0"
+component = "epaint_default_fonts (font mặc định của egui trong F-Builder)"
+reason = "Font dùng nguyên trạng để hiển thị chữ Nga, Hy Lạp, mũi tên và emoji; Ubuntu Font Licence cho phép dùng và phân phối kể cả thương mại, giống OFL"
+reviewer = "Chủ dự án (thanhlnt3)"
+date = "2026-11-11"

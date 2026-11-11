@@ -5,8 +5,8 @@
 use super::native_common::{page, params_json, spec};
 use super::static_input::{self, builder, format_err};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Limitation, Location, ToolError};
-use craft_anything_formats::wasm::{self, WasmReport};
+use f_builder_evidence::{Authority, Confidence, Limitation, Location, ToolError};
+use f_builder_formats::wasm::{self, WasmReport};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -194,8 +194,8 @@ fn formats_wasm_compare(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
 mod tests {
     use super::super::native_common::test_support::{call, call_err};
     use crate::Engine;
-    use craft_anything_formats::wasm;
-    use craft_anything_testkit::{formats as fx, temp_file};
+    use f_builder_formats::wasm;
+    use f_builder_testkit::{formats as fx, temp_file};
     use serde_json::json;
 
     /// A module importing env.log (i64)->() and exporting add and sub as (i32, i32)->(i64).

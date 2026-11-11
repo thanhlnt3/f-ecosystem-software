@@ -1,11 +1,11 @@
-//! Owned processes: the only way Craft Anything runs another program.
+//! Owned processes: the only way F-Builder runs another program.
 //!
 //! ```no_run
-//! use craft_anything_platform::process::Process;
+//! use f_builder_platform::process::Process;
 //! use std::time::Duration;
 //! let out = Process::new("git").args(["--version"]).timeout(Duration::from_secs(5)).run_checked()?;
 //! println!("{}", out.stdout_text());
-//! # Ok::<(), craft_anything_evidence::ToolError>(())
+//! # Ok::<(), f_builder_evidence::ToolError>(())
 //! ```
 //!
 //! Guarantees:
@@ -21,7 +21,7 @@
 //! Use [`Process::spawn`] and poll [`RunningProcess::try_result`] instead.
 
 use crate::sync::Mutex;
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use process_wrap::std::{ChildWrapper, CommandWrap};
 use std::ffi::{OsStr, OsString};
 use std::io::{Read, Write};
@@ -438,7 +438,7 @@ fn spawn_error_for(name: &str, program: &OsStr, e: std::io::Error, remediation: 
 fn interpreter_missing_error(name: &str, program: &OsStr, interpreter: &str, e: &std::io::Error) -> ToolError {
     ToolError::new(ErrorCode::EngineMissing, format!("{name} was installed with npm and needs `{interpreter}` (Node.js) to run, but `{interpreter}` wasn't found."))
         .with_remediation(format!(
-            "Install Node.js, or if you use nvm for Windows, run `nvm use <version>` in a terminal opened as administrator. Then restart Craft Anything. Installing {name} without npm also works, when it offers that."
+            "Install Node.js, or if you use nvm for Windows, run `nvm use <version>` in a terminal opened as administrator. Then restart F-Builder. Installing {name} without npm also works, when it offers that."
         ))
         .with_details(serde_json::json!({"program": program.to_string_lossy(), "reason": "interpreter_missing", "interpreter": interpreter, "error": e.to_string()}))
 }
@@ -874,9 +874,9 @@ fn take(buf: &Arc<Mutex<Capped>>) -> (Vec<u8>, bool) {
 /// click.
 ///
 /// ```no_run
-/// use craft_anything_platform::process::Launch;
+/// use f_builder_platform::process::Launch;
 /// Launch::new("/path/to/game").cwd("/path/to").hide_console().start()?;
-/// # Ok::<(), craft_anything_evidence::ToolError>(())
+/// # Ok::<(), f_builder_evidence::ToolError>(())
 /// ```
 #[derive(Debug, Clone)]
 pub struct Launch {
@@ -1253,10 +1253,10 @@ mod launch_tests {
 
     #[test]
     fn a_missing_program_is_a_tool_error_with_remediation() {
-        let e = Launch::new("craft-anything-no-such-program-xyz").remediation("Install it.").start().unwrap_err();
+        let e = Launch::new("f-builder-no-such-program-xyz").remediation("Install it.").start().unwrap_err();
         assert_eq!(e.code, ErrorCode::EngineMissing);
         assert_eq!(e.remediation.as_deref(), Some("Install it."));
-        assert!(e.message.contains("craft-anything-no-such-program-xyz"), "{}", e.message);
+        assert!(e.message.contains("f-builder-no-such-program-xyz"), "{}", e.message);
     }
 
     #[test]
@@ -1389,7 +1389,7 @@ mod launch_tests {
         let mut command = std::process::Command::new(std::env::current_exe().unwrap());
         command
             .args(["--ignored", "--exact", "process::launch_tests::watched_descendant_stand_in"])
-            .env("CRAFT_ANYTHING_TEST_DESCENDANT", "1")
+            .env("F_BUILDER_TEST_DESCENDANT", "1")
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -1405,14 +1405,14 @@ mod launch_tests {
 
     /// Provide a child process whose marker files expose whether it survives shutdown.
     ///
-    /// Return without writing unless `CRAFT_ANYTHING_TEST_DESCENDANT` is exactly `1`, as
+    /// Return without writing unless `F_BUILDER_TEST_DESCENDANT` is exactly `1`, as
     /// set by the parent test. When enabled, hold an exclusive lock on `descendant-alive` until
     /// the process exits, write startup and periodic heartbeat files in the working directory,
     /// then a survival marker (before the lock is released) if the loop reaches its end.
     #[test]
     #[ignore = "stand-in invoked by stopping_a_watched_program_stops_its_descendant"]
     fn watched_descendant_stand_in() {
-        if std::env::var_os("CRAFT_ANYTHING_TEST_DESCENDANT").as_deref() != Some(OsStr::new("1")) {
+        if std::env::var_os("F_BUILDER_TEST_DESCENDANT").as_deref() != Some(OsStr::new("1")) {
             return;
         }
         let alive = std::fs::File::create("descendant-alive").unwrap();
@@ -1435,7 +1435,7 @@ mod launch_tests {
         for fixture in ["watched_parent_stand_in", "watched_descendant_stand_in"] {
             let out = Process::new(std::env::current_exe().unwrap())
                 .args(["--ignored", "--exact", &format!("process::launch_tests::{fixture}")])
-                .env_remove("CRAFT_ANYTHING_TEST_DESCENDANT")
+                .env_remove("F_BUILDER_TEST_DESCENDANT")
                 .cwd(dir.path())
                 .run()
                 .unwrap();
@@ -1481,9 +1481,9 @@ mod launch_tests {
 
     #[test]
     fn paths_for_explorer_use_backslashes_and_no_verbatim_prefix() {
-        // Project folders are kept as `D:/Projects/Craft Anything\name`; Explorer opened
+        // Project folders are kept as `D:/Projects/F-Builder\name`; Explorer opened
         // Documents for those instead of the folder.
-        assert_eq!(windows_form(r"D:/Projects/Craft Anything\notepad"), r"D:\Projects\Craft Anything\notepad");
+        assert_eq!(windows_form(r"D:/Projects/F-Builder\notepad"), r"D:\Projects\F-Builder\notepad");
         assert_eq!(windows_form(r"\\?\D:\Projects\x"), r"D:\Projects\x");
         assert_eq!(windows_form(r"\\?\UNC\server\share\x"), r"\\server\share\x");
         assert_eq!(windows_form(r"\\server/share"), r"\\server\share");
@@ -1586,7 +1586,7 @@ mod error_tests {
         assert!(remediation.contains("moved") && remediation.contains("Settings → AI"), "{remediation}");
         assert_eq!(err.details.as_ref().and_then(|d| d["reason"].as_str()), Some("path_missing"));
 
-        let err = Process::new("craft-anything-no-such-program").run().unwrap_err();
+        let err = Process::new("f-builder-no-such-program").run().unwrap_err();
         assert!(err.message.contains("isn't on your PATH"), "{}", err.message);
         assert_eq!(err.details.as_ref().and_then(|d| d["reason"].as_str()), Some("not_found"));
     }
@@ -1629,7 +1629,7 @@ mod tests {
         assert!(err.remediation.unwrap_or_default().contains("Node.js"));
         assert_eq!(err.details.as_ref().and_then(|d| d["reason"].as_str()), Some("found_but_not_started"));
 
-        let err = Process::new("craft-anything-no-such-program").run().unwrap_err();
+        let err = Process::new("f-builder-no-such-program").run().unwrap_err();
         assert_eq!(err.code, ErrorCode::EngineMissing);
         assert!(err.message.contains("isn't installed or isn't on your PATH"), "{}", err.message);
         assert_eq!(err.details.as_ref().and_then(|d| d["reason"].as_str()), Some("not_found"));

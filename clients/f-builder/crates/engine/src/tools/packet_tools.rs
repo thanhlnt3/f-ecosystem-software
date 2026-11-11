@@ -1,4 +1,4 @@
-//! Saved packet captures (pcap and pcapng). The built-in decoder (craft_anything_formats::pcap)
+//! Saved packet captures (pcap and pcapng). The built-in decoder (f_builder_formats::pcap)
 //! needs nothing installed: an overview with paged conversations, and per-packet decoded fields
 //! with simple filters. When Wireshark's `tshark` is installed it can produce the address, DNS,
 //! TLS-name, protocol and HTTP inventories instead; the built-in decoder is the fallback. Nothing
@@ -8,8 +8,8 @@ use super::native_common::{page, params_json, spec};
 use super::static_input::{self, Input, builder, format_err};
 use super::{Detail, detailed};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, ErrorCode, Limitation, Location, Subject, ToolError};
-use craft_anything_formats::pcap::{self, Capture, Count, FlowTable};
+use f_builder_evidence::{Authority, Confidence, Coverage, ErrorCode, Limitation, Location, Subject, ToolError};
+use f_builder_formats::pcap::{self, Capture, Count, FlowTable};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -350,7 +350,7 @@ fn packets_fields_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, T
 /// tshark from Settings → Engines, the engine store or PATH, then Wireshark's standard folder.
 fn find_tshark(ctx: &Ctx<'_>) -> Option<PathBuf> {
     let s = &ctx.session.settings;
-    craft_anything_engines::locate("tshark", &s.engines.tools, &s.engine_store_dir()).or_else(|| {
+    f_builder_engines::locate("tshark", &s.engines.tools, &s.engine_store_dir()).or_else(|| {
         let mut c: Vec<PathBuf> =
             ["ProgramFiles", "ProgramFiles(x86)"].iter().filter_map(std::env::var_os).map(|r| PathBuf::from(r).join("Wireshark").join("tshark.exe")).collect();
         c.push(PathBuf::from("/Applications/Wireshark.app/Contents/MacOS/tshark"));
@@ -360,7 +360,7 @@ fn find_tshark(ctx: &Ctx<'_>) -> Option<PathBuf> {
 
 fn tshark_version(ctx: &Ctx<'_>, exe: &PathBuf) -> Result<String, String> {
     let cancel = ctx.cancel.clone();
-    match craft_anything_platform::Process::new(exe)
+    match f_builder_platform::Process::new(exe)
         .arg("--version")
         .timeout(Duration::from_secs(20))
         .stdout_cap(64 << 10)
@@ -388,7 +388,7 @@ fn engines_tshark_check(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
     let summary = match (&found, &version) {
         (Some(p), Some(v)) => format!("{v} is available at {}. packets_inventory_show will use it; the built-in decoder works without it.", p.display()),
         (Some(p), None) => format!("tshark was found at {} but did not report a version. The built-in decoder works without it.", p.display()),
-        (None, _) => "Wireshark's tshark is not installed. That's fine: the packet tools use Craft Anything's built-in decoder.".into(),
+        (None, _) => "Wireshark's tshark is not installed. That's fine: the packet tools use F-Builder's built-in decoder.".into(),
     };
     let mut lims = Vec::new();
     if let Some(e) = &error {
@@ -510,7 +510,7 @@ fn run_tshark(ctx: &Ctx<'_>, exe: &PathBuf, file: &std::path::Path) -> Result<(I
         args.extend(["-e".into(), (*f).into()]);
     }
     let cancel = ctx.cancel.clone();
-    let out = craft_anything_platform::Process::new(exe)
+    let out = f_builder_platform::Process::new(exe)
         .args(&args)
         .timeout(Duration::from_secs(300))
         .idle_timeout(Duration::from_secs(120))
@@ -613,8 +613,8 @@ mod tests {
     use super::super::native_common::test_support::{call, call_err};
     use super::aggregate_tshark;
     use crate::Engine;
-    use craft_anything_testkit::pcap as fx;
-    use craft_anything_testkit::temp_file;
+    use f_builder_testkit::pcap as fx;
+    use f_builder_testkit::temp_file;
     use serde_json::json;
 
     #[test]

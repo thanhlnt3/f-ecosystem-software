@@ -5,6 +5,6 @@ allow-indexing-slicing-in-tests = true
 
 # Locks must be able to notice a deadlock and get out of it; see crates/platform/src/sync.rs.
 disallowed-types = [
-    { path = "std::sync::Mutex", reason = "use craft_anything_platform::sync::Mutex, which can't hang" },
-    { path = "std::sync::MutexGuard", reason = "use craft_anything_platform::sync::MutexGuard" },
+    { path = "std::sync::Mutex", reason = "use f_builder_platform::sync::Mutex, which can't hang" },
+    { path = "std::sync::MutexGuard", reason = "use f_builder_platform::sync::MutexGuard" },
 ]

@@ -15,7 +15,7 @@
   timestamp server, ...). Optional overrides: WINDOWS_TIMESTAMP_URL, SIGNTOOL (path to signtool.exe).
 
 .EXAMPLE
-  pwsh packaging/windows/sign.ps1 dist/craft-anything.exe dist/craft-anything.msi
+  pwsh packaging/windows/sign.ps1 dist/f-builder.exe dist/f-builder.msi
 #>
 param(
   [Parameter(Mandatory = $true, ValueFromRemainingArguments = $true)]
@@ -55,8 +55,8 @@ if (-not $haveCert -and -not $haveAzure) {
 }
 
 $script:SignTool = Find-SignTool
-$common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256', '/d', 'Craft Anything', '/du', 'https://github.com/storytold/craft-anything')
-$tmp = Join-Path ([IO.Path]::GetTempPath()) "craft-anything-sign-$PID"
+$common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256', '/d', 'F-Builder', '/du', 'https://github.com/thanhlnt3/f-ecosystem-software')
+$tmp = Join-Path ([IO.Path]::GetTempPath()) "f-builder-sign-$PID"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
 try {

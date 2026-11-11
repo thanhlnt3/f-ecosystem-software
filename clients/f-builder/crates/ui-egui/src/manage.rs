@@ -5,14 +5,14 @@
 use crate::i18n::{tr, trf};
 use crate::state::{Modal, Screen};
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, icons, widgets};
-use craft_anything_engine::evidence::ToolError;
-use craft_anything_engine::workspace::Workspace;
+use crate::{BuilderApp, icons, widgets};
 use egui::{RichText, Ui, Vec2};
+use f_builder_engine::evidence::ToolError;
+use f_builder_engine::workspace::Workspace;
 use serde_json::{Value, json};
 use std::path::Path;
 
-impl CraftApp {
+impl BuilderApp {
     pub fn rename_project(&mut self, root: &Path, name: &str) {
         self.act("project_rename", json!({"project": root, "name": name}), tr("Rename the project"));
     }
@@ -65,7 +65,7 @@ impl CraftApp {
 }
 
 /// The right-click menu on a project in the sidebar.
-pub fn menu(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
+pub fn menu(app: &mut BuilderApp, ui: &mut Ui, ws: &Workspace) {
     if ui.button(tr("Rename…")).clicked() {
         ask_rename(app, ws);
         ui.close();
@@ -82,7 +82,7 @@ pub fn menu(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
 }
 
 /// The same, as quiet links on the project's page.
-pub fn buttons(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
+pub fn buttons(app: &mut BuilderApp, ui: &mut Ui, ws: &Workspace) {
     if widgets::secondary(ui, None, "Rename").clicked() {
         ask_rename(app, ws);
     }
@@ -94,16 +94,16 @@ pub fn buttons(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
     }
 }
 
-fn ask_rename(app: &mut CraftApp, ws: &Workspace) {
+fn ask_rename(app: &mut BuilderApp, ws: &Workspace) {
     app.state.rename_input = ws.manifest.name.clone();
     app.state.modal = Some(Modal::Rename(ws.root.clone()));
 }
 
-fn project<'a>(app: &'a CraftApp, root: &Path) -> Option<&'a Workspace> {
+fn project<'a>(app: &'a BuilderApp, root: &Path) -> Option<&'a Workspace> {
     app.workspace.iter().chain(&app.projects).find(|w| w.root == root)
 }
 
-pub fn rename_modal(app: &mut CraftApp, ui: &mut Ui, root: &Path, close: &mut bool) {
+pub fn rename_modal(app: &mut BuilderApp, ui: &mut Ui, root: &Path, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.label(theme::heading(tr("Rename the project"), theme::SECTION));
     ui.add_space(8.0);
@@ -128,7 +128,7 @@ pub fn rename_modal(app: &mut CraftApp, ui: &mut Ui, root: &Path, close: &mut bo
     });
 }
 
-pub fn delete_modal(app: &mut CraftApp, ui: &mut Ui, root: &Path, close: &mut bool) {
+pub fn delete_modal(app: &mut BuilderApp, ui: &mut Ui, root: &Path, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     let Some(ws) = project(app, root).cloned() else {
         *close = true;
@@ -144,7 +144,7 @@ pub fn delete_modal(app: &mut CraftApp, ui: &mut Ui, root: &Path, close: &mut bo
     // What goes and what stays, in so many words: it can't be undone.
     let m = &ws.manifest;
     let what = if m.app_in_root || !m.start_files.is_empty() {
-        tr("Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.")
+        tr("F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.")
     } else {
         tr("Its folder is deleted with everything in it: what was built, the checks and the conversation.")
     };

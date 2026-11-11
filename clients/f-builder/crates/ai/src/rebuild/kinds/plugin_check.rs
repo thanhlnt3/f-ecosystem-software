@@ -1,10 +1,10 @@
-//! Checks from WASM plugins (`craft-anything:plugin/checks`), run after a kind's own checks. A
+//! Checks from WASM plugins (`f-builder:plugin/checks`), run after a kind's own checks. A
 //! plugin can't read files, so it gets the build as JSON: every file's path and size, and the text
 //! of the files with the extensions it asked for (capped). A plugin that fails to run doesn't fail
 //! the build: its result passes with a note saying why, so the builder isn't sent to fix it.
 
 use super::*;
-use craft_anything_engine::wasm_plugins::PluginCheck;
+use f_builder_engine::wasm_plugins::PluginCheck;
 use std::sync::Arc;
 
 /// Files listed per build.
@@ -118,7 +118,7 @@ pub fn build_json(ws: &Workspace, kind: &str, round: u32, extensions: &[String])
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_engine::workspace::TargetRef;
+    use f_builder_engine::workspace::TargetRef;
 
     #[test]
     fn a_plugin_sees_the_files_and_the_text_it_asked_for() {

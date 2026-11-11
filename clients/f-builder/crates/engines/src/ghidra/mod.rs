@@ -9,7 +9,7 @@
 //! reuse another project's code, scripts or wording.
 //!
 //! Everything here is bounded and cancellable and can never hang:
-//! - the external process runs through [`craft_anything_platform::process`], so its group is killed
+//! - the external process runs through [`f_builder_platform::process`], so its group is killed
 //!   on timeout, cancel or drop;
 //! - the one-time analysis, and opening the analysed program, each have a deadline, with a
 //!   progress ping every few seconds;
@@ -23,9 +23,9 @@ mod protocol;
 pub use client::Client;
 pub use protocol::{GhidraError, Request, Response, ct_eq};
 
-use craft_anything_platform::process::{Process, RunningProcess, StdinMode};
-use craft_anything_platform::sync::Mutex;
-use craft_anything_platform::write_atomic_private;
+use f_builder_platform::process::{Process, RunningProcess, StdinMode};
+use f_builder_platform::sync::Mutex;
+use f_builder_platform::write_atomic_private;
 use serde::Serialize;
 use serde_json::Value;
 use std::ffi::OsString;
@@ -36,11 +36,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
 /// The Java post-script we ship and run inside Ghidra (our own code).
-pub const BRIDGE_SCRIPT_NAME: &str = "CraftAnythingBridge.java";
-const BRIDGE_SCRIPT: &str = include_str!("CraftAnythingBridge.java");
+pub const BRIDGE_SCRIPT_NAME: &str = "FBuilderBridge.java";
+const BRIDGE_SCRIPT: &str = include_str!("FBuilderBridge.java");
 /// Our pre-script for the one-time analysis: skips Ghidra's slowest whole-program passes.
-const FAST_SCRIPT_NAME: &str = "CraftAnythingFastAnalysis.java";
-const FAST_SCRIPT: &str = include_str!("CraftAnythingFastAnalysis.java");
+const FAST_SCRIPT_NAME: &str = "FBuilderFastAnalysis.java";
+const FAST_SCRIPT: &str = include_str!("FBuilderFastAnalysis.java");
 
 /// A function as the deep engine sees it.
 #[derive(Debug, Clone, Serialize)]
@@ -156,7 +156,7 @@ const SESSION_LIFETIME: Duration = Duration::from_secs(7 * 24 * 3600);
 const REQUEST_TIME: Duration = Duration::from_secs(15 * 60);
 
 /// The project every analysed target lives in (one per cache directory).
-const PROJECT_NAME: &str = "craft-anything-project";
+const PROJECT_NAME: &str = "f-builder-project";
 /// Written into the cache directory once Ghidra finished analysing and saved the program.
 const ANALYSED_MARKER: &str = "analysed.ok";
 
@@ -268,7 +268,7 @@ fn random_token() -> String {
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
     let seed = format!("{}|{nanos}|{n}|ghidra-bridge", std::process::id());
-    craft_anything_evidence::sha256_hex(seed.as_bytes())
+    f_builder_evidence::sha256_hex(seed.as_bytes())
 }
 
 /// A descriptor our post-script reads: where to listen and the token to require.
@@ -359,7 +359,7 @@ fn dot_free_link(store: &Path) -> Result<Option<PathBuf>, GhidraError> {
     if !base.is_absolute() || has_dot_part(&base) {
         return Ok(None);
     }
-    let dir = base.join(format!("craft-anything-{owner}"));
+    let dir = base.join(format!("f-builder-{owner}"));
     make_private_dir(&dir)?;
     // In a shared temp folder, a folder someone else made (or a link to one) isn't ours to use.
     let meta = std::fs::symlink_metadata(&dir).map_err(|e| launch("checking the link folder", e))?;
@@ -369,7 +369,7 @@ fn dot_free_link(store: &Path) -> Result<Option<PathBuf>, GhidraError> {
             dir.display()
         )));
     }
-    let key = craft_anything_evidence::sha256_hex(store.as_os_str().as_encoded_bytes());
+    let key = f_builder_evidence::sha256_hex(store.as_os_str().as_encoded_bytes());
     let link = dir.join(format!("engines-{}", key.get(..16).unwrap_or(&key)));
     // Two processes can make the link at once: whoever loses checks the one the other made.
     for _ in 0..2 {
@@ -695,7 +695,7 @@ pub fn analyse(
         .map_err(|e| GhidraError::Launch(format!("writing the analysis script: {e}")))?;
     let snapshot = scratch.0.join(&program);
     write_atomic_private(&snapshot, target_bytes).map_err(|e| GhidraError::Launch(format!("copying the target: {e}")))?;
-    if craft_anything_evidence::sha256_hex(target_bytes) != target_sha256 {
+    if f_builder_evidence::sha256_hex(target_bytes) != target_sha256 {
         return Err(GhidraError::Launch("target bytes do not match the expected sha256".into()));
     }
     progress(0.02, "Ghidra is analysing the program (once per program; a big one can take hours)");
@@ -833,7 +833,7 @@ impl Session {
         })
     }
 
-    fn lock(&self) -> craft_anything_platform::sync::MutexGuard<'_, Client> {
+    fn lock(&self) -> f_builder_platform::sync::MutexGuard<'_, Client> {
         self.client.lock().unwrap_or_else(PoisonError::into_inner)
     }
 

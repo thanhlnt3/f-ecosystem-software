@@ -325,7 +325,7 @@ pub fn compare_export_outlines(l: &AppGraph, r: &AppGraph) -> Value {
 mod tests {
     use super::*;
     use crate::js_app::tests_support::{graph_of, notes_graph};
-    use craft_anything_testkit::electron as fx;
+    use f_builder_testkit::electron as fx;
 
     #[test]
     fn build_hashes_in_names_are_recognised_and_plain_words_are_not() {

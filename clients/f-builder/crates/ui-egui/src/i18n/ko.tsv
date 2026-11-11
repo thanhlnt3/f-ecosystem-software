@@ -109,7 +109,7 @@ Add to a running build	진행 중인 빌드에 추가
 Added	추가됨
 Added {n} picture(s). The builder uses them from your next change.	그림 {n}장을 추가했습니다. 빌더가 다음 변경부터 사용합니다.
 Address to file offset	주소를 파일 오프셋으로 변환
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	심층 모드에 디컴파일러를 더합니다. Craft Anything이 내려받아 설치해 줄 수 있습니다.
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	심층 모드에 디컴파일러를 더합니다. F-Builder이 내려받아 설치해 줄 수 있습니다.
 Advanced	고급
 After installing one, look for it again.	하나를 설치한 뒤 다시 찾으면 됩니다.
 Agent	에이전트
@@ -199,7 +199,7 @@ Build with {name} instead	대신 {name}에서 만들기
 Build without it	없이 만들기
 Builder's questions:	빌더의 질문:
 Building	만드는 중
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	만들려면 이 컴퓨터에 코딩 에이전트(Claude Code, Codex, Gemini CLI 중 하나를 설치하고 그 창에서 한 번 로그인)나 API 키가 있는 AI가 필요합니다. Craft Anything은 계정 정보를 보지 않습니다.
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	만들려면 이 컴퓨터에 코딩 에이전트(Claude Code, Codex, Gemini CLI 중 하나를 설치하고 그 창에서 한 번 로그인)나 API 키가 있는 AI가 필요합니다. F-Builder은 계정 정보를 보지 않습니다.
 Building needs a coding agent such as Claude Code, or an AI with an API key.	만들려면 Claude Code 같은 코딩 에이전트나 API 키가 있는 AI가 필요합니다.
 Builds	빌드
 Builds and answers may use it again.	빌드와 답변에서 다시 쓸 수 있습니다.
@@ -250,7 +250,7 @@ Classes	클래스
 Claude Code folder (CLAUDE_CONFIG_DIR)	Claude Code 폴더 (CLAUDE_CONFIG_DIR)
 Clean room	클린룸
 Clean room / Deep	클린룸 / 심층
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	클린룸은 원본의 코드, 파일, 페이지 소스를 절대 읽지 않습니다. 심층 모드는 Craft Anything의 모든 도구로 읽습니다.
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	클린룸은 원본의 코드, 파일, 페이지 소스를 절대 읽지 않습니다. 심층 모드는 F-Builder의 모든 도구로 읽습니다.
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	클린룸은 원본의 코드, 파일, 페이지 소스를 절대 읽지 않고 눈에 보이는 것만으로 작업합니다. 심층은 모든 도구로 읽고, Ghidra가 설치되어 있으면 Ghidra도 씁니다. 발견한 내용마다 어느 쪽을 썼는지 기록됩니다.
 Clean room on	클린룸 켜짐
 Clean room or Deep	클린룸 또는 심층
@@ -307,13 +307,13 @@ Couldn't open {}: {}	{} 열기 실패: {}
 Couldn't start a worker thread: {e}	작업 스레드를 시작하지 못했습니다: {e}
 Couldn't start it.	시작하지 못했습니다.
 Coverage unknown	적용 범위 알 수 없음
-Craft Anything	Craft Anything
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything은 {engine}에서 만들 수 없어 가장 가까운 Unity를 씁니다.
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	작업 중에 Craft Anything이나 컴퓨터가 종료되었습니다. 지금까지 한 것은 모두 남아 있으며, 계속을 누르면 멈춘 곳부터 이어 갑니다.
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything이 가진 모든 도구로 코드와 파일을 읽습니다. 개인 용도 전용입니다.
-Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	Craft Anything이 가진 모든 도구로 원본의 코드, 파일, 페이지 소스를 읽고, Ghidra가 설치되어 있으면 Ghidra도 씁니다.
-Craft Anything report.md	Craft Anything report.md
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Craft Anything의 기록과 검사, app/에 만든 모든 것이 삭제됩니다. 폴더 안에 직접 둔 파일은 그대로 남습니다.
+F-Builder	F-Builder
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder은 {engine}에서 만들 수 없어 가장 가까운 Unity를 씁니다.
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	작업 중에 F-Builder이나 컴퓨터가 종료되었습니다. 지금까지 한 것은 모두 남아 있으며, 계속을 누르면 멈춘 곳부터 이어 갑니다.
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder이 가진 모든 도구로 코드와 파일을 읽습니다. 개인 용도 전용입니다.
+F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed.	F-Builder이 가진 모든 도구로 원본의 코드, 파일, 페이지 소스를 읽고, Ghidra가 설치되어 있으면 Ghidra도 씁니다.
+F-Builder report.md	F-Builder report.md
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	F-Builder의 기록과 검사, app/에 만든 모든 것이 삭제됩니다. 폴더 안에 직접 둔 파일은 그대로 남습니다.
 Crash dump	크래시 덤프
 Create the project	프로젝트 만들기
 Critical	심각
@@ -506,7 +506,7 @@ Hide the console	콘솔 숨기기
 High	높음
 Home	홈
 How alike a rebuild must look to the original before refining stops.	다듬기를 멈추려면 다시 만든 결과가 원본과 얼마나 닮아야 하는지 정합니다.
-How closely may Craft Anything look at it?	Craft Anything이 얼마나 자세히 살펴봐도 될까요?
+How closely may F-Builder look at it?	F-Builder이 얼마나 자세히 살펴봐도 될까요?
 How complete is the rebuild	다시 만든 결과의 완성도
 How do I open an app?	앱은 어떻게 여나요?
 How do the window and the page talk to each other?	창과 페이지는 서로 어떻게 주고받나요?
@@ -566,7 +566,7 @@ Is there any readable text inside?	안에 읽을 수 있는 글자가 있나요?
 Is this file safe to open?	이 파일을 열어도 안전한가요?
 It closed straight away.	바로 닫혔습니다.
 It closed straight away. It said:	바로 닫혔습니다. 남긴 메시지:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	이 컴퓨터에는 아직 없습니다. Craft Anything이 Ghidra {version} 및 필요한 Java 런타임(약 {mb} MB)을 내려받아 배포처의 체크섬으로 둘 다 확인한 뒤 자체 폴더에 설치할 수 있습니다. 컴퓨터의 다른 부분은 바뀌지 않습니다.
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	이 컴퓨터에는 아직 없습니다. F-Builder이 Ghidra {version} 및 필요한 Java 런타임(약 {mb} MB)을 내려받아 배포처의 체크섬으로 둘 다 확인한 뒤 자체 폴더에 설치할 수 있습니다. 컴퓨터의 다른 부분은 바뀌지 않습니다.
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	이 컴퓨터에는 아직 없습니다. 릴리스 페이지에서 Ghidra {version} 버전을 설치한 뒤 그 폴더를 고르세요.
 It's already open.	이미 열려 있습니다.
 It's already open. Right-click it to open another copy.	이미 열려 있습니다. 하나 더 열려면 오른쪽 클릭하세요.
@@ -611,7 +611,7 @@ Last: {what}	마지막: {what}
 Launch an app	앱 실행
 Leave a few GB for the rest of your computer.	컴퓨터의 다른 작업을 위해 몇 GB는 남겨 두세요.
 Leave a path empty to use the managed install. We never need environment variables.	경로를 비워 두면 관리되는 설치본을 씁니다. 환경 변수는 필요 없습니다.
-Leave empty to use the one Craft Anything sets up.	비워 두면 Craft Anything이 설치한 것을 씁니다.
+Leave empty to use the one F-Builder sets up.	비워 두면 F-Builder이 설치한 것을 씁니다.
 Let a project generate assets	프로젝트가 에셋을 생성하도록 허용
 Let's go	시작하기
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	빌더가 게임용 사실적인 3D 모델과 텍스처를 만들 수 있습니다. 모델 하나에 {model}, 프로젝트마다 예산 {budget}입니다.
@@ -743,8 +743,8 @@ Nothing can build yet: install Claude Code (and sign in to it once), or add an A
 Nothing found	찾은 것 없음
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	아직 찾은 것이 없습니다. API 키, 로컬 모델 서버(Ollama, LM Studio), 이미 있는 에이전트 앱을 찾습니다. 다른 포트나 다른 컴퓨터에 있는 서버는 아래에서 주소로 추가할 수 있습니다.
 Nothing inside it is read.	안의 내용은 읽지 않습니다.
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	안의 내용은 읽지 않습니다. Craft Anything은 눈에 보이는 것만으로 작업합니다. 내가 만드는 버전에는 따로 그린 그림이 들어갑니다.
-Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.	원본의 안쪽은 읽지 않습니다. 코드, 파일, 페이지 소스 모두 마찬가지입니다. Craft Anything은 눈에 보이는 것으로 작업합니다. 그림, 방문자가 보는 페이지, 실행하는 모습을 봅니다.
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	안의 내용은 읽지 않습니다. F-Builder은 눈에 보이는 것만으로 작업합니다. 내가 만드는 버전에는 따로 그린 그림이 들어갑니다.
+Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.	원본의 안쪽은 읽지 않습니다. 코드, 파일, 페이지 소스 모두 마찬가지입니다. F-Builder은 눈에 보이는 것으로 작업합니다. 그림, 방문자가 보는 페이지, 실행하는 모습을 봅니다.
 Nothing made yet. What you make shows up here.	아직 만든 것이 없습니다. 만든 것은 여기에 나옵니다.
 Nothing matches the filter.	필터에 맞는 항목이 없습니다.
 Nothing matches.	맞는 항목이 없습니다.
@@ -867,7 +867,7 @@ Plugin command or address	플러그인 명령 또는 주소
 Plugin id	플러그인 ID
 Plugin removed.	플러그인을 뺐습니다.
 Plugins	플러그인
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	플러그인은 Craft Anything이 자기 도구처럼 내놓는 도구를 더합니다. MCP 서버(명령이나 주소. 추가한 뒤 도구를 읽으세요) 또는 WebAssembly 컴포넌트(.wasm 파일. 내 파일이나 네트워크에 손댈 수 없습니다)를 쓸 수 있습니다.
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	플러그인은 F-Builder이 자기 도구처럼 내놓는 도구를 더합니다. MCP 서버(명령이나 주소. 추가한 뒤 도구를 읽으세요) 또는 WebAssembly 컴포넌트(.wasm 파일. 내 파일이나 네트워크에 손댈 수 없습니다)를 쓸 수 있습니다.
 Plugins added here always ask before each call.	여기서 추가한 플러그인은 부를 때마다 먼저 묻습니다.
 Plugins read. Their new tools are offered from the next start.	플러그인을 읽었습니다. 새 도구는 다음 실행부터 나옵니다.
 Preserving software that's no longer supported.	더 이상 지원되지 않는 소프트웨어 보존.
@@ -1036,7 +1036,7 @@ Sign in and add the Unity Editor	로그인하고 Unity Editor 추가
 Sign in and install Unreal Engine	로그인하고 Unreal Engine 설치
 Simple	간단
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	간단: 원하는 것을 말하면 알아서 처리합니다. 고급: 모든 도구, 근거, 로그를 봅니다.
-Since Craft Anything opened.	Craft Anything을 연 뒤부터.
+Since F-Builder opened.	F-Builder을 연 뒤부터.
 Size	크기
 Skip setup	설정 건너뛰기
 Smart contract interface	스마트 계약 인터페이스
@@ -1093,14 +1093,14 @@ Take files out of an Unreal pak	Unreal pak에서 파일 꺼내기
 Take out packed files	묶인 파일 꺼내기
 Target	대상
 Targets	대상
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	그 폴더에는 이미 {names} 항목이 있습니다. Craft Anything이 자체 파일을 두는 곳입니다. 다른 폴더를 고르거나 먼저 그 항목을 옮겨야 합니다.
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	그 폴더에는 이미 {names} 항목이 있습니다. F-Builder이 자체 파일을 두는 곳입니다. 다른 폴더를 고르거나 먼저 그 항목을 옮겨야 합니다.
 That folder is already a project, so it's open now.	그 폴더는 이미 프로젝트라서 바로 열었습니다.
 The Rust toolchain (rustup.rs).	Rust 툴체인 (rustup.rs).
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	빌더가 스스로 질문에 답하고 무엇을 골랐는지 알려 주므로("결정함: …") 나중에 바꿀 수 있습니다.
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	빌더가 새로 고안한 디자인 설명을 바탕으로 게임의 3D 모델과 텍스처를 만들며, 비용은 fal.ai 계정에서 나갑니다. 게임이 빠르게 돌도록 모델은 로우폴리로 만듭니다. 텍스처를 입힌 모델은 {model}, 그림은 {picture}입니다. 프로젝트마다 예산은 {budget}이며, 넘기 전에 먼저 묻습니다. 키는 시스템 키체인에 보관합니다.
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	빌더가 이 파일(코드, 메모, 그림)을 읽고 그 옆의 새 앱 폴더에 앱을 만듭니다. 원래 파일은 그대로 둡니다.
 The builder will decide its questions and tell you what it chose.	빌더가 질문을 스스로 정하고 무엇을 골랐는지 알려 줍니다.
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	빌더가 이 파일을 직접 고치고 잘 되는 것을 남깁니다. Craft Anything은 그 옆에 자체 기록 몇 개를 더합니다.
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	빌더가 이 파일을 직접 고치고 잘 되는 것을 남깁니다. F-Builder은 그 옆에 자체 기록 몇 개를 더합니다.
 The builder's questions	빌더의 질문
 The builder's questions come to you as cards, and it waits for your answer.	빌더의 질문이 카드로 오고, 빌더는 답을 기다립니다.
 The builder's questions will come to you.	빌더의 질문을 직접 받습니다.
@@ -1213,7 +1213,7 @@ What a program exports	프로그램이 내보내는 것
 What a program imports	프로그램이 가져오는 것
 What are its main parts?	주요 부분은 무엇인가요?
 What brings you here?	무엇을 하러 오셨나요?
-What can Craft Anything do?	Craft Anything으로 무엇을 할 수 있나요?
+What can F-Builder do?	F-Builder으로 무엇을 할 수 있나요?
 What data was sent?	어떤 데이터를 보냈나요?
 What do you want to look inside?	무엇을 살펴볼까요?
 What do you want to make?	무엇을 만들까요?
@@ -1268,7 +1268,7 @@ Why we ask	묻는 이유
 Window / focus info	창 / 포커스 정보
 Windows resources	Windows 리소스
 Wireshark tools check	Wireshark 도구 검사
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	없으면 심층 모드는 Craft Anything 자체 디컴파일러를 쓰며, 결과가 더 거칩니다.
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	없으면 심층 모드는 F-Builder 자체 디컴파일러를 쓰며, 결과가 더 거칩니다.
 Work out a copy's size	복사본 크기 계산
 Work out what an installed app is built on	설치된 앱이 무엇으로 만들어졌는지 알아내기
 Workbench	작업대
@@ -1430,12 +1430,12 @@ View	보기
 Window	윈도우
 Help	도움말
 Command palette	명령 팔레트
-Craft Anything on GitHub	GitHub의 Craft Anything
+F-Builder on GitHub	GitHub의 F-Builder
 Report a problem…	문제 신고…
-Quit Craft Anything	Craft Anything 종료
-About Craft Anything	Craft Anything에 관하여
+Quit F-Builder	F-Builder 종료
+About F-Builder	F-Builder에 관하여
 Services	서비스
-Hide Craft Anything	Craft Anything 가리기
+Hide F-Builder	F-Builder 가리기
 Hide others	기타 가리기
 Show all	모두 보기
 Close window	윈도우 닫기

@@ -1,7 +1,7 @@
 //! User settings (`config.toml`). No environment variables are required for anything.
 
 use crate::versioned::{Step, upgrade};
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -36,7 +36,7 @@ pub struct GhidraSettings {
 
 /// One list for the per-engine path overrides: it declares the `ToolPaths` fields, `override_for`,
 /// and the list the Engines settings page shows. The ids and their order are exactly the engines in
-/// `craft_anything_engines::ENGINES` that have a path setting (a test checks it).
+/// `f_builder_engines::ENGINES` that have a path setting (a test checks it).
 macro_rules! tool_paths {
     ($($id:ident),* $(,)?) => {
         /// Paths to external tools when the user prefers their own install over the managed one.
@@ -53,7 +53,7 @@ macro_rules! tool_paths {
             }
         }
 
-        impl craft_anything_engines::ToolPathLookup for ToolPaths {
+        impl f_builder_engines::ToolPathLookup for ToolPaths {
             fn override_for(&self, id: &str) -> Option<PathBuf> {
                 match id {
                     $(stringify!($id) => self.$id.clone(),)*
@@ -118,7 +118,7 @@ pub struct Settings {
     pub runtime_study: bool,
     /// Recently opened projects and targets.
     pub recent: Vec<PathBuf>,
-    /// Where new projects are created; `None` = `Documents/Craft Anything`.
+    /// Where new projects are created; `None` = `Documents/F-Builder`.
     pub projects_dir: Option<PathBuf>,
     /// More places projects are listed from: folders of projects, or projects started in a folder
     /// the person picked (added when they start one there).
@@ -128,7 +128,7 @@ pub struct Settings {
     pub existing_files: Option<crate::workspace::ExistingFiles>,
     /// Generated game assets: the budget a new project starts with and the picture model.
     pub assets: AssetSettings,
-    /// External MCP servers whose tools are offered as Craft Anything tools (`[[plugins.mcp]]`).
+    /// External MCP servers whose tools are offered as F-Builder tools (`[[plugins.mcp]]`).
     pub plugins: crate::plugins::PluginSettings,
     /// How builds are checked and when refining stops (`[build]`).
     pub build: BuildSettings,
@@ -267,18 +267,18 @@ pub fn read_settings(text: &str) -> Result<Settings, String> {
     table.try_into::<Settings>().map_err(|e| e.to_string())
 }
 
-/// Where settings, logs and the engine store live: `CRAFT_ANYTHING_CONFIG_DIR`, then a portable
+/// Where settings, logs and the engine store live: `F_BUILDER_CONFIG_DIR`, then a portable
 /// `portable.txt` marker next to the executable, then the platform config dir.
 pub fn config_dir() -> PathBuf {
-    if let Some(dir) = std::env::var_os("CRAFT_ANYTHING_CONFIG_DIR") {
+    if let Some(dir) = std::env::var_os("F_BUILDER_CONFIG_DIR") {
         return PathBuf::from(dir);
     }
     if let Some(exe_dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf))
         && exe_dir.join("portable.txt").exists()
     {
-        return exe_dir.join("CraftAnythingData");
+        return exe_dir.join("FBuilderData");
     }
-    dirs::config_dir().map(|d| d.join("craft-anything")).unwrap_or_else(|| PathBuf::from(".craft-anything"))
+    dirs::config_dir().map(|d| d.join("f-builder")).unwrap_or_else(|| PathBuf::from(".f-builder"))
 }
 
 impl Settings {
@@ -330,7 +330,7 @@ impl Settings {
             Ok(text) => match read_settings(&text) {
                 Ok(s) => {
                     if s.version > SETTINGS_VERSION {
-                        log::warn!("{} is from a newer Craft Anything (version {}); changes won't be saved over it", path.display(), s.version);
+                        log::warn!("{} is from a newer F-Builder (version {}); changes won't be saved over it", path.display(), s.version);
                     }
                     s
                 }
@@ -341,10 +341,7 @@ impl Settings {
                         .and_then(|t| t.get("version").and_then(toml::Value::as_integer))
                         .and_then(|n| u32::try_from(n).ok());
                     if let Some(version) = newer.filter(|v| *v > SETTINGS_VERSION) {
-                        log::warn!(
-                            "{} is from a newer Craft Anything (version {version}) and unreadable here ({e}); using defaults without saving",
-                            path.display()
-                        );
+                        log::warn!("{} is from a newer F-Builder (version {version}) and unreadable here ({e}); using defaults without saving", path.display());
                         return Settings { version, ..Settings::default() };
                     }
                     log::warn!("{} is unreadable ({e}); using defaults and keeping a copy", path.display());
@@ -401,7 +398,7 @@ impl Settings {
             Err(e) => return Err(ToolError::io(path.display(), e)),
         };
         if current.version > SETTINGS_VERSION || pending.version > SETTINGS_VERSION {
-            return Err(ToolError::new(ErrorCode::BadSettings, "Update Craft Anything to recover settings saved by a newer version."));
+            return Err(ToolError::new(ErrorCode::BadSettings, "Update F-Builder to recover settings saved by a newer version."));
         }
         pending.ai = current.ai;
         pending.save_to(path)?;
@@ -412,9 +409,9 @@ impl Settings {
         if self.version > SETTINGS_VERSION {
             return Err(ToolError::new(
                 ErrorCode::BadSettings,
-                format!("{} was written by a newer Craft Anything (version {}), so this one doesn't change it.", path.display(), self.version),
+                format!("{} was written by a newer F-Builder (version {}), so this one doesn't change it.", path.display(), self.version),
             )
-            .with_remediation("Update Craft Anything to change settings, or move config.toml aside to start fresh. Nothing was written."));
+            .with_remediation("Update F-Builder to change settings, or move config.toml aside to start fresh. Nothing was written."));
         }
         let text = toml::to_string_pretty(self).map_err(|e| ToolError::new(ErrorCode::BadSettings, e.to_string()))?;
         crate::project::write_atomic(path, text.as_bytes())
@@ -432,15 +429,15 @@ impl Settings {
     pub fn ghidra_launcher(&self) -> Option<PathBuf> {
         let (dir, store) = (self.engines.ghidra.install_dir.as_deref(), self.engine_store_dir());
         if self.engines.only_configured {
-            craft_anything_engines::ghidra::get::headless_configured(dir, &store)
+            f_builder_engines::ghidra::get::headless_configured(dir, &store)
         } else {
-            craft_anything_engines::ghidra::get::headless(dir, &store)
+            f_builder_engines::ghidra::get::headless(dir, &store)
         }
     }
 
     /// The Java runtime Ghidra runs on (`None`: let Ghidra find its own).
     pub fn ghidra_java(&self) -> Option<PathBuf> {
-        craft_anything_engines::ghidra::get::java_home(self.engines.ghidra.java_home.as_deref(), &self.engine_store_dir())
+        f_builder_engines::ghidra::get::java_home(self.engines.ghidra.java_home.as_deref(), &self.engine_store_dir())
     }
 
     /// Where an external engine is on this computer, honouring every setting that can name one:
@@ -449,20 +446,20 @@ impl Settings {
     /// `doctor`, `capabilities`) and behind `Requires::Engine`, so they all agree with what Deep
     /// mode actually runs.
     pub fn engine_path(&self, id: &str) -> Option<PathBuf> {
-        if id == craft_anything_engines::ghidra::get::ID {
+        if id == f_builder_engines::ghidra::get::ID {
             return self.ghidra_launcher();
         }
         if self.engines.only_configured {
-            craft_anything_engines::locate_configured(id, &self.engines.tools, &self.engine_store_dir())
+            f_builder_engines::locate_configured(id, &self.engines.tools, &self.engine_store_dir())
         } else {
-            craft_anything_engines::locate(id, &self.engines.tools, &self.engine_store_dir())
+            f_builder_engines::locate(id, &self.engines.tools, &self.engine_store_dir())
         }
     }
 
     /// Why an engine wasn't found and what to do about it, as (reason, remediation).
     pub fn engine_not_found(&self, id: &str) -> (String, String) {
-        use craft_anything_engines::ToolPathLookup;
-        craft_anything_engines::not_found_help(id, self.engines.tools.override_for(id).as_deref(), craft_anything_platform::in_flatpak())
+        use f_builder_engines::ToolPathLookup;
+        f_builder_engines::not_found_help(id, self.engines.tools.override_for(id).as_deref(), f_builder_platform::in_flatpak())
     }
 }
 
@@ -520,10 +517,10 @@ auto_mode = true
 
     #[test]
     fn path_overrides_match_the_engine_table_exactly() {
-        use craft_anything_engines::ToolPathLookup;
+        use f_builder_engines::ToolPathLookup;
         let mut paths = ToolPaths::default();
         let ids: Vec<&str> = paths.entries_mut().into_iter().map(|(id, _)| id).collect();
-        let table: Vec<&str> = craft_anything_engines::path_setting_ids().collect();
+        let table: Vec<&str> = f_builder_engines::path_setting_ids().collect();
         assert_eq!(ids, table, "tool_paths! must list the engine table's path-setting ids, in table order");
         for (id, v) in paths.entries_mut() {
             *v = Some(PathBuf::from(format!("/opt/{id}")));

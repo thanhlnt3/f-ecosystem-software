@@ -355,9 +355,9 @@ fn ghidra_memory_follows_the_setting_within_its_bounds() {
 
 #[test]
 fn a_dot_free_store_is_given_to_ghidra_as_it_is() {
-    let store = Path::new("/home/u/craft-anything/engines");
+    let store = Path::new("/home/u/f-builder/engines");
     assert_eq!(ghidra_root(store).unwrap(), store);
-    assert!(has_dot_part(Path::new("/home/u/.config/craft-anything/engines")));
+    assert!(has_dot_part(Path::new("/home/u/.config/f-builder/engines")));
     assert!(!has_dot_part(store));
 }
 
@@ -387,7 +387,7 @@ impl Drop for LinkGuard {
 #[test]
 fn a_store_under_a_dot_folder_reaches_ghidra_through_a_dot_free_link() {
     let home = tempfile::tempdir().unwrap();
-    let store = home.path().join(".config").join("craft-anything").join("engines");
+    let store = home.path().join(".config").join("f-builder").join("engines");
     let (_link, root) = LinkGuard::root(&store);
     assert!(!has_dot_part(&root), "{}", root.display());
     assert!(!has_dot_part(&project_cache_dir(&root, &"ab".repeat(32), &"cd".repeat(32))));
@@ -424,7 +424,7 @@ fn a_second_analysis_waits_for_the_running_one_and_a_dead_ones_lock_is_taken_ove
         memory_gb: None,
     };
     // The bytes and their real sha, so this reaches the launch instead of failing on a mismatch.
-    let (sha, digest) = (craft_anything_evidence::sha256_hex(b"x"), "cd".repeat(32));
+    let (sha, digest) = (f_builder_evidence::sha256_hex(b"x"), "cd".repeat(32));
     // A temp folder can be under a dot folder (`/tmp/.tmpXXXX`): the project is then reached
     // through the store's link, which is the path analyse() gives back.
     let (_link, root) = LinkGuard::root(d.path());
@@ -603,11 +603,11 @@ fn pointer_table_elf_at(base: u64, e_type: u8) -> (Vec<u8>, u64, u64, u64) {
     (b, triple, negate, table)
 }
 
-/// Real Ghidra, only where `CRAFT_ANYTHING_TEST_GHIDRA` names the engine store holding `ghidra/`
-/// and `jdk/` (the app's is `%APPDATA%/craft-anything/engines`). Its analysis goes to a temp folder.
+/// Real Ghidra, only where `F_BUILDER_TEST_GHIDRA` names the engine store holding `ghidra/`
+/// and `jdk/` (the app's is `%APPDATA%/f-builder/engines`). Its analysis goes to a temp folder.
 #[test]
 fn live_ghidra_makes_and_decompiles_code_reached_only_through_a_pointer_table() {
-    let Some(store) = std::env::var_os("CRAFT_ANYTHING_TEST_GHIDRA").map(PathBuf::from) else { return };
+    let Some(store) = std::env::var_os("F_BUILDER_TEST_GHIDRA").map(PathBuf::from) else { return };
     // Ghidra rejects project paths with a folder that starts with a dot, as tempdir()'s do.
     let temp = tempfile::Builder::new().prefix("ghidra-live").tempdir().unwrap();
     let cfg = Config {
@@ -620,7 +620,7 @@ fn live_ghidra_makes_and_decompiles_code_reached_only_through_a_pointer_table() 
         memory_gb: Some(4),
     };
     let (elf, triple, negate, table) = pointer_table_elf();
-    let session = Session::start(&cfg, &elf, &craft_anything_evidence::sha256_hex(&elf), &"cd".repeat(32), &|| false, &|_, _| {}).expect("Ghidra starts");
+    let session = Session::start(&cfg, &elf, &f_builder_evidence::sha256_hex(&elf), &"cd".repeat(32), &|| false, &|_, _| {}).expect("Ghidra starts");
 
     let known: Vec<u64> = session.list_functions().unwrap().iter().map(|f| f.entry).collect();
     assert!(!known.contains(&triple) && !known.contains(&negate), "the analysis already made these, so this tests nothing: {known:x?}");
@@ -657,7 +657,7 @@ fn addresses_move_between_our_image_base_and_the_engines() {
 /// where, and our addresses reach the right code once moved there.
 #[test]
 fn live_ghidra_reports_where_it_loaded_a_position_independent_elf() {
-    let Some(store) = std::env::var_os("CRAFT_ANYTHING_TEST_GHIDRA").map(PathBuf::from) else { return };
+    let Some(store) = std::env::var_os("F_BUILDER_TEST_GHIDRA").map(PathBuf::from) else { return };
     let temp = tempfile::Builder::new().prefix("ghidra-live").tempdir().unwrap();
     let cfg = Config {
         analyze_headless: get::headless(None, &store).expect("Ghidra in the engine store"),
@@ -669,7 +669,7 @@ fn live_ghidra_reports_where_it_loaded_a_position_independent_elf() {
         memory_gb: Some(4),
     };
     let (elf, triple, _, _) = pointer_table_elf_at(0, 3);
-    let session = Session::start(&cfg, &elf, &craft_anything_evidence::sha256_hex(&elf), &"ef".repeat(32), &|| false, &|_, _| {}).expect("Ghidra starts");
+    let session = Session::start(&cfg, &elf, &f_builder_evidence::sha256_hex(&elf), &"ef".repeat(32), &|| false, &|_, _| {}).expect("Ghidra starts");
     let base = session.image_base().expect("the handshake says where the program is");
     assert_ne!(base, 0, "Ghidra moves a program whose lowest segment is at 0");
     let rebase = Rebase::new(0, Some(base));

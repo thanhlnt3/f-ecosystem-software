@@ -1,18 +1,19 @@
 //! HTTP plumbing: one ureq agent (rustls), JSON POST with streamed responses, and an SSE parser.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
+use f_builder_evidence::{ErrorCode, ToolError};
 use serde_json::Value;
 use std::io::{BufRead, BufReader, Read};
 use std::time::Duration;
 
 /// Generic, non-identifying User-Agent.
-pub const USER_AGENT: &str = "CraftAnything-dev";
+pub const USER_AGENT: &str = "FBuilder-dev";
 
 /// An agent for model calls: generous body time (streams can run for many minutes), bounded
 /// connect and first-byte waits.
 pub fn agent(connect: Duration, first_byte: Duration, body: Duration) -> ureq::Agent {
     ureq::Agent::config_builder()
         .http_status_as_error(false)
+        .tls_config(ureq::tls::TlsConfig::builder().root_certs(ureq::tls::RootCerts::PlatformVerifier).build())
         .user_agent(USER_AGENT)
         .timeout_connect(Some(connect))
         .timeout_recv_response(Some(first_byte))

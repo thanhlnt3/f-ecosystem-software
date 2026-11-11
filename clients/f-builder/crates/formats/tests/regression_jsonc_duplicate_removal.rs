@@ -1,4 +1,4 @@
-use craft_anything_formats::jsonc::parse;
+use f_builder_formats::jsonc::parse;
 use serde_json::json;
 
 #[test]

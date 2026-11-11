@@ -1,6 +1,6 @@
 //! WASM component plugins (R1.8 phase 2): each `[[plugins.wasm]]` entry is a component exporting
-//! `craft-anything:plugin/tools` (see `crates/engines/wit/plugin.wit`), whose tools become
-//! Craft Anything tools in a toolset of their own.
+//! `f-builder:plugin/tools` (see `crates/engines/wit/plugin.wit`), whose tools become
+//! F-Builder tools in a toolset of their own.
 //!
 //! ```toml
 //! [[plugins.wasm]]
@@ -65,7 +65,7 @@ pub struct PluginCheck {
     /// File extensions whose text it wants.
     pub extensions: Vec<String>,
     #[allow(clippy::type_complexity)]
-    run: Box<dyn Fn(&serde_json::Value) -> Result<serde_json::Value, craft_anything_evidence::ToolError> + Send + Sync>,
+    run: Box<dyn Fn(&serde_json::Value) -> Result<serde_json::Value, f_builder_evidence::ToolError> + Send + Sync>,
 }
 
 impl PluginCheck {
@@ -75,13 +75,13 @@ impl PluginCheck {
         title: impl Into<String>,
         kinds: Vec<String>,
         extensions: Vec<String>,
-        run: impl Fn(&serde_json::Value) -> Result<serde_json::Value, craft_anything_evidence::ToolError> + Send + Sync + 'static,
+        run: impl Fn(&serde_json::Value) -> Result<serde_json::Value, f_builder_evidence::ToolError> + Send + Sync + 'static,
     ) -> Self {
         PluginCheck { id, title: title.into(), kinds, extensions, run: Box::new(run) }
     }
 
     /// Judge `build` (the JSON described in plugin.wit); the plugin's answer.
-    pub fn run(&self, build: &serde_json::Value) -> Result<serde_json::Value, craft_anything_evidence::ToolError> {
+    pub fn run(&self, build: &serde_json::Value) -> Result<serde_json::Value, f_builder_evidence::ToolError> {
         (self.run)(build)
     }
 }
@@ -122,8 +122,8 @@ mod imp {
     use super::*;
     use crate::registry::custom_toolset;
     use crate::tool::{Ctx, Effects, Requires, ToolOutput};
-    use craft_anything_engines::wasm_plugin::WasmPlugin;
-    use craft_anything_evidence::ToolError;
+    use f_builder_engines::wasm_plugin::WasmPlugin;
+    use f_builder_evidence::ToolError;
     use serde_json::{Value, json};
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -147,7 +147,7 @@ mod imp {
             let loaded = WasmPlugin::load(&p.path).and_then(|w| {
                 let (has_tools, has_checks) = w.exports()?;
                 if !has_tools && !has_checks {
-                    return Err(ToolError::invalid("it exports neither craft-anything:plugin/tools nor craft-anything:plugin/checks"));
+                    return Err(ToolError::invalid("it exports neither f-builder:plugin/tools nor f-builder:plugin/checks"));
                 }
                 let tools = if has_tools { w.describe()? } else { Vec::new() };
                 let found = if has_checks { w.describe_checks()? } else { Vec::new() };
@@ -225,7 +225,7 @@ mod tests {
     fn a_configured_plugin_adds_tools_that_run_without_asking() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("echo.wat");
-        std::fs::write(&path, craft_anything_testkit::wasm_plugin::echo_plugin_wat(false)).unwrap();
+        std::fs::write(&path, f_builder_testkit::wasm_plugin::echo_plugin_wat(false)).unwrap();
         let mut s = crate::testing::session();
         s.settings.plugins.wasm = vec![
             WasmPluginConfig { id: "wordtools".into(), name: None, path, enabled: true },
@@ -243,7 +243,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("odd.wat");
         let describe = format!(r#"[{{"name":"{}é","title":"Odd"}}]"#, "a".repeat(61));
-        std::fs::write(&path, craft_anything_testkit::wasm_plugin::component_wat("tools", "call", "input", &describe, r#"{"ok":"#, false)).unwrap();
+        std::fs::write(&path, f_builder_testkit::wasm_plugin::component_wat("tools", "call", "input", &describe, r#"{"ok":"#, false)).unwrap();
         let mut s = crate::testing::session();
         s.settings.plugins.wasm = vec![WasmPluginConfig { id: "p".into(), name: None, path, enabled: true }];
         assert!(crate::plugins::install(&mut s).is_empty());
@@ -253,7 +253,7 @@ mod tests {
     fn a_plugin_with_checks_offers_them_to_the_rebuild() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("judge.wat");
-        std::fs::write(&path, craft_anything_testkit::wasm_plugin::check_plugin_wat(true)).unwrap();
+        std::fs::write(&path, f_builder_testkit::wasm_plugin::check_plugin_wat(true)).unwrap();
         let mut s = crate::testing::session();
         s.settings.plugins.wasm = vec![WasmPluginConfig { id: "judge".into(), name: None, path, enabled: true }];
         assert!(crate::plugins::install(&mut s).is_empty(), "checks only: no tools");

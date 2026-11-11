@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Check MSI icon references without building or installing Craft Anything.
+  Check MSI icon references without building or installing F-Builder.
 
 .DESCRIPTION
   ICE50 requires advertised shortcut icon identifiers to have the target file's extension.
@@ -8,7 +8,7 @@
   can display a generic document icon even when the ICO data and application are valid.
 #>
 param(
-  [string] $WxsPath = (Join-Path $PSScriptRoot 'craft-anything.wxs')
+  [string] $WxsPath = (Join-Path $PSScriptRoot 'f-builder.wxs')
 )
 $ErrorActionPreference = 'Stop'
 [xml] $Wxs = Get-Content -LiteralPath $WxsPath -Raw

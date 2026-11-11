@@ -331,7 +331,7 @@ pub fn helper_class() -> Vec<u8> {
 
 /// A minimal `MANIFEST.MF` naming the main class.
 pub fn manifest_mf() -> Vec<u8> {
-    b"Manifest-Version: 1.0\r\nMain-Class: com.example.Hello\r\nCreated-By: craft-anything-testkit\r\n\r\n".to_vec()
+    b"Manifest-Version: 1.0\r\nMain-Class: com.example.Hello\r\nCreated-By: f-builder-testkit\r\n\r\n".to_vec()
 }
 
 /// A tiny JAR (stored zip) with both classes and a manifest.

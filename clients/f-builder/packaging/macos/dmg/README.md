@@ -7,14 +7,14 @@ scripting on CI, nothing extra installed in the signing job).
 
 | File | What |
 |---|---|
-| `background.svg` | Source of the background: the app icon (`assets/app-icon/craft-anything.svg`, linked, not copied) cropped as a cover on the Craft Anything blue (`#4e7bfb`), ink and paper, DM Sans and JetBrains Mono (from `assets/fonts`, not embedded). |
+| `background.svg` | Source of the background: the app icon (`assets/app-icon/f-builder.svg`, linked, not copied) cropped as a cover on the F-Builder blue (`#0f6b5c`), ink and paper, DM Sans and JetBrains Mono (from `assets/fonts`, not embedded). |
 | `background.tiff` | The background at 1x (660 × 400 px, 72 dpi) and 2x (1320 × 800 px, 144 dpi) in one HiDPI TIFF (Deflate, sRGB). Goes to `.background/background.tiff`. |
-| `DS_Store` | Finder's view settings for the volume: window size, icon size 128, Craft Anything.app at (326, 205), `Applications` at (574, 205), and the background. Goes to `.DS_Store`. |
+| `DS_Store` | Finder's view settings for the volume: window size, icon size 128, F-Builder.app at (326, 205), `Applications` at (574, 205), and the background. Goes to `.DS_Store`. |
 | `generate.py` | Writes `background.tiff` and `DS_Store` from the SVG and the layout above. |
 
 ## Rules
 
-- **The volume name has no version** (`Craft Anything`, not `Craft Anything <version>`). `.DS_Store` points at the
+- **The volume name has no version** (`F-Builder`, not `F-Builder <version>`). `.DS_Store` points at the
   background through an alias that includes the volume name, so a versioned name loses the
   background. The DMG file name still carries the version.
 - **Finder draws the icon labels in black in light and dark mode** when a window has a background,

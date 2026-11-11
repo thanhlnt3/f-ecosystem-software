@@ -1,6 +1,6 @@
 [package]
-name = "craft-anything-setup"
-description = "Connect Craft Anything to coding-agent apps: detect, plan, merge, back up, roll back, doctor"
+name = "f-builder-setup"
+description = "Connect F-Builder to coding-agent apps: detect, plan, merge, back up, roll back, doctor"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,11 +10,11 @@ publish = false
 workspace = true
 
 [dependencies]
-craft-anything-evidence = { workspace = true }
-craft-anything-engine = { workspace = true }
-craft-anything-engines = { workspace = true }
-craft-anything-formats = { workspace = true }
-craft-anything-platform = { workspace = true }
+f-builder-evidence = { workspace = true }
+f-builder-engine = { workspace = true }
+f-builder-engines = { workspace = true }
+f-builder-formats = { workspace = true }
+f-builder-platform = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

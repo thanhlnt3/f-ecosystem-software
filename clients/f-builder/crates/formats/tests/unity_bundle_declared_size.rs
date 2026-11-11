@@ -1,4 +1,4 @@
-use craft_anything_formats::{FormatError, unity_bundle};
+use f_builder_formats::{FormatError, unity_bundle};
 
 struct Bundle {
     bytes: Vec<u8>,
@@ -67,7 +67,7 @@ fn trailing_bytes_do_not_move_the_declared_bundle_table() {
 
 #[test]
 fn header_prefixes_describe_a_larger_bundle_without_reading_its_data() {
-    let mut data = craft_anything_testkit::games::unity_bundle();
+    let mut data = f_builder_testkit::games::unity_bundle();
     assert!(data.len() > unity_bundle::HEADER_READ);
     let size = data.len() as u64;
     let expected = unity_bundle::header(&data, size).unwrap();

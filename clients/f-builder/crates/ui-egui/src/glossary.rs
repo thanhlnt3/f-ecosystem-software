@@ -35,9 +35,9 @@ pub static GLOSSARY: &[(&str, &str)] = &[
     ("ghidra", "A free reverse-engineering tool from the NSA. Deep mode uses it for extra detail; Clean room mode never does."),
     (
         "clean room",
-        "Nothing inside the original is read: not its code, files or page source. Craft Anything works from what you can see: pictures, the page as a visitor sees it, and watching it run.",
+        "Nothing inside the original is read: not its code, files or page source. F-Builder works from what you can see: pictures, the page as a visitor sees it, and watching it run.",
     ),
-    ("deep mode", "Craft Anything reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed."),
+    ("deep mode", "F-Builder reads the original's code, files and page source with every tool it has, and with Ghidra when it's installed."),
     ("hex", "A way of writing bytes as two-character codes (00 to FF). The rawest view of a file."),
     ("byte", "The smallest unit of data in a file: a number from 0 to 255."),
     ("bytes", "The smallest units of data in a file: numbers from 0 to 255."),

@@ -9,8 +9,8 @@
 use super::interaction_tools::{approve, inbox, inside, really_inside, resolve, workspace_of};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
 use crate::workspace::Workspace;
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::process::Process;
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::process::Process;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -239,7 +239,7 @@ fn build_files_list(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, Tool
                 break;
             }
             let path = e.path();
-            // Craft Anything's own records are not the app, even when the app is the project
+            // F-Builder's own records are not the app, even when the app is the project
             // folder; the brief names them and the builder must leave them alone.
             if !listing_own && ws.is_own_record(&path) {
                 continue;
@@ -426,7 +426,7 @@ mod tests {
     }
 
     /// "Work on my project" keeps the app in the project root: the default listing must be that
-    /// root, not a missing or nested `app/`, and not Craft Anything's own records.
+    /// root, not a missing or nested `app/`, and not F-Builder's own records.
     #[test]
     fn a_project_edited_in_place_is_listed_from_its_own_folder() {
         let d = tempfile::tempdir().unwrap();
@@ -438,7 +438,7 @@ mod tests {
         std::fs::write(d.path().join("app/other.txt"), "not the app\n").unwrap();
         let mut s = crate::testing::session();
         let ws = Workspace::create_at(d.path(), "Mine", "Add a page", TargetRef::None, Some(ExistingFiles::Edit)).unwrap();
-        // checks/ isn't a Craft Anything record the builder must avoid: it keeps its own notes there.
+        // checks/ isn't a F-Builder record the builder must avoid: it keeps its own notes there.
         std::fs::create_dir_all(d.path().join("checks")).unwrap();
         std::fs::write(d.path().join("checks/notes.md"), "note\n").unwrap();
         // capture/ is an own record in the root listing, but the brief tells the builder to read it.
@@ -459,7 +459,7 @@ mod tests {
         assert!(entries.contains("main.py") && entries.contains("src/app.py"), "{list}");
         assert!(entries.contains("app/other.txt"), "a real nested folder is still part of the root: {list}");
         assert!(entries.contains("checks/notes.md"), "the builder's own check notes stay visible: {list}");
-        assert!(!entries.contains("craft.json"), "Craft Anything's own records are not app files: {list}");
+        assert!(!entries.contains("f-builder.json"), "F-Builder's own records are not app files: {list}");
         assert!(!entries.contains("capture/"), "capture stays out of the default root listing: {list}");
         assert!(entries.contains("vendor/"), "the dependency folder is listed but not walked: {list}");
         assert_eq!(list["truncated"], false, "vendor must not consume the entry cap: {list}");
@@ -581,8 +581,8 @@ mod tests {
         // Auto mode is on by default: outside app/ (but inside the project) goes ahead.
         call(&e, "build_file_write", json!({"path": "checks/notes.md", "content": "ok"})).unwrap();
         // The person's own records are never written unasked.
-        assert!(call(&e, "build_file_write", json!({"path": "craft.json", "content": "{}"})).is_err());
-        assert!(ws.root.join("craft.json").is_file(), "untouched");
+        assert!(call(&e, "build_file_write", json!({"path": "f-builder.json", "content": "{}"})).is_err());
+        assert!(ws.root.join("f-builder.json").is_file(), "untouched");
         // Dev servers never exit: refused before anything runs.
         let err = call(&e, "build_command_run", json!({"command": "npm run dev"})).unwrap_err();
         assert!(err.message.contains("dev servers"), "{}", err.message);

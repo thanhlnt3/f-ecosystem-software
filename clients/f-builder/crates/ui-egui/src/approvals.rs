@@ -5,10 +5,10 @@
 use crate::i18n::{tr, trf};
 use crate::slash::{self, Command, Typed};
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, widgets};
-use craft_anything_engine::evidence::ToolError;
-use craft_anything_engine::workspace::{ACTION_KINDS, ActionKind, Approval};
+use crate::{BuilderApp, widgets};
 use egui::{RichText, Ui};
+use f_builder_engine::evidence::ToolError;
+use f_builder_engine::workspace::{ACTION_KINDS, ActionKind, Approval};
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -79,7 +79,7 @@ pub fn command_in(text: &str) -> Option<Result<(ActionKind, Option<Approval>), S
     })
 }
 
-impl CraftApp {
+impl BuilderApp {
     /// Choose what one kind of the builder's actions gets in this project. Shown at once; saved by
     /// the tool, and from the builder's next action.
     pub fn set_approval(&mut self, root: &Path, kind: ActionKind, choice: Option<Approval>) {
@@ -124,7 +124,7 @@ impl CraftApp {
 }
 
 /// Under the prompt box: a menu with one row per kind of action and what it gets in this project.
-pub(crate) fn menu(app: &mut CraftApp, ui: &mut Ui, root: &Path) {
+pub(crate) fn menu(app: &mut BuilderApp, ui: &mut Ui, root: &Path) {
     let Some(ws) = &app.workspace else { return };
     let chosen = ws.manifest.approvals.clone();
     let t = Tokens::get(ui.ctx());

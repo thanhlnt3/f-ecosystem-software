@@ -1,21 +1,21 @@
 //! The skill we install into coding-agent apps: our own guide to the investigation method.
 
-use craft_anything_evidence::ToolError;
+use f_builder_evidence::ToolError;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 /// Folder name under each skills directory.
-pub const SKILL_DIR: &str = "craft-anything";
+pub const SKILL_DIR: &str = "f-builder";
 /// Bumped whenever the skill text changes.
 pub const SKILL_VERSION: &str = "2";
 /// How an installed SKILL.md identifies itself as ours.
-pub const SKILL_PREFIX: &str = "---\nname: craft-anything\n";
-const REFERENCE_MARKER: &str = "<!-- craft-anything skill reference -->";
+pub const SKILL_PREFIX: &str = "---\nname: f-builder\n";
+const REFERENCE_MARKER: &str = "<!-- f-builder skill reference -->";
 
 pub const SKILL_MD: &str = include_str!("skill.md");
 pub const RECOVERY_MD: &str = include_str!("skill_recovery.md");
 
-/// The managed files, relative to `<skills dir>/craft-anything/`.
+/// The managed files, relative to `<skills dir>/f-builder/`.
 pub fn files() -> [(&'static str, &'static str); 2] {
     [("SKILL.md", SKILL_MD), ("references/recovery.md", RECOVERY_MD)]
 }
@@ -56,7 +56,7 @@ pub struct SkillFileAction {
 
 pub fn backup_path(p: &Path) -> PathBuf {
     let mut s = p.as_os_str().to_os_string();
-    s.push(".craft-anything.backup");
+    s.push(".f-builder.backup");
     PathBuf::from(s)
 }
 
@@ -87,12 +87,12 @@ pub fn install(skills_dir: &Path) -> Result<Vec<PathBuf>, ToolError> {
         }
         let step = (|| {
             if old.is_some() {
-                craft_anything_platform::backup_once(&path, &backup_path(&path))?;
+                f_builder_platform::backup_once(&path, &backup_path(&path))?;
             }
-            craft_anything_platform::write_atomic_private(&path, body.as_bytes())?;
+            f_builder_platform::write_atomic_private(&path, body.as_bytes())?;
             let back = std::fs::read(&path).map_err(|e| ToolError::io(path.display(), e))?;
             if back != body.as_bytes() {
-                return Err(ToolError::new(craft_anything_evidence::ErrorCode::FileError, format!("{} did not read back correctly", path.display())));
+                return Err(ToolError::new(f_builder_evidence::ErrorCode::FileError, format!("{} did not read back correctly", path.display())));
             }
             Ok(())
         })();
@@ -109,11 +109,11 @@ pub fn install(skills_dir: &Path) -> Result<Vec<PathBuf>, ToolError> {
 fn rollback(done: &[(PathBuf, Option<Vec<u8>>)]) {
     for (path, old) in done.iter().rev() {
         let r = match old {
-            Some(bytes) => craft_anything_platform::write_atomic(path, bytes).map_err(|e| e.message),
+            Some(bytes) => f_builder_platform::write_atomic(path, bytes).map_err(|e| e.message),
             None => std::fs::remove_file(path).map_err(|e| e.to_string()),
         };
         if let Err(e) = r {
-            log::warn!("could not roll back {}: {e}; restore it from its .craft-anything.backup copy", path.display());
+            log::warn!("could not roll back {}: {e}; restore it from its .f-builder.backup copy", path.display());
         }
     }
 }

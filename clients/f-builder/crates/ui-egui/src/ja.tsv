@@ -39,7 +39,7 @@ Add pictures of the original	元の画像を追加
 Add pictures of the original (optional: screenshots help it look right)	元の画像を追加(任意: スクリーンショットがあると見た目を合わせやすい)
 Added	追加済み
 Added {n} picture(s). The builder uses them from your next change.	画像を {n} 枚追加しました。次の変更からビルダーが使います。
-Adds its decompiler to Deep mode. Craft Anything can download and set it up for you.	中まで解析モードに逆コンパイラを追加します。Craft Anything がダウンロードしてセットアップできます。
+Adds its decompiler to Deep mode. F-Builder can download and set it up for you.	中まで解析モードに逆コンパイラを追加します。F-Builder がダウンロードしてセットアップできます。
 Advanced	アドバンスト
 After installing one, look for it again.	インストールしたら、もう一度探してください。
 Agent	エージェント
@@ -95,7 +95,7 @@ Build with {name}	{name} でビルド
 Build with {name} instead	代わりに {name} でビルド
 Build without it	それなしでビルド
 Builder's questions:	ビルダーからの質問:
-Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. Craft Anything never sees your account.	ビルドには、このコンピュータ上のコーディングエージェント(Claude Code、Codex、Gemini CLI のいずれかをインストールし、それぞれのウィンドウで一度サインイン)か、API キーを使う AI が必要です。Craft Anything がアカウントを見ることはありません。
+Building needs a coding agent on this computer (Claude Code, Codex or Gemini CLI: install one and sign in to it once in its own window), or an AI with an API key. F-Builder never sees your account.	ビルドには、このコンピュータ上のコーディングエージェント(Claude Code、Codex、Gemini CLI のいずれかをインストールし、それぞれのウィンドウで一度サインイン)か、API キーを使う AI が必要です。F-Builder がアカウントを見ることはありません。
 Building needs a coding agent such as Claude Code, or an AI with an API key.	ビルドには Claude Code などのコーディングエージェントか、API キーを使う AI が必要です。
 Builds	ビルド
 Builds and answers may use it again.	ビルドと回答が再びこの AI を使えるようになります。
@@ -125,7 +125,7 @@ Choose…	選択…
 Classes	クラス
 Clean room	外から観察
 Clean room / Deep	外から観察 / 中まで解析
-Clean room never reads the original's code, files or page source. Deep mode reads them with every tool Craft Anything has.	外から観察モードでは元のコード、ファイル、ページのソースを一切読みません。中まで解析モードでは Craft Anything のすべてのツールでそれらを読みます。
+Clean room never reads the original's code, files or page source. Deep mode reads them with every tool F-Builder has.	外から観察モードでは元のコード、ファイル、ページのソースを一切読みません。中まで解析モードでは F-Builder のすべてのツールでそれらを読みます。
 Clean room never reads the original's code, files or page source: it works from what you can see. Deep reads them with every tool, and with Ghidra when it's installed. Every finding records which was used.	外から観察モード(Clean room)では元のコード、ファイル、ページのソースを読みません。見えるものから作業します。中まで解析モード(Deep)ではすべてのツールで読み、Ghidra があればそれも使います。各検出結果には、どちらを使ったかを記録します。
 Clean room on	外から観察モード オン
 Clean room or Deep	外から観察 / 中まで解析
@@ -151,9 +151,9 @@ Couldn't open it.	開けませんでした。
 Couldn't open the folder.	フォルダを開けませんでした。
 Couldn't start it.	起動できませんでした。
 Coverage unknown	確認範囲は不明
-Craft Anything can't build with {engine}, so Unity is the closest match.	Craft Anything は {engine} でビルドできないため、最も近い選択肢として Unity を使います。
-Craft Anything or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	作業中に Craft Anything またはコンピュータが終了しました。ここまでの内容は残っており、続行すると止まった所から再開します。
-Craft Anything's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	Craft Anything の記録、チェック、app/ に作ったものは削除されます。フォルダ内のあなた自身のファイルはそのまま残ります。
+F-Builder can't build with {engine}, so Unity is the closest match.	F-Builder は {engine} でビルドできないため、最も近い選択肢として Unity を使います。
+F-Builder or the computer closed while it was working. Everything so far is kept; Continue picks up where it stopped.	作業中に F-Builder またはコンピュータが終了しました。ここまでの内容は残っており、続行すると止まった所から再開します。
+F-Builder's records, checks and anything it built in app/ are deleted. Your own files in the folder stay as they are.	F-Builder の記録、チェック、app/ に作ったものは削除されます。フォルダ内のあなた自身のファイルはそのまま残ります。
 Create the project	プロジェクトを作成
 Custom	カスタム
 Decide yourself	自分で決める
@@ -273,7 +273,7 @@ Hide the answer	回答を隠す
 Hide the console	コンソールを隠す
 Home	ホーム
 How alike a rebuild must look to the original before refining stops.	再構築が元にどれくらい似たら改善を止めるかの基準です。
-How closely may Craft Anything look at it?	どこまで詳しく見てよいですか?
+How closely may F-Builder look at it?	どこまで詳しく見てよいですか?
 How do I open an app?	アプリを開くには
 How do the window and the page talk to each other?	ウィンドウとページはどう通信する?
 How is this app built?	このアプリはどうビルドされている?
@@ -310,7 +310,7 @@ Is there any readable text inside?	読めるテキストは入っている?
 Is this file safe to open?	このファイルは開いても安全?
 It closed straight away.	すぐに閉じました。
 It closed straight away. It said:	すぐに閉じました。メッセージ:
-It isn't on this computer yet. Craft Anything can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	まだこのコンピュータにありません。Craft Anything が Ghidra {version} と必要な Java ランタイム(約 {mb} MB)をダウンロードし、両方をそれぞれの配布元が公開するチェックサムで確認して、専用フォルダにセットアップできます。コンピュータの他の部分は変わりません。
+It isn't on this computer yet. F-Builder can download Ghidra {version} and the Java runtime it needs (about {mb} MB), check both against their publishers' checksums, and set them up in its own folder. Nothing else on your computer changes.	まだこのコンピュータにありません。F-Builder が Ghidra {version} と必要な Java ランタイム(約 {mb} MB)をダウンロードし、両方をそれぞれの配布元が公開するチェックサムで確認して、専用フォルダにセットアップできます。コンピュータの他の部分は変わりません。
 It isn't on this computer yet. Install Ghidra {version} from its release page, then choose its folder.	まだこのコンピュータにありません。リリースページから Ghidra {version} をインストールし、そのフォルダを選んでください。
 It's already open.	すでに開いています。
 It's already open. Right-click it to open another copy.	すでに開いています。右クリックで別のコピーを開けます。
@@ -344,7 +344,7 @@ Language	言語
 Last: {what}	最新: {what}
 Leave a few GB for the rest of your computer.	コンピュータの他の用途のために数 GB 残してください。
 Leave a path empty to use the managed install. We never need environment variables.	パスを空にすると管理インストールを使います。環境変数は不要です。
-Leave empty to use the one Craft Anything sets up.	空にすると Craft Anything が用意したものを使います。
+Leave empty to use the one F-Builder sets up.	空にすると F-Builder が用意したものを使います。
 Let's go	始めましょう
 Lets the builder make realistic 3D models and textures for games, {model} a model, with a {budget} budget per project.	ビルダーがゲーム用のリアルな 3D モデルとテクスチャを作れるようにします。1 モデルあたり {model}、プロジェクトごとの予算は {budget} です。
 Light copy: shares big files with the project	軽量コピー: 大きなファイルをプロジェクトと共有
@@ -423,9 +423,9 @@ Nothing allowed yet.	まだ何も許可されていません。
 Nothing can build yet: install Claude Code (and sign in to it once), or add an AI with an API key below.	まだビルドできません。Claude Code をインストールして一度サインインするか、下で API キーを使って AI を追加してください。
 Nothing found	何も見つかりません
 Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below.	まだ見つかっていません。API キー、ローカルのモデルサーバー(Ollama、LM Studio)、すでにあるエージェントアプリを探します。別のポートや別のコンピュータにあるサーバーは、下でアドレスを指定して追加できます。
-Craft Anything reads its code and files with every tool it has. For your private use.	Craft Anything が持つすべてのツールで、コードとファイルを読みます。私的利用のためのモードです。
+F-Builder reads its code and files with every tool it has. For your private use.	F-Builder が持つすべてのツールで、コードとファイルを読みます。私的利用のためのモードです。
 Nothing inside it is read.	中身は一切読みません。
-Nothing inside it is read; Craft Anything works from what you can see. Your version gets its own art.	中身は読みません。見えるものから Craft Anything が作業し、あなたの版には独自のアートを使います。
+Nothing inside it is read; F-Builder works from what you can see. Your version gets its own art.	中身は読みません。見えるものから F-Builder が作業し、あなたの版には独自のアートを使います。
 Nothing made yet. What you make shows up here.	まだ何も作っていません。作ったものがここに並びます。
 Nothing matches the filter.	絞り込みに一致するものがありません。
 Nothing matches.	一致するものがありません。
@@ -526,7 +526,7 @@ Plugin command or address	プラグインのコマンドまたはアドレス
 Plugin id	プラグイン ID
 Plugin removed.	プラグインを削除しました。
 Plugins	プラグイン
-Plugins add tools Craft Anything offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	プラグインは、Craft Anything 自身のツールとして使えるものを追加します。MCP サーバー(コマンドまたはアドレス。追加後にツールを読み取ります)か、WebAssembly コンポーネント(.wasm ファイル。ファイルやネットワークには触れられません)。
+Plugins add tools F-Builder offers as its own: MCP servers (a command or an address; read their tools after adding) or WebAssembly components (a .wasm file, which can't touch your files or the network).	プラグインは、F-Builder 自身のツールとして使えるものを追加します。MCP サーバー(コマンドまたはアドレス。追加後にツールを読み取ります)か、WebAssembly コンポーネント(.wasm ファイル。ファイルやネットワークには触れられません)。
 Plugins added here always ask before each call.	ここで追加したプラグインは、呼び出しのたびに必ず確認します。
 Plugins read. Their new tools are offered from the next start.	プラグインを読み取りました。新しいツールは次回起動から使えます。
 Preserving software that's no longer supported.	サポートが終わったソフトを保存するため。
@@ -627,7 +627,7 @@ Sign in and add the Unity Editor	サインインして Unity Editor を追加
 Sign in and install Unreal Engine	サインインして Unreal Engine をインストール
 Simple	シンプル
 Simple: say what you want and it's handled for you. Advanced: every tool, the evidence and the logs.	シンプル: 欲しいものを伝えるだけで処理します。アドバンスト: すべてのツール、エビデンス、ログを使えます。
-Since Craft Anything opened.	Craft Anything を起動してから。
+Since F-Builder opened.	F-Builder を起動してから。
 Size	サイズ
 Skip setup	セットアップをスキップ
 Software I made, bought, or have permission to examine.	自分で作った、購入した、または調べる許可があるソフト。
@@ -656,13 +656,13 @@ System	システム
 Take back: puts it in the box again	取り消す: 入力欄に戻します
 Target	対象
 Targets	対象
-That folder already has {names}, where Craft Anything keeps its own files. Pick another folder, or move those out first.	そのフォルダには、Craft Anything が自分のファイルを置く {names} が既にあります。別のフォルダを選ぶか、先にそれらを移してください。
+That folder already has {names}, where F-Builder keeps its own files. Pick another folder, or move those out first.	そのフォルダには、F-Builder が自分のファイルを置く {names} が既にあります。別のフォルダを選ぶか、先にそれらを移してください。
 That folder is already a project, so it's open now.	そのフォルダはすでにプロジェクトなので、開きました。
 The builder answers its own questions and says what it chose ("I decided: …"), so you can change it.	ビルダーは自分の質問に自分で答え、選んだ内容(「こう決めました: …」)を伝えるので、あとから変更できます。
 The builder makes the game's 3D models and textures from descriptions of original designs, paid from your fal.ai account. Models are low-poly so the game runs fast. A textured model costs {model} and a picture {picture}. Each project has a {budget} budget, and you're asked before it goes over. The key is kept in your system keychain.	ビルダーは、元のデザインを説明した内容からゲームの 3D モデルとテクスチャを作ります。費用はあなたの fal.ai アカウントから支払います。モデルは軽量(ローポリゴン)なので、ゲームが軽快に動きます。テクスチャ付きモデル 1 点が {model}、画像 1 枚が {picture}。プロジェクトごとに {budget} の予算があり、超える前に確認します。キーはシステムのキーチェーンに保存されます。
 The builder reads them (code, notes, pictures) and builds the app in a new app folder beside them. Your files stay as they are.	ビルダーがそれら(コード、メモ、画像)を読み、隣の新しい app フォルダにアプリをビルドします。あなたのファイルはそのまま残ります。
 The builder will decide its questions and tell you what it chose.	ビルダーが質問への答えを自分で決め、選んだ内容を伝えます。
-The builder works on these files directly and keeps what works. Craft Anything adds a few records of its own beside them.	ビルダーがこれらのファイルを直接編集し、うまくいったものを残します。Craft Anything はそれらの隣に、自身の記録を少しだけ追加します。
+The builder works on these files directly and keeps what works. F-Builder adds a few records of its own beside them.	ビルダーがこれらのファイルを直接編集し、うまくいったものを残します。F-Builder はそれらの隣に、自身の記録を少しだけ追加します。
 The builder's questions	ビルダーの質問
 The builder's questions come to you as cards, and it waits for your answer.	ビルダーの質問はカードで届き、あなたの回答を待ちます。
 The builder's questions will come to you.	ビルダーからの質問はあなたに表示されます。
@@ -742,7 +742,7 @@ Welcome	ようこそ
 What a new game may spend on generated pictures and 3D models before you're asked. Each project keeps its own.	新しいゲームが生成画像と 3D モデルに使える上限。超える前に確認します。プロジェクトごとに管理されます。
 What are its main parts?	主な構成は?
 What brings you here?	ここに来た目的は?
-What can Craft Anything do?	Craft Anything でできること
+What can F-Builder do?	F-Builder でできること
 What data was sent?	どんなデータを送った?
 What do you want to look inside?	何の中を見たいですか?
 What do you want to make?	何を作りたいですか?
@@ -784,7 +784,7 @@ Which websites does it load?	どのサイトを読み込む?
 Who builds what you make	ビルドを担当するのは
 Who can move funds?	誰が資金を動かせますか?
 Why we ask	なぜ聞くのか
-Without it, Deep mode uses Craft Anything's own decompiler, which is rougher.	ない場合、中まで解析モードは Craft Anything 内蔵の逆コンパイラを使いますが、精度は粗くなります。
+Without it, Deep mode uses F-Builder's own decompiler, which is rougher.	ない場合、中まで解析モードは F-Builder 内蔵の逆コンパイラを使いますが、精度は粗くなります。
 Work out a copy's size	コピーのサイズを計算
 Workbench	ワークベンチ
 Worked it out: computed step by step from things we saw.	導いた: 見つけたものから段階的に計算したもの。
@@ -868,12 +868,12 @@ View	表示
 Window	ウインドウ
 Help	ヘルプ
 Command palette	コマンドパレット
-Craft Anything on GitHub	GitHub の Craft Anything
+F-Builder on GitHub	GitHub の F-Builder
 Report a problem…	問題を報告…
-Quit Craft Anything	Craft Anything を終了
-About Craft Anything	Craft Anything について
+Quit F-Builder	F-Builder を終了
+About F-Builder	F-Builder について
 Services	サービス
-Hide Craft Anything	Craft Anything を非表示
+Hide F-Builder	F-Builder を非表示
 Hide others	ほかを非表示
 Show all	すべてを表示
 Close window	ウインドウを閉じる

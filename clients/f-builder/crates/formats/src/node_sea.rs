@@ -259,7 +259,7 @@ impl PackedFormat for NodeSea {
 mod tests {
     use super::*;
     use crate::packed;
-    use craft_anything_testkit::packed::{self as kit, SeaBlob, sea_blob, sea_sample};
+    use f_builder_testkit::packed::{self as kit, SeaBlob, sea_blob, sea_sample};
 
     fn check_sample(data: &[u8]) -> PackedListing {
         let l = NodeSea.list(data).unwrap();

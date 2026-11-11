@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// A fresh folder under the system temp folder, unique to this test process and call.
 pub fn temp_dir() -> PathBuf {
     static N: AtomicUsize = AtomicUsize::new(0);
-    let dir = std::env::temp_dir().join(format!("craft-anything-test-{}-{}", std::process::id(), N.fetch_add(1, Ordering::SeqCst)));
+    let dir = std::env::temp_dir().join(format!("f-builder-test-{}-{}", std::process::id(), N.fetch_add(1, Ordering::SeqCst)));
     let _ = std::fs::create_dir_all(&dir);
     dir
 }

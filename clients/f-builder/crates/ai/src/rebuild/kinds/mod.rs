@@ -93,7 +93,7 @@ pub struct KindWords {
     pub change_hint: &'static str,
 }
 
-/// A kind of thing Craft Anything can make.
+/// A kind of thing F-Builder can make.
 pub trait TargetKind: Send + Sync {
     /// Stable id, stored with the project: `"website"`, `"app"`, `"game"`.
     fn id(&self) -> &'static str;
@@ -155,7 +155,7 @@ pub struct CheckCx<'a> {
 /// its next tool call, and its own program runs are stopped by [`CheckStop`].
 fn within_limit(until: Option<Instant>, now: Instant) -> Result<(), ToolError> {
     match until {
-        Some(t) if now >= t => Err(ToolError::new(craft_anything_evidence::ErrorCode::TimedOut, "The check ran past its time limit, so it was stopped.")),
+        Some(t) if now >= t => Err(ToolError::new(f_builder_evidence::ErrorCode::TimedOut, "The check ran past its time limit, so it was stopped.")),
         _ => Ok(()),
     }
 }
@@ -171,8 +171,8 @@ pub struct CheckStop {
 }
 
 impl CheckStop {
-    /// A stop that also runs out at `until` (a round's time limit).
-    #[cfg(test)]
+    /// A stop that also runs out at `until` (a round's time limit). Only the Unix tests use it.
+    #[cfg(all(test, unix))]
     pub(crate) fn limited(until: Instant) -> CheckStop {
         CheckStop { stop: CancelToken::default(), until: Some(until) }
     }
@@ -238,7 +238,7 @@ impl CheckCx<'_> {
     }
 
     /// How builds are judged (`[build]` in settings).
-    pub fn build_settings(&self) -> craft_anything_engine::settings::BuildSettings {
+    pub fn build_settings(&self) -> f_builder_engine::settings::BuildSettings {
         self.worker.engine.session().settings.build.clone()
     }
 
@@ -250,14 +250,14 @@ impl CheckCx<'_> {
     /// The Godot installed on this computer, which opens a Godot project.
     pub fn godot(&self) -> Option<PathBuf> {
         let store = self.worker.engine.session().settings.engine_store_dir();
-        use craft_anything_engines::game as engine_game;
+        use f_builder_engines::game as engine_game;
         engine_game::inventory(&engine_game::Places::here(store)).best(engine_game::Builder::Godot).map(|i| i.program.clone())
     }
 }
 
 /// The ids of the WASM plugins' checks that join `kind`'s.
-pub(super) fn plugin_ids(session: &craft_anything_engine::Session, kind: &dyn TargetKind) -> Vec<String> {
-    craft_anything_engine::wasm_plugins::checks(session)
+pub(super) fn plugin_ids(session: &f_builder_engine::Session, kind: &dyn TargetKind) -> Vec<String> {
+    f_builder_engine::wasm_plugins::checks(session)
         .iter()
         .filter(|c| c.kinds.is_empty() || c.kinds.iter().any(|k| k == kind.id()))
         .map(|c| c.id.to_string())
@@ -280,7 +280,7 @@ impl Worker {
     pub(super) fn run_checks_within(&self, ws: &Workspace, kind: &dyn TargetKind, round: u32, limit: Option<Duration>) -> Result<Vec<CheckResult>, ToolError> {
         let until = limit.map(|l| Instant::now() + l);
         let mut cx = CheckCx { worker: self, ws, round, until };
-        let from_plugins = craft_anything_engine::wasm_plugins::checks(&self.engine.session());
+        let from_plugins = f_builder_engine::wasm_plugins::checks(&self.engine.session());
         let plugin_checks = from_plugins
             .into_iter()
             .filter(|c| c.kinds.is_empty() || c.kinds.iter().any(|k| k == kind.id()))
@@ -293,7 +293,7 @@ impl Worker {
             // Pause, or a round past its limit, stops before this check starts. A check that
             // couldn't start is a failed result, so its reason reaches the builder and the feed.
             if let Err(e) = cx.stop().check() {
-                if e.code == craft_anything_evidence::ErrorCode::Cancelled {
+                if e.code == f_builder_evidence::ErrorCode::Cancelled {
                     return Err(e);
                 }
                 out.push(CheckResult::new(c.id(), round, false, format!("Not run: {}", e.message)));

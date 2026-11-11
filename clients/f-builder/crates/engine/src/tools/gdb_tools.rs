@@ -1,4 +1,4 @@
-//! GDB sessions over the machine interface (GDB/MI), through [`craft_anything_engines::gdb`]:
+//! GDB sessions over the machine interface (GDB/MI), through [`f_builder_engines::gdb`]:
 //! each session is one owned `gdb` process driven with `-interpreter-exec console`, so any GDB
 //! command works while results come back as structured records. Starting a session only loads the
 //! program; running it, calling functions or using GDB's shell/python commands happens through
@@ -6,9 +6,9 @@
 
 use super::native_common::spec;
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_engines::gdb::GdbSession;
-use craft_anything_evidence::{Authority, Confidence, Coverage, Environment, ErrorCode, EvidenceBuilder, Limitation, Subject, ToolError, sha256_hex};
-use craft_anything_platform::sync::Mutex;
+use f_builder_engines::gdb::GdbSession;
+use f_builder_evidence::{Authority, Confidence, Coverage, Environment, ErrorCode, EvidenceBuilder, Limitation, Subject, ToolError, sha256_hex};
+use f_builder_platform::sync::Mutex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -151,7 +151,7 @@ fn abs_file(p: &str, what: &str) -> Result<PathBuf, ToolError> {
 
 fn locate_gdb(ctx: &Ctx<'_>) -> Result<PathBuf, ToolError> {
     let s = &ctx.session.settings;
-    craft_anything_engines::locate("gdb", &s.engines.tools, &s.engine_store_dir())
+    f_builder_engines::locate("gdb", &s.engines.tools, &s.engine_store_dir())
         .ok_or_else(|| ToolError::unavailable("GDB is not installed.").with_remediation("Install GDB and set its path in Settings → Engines."))
 }
 
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn live_session_when_gdb_is_installed() {
         let e = Engine::new(crate::testing::session());
-        let p = craft_anything_testkit::temp_file("dbg.elf", &craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::X86_64, true).0);
+        let p = f_builder_testkit::temp_file("dbg.elf", &f_builder_testkit::elf64(f_builder_testkit::ElfArch::X86_64, true).0);
         let Ok(ToolOutput::Value(v)) = e.call("native_gdb_session_begin", json!({"program": p}), CallOptions::new(Caller::Mcp)) else {
             return; // GDB not installed here
         };

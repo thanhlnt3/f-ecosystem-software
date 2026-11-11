@@ -43,7 +43,7 @@ source or topic, not the thing to build, so *Tee sellest mängust veebileht* is 
 **ქართული** (`ka`) is selected by `ka` and `ka-GE`, and by the system language when it is Georgian.
 `crates/ui-egui/src/i18n/ka.tsv` has the same keys as the other catalogs. Written with Claude Code from the
 meaning of each English string; terminology and doubtful strings decided by a native Georgian speaker (@devius).
-Glyphs come from Noto Sans Georgian in craft-fonts, which the pinned craft-fonts already has; a test checks it.
+Glyphs come from Noto Sans Georgian in f-builder-fonts, which the pinned f-builder-fonts already has; a test checks it.
 ## Italian
 
 **Italiano** (`it`) uses the informal "tu". `it` and `it-IT` select it, as does the system language when it is
@@ -81,7 +81,7 @@ the title bar does. The glossary: *หลักฐาน* (Evidence), *สิ่
 *เป้าหมาย* (target), *เครื่องมือ* (tool), *เวิร์กเบนช์* (workbench), *ตัวสร้าง* (builder),
 *การตั้งค่า* (Settings) and *ศึกษา / สร้าง / ตรวจ / พร้อม* for Study / Build / Check / Ready.
 It was drafted with an AI and not yet reviewed by a native speaker; corrections are welcome.
-Thai glyphs come from Noto Sans Thai in craft-fonts, which the script test in `theme.rs` checks.
+Thai glyphs come from Noto Sans Thai in f-builder-fonts, which the script test in `theme.rs` checks.
 
 ## Scope and format
 
@@ -136,9 +136,9 @@ web* is an app, not a website.
 Run:
 
 ```sh
-cargo test -p craft-anything-ui-egui
+cargo test -p f-builder-ui-egui
 cargo test -p xtask
-cargo clippy -p craft-anything-ui-egui -p xtask --all-targets -- -D warnings
+cargo clippy -p f-builder-ui-egui -p xtask --all-targets -- -D warnings
 cargo xtask i18n-coverage
 ```
 
@@ -152,16 +152,16 @@ The existing snapshot example accepts any catalog code with `--lang`, such as
 `--lang zh-hant` or `--lang ko`, for example:
 
 ```sh
-cargo run -p craft-anything-ui-egui --example snapshot -- --lang zh-hant --only settings --out-dir target/snapshots/zh-hant
+cargo run -p f-builder-ui-egui --example snapshot -- --lang zh-hant --only settings --out-dir target/snapshots/zh-hant
 ```
 
-Chinese, Korean and Georgian glyphs use the existing craft-fonts fallback, which release and CI builds
-Spanish and Estonian are Latin script and need no extra glyphs. Chinese and Korean glyphs use the existing craft-fonts fallback, which release and CI builds
-Vietnamese needs craft-fonts too: the bundled DM Sans and egui's default fonts lack the letters with
-stacked marks (ạ, ả, ấ, ế, ơ, ư, ữ…), so a build without craft-fonts shows them as boxes. With
-craft-fonts, Noto Sans CJK SC supplies those letters (a different face from the DM Sans around them);
-the script test in `theme.rs` checks every one of them. Chinese and Korean glyphs use the existing craft-fonts fallback, which release and CI builds
-already include. Local builds must set `CRAFT_FONTS_DIR` to a craft-fonts checkout
+Chinese, Korean and Georgian glyphs use the existing f-builder-fonts fallback, which release and CI builds
+Spanish and Estonian are Latin script and need no extra glyphs. Chinese and Korean glyphs use the existing f-builder-fonts fallback, which release and CI builds
+Vietnamese needs f-builder-fonts too: the bundled DM Sans and egui's default fonts lack the letters with
+stacked marks (ạ, ả, ấ, ế, ơ, ư, ữ…), so a build without f-builder-fonts shows them as boxes. With
+f-builder-fonts, Noto Sans CJK SC supplies those letters (a different face from the DM Sans around them);
+the script test in `theme.rs` checks every one of them. Chinese and Korean glyphs use the existing f-builder-fonts fallback, which release and CI builds
+already include. Local builds must set `F_BUILDER_FONTS_DIR` to a f-builder-fonts checkout
 before compiling to get the same glyph coverage. The catalogs add no font assets.
 Check each script, clipping, narrow windows and native file dialogs visually
 on each platform; catalog coverage alone does not verify layout or fonts.

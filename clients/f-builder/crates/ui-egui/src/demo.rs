@@ -2,12 +2,12 @@
 //! and a conversation. Nothing here touches the disk or the network.
 
 use crate::state::{CenterTab, ChatItem, Fill, RailKind, RightTab, Screen};
-use crate::{CraftApp, TargetInfo};
-use craft_anything_ai::{AiHub, BackendConfig, BackendKind, Detected};
-use craft_anything_engine::evidence::{Confidence, Coverage, Environment, Evidence, EvidenceBuilder, Limitation, Location, Severity, Unknown};
-use craft_anything_engine::target::Target;
-use craft_anything_engine::workspace::{CheckResult, Claim, Manifest, Status, TargetRef, Workspace};
-use craft_anything_engine::{Engine, Mode, Session, Settings};
+use crate::{BuilderApp, TargetInfo};
+use f_builder_ai::{AiHub, BackendConfig, BackendKind, Detected};
+use f_builder_engine::evidence::{Confidence, Coverage, Environment, Evidence, EvidenceBuilder, Limitation, Location, Severity, Unknown};
+use f_builder_engine::target::Target;
+use f_builder_engine::workspace::{CheckResult, Claim, Manifest, Status, TargetRef, Workspace};
+use f_builder_engine::{Engine, Mode, Session, Settings};
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -111,21 +111,21 @@ pub fn engine(mode: Mode, first_run_done: bool) -> Arc<Engine> {
 }
 
 /// Deep mode on, in the app and its engine: for scenes and tests that look inside the sample.
-pub fn deep(app: &mut CraftApp) {
+pub fn deep(app: &mut BuilderApp) {
     app.settings.deep_mode = true;
     app.engine.session().settings.deep_mode = true;
 }
 
 /// A headless app over `engine` (no disk writes, no dialogs).
-pub fn app(engine: Arc<Engine>) -> CraftApp {
+pub fn app(engine: Arc<Engine>) -> BuilderApp {
     // AI changes made in a demo or a test (adding, turning off, removing one) go to a folder of
     // its own, never the person's settings or system keychain.
     static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-    let store = std::env::temp_dir().join(format!("craft-anything-demo-{now}-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-    let keys = craft_anything_ai::KeyStore::file_only(store.join("keys.toml"));
+    let store = std::env::temp_dir().join(format!("f-builder-demo-{now}-{}", N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
+    let keys = f_builder_ai::KeyStore::file_only(store.join("keys.toml"));
     let hub = Arc::new(AiHub::with_stores(engine.clone(), store.join("config.toml"), keys));
-    let mut app = CraftApp::new(engine, hub);
+    let mut app = BuilderApp::new(engine, hub);
     app.persist = false;
     app.headless = true;
     app.backends = vec![BackendConfig {
@@ -141,7 +141,7 @@ pub fn app(engine: Arc<Engine>) -> CraftApp {
 }
 
 /// A conversation that shows every kind of chat item.
-pub fn fill_ask(app: &mut CraftApp) {
+pub fn fill_ask(app: &mut BuilderApp) {
     deep(app);
     app.state.screen = Screen::Ask;
     app.state.backend = Some("Claude".into());
@@ -167,7 +167,7 @@ pub fn fill_ask(app: &mut CraftApp) {
 }
 
 /// The workbench with a populated rail and the built-in hex view.
-pub fn fill_workbench(app: &mut CraftApp) {
+pub fn fill_workbench(app: &mut BuilderApp) {
     deep(app);
     app.settings.mode = Mode::Experienced;
     if let Some(e) = functions_evidence() {
@@ -215,11 +215,11 @@ pub fn detected() -> Vec<Detected> {
 
 /// A demo workspace with the given fields and no saved session.
 fn workspace(slug: &str, name: &str, request: &str, target: TargetRef, status: Status, age_min: u64) -> Workspace {
-    let at = craft_anything_engine::inbox::now_ms().saturating_sub(age_min * 60_000);
+    let at = f_builder_engine::inbox::now_ms().saturating_sub(age_min * 60_000);
     Workspace {
-        root: PathBuf::from(format!("/demo/Craft Anything/{slug}")),
+        root: PathBuf::from(format!("/demo/F-Builder/{slug}")),
         manifest: Manifest {
-            version: craft_anything_engine::workspace::MANIFEST_VERSION,
+            version: f_builder_engine::workspace::MANIFEST_VERSION,
             name: name.into(),
             request: request.into(),
             target,
@@ -234,7 +234,7 @@ fn workspace(slug: &str, name: &str, request: &str, target: TargetRef, status: S
             agent_session_deep: None,
             allowed_actions: Vec::new(),
             last_reply: String::new(),
-            asset_budget_usd: craft_anything_engine::workspace::ASSET_BUDGET_USD,
+            asset_budget_usd: f_builder_engine::workspace::ASSET_BUDGET_USD,
             generate_assets: false,
             app_in_root: false,
             start_files: Vec::new(),
@@ -248,7 +248,7 @@ fn workspace(slug: &str, name: &str, request: &str, target: TargetRef, status: S
 }
 
 /// A few projects on Home, and an agent app ready to build.
-pub fn fill_projects(app: &mut CraftApp) {
+pub fn fill_projects(app: &mut BuilderApp) {
     app.backends = vec![BackendConfig {
         name: "Claude Code".into(),
         kind: BackendKind::AgentCli,
@@ -267,12 +267,12 @@ pub fn fill_projects(app: &mut CraftApp) {
 }
 
 /// A project mid-build: steps, the agent's words, collapsed tool work, a question and a check.
-pub fn fill_project(app: &mut CraftApp) {
+pub fn fill_project(app: &mut BuilderApp) {
     use crate::state::{FeedItem, UserItem};
-    use craft_anything_ai::rebuild::Step;
-    use craft_anything_engine::inbox::{Request, RequestKind};
+    use f_builder_ai::rebuild::Step;
+    use f_builder_engine::inbox::{Request, RequestKind};
     let mut ws = workspace("example-com", "example.com", "Recreate this website", TargetRef::Website { url: "https://example.com".into() }, Status::Ready, 2);
-    let page = |name: &str, dir: &str, similarity| craft_anything_engine::workspace::PageLikeness { name: name.into(), dir: dir.into(), similarity };
+    let page = |name: &str, dir: &str, similarity| f_builder_engine::workspace::PageLikeness { name: name.into(), dir: dir.into(), similarity };
     let check = CheckResult {
         similarity: Some(93.4),
         at_ms: 0,

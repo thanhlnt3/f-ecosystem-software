@@ -6,8 +6,8 @@
 //! Widgets read [`Tokens::get`] instead of hard-coding colours, so a theme switch applies everywhere.
 //! Confidence has its own fixed palette so "how sure are we" reads the same in both themes.
 
-use craft_anything_engine::evidence::Confidence;
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Stroke, TextStyle, Visuals};
+use f_builder_engine::evidence::Confidence;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -83,9 +83,9 @@ pub struct Tokens {
     pub radius_lg: f32,
 }
 
-/// The app colour: getartcraft.com's deep accent (#1659c4). White on it passes WCAG AA; on its
-/// bright accent (#2d81ff, used for hover) it doesn't.
-pub const BRAND: Color32 = Color32::from_rgb(0x16, 0x59, 0xc4);
+/// The app colour: F-Eco's accent (#0f6b5c), as on the F-Eco web pages. White on it passes WCAG
+/// AA; on the bright accent (#14957f, used for hover) it doesn't.
+pub const BRAND: Color32 = Color32::from_rgb(0x0f, 0x6b, 0x5c);
 
 pub const SEEN_IT: Color32 = Color32::from_rgb(0x3f, 0xb2, 0x7f);
 pub const WORKED_OUT: Color32 = Color32::from_rgb(0x5b, 0x8d, 0xef);
@@ -109,8 +109,8 @@ pub fn confidence_label(c: Option<Confidence>) -> &'static str {
 impl Tokens {
     pub fn for_kind(kind: ThemeKind) -> Self {
         match kind {
-            // getartcraft.com's dark: warm near-black (#121316), its #101014 for the sidebar, cards
-            // and controls its warm ink (#f2f1ee) laid over the background at 4-15%.
+            // Dark: warm near-black (#121316), #101014 for the sidebar, cards and controls in warm
+            // ink (#f2f1ee) laid over the background at 4-15%.
             ThemeKind::Studio => Tokens {
                 kind,
                 chrome: Color32::from_rgb(0x10, 0x10, 0x14),
@@ -127,9 +127,9 @@ impl Tokens {
                 text_faint: Color32::from_rgb(0x8d, 0x8d, 0x8d),
                 icon: Color32::from_rgb(0xa8, 0xa8, 0xa6),
                 accent: BRAND,
-                accent_hover: Color32::from_rgb(0x2d, 0x81, 0xff),
-                accent_ink: Color32::from_rgb(0x74, 0xaa, 0xff),
-                accent_soft: Color32::from_rgba_unmultiplied(0x2d, 0x81, 0xff, 44),
+                accent_hover: Color32::from_rgb(0x14, 0x95, 0x7f),
+                accent_ink: Color32::from_rgb(0x5f, 0xd3, 0xbd),
+                accent_soft: Color32::from_rgba_unmultiplied(0x14, 0x95, 0x7f, 44),
                 on_accent: Color32::WHITE,
                 separator: Color32::from_rgb(0x24, 0x25, 0x27),
                 shadow: Color32::from_black_alpha(120),
@@ -141,8 +141,8 @@ impl Tokens {
                 radius: 8.0,
                 radius_lg: 12.0,
             },
-            // getartcraft.com's light: warm paper (#f2f1ee), its sunken #e9e8e4 for the sidebar,
-            // raised #faf9f7 for cards, ink #101014.
+            // Light: warm paper (#f2f1ee), sunken #e9e8e4 for the sidebar, raised #faf9f7 for cards,
+            // ink #101014.
             ThemeKind::StudioLight => Tokens {
                 kind,
                 chrome: Color32::from_rgb(0xe9, 0xe8, 0xe4),
@@ -159,9 +159,9 @@ impl Tokens {
                 text_faint: Color32::from_rgb(0x5d, 0x5c, 0x5e),
                 icon: Color32::from_rgb(0x4f, 0x4f, 0x52),
                 accent: BRAND,
-                accent_hover: Color32::from_rgb(0x2d, 0x81, 0xff),
+                accent_hover: Color32::from_rgb(0x14, 0x95, 0x7f),
                 accent_ink: BRAND,
-                accent_soft: Color32::from_rgba_unmultiplied(0x2d, 0x81, 0xff, 28),
+                accent_soft: Color32::from_rgba_unmultiplied(0x14, 0x95, 0x7f, 28),
                 on_accent: Color32::WHITE,
                 separator: Color32::from_rgb(0xdb, 0xda, 0xd8),
                 shadow: Color32::from_black_alpha(20),
@@ -197,7 +197,7 @@ impl Tokens {
 }
 
 fn tokens_id() -> egui::Id {
-    egui::Id::new("craft-anything-theme")
+    egui::Id::new("f-builder-theme")
 }
 
 // ---- fonts -------------------------------------------------------------------------------------
@@ -207,8 +207,8 @@ pub static DM_SANS_MEDIUM: &[u8] = include_bytes!("../../../assets/fonts/DMSans-
 pub static DM_SANS_BOLD: &[u8] = include_bytes!("../../../assets/fonts/DMSans-Bold.ttf");
 pub static JETBRAINS_MONO: &[u8] = include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf");
 
-/// A font from the optional craft-fonts build input (empty unless built with `CRAFT_FONTS_DIR`).
-pub struct CraftFont {
+/// A font from the optional f-builder-fonts build input (empty unless built with `F_BUILDER_FONTS_DIR`).
+pub struct BuilderFont {
     pub family: &'static str,
     pub style: &'static str,
     /// ISO 15924 scripts the font is for, e.g. `"Jpan"`.
@@ -216,10 +216,10 @@ pub struct CraftFont {
     pub bytes: &'static [u8],
 }
 
-include!(concat!(env!("OUT_DIR"), "/craft_fonts.rs"));
+include!(concat!(env!("OUT_DIR"), "/f_builder_fonts.rs"));
 
 /// Install DM Sans (three weights: body, labels and bold for headings; it has no static
-/// SemiBold), JetBrains Mono (code), plus any craft-fonts as fallbacks.
+/// SemiBold), JetBrains Mono (code), plus any f-builder-fonts as fallbacks.
 pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
     let mut add = |name: &str, bytes: &'static [u8]| {
@@ -230,7 +230,7 @@ pub fn install_fonts(ctx: &egui::Context) {
     add("DMSans-Bold", DM_SANS_BOLD);
     add("JetBrainsMono", JETBRAINS_MONO);
     let mut fallbacks = Vec::new();
-    for f in CRAFT_FONTS {
+    for f in F_BUILDER_FONTS {
         let name = format!("craft:{}:{}", f.family, f.style);
         fonts.font_data.insert(name.clone(), Arc::new(FontData::from_static(f.bytes)));
         if f.style.eq_ignore_ascii_case("regular") {
@@ -274,7 +274,7 @@ enum FallbackRank {
     Serif,
 }
 
-/// Which face a craft-fonts name looks like, from the family name: a face made for the interface's
+/// Which face a f-builder-fonts name looks like, from the family name: a face made for the interface's
 /// language first, a book face last.
 fn fallback_rank(name: &str) -> FallbackRank {
     let n = name.to_ascii_lowercase();
@@ -649,11 +649,11 @@ mod tests {
         assert_eq!(fallback_rank("craft:BIZ UDPGothic:Regular"), FallbackRank::Local);
     }
 
-    /// Releases are built with craft-fonts (#19), and so is CI; a build without them has only
+    /// Releases are built with f-builder-fonts (#19), and so is CI; a build without them has only
     /// DM Sans, and shows other scripts as boxes.
     #[test]
     fn with_craft_fonts_every_script_people_type_shows() {
-        if CRAFT_FONTS.is_empty() {
+        if F_BUILDER_FONTS.is_empty() {
             return;
         }
         let ctx = egui::Context::default();
@@ -682,7 +682,7 @@ mod tests {
             for font in [FontId::proportional(14.0), FontId::monospace(14.0), medium(14.0), semibold(14.0)] {
                 // egui's bundled Hack (monospace) draws Georgian itself, and it is also the face egui
                 // takes as its "no glyph" marker (it has U+25FB), so `has_glyphs` reports boxes for
-                // it. The craft-fonts face is checked through the other three families.
+                // it. The f-builder-fonts face is checked through the other three families.
                 if script == "Georgian" && font.family == FontFamily::Monospace {
                     continue;
                 }

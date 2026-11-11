@@ -9,9 +9,9 @@ use crate::model::{Block, ChatModel, Delta, Effort, Msg, Speaker, Stop, StopReas
 use crate::price::{self, Meter};
 use crate::prompt;
 use crate::{AgentEvent, Conversation, TurnFailure};
-use craft_anything_engine::{CallOptions, Caller, CancelToken, Consent, Engine, Registry, ToolOutput, Toolset};
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::sync::Mutex;
+use f_builder_engine::{CallOptions, Caller, CancelToken, Consent, Engine, Registry, ToolOutput, Toolset};
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::sync::Mutex;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -109,7 +109,7 @@ impl ToolHost for EngineHost {
     fn tools(&self, enabled: &BTreeSet<Toolset>) -> Vec<ToolDef> {
         // Clean room offers only the tools it runs.
         let clean = self.clean_room();
-        registry_tools(self.0.registry(), enabled).into_iter().filter(|t| !clean || craft_anything_engine::clean_room::allows(&t.name)).collect()
+        registry_tools(self.0.registry(), enabled).into_iter().filter(|t| !clean || f_builder_engine::clean_room::allows(&t.name)).collect()
     }
 
     fn toolset_of(&self, id: &str) -> Option<Toolset> {
@@ -155,7 +155,7 @@ pub struct ReadOnlyHost(pub EngineHost);
 
 impl ReadOnlyHost {
     fn changes_nothing(&self, id: &str) -> bool {
-        use craft_anything_engine::Effects;
+        use f_builder_engine::Effects;
         let harmless = Effects::IDEMPOTENT.union(Effects::MUTATES_SESSION).union(Effects::CARRIES_TARGET_CONTENT);
         self.0.0.registry().get(id).is_some_and(|s| harmless.contains(s.effects))
     }
@@ -1041,7 +1041,7 @@ pub(crate) mod tests {
     /// from 33-41 tools (23,000-30,000 characters) to 13 (about 10,000).
     #[test]
     fn the_real_local_builder_tool_list_is_small_and_can_write_files() {
-        let engine = craft_anything_engine::Engine::shared(craft_anything_engine::testing::session(), crate::tools());
+        let engine = f_builder_engine::Engine::shared(f_builder_engine::testing::session(), crate::tools());
         let host = EngineHost(engine);
         let enabled = BTreeSet::from([Toolset::Core, Toolset::Build]);
         let all = host.tools(&enabled);
@@ -1253,7 +1253,7 @@ pub(crate) mod tests {
 
     #[test]
     fn the_build_tool_the_limit_counts_exists() {
-        let e = craft_anything_engine::Engine::new(craft_anything_engine::testing::session());
+        let e = f_builder_engine::Engine::new(f_builder_engine::testing::session());
         assert!(e.registry().get(BUILD_COMMAND_TOOL).is_some_and(|s| !s.effects.is_empty()));
     }
 
@@ -1759,7 +1759,7 @@ pub(crate) mod tests {
 
     #[test]
     fn compaction_keeps_small_results_and_previews_large_ones() {
-        use craft_anything_evidence::{Environment, EvidenceBuilder, Subject};
+        use f_builder_evidence::{Environment, EvidenceBuilder, Subject};
         let small = EvidenceBuilder::new("op", Subject::default(), Environment::builtin(true)).result(json!({"a": 1})).summary("small").build().unwrap();
         let (text, summary, id) = compact(&ToolOutput::evidence(small.clone()));
         assert!(text.contains("\"result\":{\"a\":1}"));

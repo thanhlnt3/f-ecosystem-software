@@ -1,7 +1,7 @@
-use craft_anything_formats::unreal_iostore;
+use f_builder_formats::unreal_iostore;
 
 fn file_for_chunk(offset: u64, length: u64) -> unreal_iostore::File {
-    let mut toc = unreal_iostore::toc(&craft_anything_testkit::games::unreal_utoc(9, u32::MAX)).unwrap();
+    let mut toc = unreal_iostore::toc(&f_builder_testkit::games::unreal_utoc(9, u32::MAX)).unwrap();
     toc.chunks[0] = (offset, length);
     for (i, block) in toc.blocks.iter_mut().enumerate() {
         block.compressed_size = 10 * (i as u32 + 1);

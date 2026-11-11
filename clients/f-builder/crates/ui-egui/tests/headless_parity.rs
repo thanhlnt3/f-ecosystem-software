@@ -1,24 +1,24 @@
 //! Headless parity (R1.6): everything a person can do in the app, the CLI and MCP can do too.
 //!
-//! **The rule:** a new action in the app (a `CraftApp` method that does something, a button,
+//! **The rule:** a new action in the app (a `BuilderApp` method that does something, a button,
 //! a setting) gets a row in [`ACTIONS`] naming its headless counterpart: a tool id (MCP and
-//! `craft-anything-cli <tool-id-in-kebab-case>`) or a built-in CLI command (`rebuild …`). An
+//! `f-builder-cli <tool-id-in-kebab-case>`) or a built-in CLI command (`rebuild …`). An
 //! action with no counterpart yet is `Pending`, naming the tool it waits for and the roadmap item;
 //! a pure view action (theme, panels, the palette) is `UiOnly` with the reason.
 //!
 //! The tests check that:
 //! - every tool named here is registered and reachable by its CLI spelling;
-//! - every CLI command and flag named here exists in `apps/craft-anything-cli/src`;
+//! - every CLI command and flag named here exists in `apps/f-builder-cli/src`;
 //! - a pending tool that now exists fails the test, so its row is moved to `Tool`;
-//! - every `&mut self` method on `CraftApp` is either a row here or in [`PLUMBING`], so a new
+//! - every `&mut self` method on `BuilderApp` is either a row here or in [`PLUMBING`], so a new
 //!   method can't slip in without a decision.
 
-use craft_anything_engine::Registry;
+use f_builder_engine::Registry;
 use std::path::{Path, PathBuf};
 
 /// How a person does the same thing without the app.
 enum Headless {
-    /// Tool ids (MCP, and the CLI as `craft-anything-cli <id-in-kebab-case>`).
+    /// Tool ids (MCP, and the CLI as `f-builder-cli <id-in-kebab-case>`).
     Tool(&'static [&'static str]),
     /// A built-in CLI command; `<…>` are arguments, `--flags` must exist.
     Cli(&'static str),
@@ -30,7 +30,7 @@ enum Headless {
 use Headless::*;
 
 struct Action {
-    /// A `CraftApp` method name, or (with spaces) where the control lives in the app.
+    /// A `BuilderApp` method name, or (with spaces) where the control lives in the app.
     ui: &'static str,
     /// What the person gets, in a few words.
     does: &'static str,
@@ -141,7 +141,7 @@ const ACTIONS: &[Action] = &[
     a("Panels and screens",  "Home, Ask, Workbench, Settings, panels",         UiOnly("navigation")),
 ];
 
-/// `CraftApp` methods that aren't person-facing actions: callbacks, polling, drawing, helpers.
+/// `BuilderApp` methods that aren't person-facing actions: callbacks, polling, drawing, helpers.
 #[rustfmt::skip]
 const PLUMBING: &[(&str, &str)] = &[
     ("load_agent_model_catalog", "worker dispatch shared by the model picker and its reload action"),
@@ -178,14 +178,14 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Names of `&mut self` methods inside `impl CraftApp { … }` blocks.
-fn craft_app_methods() -> Vec<String> {
+/// Names of `&mut self` methods inside `impl BuilderApp { … }` blocks.
+fn builder_app_methods() -> Vec<String> {
     let mut names = Vec::new();
     for f in rust_files(&crate_dir().join("src")) {
         let text = std::fs::read_to_string(&f).unwrap();
         let mut inside = false;
         for line in text.lines() {
-            if line.starts_with("impl CraftApp ") {
+            if line.starts_with("impl BuilderApp ") {
                 inside = true;
             } else if line == "}" {
                 inside = false;
@@ -207,7 +207,7 @@ fn is_method_row(ui: &str) -> bool {
 
 /// Every tool the shipped apps have: the engine's plus the AI and setup layers' (as `Engine::shared`).
 fn registry() -> Registry {
-    Registry::new(craft_anything_engine::tools::all().into_iter().chain(craft_anything_ai::tools()).chain(craft_anything_setup::tools::specs()).collect())
+    Registry::new(f_builder_engine::tools::all().into_iter().chain(f_builder_ai::tools()).chain(f_builder_setup::tools::specs()).collect())
 }
 
 #[test]
@@ -223,7 +223,7 @@ fn named_tools_exist_and_are_reachable_from_the_cli() {
                 }
                 let cli = id.replace('_', "-");
                 if r.get(&cli).map(|s| s.id) != Some(*id) {
-                    missing.push(format!("{} -> {id}: `craft-anything-cli {cli}` doesn't reach it", act.ui));
+                    missing.push(format!("{} -> {id}: `f-builder-cli {cli}` doesn't reach it", act.ui));
                 }
             }
         }
@@ -246,7 +246,7 @@ fn pending_tools_do_not_exist_yet() {
 
 #[test]
 fn named_cli_commands_and_flags_exist() {
-    let cli_src = crate_dir().join("../../apps/craft-anything-cli/src");
+    let cli_src = crate_dir().join("../../apps/f-builder-cli/src");
     let text: String = rust_files(&cli_src).iter().map(|f| std::fs::read_to_string(f).unwrap()).collect::<Vec<_>>().join("\n");
     let mut missing = Vec::new();
     for act in ACTIONS {
@@ -270,11 +270,11 @@ fn named_cli_commands_and_flags_exist() {
 
 #[test]
 fn every_craft_app_action_has_a_row() {
-    let methods = craft_app_methods();
+    let methods = builder_app_methods();
     assert!(methods.iter().any(|m| m == "start_make"), "the method scan found nothing: {methods:?}");
     let listed = |m: &str| ACTIONS.iter().any(|a| a.ui == m) || PLUMBING.iter().any(|(p, _)| *p == m);
     let new: Vec<&String> = methods.iter().filter(|m| !listed(m)).collect();
-    assert!(new.is_empty(), "new CraftApp methods: add each to ACTIONS (with its tool or CLI command) or PLUMBING: {new:?}");
+    assert!(new.is_empty(), "new BuilderApp methods: add each to ACTIONS (with its tool or CLI command) or PLUMBING: {new:?}");
     let gone: Vec<&str> = ACTIONS
         .iter()
         .map(|a| a.ui)
@@ -282,7 +282,7 @@ fn every_craft_app_action_has_a_row() {
         .chain(PLUMBING.iter().map(|(p, _)| *p))
         .filter(|m| !methods.iter().any(|x| x == m))
         .collect();
-    assert!(gone.is_empty(), "rows name CraftApp methods that no longer exist (renamed or removed): {gone:?}");
+    assert!(gone.is_empty(), "rows name BuilderApp methods that no longer exist (renamed or removed): {gone:?}");
 }
 
 #[test]
@@ -297,7 +297,7 @@ fn every_row_says_why_when_there_is_no_counterpart() {
     }
 }
 
-/// Counts, for the PR and the roadmap: `cargo test -p craft-anything-ui-egui --test headless_parity -- --nocapture`.
+/// Counts, for the PR and the roadmap: `cargo test -p f-builder-ui-egui --test headless_parity -- --nocapture`.
 #[test]
 fn summary() {
     let (mut covered, mut pending, mut ui_only) = (0, 0, 0);

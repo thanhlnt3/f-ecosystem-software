@@ -355,7 +355,7 @@ impl PackedFormat for BunProgram {
 mod tests {
     use super::*;
     use crate::packed;
-    use craft_anything_testkit::packed::{self as kit, BunModule, bun_appended, bun_graph, bun_module, bun_sample, bun_section_payload};
+    use f_builder_testkit::packed::{self as kit, BunModule, bun_appended, bun_graph, bun_module, bun_sample, bun_section_payload};
 
     fn check_sample(data: &[u8]) -> PackedListing {
         let listing = BunProgram.list(data).unwrap();

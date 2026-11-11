@@ -1,3 +1,30 @@
+F-Builder
+Copyright (c) 2026 F-Eco contributors.
+Licensed under the MIT License or the Apache License, Version 2.0, at your option
+(LICENSE-MIT, LICENSE-APACHE).
+
+F-Builder is part of F-EcoSystem-Software (https://github.com/thanhlnt3/f-ecosystem-software).
+It is based on Craft Anything 0.6.0 by the ArtCraft team and the Craft Anything contributors
+(https://github.com/storytold/craft-anything, tag v0.6.0, commit 899b4ebd24ca17d4a84af1e1b9ef9c0304de08ab),
+licensed under the MIT License or the Apache License, Version 2.0.
+
+Changes made in F-Builder (2026-11-11 onwards):
+- renamed the product, crates, binaries, data folders, environment variables and identifiers
+  from Craft Anything to F-Builder (bundle id io.github.thanhlnt3.f-builder);
+- removed the ArtCraft name, wordmark and logos (docs/brand/) and the raven app icon
+  (assets/app-icon/), which are trademarks of the ArtCraft Team and not open source, and
+  replaced the icon with F-Builder's own (assets/app-icon/, MIT OR Apache-2.0);
+- changed the interface colours to F-Eco's;
+- removed the translated READMEs, the upstream CI workflows and the Linux/FreeBSD packaging;
+- further changes are recorded in the F-EcoSystem-Software git history (clients/f-builder/).
+
+F-Builder is not affiliated with or endorsed by the ArtCraft Team.
+
+The original NOTICE of Craft Anything follows, unchanged. The ArtCraft brand files it mentions
+(docs/brand/) are not included in F-Builder.
+
+-------------------------------------------------------------------------------------------------
+
 Craft Anything
 Copyright (c) 2026 ArtCraft Team and the Craft Anything contributors.
 Licensed under the MIT License or the Apache License, Version 2.0, at your option

@@ -1,8 +1,8 @@
 //! The same agent model catalogue and validated selection for CLI/MCP clients.
 
 use crate::{AiConfig, Effort, ModelContext, cli_agents};
-use craft_anything_engine::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::ToolError;
+use f_builder_engine::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
+use f_builder_evidence::ToolError;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -92,11 +92,11 @@ fn ai_model_set(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErro
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_engine::{CallOptions, Caller, Engine};
+    use f_builder_engine::{CallOptions, Caller, Engine};
 
     /// Build hub and tool clients sharing an isolated settings file and an explicit saved selection.
     fn selection_clients() -> (crate::AiHub, std::path::PathBuf) {
-        let mut session = craft_anything_engine::testing::session();
+        let mut session = f_builder_engine::testing::session();
         let path = session.config_dir().join("config.toml");
         let mut config = AiConfig::default();
         config.upsert(crate::BackendEntry {
@@ -141,7 +141,7 @@ mod tests {
             disk.ai = config.to_table().unwrap();
             disk.save_to(&path).unwrap();
             reset_selection(&hub, tool).unwrap();
-            let saved = craft_anything_engine::Settings::load_from(&path);
+            let saved = f_builder_engine::Settings::load_from(&path);
             let config = AiConfig::from_table(&saved.ai).unwrap();
             assert_eq!(saved.language, "zh-hans");
             assert_eq!(config.get("Other"), Some(&other));
@@ -164,7 +164,7 @@ mod tests {
                     toml::to_string(&newer).unwrap()
                 });
                 std::fs::write(&path, &text).unwrap();
-                assert_eq!(reset_selection(&hub, tool).unwrap_err().code, craft_anything_evidence::ErrorCode::BadSettings);
+                assert_eq!(reset_selection(&hub, tool).unwrap_err().code, f_builder_evidence::ErrorCode::BadSettings);
                 assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
                 assert_eq!(hub.engine.session().settings, before);
             }
@@ -200,7 +200,7 @@ mod tests {
     /// Engine dispatch rejects invalid requests and persists default selection without a running agent.
     #[test]
     fn model_tools_are_headless_and_default_selection_persists_in_the_session_store() {
-        let mut session = craft_anything_engine::testing::session();
+        let mut session = f_builder_engine::testing::session();
         let path = session.config_dir().join("config.toml");
         let mut cfg = AiConfig::default();
         cfg.upsert(crate::BackendEntry {
@@ -225,7 +225,7 @@ mod tests {
         assert!(call("ai_models_list", json!({"name":"missing"})).is_err());
         assert!(call("ai_model_set", json!({"name":"OpenCode","thinking":"unsupported"})).is_err());
         call("ai_model_set", json!({"name":"OpenCode"})).unwrap();
-        let saved = AiConfig::from_settings(&craft_anything_engine::Settings::load_from(&path));
+        let saved = AiConfig::from_settings(&f_builder_engine::Settings::load_from(&path));
         assert!(saved.get("OpenCode").unwrap().options.cli_model.is_none());
         assert!(saved.get("OpenCode").unwrap().options.cli_thinking.is_none());
     }

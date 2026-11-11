@@ -61,7 +61,7 @@ const SSH_FAILURES: &[(&str, &str, &str)] = &[
         "the computer accepted the login but wouldn't start the program",
         "Check that this computer lets you run programs over ssh and hasn't run out of processes or memory.",
     ),
-    ("permission denied", "the login was refused", "Set up an ssh key or agent for this computer; Craft Anything can't type a password."),
+    ("permission denied", "the login was refused", "Set up an ssh key or agent for this computer; F-Builder can't type a password."),
     ("host key verification failed", "this computer's identity isn't trusted yet", "Connect once from a terminal and accept its host key."),
     ("could not resolve hostname", "that computer's name wasn't found", "Check the name in Settings → AI and in ~/.ssh/config."),
     ("connection refused", "the computer refused the connection", "Check that its ssh server is running and the port is right."),
@@ -219,7 +219,7 @@ fn host_blocks(text: &str) -> Vec<(Vec<String>, bool)> {
 
 /// A local port forwarded to a server on a remote host (`ssh -N -L`), owned and killed on drop.
 pub struct Tunnel {
-    _proc: craft_anything_platform::RunningProcess,
+    _proc: f_builder_platform::RunningProcess,
     pub local_port: u16,
 }
 
@@ -231,8 +231,8 @@ impl std::fmt::Debug for Tunnel {
 
 /// Forward a free local port to `remote_host:remote_port` as seen from `ssh_host`. Waits (at most
 /// 12 s) until the forward accepts connections.
-pub fn open_tunnel(ssh_host: &str, remote_host: &str, remote_port: u16) -> Result<Tunnel, craft_anything_evidence::ToolError> {
-    use craft_anything_evidence::{ErrorCode, ToolError};
+pub fn open_tunnel(ssh_host: &str, remote_host: &str, remote_port: u16) -> Result<Tunnel, f_builder_evidence::ToolError> {
+    use f_builder_evidence::{ErrorCode, ToolError};
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|l| l.local_addr())
         .map(|a| a.port())
@@ -246,7 +246,7 @@ pub fn open_tunnel(ssh_host: &str, remote_host: &str, remote_port: u16) -> Resul
         format!("127.0.0.1:{port}:{remote_host}:{remote_port}"),
         ssh_host.to_string(),
     ]);
-    let mut proc = craft_anything_platform::Process::new("ssh")
+    let mut proc = f_builder_platform::Process::new("ssh")
         .args(&args)
         .timeout(std::time::Duration::from_secs(24 * 3600))
         .label("ssh")

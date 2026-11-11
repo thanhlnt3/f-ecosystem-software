@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn finds_markers() {
-        let (elf, _) = craft_anything_testkit::elf64(craft_anything_testkit::ElfArch::X86_64, true);
+        let (elf, _) = f_builder_testkit::elf64(f_builder_testkit::ElfArch::X86_64, true);
         let b = crate::parse_binary(&elf).unwrap();
         assert!(detect(&b, &elf).iter().all(|h| h.id != "go"));
         let mut go = elf.clone();
@@ -218,7 +218,7 @@ mod tests {
         let hints = detect(&b, &go);
         let g = hints.iter().find(|h| h.id == "go").unwrap();
         assert_eq!(g.label, "Go (go1.22.3)");
-        let pe = craft_anything_testkit::pe64();
+        let pe = f_builder_testkit::pe64();
         let b = crate::parse_binary(&pe).unwrap();
         let _ = detect(&b, &pe);
     }

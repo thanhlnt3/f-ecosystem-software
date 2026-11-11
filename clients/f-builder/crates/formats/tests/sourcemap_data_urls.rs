@@ -1,4 +1,4 @@
-use craft_anything_formats::sourcemap::{Limits, decode_data_url, parse};
+use f_builder_formats::sourcemap::{Limits, decode_data_url, parse};
 
 #[test]
 fn percent_encoded_inline_maps_recover_original_sources() {

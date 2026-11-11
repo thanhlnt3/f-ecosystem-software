@@ -1,5 +1,5 @@
-use craft_anything_formats::elf;
-use craft_anything_testkit::elf64_core;
+use f_builder_formats::elf;
+use f_builder_testkit::elf64_core;
 
 fn core_with_files(declared: u64, rows: usize) -> Vec<u8> {
     let mut desc = Vec::new();

@@ -4,8 +4,8 @@
 use super::native_common::{DEFAULT_LIMIT, page, params_json, spec};
 use super::static_input::{self, builder, format_err};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, Limitation, Location, ToolError};
-use craft_anything_formats::pyc::{self, CodeRead, PycFile};
+use f_builder_evidence::{Authority, Confidence, Coverage, Limitation, Location, ToolError};
+use f_builder_formats::pyc::{self, CodeRead, PycFile};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -111,9 +111,9 @@ fn formats_bytecode_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput,
 mod tests {
     use super::super::native_common::test_support::{call, call_err};
     use crate::Engine;
-    use craft_anything_formats::pyc;
-    use craft_anything_testkit::packed::{self as kit, code_38, code_311};
-    use craft_anything_testkit::temp_file;
+    use f_builder_formats::pyc;
+    use f_builder_testkit::packed::{self as kit, code_38, code_311};
+    use f_builder_testkit::temp_file;
     use serde_json::{Value, json};
 
     fn sample() -> Vec<u8> {

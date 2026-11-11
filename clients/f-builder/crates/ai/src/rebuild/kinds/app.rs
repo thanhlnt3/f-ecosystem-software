@@ -6,7 +6,7 @@ use super::*;
 pub struct AppKind;
 
 /// What a console program's brief asks for, instead of a picture.
-pub const RUNS_BRIEF: &str = "The original is a console program, so it's compared by its runs: capture/runs/ holds, for each input it was run with, what it printed and how it exited. Make the rebuild a console program that prints the same text for each input (its own name may differ) and exits the same way. Craft Anything runs yours with the same inputs after each build and checks each one; rebuild_check shows you the result while you work.";
+pub const RUNS_BRIEF: &str = "The original is a console program, so it's compared by its runs: capture/runs/ holds, for each input it was run with, what it printed and how it exited. Make the rebuild a console program that prints the same text for each input (its own name may differ) and exits the same way. F-Builder runs yours with the same inputs after each build and checks each one; rebuild_check shows you the result while you work.";
 
 impl AppKind {
     pub const ID: &'static str = "app";

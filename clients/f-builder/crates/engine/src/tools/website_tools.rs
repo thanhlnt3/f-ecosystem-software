@@ -12,9 +12,9 @@ use super::browser_tools::{browser_env, cleanup, deadline};
 use super::native_common::spec;
 use super::web_common::{self, Browser, LaunchOptions};
 use crate::tool::{Caller, Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_engines::cdp::{self, CdpClient, CdpEvent, Deadline, Endpoint, PAGE_MAX_MESSAGE};
-use craft_anything_evidence::{Authority, Confidence, Coverage, ErrorCode, EvidenceBuilder, Limitation, Location, Subject, ToolError, sha256_hex};
-use craft_anything_platform::sync::Mutex;
+use f_builder_engines::cdp::{self, CdpClient, CdpEvent, Deadline, Endpoint, PAGE_MAX_MESSAGE};
+use f_builder_evidence::{Authority, Confidence, Coverage, ErrorCode, EvidenceBuilder, Limitation, Location, Subject, ToolError, sha256_hex};
+use f_builder_platform::sync::Mutex;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -234,7 +234,7 @@ fn open_site(ctx: &mut Ctx<'_>, dl: &Deadline) -> Result<Arc<SiteBrowser>, ToolE
     live_site(ctx, dl).ok_or_else(|| {
         let fix = match ctx.caller {
             Caller::Cli => {
-                "Each CLI command starts its own browser and closes it when it ends, so a site opened by an earlier command isn't open here. Run web_site_open and the tools that use the page in one session: an MCP client (`craft-anything-cli mcp`), the app, or `craft-anything-cli rebuild`."
+                "Each CLI command starts its own browser and closes it when it ends, so a site opened by an earlier command isn't open here. Run web_site_open and the tools that use the page in one session: an MCP client (`f-builder-cli mcp`), the app, or `f-builder-cli rebuild`."
             }
             _ => "Open one first with web_site_open.",
         };
@@ -398,10 +398,10 @@ fn d_state_width() -> u32 {
     1440
 }
 
-/// Marks the visible toggles (`data-craft-state="<n>"`) and lists them, after dropping the marks
+/// Marks the visible toggles (`data-builder-state="<n>"`) and lists them, after dropping the marks
 /// an earlier call left (they'd name a control hidden at this width, #339). `__MAX__` is replaced.
 const FIND_STATES_JS: &str = r#"(() => {
-  for (const old of document.querySelectorAll('[data-craft-state]')) old.removeAttribute('data-craft-state');
+  for (const old of document.querySelectorAll('[data-builder-state]')) old.removeAttribute('data-builder-state');
   const cap = (s, n) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
   const shown = el => { const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; const s = getComputedStyle(el); return s.visibility !== 'hidden' && s.display !== 'none'; };
   const sel = '[aria-expanded="false"], [aria-haspopup]:not([aria-haspopup="false"]), [role="tab"][aria-selected="false"], details:not([open]) > summary';
@@ -411,7 +411,7 @@ const FIND_STATES_JS: &str = r#"(() => {
     if (!shown(el) || el.closest('form') || el.matches('[type="submit"]')) continue;
     const pop = el.getAttribute('aria-haspopup');
     const kind = el.matches('summary') ? 'section' : el.getAttribute('role') === 'tab' ? 'tab' : pop === 'dialog' ? 'dialog' : 'menu';
-    el.setAttribute('data-craft-state', String(out.length));
+    el.setAttribute('data-builder-state', String(out.length));
     out.push({index: out.length, kind, label: cap(el.innerText || el.getAttribute('aria-label') || el.getAttribute('title'), 80)});
   }
   return out;
@@ -419,27 +419,27 @@ const FIND_STATES_JS: &str = r#"(() => {
 
 /// What the page looks like around control `__I__` now.
 const STATE_JS: &str = r#"(() => {
-  const el = document.querySelector('[data-craft-state="__I__"]');
+  const el = document.querySelector('[data-builder-state="__I__"]');
   const seen = d => { const r = d.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"], dialog[open], [aria-modal="true"]')).filter(seen).length;
   const details = el && el.parentElement && el.parentElement.tagName === 'DETAILS' ? el.parentElement.open : null;
   return {present: !!el, expanded: el ? el.getAttribute('aria-expanded') : null, selected: el ? el.getAttribute('aria-selected') : null, open: details, dialogs, url: location.href};
 })()"#;
 
-const CLICK_STATE_JS: &str = r#"(() => { const el = document.querySelector('[data-craft-state="__I__"]'); if (!el) return false; el.scrollIntoView({block: 'center'}); el.click(); return true; })()"#;
+const CLICK_STATE_JS: &str = r#"(() => { const el = document.querySelector('[data-builder-state="__I__"]'); if (!el) return false; el.scrollIntoView({block: 'center'}); el.click(); return true; })()"#;
 
 /// Before tab `__I__` is clicked: mark the tab its list has selected now, to select it again after (#335).
 const REMEMBER_TAB_JS: &str = r#"(() => {
-  const el = document.querySelector('[data-craft-state="__I__"]');
+  const el = document.querySelector('[data-builder-state="__I__"]');
   if (!el || el.getAttribute('role') !== 'tab') return false;
   const list = el.closest('[role="tablist"]') || el.parentElement;
   const was = list && Array.from(list.querySelectorAll('[role="tab"][aria-selected="true"]')).find(t => t !== el);
   if (!was) return false;
-  was.setAttribute('data-craft-tab-was', '__I__');
+  was.setAttribute('data-builder-tab-was', '__I__');
   return true;
 })()"#;
 
-const RESELECT_TAB_JS: &str = r#"(() => { const el = document.querySelector('[data-craft-tab-was="__I__"]'); if (!el) return false; el.removeAttribute('data-craft-tab-was'); el.click(); return true; })()"#;
+const RESELECT_TAB_JS: &str = r#"(() => { const el = document.querySelector('[data-builder-tab-was="__I__"]'); if (!el) return false; el.removeAttribute('data-builder-tab-was'); el.click(); return true; })()"#;
 
 fn press_escape(client: &mut CdpClient, dl: &Deadline) {
     for kind in ["keyDown", "keyUp"] {
@@ -1378,7 +1378,7 @@ mod tests {
             assert!(!out.exists());
             err.remediation.unwrap_or_default()
         };
-        assert!(fix(crate::Caller::Cli).contains("Each CLI command starts its own browser") && fix(crate::Caller::Cli).contains("craft-anything-cli mcp"));
+        assert!(fix(crate::Caller::Cli).contains("Each CLI command starts its own browser") && fix(crate::Caller::Cli).contains("f-builder-cli mcp"));
         assert_eq!(fix(crate::Caller::Mcp), "Open one first with web_site_open.");
     }
 

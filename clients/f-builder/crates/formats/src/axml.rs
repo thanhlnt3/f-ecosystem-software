@@ -720,7 +720,7 @@ pub fn manifest(doc: &Document) -> Manifest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::android as fx;
+    use f_builder_testkit::android as fx;
 
     fn pool_with_offsets(offsets: &[u32], string_data: &[u8]) -> Vec<u8> {
         let start = 28 + offsets.len() * 4;
@@ -960,7 +960,7 @@ mod tests {
     #[test]
     fn hostile() {
         let s = fx::manifest_axml();
-        for m in craft_anything_testkit::mutations(&s) {
+        for m in f_builder_testkit::mutations(&s) {
             if let Ok(d) = parse(&m) {
                 let _ = manifest(&d);
                 let _ = d.to_xml(4096);
@@ -970,7 +970,7 @@ mod tests {
             let _ = parse(&s[..len]);
         }
         for seed in 0..64 {
-            let mut n = craft_anything_testkit::noise(seed, 512);
+            let mut n = f_builder_testkit::noise(seed, 512);
             n[0] = 3;
             n[1] = 0;
             n[2] = 8;

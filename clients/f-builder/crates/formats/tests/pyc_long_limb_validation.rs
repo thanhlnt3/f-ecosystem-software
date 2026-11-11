@@ -1,4 +1,4 @@
-use craft_anything_formats::{FormatError, pyc};
+use f_builder_formats::{FormatError, pyc};
 
 fn long(negative: bool, digits: &[u16]) -> Vec<u8> {
     let mut bytes = vec![b'l'];

@@ -63,7 +63,7 @@ Fixed:
   site with `web_site_open` first).
 - `web_site_open` keeps its browser for one session, so from the CLI, where each command is a
   session of its own, a later `web-site-capture` finds no site (it says so). Run them together in
-  an MCP client (`craft-anything-cli mcp`), the app or `rebuild` (#153).
+  an MCP client (`f-builder-cli mcp`), the app or `rebuild` (#153).
 - `web_coverage_measure`: coverage on a page with no scripts reports 0 of 0.
 
 ## Engines and how they're used

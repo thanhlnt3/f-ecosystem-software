@@ -85,7 +85,7 @@ pub fn check(root: &Path) -> bool {
         };
         lookups.visit_file(&file);
     }
-    for spec in craft_anything_engine::Registry::with_all_tools().all() {
+    for spec in f_builder_engine::Registry::with_all_tools().all() {
         lookups.0.0.insert(spec.title.to_string());
         lookups.0.0.insert(spec.toolset.title().to_string());
     }

@@ -568,7 +568,7 @@ mod tests {
     /// Preserve the relocation itself when either its symbol extent or its linked string table is invalid.
     #[test]
     fn relocations_do_not_borrow_symbol_names() {
-        let original = craft_anything_testkit::sbpf::program();
+        let original = f_builder_testkit::sbpf::program();
         let table = u64::from_le_bytes(original[40..48].try_into().unwrap()) as usize;
         let dynsym = table + 3 * 64;
         let dynstr = table + 2 * 64;
@@ -590,7 +590,7 @@ mod tests {
 
     #[test]
     fn sbpf_section_tables_need_complete_headers() {
-        let mut elf = craft_anything_testkit::sbpf::program();
+        let mut elf = f_builder_testkit::sbpf::program();
         assert!(inspect(&elf[..63]).is_err());
         elf[58..60].copy_from_slice(&32u16.to_le_bytes());
         assert!(inspect(&elf).is_err());
@@ -603,7 +603,7 @@ mod tests {
 
     #[test]
     fn sbpf_extended_section_header_requires_its_padding() {
-        let mut elf = craft_anything_testkit::sbpf::program();
+        let mut elf = f_builder_testkit::sbpf::program();
         elf.truncate(64);
         elf[40..48].copy_from_slice(&64u64.to_le_bytes());
         elf[58..60].copy_from_slice(&72u16.to_le_bytes());
@@ -619,7 +619,7 @@ mod tests {
 
     #[test]
     fn relocations_require_complete_records_and_respect_the_stride() {
-        let mut elf = craft_anything_testkit::sbpf::program();
+        let mut elf = f_builder_testkit::sbpf::program();
         let table = u64::from_le_bytes(elf[40..48].try_into().unwrap()) as usize;
         let sh = table + 4 * 64;
         let original = u64::from_le_bytes(elf[sh + 24..sh + 32].try_into().unwrap()) as usize;
@@ -637,7 +637,7 @@ mod tests {
         let relocs = inspect(&elf).unwrap().relocations;
         assert_eq!(relocs.len(), 2);
         assert_eq!(relocs[0], relocs[1]);
-        assert_eq!(relocs[0].symbol, craft_anything_testkit::sbpf::SYSCALL);
+        assert_eq!(relocs[0].symbol, f_builder_testkit::sbpf::SYSCALL);
         let dynsym = table + 3 * 64;
         elf[dynsym + 32..dynsym + 40].copy_from_slice(&24u64.to_le_bytes());
         let relocs = inspect(&elf).unwrap().relocations;
@@ -688,16 +688,16 @@ mod tests {
 
     #[test]
     fn parses_the_fixture() {
-        let elf = craft_anything_testkit::sbpf::program();
+        let elf = f_builder_testkit::sbpf::program();
         let p = inspect(&elf).unwrap();
         assert!(p.is_sbpf);
         assert_eq!(p.e_machine, EM_BPF);
         assert_eq!(p.sbpf_version, "sbpf_v1");
-        assert_eq!(p.entry, craft_anything_testkit::sbpf::TEXT_VADDR);
+        assert_eq!(p.entry, f_builder_testkit::sbpf::TEXT_VADDR);
         assert_eq!(p.entry_symbol.as_deref(), Some("entrypoint"));
         // .text section is present and executable.
         let text = p.text.expect("text range");
-        assert_eq!(text.addr, craft_anything_testkit::sbpf::TEXT_VADDR);
+        assert_eq!(text.addr, f_builder_testkit::sbpf::TEXT_VADDR);
         assert_eq!(text.size, 24);
         assert!(p.sections.iter().any(|s| s.name == ".text" && s.exec));
         // The sol_log_ relocation resolves to a syscall.
@@ -707,7 +707,7 @@ mod tests {
         let sc = p.syscalls.iter().find(|s| s.name == "sol_log_").expect("sol_log_ syscall");
         assert!(sc.known);
         assert_eq!(sc.hash, murmur3_32(b"sol_log_", 0));
-        assert_eq!(sc.call_sites, vec![craft_anything_testkit::sbpf::TEXT_VADDR + 8]);
+        assert_eq!(sc.call_sites, vec![f_builder_testkit::sbpf::TEXT_VADDR + 8]);
     }
 
     #[test]

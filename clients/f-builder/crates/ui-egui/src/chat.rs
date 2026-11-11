@@ -4,10 +4,10 @@
 use crate::i18n::tr;
 use crate::state::{ChatItem, ConsentAnswer};
 use crate::theme::{self, Tokens};
-use crate::{CraftApp, evidence_ui, glossary, icons, widgets};
-use craft_anything_ai::AgentEvent;
-use craft_anything_engine::TargetKind;
+use crate::{BuilderApp, evidence_ui, glossary, icons, widgets};
 use egui::{Margin, RichText, Ui, Vec2};
+use f_builder_ai::AgentEvent;
+use f_builder_engine::TargetKind;
 use serde_json::Value;
 
 /// Fold one agent event into the conversation.
@@ -114,7 +114,7 @@ pub fn describe_value(v: &Value) -> String {
 pub fn suggestions(kind: Option<TargetKind>) -> Vec<&'static str> {
     use TargetKind::*;
     match kind {
-        None => vec!["What can Craft Anything do?", "How do I open an app?", "Is it safe to look inside programs?"],
+        None => vec!["What can F-Builder do?", "How do I open an app?", "Is it safe to look inside programs?"],
         Some(Elf | Pe | MachO | MachOFat | DosCom | RawBinary) => {
             vec!["What does this program do?", "What does it send over the internet?", "Is it safe to run?", "Which files does it read or write?"]
         }
@@ -133,7 +133,7 @@ pub fn suggestions(kind: Option<TargetKind>) -> Vec<&'static str> {
 }
 
 /// Beginner Ask screen: target card on the left, conversation in the centre.
-pub fn ask_screen(app: &mut CraftApp, ui: &mut Ui) {
+pub fn ask_screen(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let side_w = 300.0_f32.min(ui.available_width() * 0.3);
     // What's open sits on the right; the app's sidebar is on the left.
@@ -145,7 +145,7 @@ pub fn ask_screen(app: &mut CraftApp, ui: &mut Ui) {
     });
 }
 
-fn target_card(app: &mut CraftApp, ui: &mut Ui) {
+fn target_card(app: &mut BuilderApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     widgets::card(&t).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -217,7 +217,7 @@ pub const COMPOSER_GAP: f32 = 16.0;
 pub const MESSAGE_GAP: f32 = 6.0;
 
 /// The conversation with its composer. `dense` = Experienced agent console.
-pub fn conversation(app: &mut CraftApp, ui: &mut Ui, dense: bool) {
+pub fn conversation(app: &mut BuilderApp, ui: &mut Ui, dense: bool) {
     let width = ui.available_width();
     let max_w = if dense { width } else { width.min(720.0) };
     let pad = ((width - max_w) / 2.0).max(0.0);
@@ -254,7 +254,7 @@ pub fn remember_composer_height(ui: &mut Ui, id: egui::Id, used: f32, measured: 
     }
 }
 
-fn history(app: &mut CraftApp, ui: &mut Ui, dense: bool, pad: f32, max_w: f32) {
+fn history(app: &mut BuilderApp, ui: &mut Ui, dense: bool, pad: f32, max_w: f32) {
     egui::ScrollArea::vertical().auto_shrink([false, false]).stick_to_bottom(true).show(ui, |ui| {
         ui.horizontal(|ui| {
             ui.add_space(pad);
@@ -295,7 +295,7 @@ fn history(app: &mut CraftApp, ui: &mut Ui, dense: bool, pad: f32, max_w: f32) {
     });
 }
 
-fn greeting(app: &CraftApp, ui: &mut Ui, dense: bool) {
+fn greeting(app: &BuilderApp, ui: &mut Ui, dense: bool) {
     let t = Tokens::get(ui.ctx());
     if dense {
         ui.label(RichText::new(tr("Ask the agent about this target. It cites evidence for every claim.")).color(t.text_faint));
@@ -318,7 +318,7 @@ fn greeting(app: &CraftApp, ui: &mut Ui, dense: bool) {
     ui.add_space(16.0);
 }
 
-fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, dense: bool) {
+fn composer(app: &mut BuilderApp, ui: &mut Ui, width: f32, dense: bool) {
     let answering = app.answering();
     let hint = if dense { tr("Ask the agent…") } else { tr("Ask anything, e.g. \"What does this program do?\"") };
     ui.allocate_ui(Vec2::new(width, 0.0), |ui| {

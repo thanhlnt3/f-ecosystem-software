@@ -3,7 +3,7 @@
 use crate::project::write_atomic;
 use crate::target::{RawSpec, Target, TargetKind};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, empty_schema, parse_params, schema_of};
-use craft_anything_evidence::{ErrorCode, Evidence, Severity, ToolError, Unknown, UnknownStatus};
+use f_builder_evidence::{ErrorCode, Evidence, Severity, ToolError, Unknown, UnknownStatus};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -272,8 +272,8 @@ fn core_session_show(ctx: &mut Ctx<'_>, _params: Value) -> Result<ToolOutput, To
         "evidence_not_loaded": s.unloaded_evidence(),
         "unknowns": s.unknowns().count(),
         "project": s.project.as_ref().map(|p| json!({"name": p.meta.name, "path": p.root, "purpose": p.meta.purpose})),
-        "server": {"name": "craft-anything", "version": env!("CARGO_PKG_VERSION")},
-        "host": craft_anything_evidence::host_triple(),
+        "server": {"name": "f-builder", "version": env!("CARGO_PKG_VERSION")},
+        "host": f_builder_evidence::host_triple(),
     })))
 }
 
@@ -354,7 +354,7 @@ fn core_evidence_show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, To
     })))
 }
 
-pub const BUNDLE_FORMAT: &str = "craft-anything-evidence-bundle";
+pub const BUNDLE_FORMAT: &str = "f-builder-evidence-bundle";
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -408,7 +408,7 @@ fn core_evidence_import(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
     let bytes = std::fs::read(&path).map_err(|e| ToolError::io(path.display(), e))?;
     let v: Value = serde_json::from_slice(&bytes).map_err(|e| ToolError::invalid(format!("not a bundle: {e}")))?;
     if v.get("format").and_then(Value::as_str) != Some(BUNDLE_FORMAT) {
-        return Err(ToolError::invalid("not a Craft Anything evidence bundle"));
+        return Err(ToolError::invalid("not a F-Builder evidence bundle"));
     }
     let mut imported = 0usize;
     let mut rejected = Vec::new();
@@ -684,7 +684,7 @@ mod tests {
             .to_json();
         assert_eq!(up["result"]["revision"], 2);
         let stale = e.call("core_unknown_edit", json!({"unknown_id": id, "based_on_revision": 1}), CallOptions::new(Caller::Agent)).unwrap_err();
-        assert_eq!(stale.code, craft_anything_evidence::ErrorCode::StaleRevision);
+        assert_eq!(stale.code, f_builder_evidence::ErrorCode::StaleRevision);
         let v = e.call("core_unknown_verify", json!({"unknown_id": id}), CallOptions::new(Caller::Agent)).unwrap().to_json();
         assert_eq!(v["result"]["valid"], false, "cites no evidence");
     }
@@ -695,7 +695,7 @@ mod tests {
         let e = Engine::new(crate::testing::session());
         for caller in [Caller::Agent, Caller::Mcp, Caller::Cli] {
             let error = e.call("core_unknown_add", json!({"question": ["Where is the loop?"]}), CallOptions::new(caller)).unwrap_err();
-            assert_eq!(error.code, craft_anything_evidence::ErrorCode::BadInput);
+            assert_eq!(error.code, f_builder_evidence::ErrorCode::BadInput);
             assert_eq!(error.details.as_ref().unwrap()["parameter_path"], "/question");
             assert!(error.message.contains("expected a string"));
             assert_eq!(e.session().unknowns().count(), 0);
@@ -708,10 +708,10 @@ mod tests {
     fn project_evidence_is_loaded_in_a_new_session() {
         use crate::project::{Project, Purpose};
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("p.cany");
+        let root = dir.path().join("p.fbproj");
         let project = Project::create(&root, "p", Purpose::Education).unwrap();
         let ev = |n: i64| {
-            craft_anything_evidence::EvidenceBuilder::new("x", craft_anything_evidence::Subject::default(), craft_anything_evidence::Environment::builtin(true))
+            f_builder_evidence::EvidenceBuilder::new("x", f_builder_evidence::Subject::default(), f_builder_evidence::Environment::builtin(true))
                 .result(json!(n))
                 .build()
                 .unwrap()

@@ -652,7 +652,7 @@ pub fn scan_glue(text: &str, imports: &[WasmImport]) -> GlueScan {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::formats as fx;
+    use f_builder_testkit::formats as fx;
 
     /// The output inventory limit applies to retained functions, not the local groups within one retained function.
     #[test]
@@ -766,7 +766,7 @@ mod tests {
     #[test]
     fn hostile_inputs_do_not_panic() {
         let m = fx::wasm_module();
-        for x in craft_anything_testkit::mutations(&m) {
+        for x in f_builder_testkit::mutations(&m) {
             if let Ok(r) = inspect(&x)
                 && r.validation.valid
             {
@@ -777,7 +777,7 @@ mod tests {
             let _ = inspect(&m[..n]);
         }
         for seed in 0..100 {
-            let mut n = craft_anything_testkit::noise(seed, 256);
+            let mut n = f_builder_testkit::noise(seed, 256);
             n[..8].copy_from_slice(b"\0asm\x01\0\0\0");
             let _ = inspect(&n);
             let _ = scan_glue(&String::from_utf8_lossy(&n), &[]);

@@ -1,12 +1,12 @@
 //! The person's installed Grok Build CLI, driven over ACP (`grok agent stdio`). Sign-in stays in
-//! `grok login`. Craft Anything checks that an auth file exists and does not read it.
+//! `grok login`. F-Builder checks that an auth file exists and does not read it.
 
 use super::*;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 /// Grok Build's ACP-only adapter. `acp = false` or an SSH host fails closed: the plain runner
-/// would open the interactive TUI, which has no approval channel back to Craft Anything.
+/// would open the interactive TUI, which has no approval channel back to F-Builder.
 pub struct Grok;
 
 impl AgentAdapter for Grok {
@@ -79,7 +79,7 @@ impl AgentAdapter for Grok {
     }
 
     fn check_tool_server(&self, stop: &CancelToken) -> Result<(), ToolError> {
-        cli_can_start(craft_anything_platform::self_cli_path().as_deref(), stop)
+        cli_can_start(f_builder_platform::self_cli_path().as_deref(), stop)
     }
 
     /// Extra arguments would land before `agent` and can request blanket approval. Supported
@@ -92,7 +92,7 @@ impl AgentAdapter for Grok {
         if options.args.is_empty() {
             Ok(())
         } else {
-            Err(ToolError::invalid("Extra Grok arguments could bypass Craft Anything's approval checks.")
+            Err(ToolError::invalid("Extra Grok arguments could bypass F-Builder's approval checks.")
                 .with_remediation("Remove this backend's extra arguments. Set its program, model and thinking through the backend options instead."))
         }
     }
@@ -146,7 +146,7 @@ impl AgentAdapter for Grok {
     }
 
     fn sign_in_fix(&self) -> Option<String> {
-        Some("Sign in with `grok login` in a terminal, then try again. Grok keeps the sign-in; Craft Anything never sees it.".into())
+        Some("Sign in with `grok login` in a terminal, then try again. Grok keeps the sign-in; F-Builder never sees it.".into())
     }
 
     fn signed_in(&self, _program: &str) -> Option<bool> {
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn a_missing_auth_file_is_unknown_and_an_existing_file_is_signed_in() {
-        let root = std::env::temp_dir().join(format!("craft-grok-auth-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("fbuilder-grok-auth-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let file = root.join("auth.json");
@@ -315,13 +315,13 @@ mod tests {
     /// when the person's own config would approve every tool. That config is not modified.
     /// Not part of the default suite.
     #[test]
-    #[ignore = "live Grok Build session; needs grok signed in and craft-anything-cli built"]
+    #[ignore = "live Grok Build session; needs grok signed in and f-builder-cli built"]
     #[cfg(unix)]
     fn a_live_build_connects_tools_and_answers_one_permission() {
         use std::os::unix::fs::PermissionsExt;
         let pid = std::process::id();
-        let root = std::env::temp_dir().join(format!("craft-grok-live-{pid}"));
-        let home = std::env::temp_dir().join(format!("craft-grok-home-{pid}"));
+        let root = std::env::temp_dir().join(format!("fbuilder-grok-live-{pid}"));
+        let home = std::env::temp_dir().join(format!("fbuilder-grok-home-{pid}"));
         let _keep_root = RemoveOnDrop(root.clone());
         let _keep_home = RemoveOnDrop(home.clone());
         let _ = std::fs::remove_dir_all(&root);
@@ -349,7 +349,7 @@ mod tests {
         std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
         let _ = std::process::Command::new("git").arg("-C").arg(&root).arg("init").output();
 
-        let permissions = std::sync::Arc::new(craft_anything_platform::sync::Mutex::new(Vec::<String>::new()));
+        let permissions = std::sync::Arc::new(f_builder_platform::sync::Mutex::new(Vec::<String>::new()));
         let record = permissions.clone();
         let approver: super::super::acp::Approver = std::sync::Arc::new(move |tool: &str, _input: &serde_json::Value| {
             record.lock().unwrap().push(tool.to_string());
@@ -373,7 +373,7 @@ mod tests {
         spec.builder = Some(super::super::Builder { investigation: Some(root.clone()), inbox: root.join("inbox") });
         let mut conv = super::super::builder_conversation(spec, approver);
         conv.send(
-            "Do exactly these two things in this folder, then stop. First call the craft-anything MCP tool core_session_show and no other MCP server. Then run this shell command and no other command: mkdir grok-live-marker",
+            "Do exactly these two things in this folder, then stop. First call the f-builder MCP tool core_session_show and no other MCP server. Then run this shell command and no other command: mkdir grok-live-marker",
         );
 
         let started = std::time::Instant::now();
@@ -388,7 +388,7 @@ mod tests {
                     crate::AgentEvent::ToolStarted { tool, input, .. } => {
                         let blob = format!("{tool} {input}");
                         let lower = blob.to_ascii_lowercase();
-                        if lower.contains("session_show") || lower.contains("craft-anything") || lower.contains("craft_anything") {
+                        if lower.contains("session_show") || lower.contains("f-builder") || lower.contains("f_builder") {
                             saw_server = true;
                         }
                         let mut note = blob.chars().take(160).collect::<String>();
@@ -415,7 +415,7 @@ mod tests {
         let asked = permissions.lock().unwrap().clone();
         assert!(done, "the turn did not finish; tools={tools:?} permissions={asked:?} notes={notes:?} errors={errors:?}");
         assert!(!asked.is_empty(), "no permission was answered; tools={tools:?} notes={notes:?} errors={errors:?}");
-        assert!(saw_server, "craft-anything's tools did not run; tools={tools:?} permissions={asked:?} notes={notes:?} errors={errors:?}");
+        assert!(saw_server, "f-builder's tools did not run; tools={tools:?} permissions={asked:?} notes={notes:?} errors={errors:?}");
     }
 
     #[cfg(unix)]

@@ -528,7 +528,7 @@ pub fn oid_text(d: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::apple as fx;
+    use f_builder_testkit::apple as fx;
 
     #[test]
     fn sha1_vectors() {
@@ -582,7 +582,7 @@ mod tests {
     #[test]
     fn hostile_inputs() {
         let blob = fx::code_signature_blob();
-        for m in craft_anything_testkit::mutations(&blob) {
+        for m in f_builder_testkit::mutations(&blob) {
             let _ = parse(&m);
         }
         for i in 0..blob.len() {
@@ -590,7 +590,7 @@ mod tests {
         }
         for seed in 0..100 {
             let mut n = vec![0xfa, 0xde, 0x0c, 0xc0];
-            n.extend(craft_anything_testkit::noise(seed, 200));
+            n.extend(f_builder_testkit::noise(seed, 200));
             let _ = parse(&n);
         }
     }

@@ -4,7 +4,7 @@
 
 use crate::openai::{LOCAL_SERVERS, OpenAi};
 use crate::{BackendConfig, BackendKind, Detected};
-use craft_anything_evidence::ErrorCode;
+use f_builder_evidence::ErrorCode;
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
 use std::sync::mpsc;
@@ -238,7 +238,7 @@ fn opencode_config(var: impl Fn(&str) -> Option<String>, home: Option<PathBuf>) 
 /// (`provider.<id>.options.baseURL`), as (name, base URL): one on another port or machine is
 /// offered too (#83, #73). Hosted services are left out; they need a key this scan doesn't have.
 pub fn opencode_servers(text: &str) -> Vec<(String, String)> {
-    let Ok(doc) = craft_anything_formats::jsonc::parse(text, false) else { return Vec::new() };
+    let Ok(doc) = f_builder_formats::jsonc::parse(text, false) else { return Vec::new() };
     let config = doc.to_value();
     let Some(providers) = config.get("provider").and_then(serde_json::Value::as_object) else { return Vec::new() };
     providers
@@ -287,7 +287,7 @@ const LM_STUDIO_SETTINGS: &[&str] = &[".lmstudio/.internal/http-server-config.js
 
 /// The server port in LM Studio's settings file (`"port": 1235`).
 pub(crate) fn lmstudio_port(text: &str) -> Option<u16> {
-    let doc = craft_anything_formats::jsonc::parse(text, false).ok()?.to_value();
+    let doc = f_builder_formats::jsonc::parse(text, false).ok()?.to_value();
     doc.get("port").and_then(serde_json::Value::as_u64).and_then(|p| u16::try_from(p).ok()).filter(|p| *p != 0)
 }
 

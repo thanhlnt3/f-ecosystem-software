@@ -1,15 +1,15 @@
 //! A safe adapter around the Frida command-line tools (`frida`, `frida-ps`, `frida-ls-devices`).
 //!
 //! This is **not** a native binding: every operation shells out to the Frida CLI through
-//! [`craft_anything_platform::process`] with a deadline, closed stdin and capped output, so a hung
-//! or chatty session can never lock Craft Anything up. The companion CLIs (`frida-ps`,
+//! [`f_builder_platform::process`] with a deadline, closed stdin and capped output, so a hung
+//! or chatty session can never lock F-Builder up. The companion CLIs (`frida-ps`,
 //! `frida-ls-devices`) are found next to the located `frida` binary.
 //!
 //! Remote-device authentication (token, certificate, origin) is accepted only to be forwarded to
 //! the CLI as process arguments. It is never logged, returned, or placed in evidence.
 
-use craft_anything_evidence::{ErrorCode, ToolError};
-use craft_anything_platform::process::{Cancel, Output, Process};
+use f_builder_evidence::{ErrorCode, ToolError};
+use f_builder_platform::process::{Cancel, Output, Process};
 use serde::Serialize;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
@@ -180,7 +180,7 @@ impl Frida {
             if !prog.is_file() {
                 return Err(ToolError::new(ErrorCode::EngineMissing, "frida-ls-devices isn't next to frida.").with_remediation(INSTALL));
             }
-            let (text, code) = craft_anything_platform::capture::console_text(&prog, &args, self.wall, self.cancel.clone())?;
+            let (text, code) = f_builder_platform::capture::console_text(&prog, &args, self.wall, self.cancel.clone())?;
             if code != Some(0) {
                 let last = text.lines().rev().map(str::trim).find(|l| !l.is_empty()).unwrap_or("no output");
                 return Err(ToolError::new(ErrorCode::ProgramFailed, format!("frida-ls-devices failed: {last}")));
@@ -269,7 +269,7 @@ fn cli_failed(what: &str, out: &Output) -> ToolError {
     ToolError::new(ErrorCode::ProgramFailed, format!("{what} failed: {msg}"))
         .with_remediation(format!(
             "Check the device is reachable and frida-server is running on it. What Frida printed last:\n{}",
-            craft_anything_platform::process::output_excerpt(&tail)
+            f_builder_platform::process::output_excerpt(&tail)
         ))
         .with_details(serde_json::json!({"exit_code": out.code, "stderr_tail": tail}))
 }

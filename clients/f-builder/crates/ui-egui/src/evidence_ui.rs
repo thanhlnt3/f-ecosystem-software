@@ -3,8 +3,8 @@
 use crate::i18n::tr;
 use crate::theme::{self, Tokens, confidence_color};
 use crate::{icons, widgets};
-use craft_anything_engine::evidence::{CoverageStatus, Evidence};
 use egui::{Margin, RichText, Ui};
+use f_builder_engine::evidence::{CoverageStatus, Evidence};
 use serde_json::Value;
 
 /// A proof card: summary + confidence up top, the details behind an expander.

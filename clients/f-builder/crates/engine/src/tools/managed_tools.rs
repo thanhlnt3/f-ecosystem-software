@@ -7,8 +7,8 @@ use super::artifact_tools::{WalkOptions, is_path_input, resolve_evidence_input, 
 use super::native_common::{page, spec};
 use super::static_input::{Input, builder, format_err, load, load_path};
 use crate::tool::{Ctx, Effects, Requires, ToolOutput, ToolSpec, Toolset, parse_params, schema_of};
-use craft_anything_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, Subject, ToolError};
-use craft_anything_formats::dotnet::{self, Assembly, MemberOptions, Members, MethodInfo, NativeBoundaries, csharp};
+use f_builder_evidence::{Authority, Confidence, Coverage, CoverageStatus, ErrorCode, Limitation, Location, Subject, ToolError};
+use f_builder_formats::dotnet::{self, Assembly, MemberOptions, Members, MethodInfo, NativeBoundaries, csharp};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -615,10 +615,10 @@ fn norm_module(m: &str) -> String {
 fn native_lib(ctx: &Ctx<'_>, v: &Value) -> Result<NativeLib, ToolError> {
     let from_path = |p: &str| -> Result<NativeLib, ToolError> {
         let input = load_path(p, 2 << 30)?;
-        let bin = craft_anything_formats::parse_binary(&input.bytes).map_err(|e| format_err(e, "an ELF, PE or Mach-O library"))?;
+        let bin = f_builder_formats::parse_binary(&input.bytes).map_err(|e| format_err(e, "an ELF, PE or Mach-O library"))?;
         let mut exports: BTreeSet<String> = bin.exports.iter().map(|e| e.name.clone()).collect();
         // Mach-O exports carry a leading underscore.
-        if matches!(bin.format, craft_anything_formats::Format::MachO) {
+        if matches!(bin.format, f_builder_formats::Format::MachO) {
             exports = exports.into_iter().map(|e| e.strip_prefix('_').map(String::from).unwrap_or(e)).collect();
         }
         Ok(NativeLib { norm: norm_module(&input.name), name: input.name, exports, source: p.to_string() })
@@ -730,7 +730,7 @@ fn managed_native_calls_verify(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolO
         b = b.link(id);
     }
     for v in &p.native {
-        if let Some(id) = v.as_str().filter(|s| craft_anything_evidence::is_evidence_id(s)).or_else(|| v.get("evidence_id").and_then(Value::as_str)) {
+        if let Some(id) = v.as_str().filter(|s| f_builder_evidence::is_evidence_id(s)).or_else(|| v.get("evidence_id").and_then(Value::as_str)) {
             b = b.link(id.to_string());
         }
     }
@@ -1027,7 +1027,7 @@ fn managed_app_graph_build(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutpu
 mod tests {
     use super::super::native_common::test_support::{call, call_err, engine_with};
     use crate::Engine;
-    use craft_anything_testkit::managed as fx;
+    use f_builder_testkit::managed as fx;
     use serde_json::{Value, json};
 
     fn retained(v: &Value) -> Value {
@@ -1052,7 +1052,7 @@ mod tests {
         let f = call(&e, "managed_members_list", json!({"type_names": ["Sample.NativeMethods"]}));
         assert_eq!(f["result"]["total_types"], 1);
         let err = call_err(&e, "managed_members_list", json!({"type_names": ["Nope"]}));
-        assert_eq!(err.code, craft_anything_evidence::ErrorCode::BadInput);
+        assert_eq!(err.code, f_builder_evidence::ErrorCode::BadInput);
         let nb = call(&e, "managed_native_calls_list", json!({}));
         assert_eq!(nb["result"]["pinvokes"].as_array().unwrap().len(), 2);
         assert_eq!(nb["result"]["internal_calls"][0]["method"], "GetTicks");
@@ -1060,18 +1060,18 @@ mod tests {
 
     #[test]
     fn non_managed_input_is_a_clear_error() {
-        let e = engine_with("prog.exe", &craft_anything_testkit::pe64());
+        let e = engine_with("prog.exe", &f_builder_testkit::pe64());
         let err = call_err(&e, "managed_assembly_show", json!({}));
         assert!(err.message.contains(".NET"), "{}", err.message);
-        let p = craft_anything_testkit::temp_file("junk.dll", b"MZjunk");
+        let p = f_builder_testkit::temp_file("junk.dll", b"MZjunk");
         assert!(call_err(&Engine::new(crate::testing::session()), "managed_members_list", json!({"path": p})).remediation.is_some());
     }
 
     #[test]
     fn compare_two_builds() {
         let e = Engine::new(crate::testing::session());
-        let p1 = craft_anything_testkit::temp_file("v1.dll", &fx::managed_assembly(1));
-        let p2 = craft_anything_testkit::temp_file("v2.dll", &fx::managed_assembly(2));
+        let p1 = f_builder_testkit::temp_file("v1.dll", &fx::managed_assembly(1));
+        let p2 = f_builder_testkit::temp_file("v2.dll", &fx::managed_assembly(2));
         let m1 = call(&e, "managed_members_list", json!({"path": p1}));
         let d = call(&e, "managed_assemblies_compare", json!({"left": retained(&m1), "right": p2}));
         let c = &d["result"]["counts"];
@@ -1085,26 +1085,23 @@ mod tests {
         // A changed file behind retained evidence is refused.
         std::fs::write(&p1, fx::managed_assembly(2)).unwrap();
         let err = call_err(&e, "managed_assemblies_compare", json!({"left": retained(&m1), "right": p2}));
-        assert_eq!(err.code, craft_anything_evidence::ErrorCode::FileChanged);
+        assert_eq!(err.code, f_builder_evidence::ErrorCode::FileChanged);
     }
 
     #[test]
     fn verify_pinvokes_against_a_native_library() {
         let e = Engine::new(crate::testing::session());
-        let asm = craft_anything_testkit::temp_file("Sample.dll", &fx::managed_assembly(1));
+        let asm = f_builder_testkit::temp_file("Sample.dll", &fx::managed_assembly(1));
         // The native export library is named like the P/Invoke module.
-        let lib = craft_anything_testkit::temp_file("craft.dll", &craft_anything_testkit::pe64());
+        let lib = f_builder_testkit::temp_file("craft.dll", &f_builder_testkit::pe64());
         let nb = call(&e, "managed_native_calls_list", json!({"path": asm}));
         let layout = call(&e, "native_layout_show", json!({"path": lib}));
         let v = call(&e, "managed_native_calls_verify", json!({"managed": retained(&nb), "native": [retained(&layout)]}));
         let rows = v["result"]["pinvokes"].as_array().unwrap();
         assert_eq!(rows[0]["status"], "found", "{}", v["result"]);
         assert_eq!(rows[1]["status"], "missing");
-        let v2 = call(
-            &e,
-            "managed_native_calls_verify",
-            json!({"managed": asm, "native": [craft_anything_testkit::temp_file("other.dll", &craft_anything_testkit::pe64())]}),
-        );
+        let v2 =
+            call(&e, "managed_native_calls_verify", json!({"managed": asm, "native": [f_builder_testkit::temp_file("other.dll", &f_builder_testkit::pe64())]}));
         assert_eq!(v2["result"]["counts"]["undetermined"], 2);
         assert_eq!(super::norm_module("libcraft.so.1"), "craft");
         assert_eq!(super::norm_module("C:\\x\\Craft.DLL"), "craft");
@@ -1114,7 +1111,7 @@ mod tests {
     #[test]
     fn reconstruction_and_graph() {
         let e = Engine::new(crate::testing::session());
-        let asm = craft_anything_testkit::temp_file("Sample.dll", &fx::managed_assembly(1));
+        let asm = f_builder_testkit::temp_file("Sample.dll", &fx::managed_assembly(1));
         let m = call(&e, "managed_members_list", json!({"path": asm}));
         let r = call(&e, "managed_reconstruction_check", json!({"members": retained(&m), "source_text": fx::RECONSTRUCTION_CS}));
         assert_eq!(r["result"]["counts"]["signature_mismatch"], 1, "{}", r["result"]);

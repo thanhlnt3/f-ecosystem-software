@@ -1,4 +1,4 @@
-use craft_anything_js::html::scan_html;
+use f_builder_js::html::scan_html;
 
 #[test]
 fn regression_closing_tag_lookalikes_do_not_end_scripts() {

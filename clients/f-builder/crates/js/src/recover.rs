@@ -328,7 +328,7 @@ pub fn recover_modules(src: &str, modules: &[BundleModule], level: RewriteLevel,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use craft_anything_testkit::electron as fx;
+    use f_builder_testkit::electron as fx;
 
     #[test]
     fn rewrites_are_safe_and_parse() {
