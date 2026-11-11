@@ -47,6 +47,9 @@ regex = "1.13.1"
 totp-rs = "5.7.2"
 tempfile = "3"
 f-dev = { path = "../../tools/f-dev" }
+fsdk = { path = "../../sdk/rust" }
+# Thư viện OIDC chuẩn (tasks.md 10.4: app không dùng F-SDK vẫn tích hợp được).
+openidconnect = { version = "4.1.0", default-features = false }
 
 [lints]
 workspace = true

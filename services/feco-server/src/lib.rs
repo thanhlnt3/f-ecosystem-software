@@ -17,6 +17,8 @@ pub mod csrf;
 pub mod dev_web;
 pub mod developer;
 pub mod dns;
+pub mod entitlements;
+pub mod errors;
 pub mod export;
 pub mod hydra;
 pub mod i18n;
@@ -226,6 +228,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/apps/{client_id}", get(connected::detail))
         .route("/apps/{client_id}/revoke", post(connected::revoke))
         .route("/v1/me", get(api::me))
+        .route("/v1/entitlements", get(entitlements::api_list))
         .route("/v1/catalog", get(store_web::api_list))
         .route("/v1/catalog/installs", post(store_web::api_install))
         .route("/v1/catalog/{id}", get(store_web::api_detail))

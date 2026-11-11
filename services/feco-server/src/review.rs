@@ -990,6 +990,27 @@ pub async fn revoke(
             }
         }
     }
+    // Báo cho chính app (spec app-sdk, "Sự kiện cho app").
+    let client_id: Option<String> = sqlx::query_scalar(
+        "SELECT client_id FROM catalog_apps WHERE id = $1
+         UNION SELECT client_id FROM developer_apps WHERE app_id = $1 LIMIT 1",
+    )
+    .bind(app_id)
+    .fetch_optional(&state.db)
+    .await?;
+    if let Some(client_id) = client_id {
+        let payload = json!({
+            "event": "app.version.revoked",
+            "client_id": client_id,
+            "app_id": app_id,
+            "versions": revoked_versions,
+            "reason": reason.trim(),
+            "occurred_at": OffsetDateTime::now_utc()
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
+        });
+        crate::store::enqueue_event(&state.db, &client_id, "app.version.revoked", &payload).await?;
+    }
     audit::record(
         &state.db,
         Actor::Admin(admin.to_owned()),

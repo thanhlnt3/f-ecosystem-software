@@ -10,6 +10,9 @@ members = [
     "tools/feco-license-check",
     "tools/feco-demo-app",
     "tools/f-dev",
+    "sdk/rust",
+    "sdk/c",
+
 ]
 
 [workspace.package]

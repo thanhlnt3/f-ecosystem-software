@@ -3261,11 +3261,35 @@ async fn app_review_end_to_end() {
     // --- Scenario "Thu hồi toàn bộ app" (đo thời gian lan tới danh mục).
     let before = catalog_ids(&format!("q=good%20{stamp}")).await;
     assert!(before.contains(&app), "{before:?}");
+    let client_id: String =
+        sqlx::query_scalar("SELECT client_id FROM developer_apps WHERE app_id = $1")
+            .bind(&app)
+            .fetch_one(&st.db)
+            .await
+            .unwrap();
+    let (hook_url, _hooks) = webhook_receiver().await;
+    store::register_webhook(&st.db, &st.data_key, &client_id, &hook_url)
+        .await
+        .unwrap();
     let started = std::time::Instant::now();
     let n = review::revoke(&st, &app, None, "e2e", "Lừa đảo")
         .await
         .unwrap();
     assert!(n >= 2, "thu hồi mọi phiên bản: {n}");
+    // Spec app-sdk, "Sự kiện cho app": app nhận webhook app.version.revoked.
+    let payload: Value = sqlx::query_scalar(
+        "SELECT payload FROM webhook_outbox WHERE client_id = $1 AND event_type = 'app.version.revoked'",
+    )
+    .bind(&client_id)
+    .fetch_one(&st.db)
+    .await
+    .unwrap();
+    assert_eq!(payload["app_id"], app.as_str());
+    assert_eq!(payload["reason"], "Lừa đảo");
+    assert!(
+        payload["versions"].as_array().unwrap().len() >= 2,
+        "{payload}"
+    );
     let res = reqwest::get(format!("{BASE}/v1/catalog/{app}"))
         .await
         .unwrap();
@@ -3309,4 +3333,539 @@ async fn app_review_end_to_end() {
     ] {
         assert!(actions.contains(&a.to_owned()), "{a}: {actions:?}");
     }
+}
+
+// ---------- Nhóm 10: F-SDK (spec app-sdk) ----------
+
+/// App con xin cả scope `purchases` (kiểm tra quyền sử dụng).
+async fn create_sdk_app(name: &str) -> String {
+    let body = serde_json::json!({
+        "client_name": name,
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "scope": "openid offline_access profile email purchases",
+        "redirect_uris": [APP_CALLBACK],
+        "token_endpoint_auth_method": "none",
+        "subject_type": "pairwise",
+        "policy_uri": "https://app.example/privacy",
+        "metadata": {"developer": "Kho Việt", "scopes": {
+            "profile": {"required": true, "purpose_vi": "Hiển thị tên", "purpose_en": "Show your name"},
+            "purchases": {"required": true, "purpose_vi": "Kiểm tra bản quyền", "purpose_en": "Check your licence"}
+        }},
+    });
+    let res: Value = reqwest::Client::new()
+        .post(format!("{HYDRA_ADMIN}/admin/clients"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    res["client_id"].as_str().expect("client_id").to_owned()
+}
+
+/// "Trình duyệt hệ thống" của người dùng cho F-SDK: mở trang đăng nhập (đã có phiên), đồng ý nếu
+/// được hỏi, rồi theo chuyển hướng về địa chỉ loopback mà F-SDK đang nghe.
+fn open_in(user: reqwest::Client) -> impl FnOnce(&url::Url) -> Result<(), String> {
+    move |url| {
+        let url = url.clone();
+        tokio::spawn(async move {
+            let res = user.get(url).send().await.unwrap();
+            let mut a = finish(res, String::new()).await;
+            if a.consent_page.is_some() {
+                a = answer_consent(&user, a, "accept", &[]).await;
+            }
+            let callback = a.callback.expect("phải về callback của app");
+            reqwest::get(callback).await.unwrap();
+        });
+        Ok(())
+    }
+}
+
+/// HTTP cho thư viện `openidconnect` (không theo chuyển hướng, như thư viện yêu cầu).
+async fn oidc_http(
+    req: axum::http::Request<Vec<u8>>,
+) -> Result<axum::http::Response<Vec<u8>>, std::io::Error> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(std::io::Error::other)?;
+    let (parts, body) = req.into_parts();
+    let res = client
+        .request(parts.method, parts.uri.to_string())
+        .headers(parts.headers)
+        .body(body)
+        .send()
+        .await
+        .map_err(std::io::Error::other)?;
+    let mut out = axum::http::Response::builder().status(res.status());
+    for (k, v) in res.headers() {
+        out = out.header(k, v);
+    }
+    let bytes = res.bytes().await.map_err(std::io::Error::other)?;
+    out.body(bytes.to_vec()).map_err(std::io::Error::other)
+}
+
+fn repo_root() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// Thư viện C ABI của F-SDK cho binding Python; tự dựng nếu chưa có.
+fn fsdk_c_library() -> std::path::PathBuf {
+    let target = std::env::var("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| repo_root().join("target"));
+    let name = if cfg!(windows) {
+        "fsdk_c.dll"
+    } else if cfg!(target_os = "macos") {
+        "libfsdk_c.dylib"
+    } else {
+        "libfsdk_c.so"
+    };
+    let lib = target.join("debug").join(name);
+    if !lib.exists() {
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let ok = std::process::Command::new(cargo)
+            .args(["build", "-p", "fsdk-c"])
+            .current_dir(repo_root())
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok && lib.exists(), "không dựng được {}", lib.display());
+    }
+    lib
+}
+
+/// App mẫu của một binding: trình chạy (thử lần lượt), tham số, biến môi trường thêm.
+struct Example {
+    programs: Vec<String>,
+    args: Vec<String>,
+    env: Vec<(&'static str, String)>,
+}
+
+/// Chạy app mẫu của một binding như F-Launcher mở app (biến môi trường kèm mã khởi chạy);
+/// trả JSON app in ra, hoặc `None` nếu máy không có trình chạy (trừ khi FECO_E2E_SDKS=1).
+fn run_example(programs: &[&str], args: &[String], env: &[(&str, String)]) -> Option<Value> {
+    let required = std::env::var("FECO_E2E_SDKS").is_ok();
+    for program in programs {
+        let mut cmd = std::process::Command::new(program);
+        cmd.args(args).current_dir(repo_root());
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        let out = match cmd.output() {
+            Ok(out) => out,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => panic!("{program}: {e}"),
+        };
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            out.status.success(),
+            "{program} {args:?}: {}\n{stdout}\n{}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let line = stdout
+            .lines()
+            .rev()
+            .find(|l| l.starts_with('{'))
+            .expect("JSON");
+        return Some(serde_json::from_str(line).unwrap());
+    }
+    assert!(!required, "thiếu trình chạy {programs:?}");
+    eprintln!("bỏ qua app mẫu {args:?}: máy không có {programs:?}");
+    None
+}
+
+/// Spec app-sdk: F-SDK Rust đăng nhập qua launcher và qua trình duyệt (PKCE), tự làm mới token,
+/// `/v1/me` theo scope, `/v1/entitlements` chỉ của chính app, webhook có chữ ký kiểm được bằng
+/// F-SDK, mã lỗi thống nhất; app mẫu Python, TypeScript (và C trong CI) đăng nhập được.
+#[tokio::test]
+async fn sdk_end_to_end() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let st = local_state();
+    let launcher = LAUNCHER.get().unwrap().clone();
+    let (email, password) = unique("sdk");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Lan Phạm").await;
+    let a = authorize(&user, &launcher, "openid offline_access profile").await;
+    let launcher_token = exchange(&launcher, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let kho = create_sdk_app("QuanLyKho").await;
+    let other = create_sdk_app("AppKhac").await;
+    let scopes = "openid offline_access profile purchases";
+    let config = |client: &str, scopes: &str| {
+        fsdk::Config::new(client, &format!("{HYDRA_PUBLIC}/"), &format!("{BASE}/"))
+            .unwrap()
+            .redirect_uri(APP_CALLBACK)
+            .scopes(scopes)
+    };
+
+    // --- Scenario "Chạy ngoài launcher": F-SDK mở trình duyệt, PKCE, người dùng đồng ý một lần.
+    let browser_session = fsdk::login_with(&config(&kho, scopes), open_in(user.clone()))
+        .await
+        .expect("đăng nhập qua trình duyệt");
+    let me_browser = browser_session.me().await.unwrap();
+    assert_eq!(me_browser.name.as_deref(), Some("Lan Phạm"));
+    assert!(browser_session.granted_scopes().await.contains("purchases"));
+    assert!(browser_session.id_token().await.is_some());
+
+    // --- Scenario "Đăng nhập bằng F-SDK": launcher mở app với mã khởi chạy trong biến môi trường.
+    let (status, issued) = issue_launch_code(&launcher_token, &kho).await;
+    assert_eq!(status, 200, "{issued}");
+    for (k, v) in [
+        (
+            "FECO_LAUNCH_CODE",
+            issued["code"].as_str().unwrap().to_owned(),
+        ),
+        ("FECO_CLIENT_ID", kho.clone()),
+        ("FECO_ISSUER_URL", format!("{HYDRA_PUBLIC}/")),
+        ("FECO_SERVER_URL", format!("{BASE}/")),
+        ("FSDK_REDIRECT_URI", APP_CALLBACK.to_owned()),
+        ("FSDK_SCOPES", scopes.to_owned()),
+    ] {
+        std::env::set_var(k, v);
+    }
+    let session = fsdk::session_from_launcher().await;
+    for k in [
+        "FECO_LAUNCH_CODE",
+        "FECO_CLIENT_ID",
+        "FECO_ISSUER_URL",
+        "FECO_SERVER_URL",
+    ] {
+        std::env::remove_var(k);
+    }
+    let session = session.expect("phiên từ launcher");
+    let me = session.me().await.unwrap();
+    // Scenario "Token chỉ có profile": không có email.
+    assert_eq!(me.sub, me_browser.sub, "cùng định danh riêng của app");
+    assert_eq!(me.name.as_deref(), Some("Lan Phạm"));
+    assert!(
+        me.email.is_none() && me.raw.get("email").is_none(),
+        "{}",
+        me.raw
+    );
+    assert_ne!(me.sub, subject_of(&email).await.to_string(), "sub pairwise");
+
+    // Tự làm mới token: token sắp hết hạn thì F-SDK đổi refresh token lấy token mới.
+    let old_access = session.access_token().await.unwrap();
+    let old_refresh = session.refresh_token().await;
+    session.expire_now().await;
+    let new_access = session.access_token().await.unwrap();
+    assert_ne!(old_access, new_access);
+    assert_ne!(
+        session.refresh_token().await,
+        old_refresh,
+        "refresh token xoay vòng"
+    );
+    assert_eq!(session.me().await.unwrap().sub, me.sub);
+
+    // --- Scenario "App được xây theo yêu cầu" + webhook entitlement.changed.
+    let (hook_url, hooks) = webhook_receiver().await;
+    let secret = store::register_webhook(&st.db, &st.data_key, &kho, &hook_url)
+        .await
+        .unwrap();
+    assert!(session.entitlements().await.unwrap().is_empty());
+    let subject = subject_of(&email).await;
+    use feco_server::entitlements;
+    assert!(
+        entitlements::grant(&st, &kho, subject, "owner", "custom-build:DH-0001", None)
+            .await
+            .unwrap()
+    );
+    entitlements::grant(&st, &other, subject, "license", "purchase:DH-0002", None)
+        .await
+        .unwrap();
+    let list = session.entitlements().await.unwrap();
+    assert_eq!(list.len(), 1, "chỉ thấy quyền với chính app: {list:?}");
+    assert_eq!(list[0].kind, "owner");
+    assert_eq!(list[0].source.as_deref(), Some("custom-build:DH-0001"));
+    feco_server::webhooks::deliver_due(&st.db, &st.http, &st.data_key)
+        .await
+        .unwrap();
+    let got = hooks.lock().unwrap().clone();
+    let (_, signature, body) = got
+        .iter()
+        .find(|(event, ..)| event == "entitlement.changed")
+        .unwrap_or_else(|| panic!("thiếu entitlement.changed: {got:?}"));
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    assert!(fsdk::verify_webhook(&secret, signature, body, now));
+    assert!(!fsdk::verify_webhook(&secret, signature, b"{}", now));
+    assert!(!fsdk::verify_webhook(&secret, signature, body, now + 3600));
+    let payload: Value = serde_json::from_slice(body).unwrap();
+    assert_eq!(
+        (
+            payload["sub"].as_str(),
+            payload["kind"].as_str(),
+            payload["action"].as_str()
+        ),
+        (Some(me.sub.as_str()), Some("owner"), Some("granted"))
+    );
+
+    // Token không có scope purchases: 403 insufficient_scope.
+    let (_, issued) = issue_launch_code(&launcher_token, &kho).await;
+    let narrow = fsdk::session_from_launch(
+        &config(&kho, "openid profile"),
+        &fsdk::Launch {
+            code: issued["code"].as_str().unwrap().to_owned(),
+        },
+    )
+    .await
+    .unwrap();
+    match narrow.entitlements().await {
+        Err(fsdk::Error::Api(e)) => {
+            assert_eq!((e.status, e.error.as_str()), (403, "insufficient_scope"))
+        }
+        other => panic!("{other:?}"),
+    }
+    session.report_crash("1.0.0").await.unwrap();
+
+    // --- App mẫu của các binding đăng nhập được (sandbox: biến môi trường như launcher truyền).
+    let library = fsdk_c_library();
+    let mut examples = vec![
+        Example {
+            programs: vec!["python3".into(), "python".into()],
+            args: vec!["sdk/python/examples/login.py".into()],
+            env: vec![("FSDK_LIBRARY", library.to_string_lossy().into_owned())],
+        },
+        Example {
+            programs: vec!["node".into()],
+            args: vec!["sdk/typescript/examples/login.ts".into()],
+            env: vec![],
+        },
+    ];
+    if let Ok(c_example) = std::env::var("FSDK_C_EXAMPLE") {
+        let lib_dir = library.parent().unwrap().to_string_lossy().into_owned();
+        examples.push(Example {
+            programs: vec![c_example],
+            args: vec![],
+            env: vec![("LD_LIBRARY_PATH", lib_dir)],
+        });
+    }
+    for example in examples {
+        let (_, issued) = issue_launch_code(&launcher_token, &kho).await;
+        let mut env = vec![
+            (
+                "FECO_LAUNCH_CODE",
+                issued["code"].as_str().unwrap().to_owned(),
+            ),
+            ("FECO_CLIENT_ID", kho.clone()),
+            ("FECO_ISSUER_URL", format!("{HYDRA_PUBLIC}/")),
+            ("FECO_SERVER_URL", format!("{BASE}/")),
+            ("FSDK_REDIRECT_URI", APP_CALLBACK.to_owned()),
+            ("FSDK_SCOPES", scopes.to_owned()),
+        ];
+        env.extend(example.env.iter().cloned());
+        let programs: Vec<&str> = example.programs.iter().map(String::as_str).collect();
+        let Some(out) = run_example(&programs, &example.args, &env) else {
+            continue;
+        };
+        let me_out = if out.get("me").is_some() {
+            &out["me"]
+        } else {
+            &out
+        };
+        assert_eq!(me_out["sub"], me.sub.as_str(), "{out}");
+        assert_eq!(me_out["name"], "Lan Phạm", "{out}");
+        assert!(me_out.get("email").is_none(), "{out}");
+        if let Some(list) = out.get("entitlements") {
+            assert_eq!(list[0]["kind"], "owner", "{out}");
+        }
+        eprintln!(
+            "app mẫu {:?} đăng nhập được",
+            example.args.first().unwrap_or(&example.programs[0])
+        );
+    }
+
+    // --- Scenario "Token hết hạn" (token đã bị thu hồi): mọi endpoint trả 401 invalid_token.
+    let dead = session.access_token().await.unwrap();
+    session.logout().await.unwrap();
+    let http = reqwest::Client::new();
+    for (method, path, body) in [
+        ("GET", "/v1/me", Value::Null),
+        ("GET", "/v1/entitlements", Value::Null),
+        (
+            "POST",
+            "/v1/apps/crashes",
+            serde_json::json!({"version": "1.0.0"}),
+        ),
+        (
+            "POST",
+            "/v1/launch-codes",
+            serde_json::json!({"client_id": kho}),
+        ),
+        (
+            "POST",
+            "/v1/catalog/installs",
+            serde_json::json!({"app_id": "x"}),
+        ),
+    ] {
+        let mut req = http
+            .request(method.parse().unwrap(), format!("{BASE}{path}"))
+            .bearer_auth(&dead);
+        if !body.is_null() {
+            req = req.json(&body);
+        }
+        let res = req.send().await.unwrap();
+        let status = res.status().as_u16();
+        let body: Value = res.json().await.unwrap();
+        assert_eq!(status, 401, "{path}: {body}");
+        assert_eq!(body["error"], "invalid_token", "{path}: {body}");
+        for field in ["message", "message_vi", "request_id"] {
+            assert!(
+                body[field].as_str().is_some_and(|s| !s.is_empty()),
+                "{path} thiếu {field}: {body}"
+            );
+        }
+        assert!(feco_server::errors::documented("invalid_token"));
+    }
+    match session.me().await {
+        Err(fsdk::Error::Api(e)) => {
+            assert_eq!((e.status, e.error.as_str()), (401, "invalid_token"));
+            assert!(!e.request_id.is_empty());
+        }
+        other => panic!("{other:?}"),
+    }
+
+    // Tài liệu liệt kê mọi mã lỗi kèm cách xử lý, và chính sách phiên bản API.
+    let docs = reqwest::get(format!("{BASE}/developer/docs"))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let rows = Html::parse_document(&docs)
+        .select(&Selector::parse("#error-codes tr").unwrap())
+        .count();
+    assert_eq!(rows, feco_server::errors::CODES.len());
+    assert!(docs.contains("12 tháng") || docs.contains("12 months"));
+}
+
+/// tasks.md 10.4 (spec app-sdk, "Chuẩn mở cho xác thực"): app dùng thư viện OIDC chuẩn
+/// (`openidconnect`, không dùng F-SDK) khám phá cấu hình, đăng nhập bằng PKCE và kiểm chữ ký
+/// ID token qua JWKS. Bản Python dùng Authlib chạy trong CI (`FECO_E2E_SDKS=1`).
+#[tokio::test]
+async fn standard_oidc_library_integration() {
+    use openidconnect::{
+        core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata},
+        AuthorizationCode, ClientId, CsrfToken, IssuerUrl, Nonce, OAuth2TokenResponse,
+        PkceCodeChallenge, RedirectUrl, Scope, TokenResponse,
+    };
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let (email, password) = unique("oidc");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Hải Đỗ").await;
+    let client_id = create_sdk_app("OidcChuan").await;
+
+    let issuer = IssuerUrl::new(format!("{HYDRA_PUBLIC}/")).unwrap();
+    let metadata = CoreProviderMetadata::discover_async(issuer, &oidc_http)
+        .await
+        .expect("tài liệu khám phá");
+    let client =
+        CoreClient::from_provider_metadata(metadata, ClientId::new(client_id.clone()), None)
+            .set_redirect_uri(RedirectUrl::new(APP_CALLBACK.into()).unwrap());
+    let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
+    let (auth_url, csrf, nonce) = client
+        .authorize_url(
+            CoreAuthenticationFlow::AuthorizationCode,
+            CsrfToken::new_random,
+            Nonce::new_random,
+        )
+        .add_scope(Scope::new("profile".into()))
+        .set_pkce_challenge(challenge)
+        .url();
+    let res = user.get(auth_url).send().await.unwrap();
+    let a = answer_consent(&user, finish(res, String::new()).await, "accept", &[]).await;
+    let callback = a.callback.expect("về callback");
+    assert_eq!(
+        query(&callback, "state").as_deref(),
+        Some(csrf.secret().as_str())
+    );
+    let token = client
+        .exchange_code(AuthorizationCode::new(query(&callback, "code").unwrap()))
+        .unwrap()
+        .set_pkce_verifier(verifier)
+        .request_async(&oidc_http)
+        .await
+        .expect("đổi code lấy token");
+    let id_token = token.id_token().expect("có ID token");
+    let claims = id_token
+        .claims(&client.id_token_verifier(), &nonce)
+        .expect("chữ ký ID token hợp lệ qua JWKS");
+    let (status, me_body) = me(token.access_token().secret(), None).await;
+    assert_eq!(status, 200);
+    assert_eq!(me_body["sub"], claims.subject().as_str());
+    // ID token bị sửa thì thư viện từ chối.
+    let forged: openidconnect::core::CoreIdToken = {
+        let raw = id_token.to_string();
+        let mut parts: Vec<&str> = raw.split('.').collect();
+        let other_sig = "AAAA";
+        parts[2] = other_sig;
+        parts.join(".").parse().unwrap()
+    };
+    assert!(forged.claims(&client.id_token_verifier(), &nonce).is_err());
+
+    // Cùng kịch bản bằng Python + Authlib (thư viện OIDC phổ biến), nếu máy có Authlib.
+    let python = ["python3", "python"].into_iter().find(|p| {
+        std::process::Command::new(p)
+            .args(["-c", "import authlib, requests"])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    });
+    let Some(python) = python else {
+        assert!(
+            std::env::var("FECO_E2E_SDKS").is_err(),
+            "CI phải có Authlib để chạy bản Python"
+        );
+        eprintln!("bỏ qua bản Python: chưa cài authlib, requests");
+        return;
+    };
+    let mut child = std::process::Command::new(python)
+        .args([
+            "examples/standard-oidc/authlib_login.py",
+            &format!("{HYDRA_PUBLIC}/"),
+            &client_id,
+            APP_CALLBACK,
+        ])
+        .current_dir(repo_root())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    use std::io::{BufRead, Write};
+    let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    stdout.read_line(&mut line).unwrap();
+    let auth_url = line.trim().to_owned();
+    assert!(auth_url.starts_with(HYDRA_PUBLIC), "{auth_url}");
+    // Đã đồng ý ở trên: Hydra chuyển thẳng về callback.
+    let res = user.get(&auth_url).send().await.unwrap();
+    let mut a = finish(res, String::new()).await;
+    if a.consent_page.is_some() {
+        a = answer_consent(&user, a, "accept", &[]).await;
+    }
+    let callback = a.callback.expect("về callback");
+    writeln!(child.stdin.take().unwrap(), "{callback}").unwrap();
+    let mut rest = String::new();
+    std::io::Read::read_to_string(&mut stdout, &mut rest).unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "{rest}\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let claims: Value = serde_json::from_str(rest.trim()).unwrap();
+    assert_eq!(claims["sub"], me_body["sub"], "{claims}");
+    assert_eq!(claims["aud"], client_id.as_str());
 }

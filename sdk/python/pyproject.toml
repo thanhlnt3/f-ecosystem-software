@@ -1,0 +1,21 @@
+[project]
+name = "fsdk"
+version = "0.1.0"
+description = "F-SDK: đăng nhập bằng tài khoản F-Eco, đọc dữ liệu người dùng theo scope, kiểm tra quyền sử dụng"
+license = "MIT OR Apache-2.0"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/thanhlnt3/f-ecosystem-software"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["fsdk"]
+
+[tool.setuptools.package-data]
+# Bản phát hành đóng gói kèm thư viện fsdk_c của từng nền tảng.
+fsdk = ["fsdk_c.dll", "libfsdk_c.so", "libfsdk_c.dylib"]

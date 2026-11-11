@@ -778,6 +778,7 @@ async fn open_app(s: &Shared, app: &str) -> Result<String, String> {
     let env = LaunchEnv {
         launch_code: code,
         server_url: s.config.server.to_string(),
+        issuer_url: s.config.hydra.to_string(),
         broker_url: secret.as_ref().map(|_| s.broker_url.clone()),
         broker_secret: secret,
     };

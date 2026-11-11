@@ -31,6 +31,16 @@
 <pre id="redirect-list">{{ redirects }}</pre>
 {% endif %}
 
+{% if can_release %}
+<form method="post" action="/developer/apps/{{ app.app_id }}/webhook" id="webhook-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="webhook-url">{{ i18n.t("dev.webhook") }}</label>
+  <input type="text" name="url" id="webhook-url" placeholder="https://soundlab.example/feco/webhook" required>
+  <p class="muted">{{ i18n.t("dev.webhook_note") }}</p>
+  <button type="submit" class="secondary">{{ i18n.t("dev.webhook_save") }}</button>
+</form>
+{% endif %}
+
 <h2>{{ i18n.t("dev.versions") }}</h2>
 {% if versions.is_empty() %}<p class="muted">{{ i18n.t("dev.no_versions") }}</p>{% endif %}
 {% for v in versions %}

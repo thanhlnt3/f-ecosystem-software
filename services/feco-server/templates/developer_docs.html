@@ -40,6 +40,7 @@ FDEV_TOKEN=fdev_... f-dev publish --manifest f-app.toml --package dist/ --server
 <p>{{ i18n.t("dev.docs_api") }}</p>
 <pre><code>GET  {{ hydra }}.well-known/openid-configuration      OAuth 2.0 / OIDC (Authorization Code + PKCE)
 GET  {{ server }}v1/me                                  Authorization: Bearer &lt;access token&gt;
+GET  {{ server }}v1/entitlements                        scope purchases
 POST {{ server }}v1/launch-codes/exchange               {code, client_id, redirect_uri, code_challenge, scope}
 POST {{ server }}v1/apps/crashes                        {version}
 GET  {{ server }}v1/catalog/{app}/update?platform=&amp;device=&amp;channel=
@@ -47,6 +48,21 @@ GET  {{ server }}v1/catalog/{app}/update?platform=&amp;device=&amp;channel=
 POST {{ server }}v1/dev/apps/{app}/versions             f-app.toml           Authorization: Bearer fdev_...
 PUT  {{ server }}v1/dev/versions/{id}/packages/{platform}   zip, X-Feco-Sha256
 POST {{ server }}v1/dev/versions/{id}/submit</code></pre>
+
+<h2 id="events">{{ i18n.t("dev.docs_events") }}</h2>
+<p>{{ i18n.t("dev.docs_events_note") }}</p>
+<pre><code>user.revoked  user.deleted  app.version.revoked  entitlement.changed
+F-Eco-Signature: t=&lt;giây unix&gt;,v1=HMAC-SHA256(khóa ký, "&lt;t&gt;.&lt;thân yêu cầu&gt;")</code></pre>
+
+<h2 id="errors">{{ i18n.t("dev.docs_errors") }}</h2>
+<p>{{ i18n.t("dev.docs_errors_note") }}</p>
+<pre><code>{"error": "invalid_token", "message": "...", "message_vi": "...", "request_id": "..."}</code></pre>
+<table id="error-codes">
+{% for (code, status, howto) in errors %}<tr><td><code>{{ code }}</code></td><td>{{ status }}</td><td>{{ howto }}</td></tr>{% endfor %}
+</table>
+
+<h2 id="versioning">{{ i18n.t("dev.docs_versioning") }}</h2>
+<p>{{ i18n.t("dev.docs_versioning_note") }}</p>
 
 <h2>{{ i18n.t("dev.docs_sample_title") }}</h2>
 <p>{{ i18n.t("dev.docs_sample") }} <a href="https://github.com/thanhlnt3/f-ecosystem-software/tree/main/tools/feco-demo-app" rel="noopener">tools/feco-demo-app</a></p>

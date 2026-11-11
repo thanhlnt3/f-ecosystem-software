@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–9):
+> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–10):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện tiếng Việt và tiếng Anh.
@@ -13,6 +13,7 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 >
 > - Cổng nhà phát triển (`/developer`): đăng ký cá nhân hoặc tổ chức (cần email đã xác minh và TOTP), Thỏa thuận nhà phát triển, xác minh tên miền bằng DNS TXT, nhóm và vai trò, client ID cùng địa chỉ chuyển hướng, manifest `f-app.toml`, nộp gói qua web hoặc CLI `f-dev`, kiểm tra chữ ký mã, kênh stable/beta và phát hành dần theo phần trăm, số liệu tổng hợp.
 > - Kiểm duyệt: hàng đợi kiểm tra tự động (quét mã độc bằng engine chữ ký của F-Eco và ClamAV, chữ ký mã, kiến trúc, packer), quy tắc duyệt thủ công hay tự động, chính sách nội dung (`/policy/content`), từ chối kèm điều khoản và cách sửa, kháng nghị, gỡ khẩn cấp, quét lại 7 ngày.
+> - F-SDK cho Rust, C (ABI ổn định), Python và TypeScript/Node.js: đăng nhập bằng mã khởi chạy của launcher hoặc qua trình duyệt (PKCE), tự làm mới token, `/v1/me`, kiểm tra quyền sử dụng (`/v1/entitlements`), báo lỗi khi chạy, kiểm chữ ký webhook. App dùng thư viện OIDC chuẩn không cần F-SDK. Mã lỗi thống nhất, liệt kê ở `/developer/docs`.
 >
 > Chưa có: bảng quản trị (người duyệt tạm dùng công cụ `feco-catalog`), máy ảo chạy thử app, môi trường sandbox, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
 
@@ -26,7 +27,8 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
   - [5. Dùng thử đăng nhập một lần với app mẫu](#5-dùng-thử-đăng-nhập-một-lần-với-app-mẫu)
   - [6. Dùng thử F-Launcher](#6-dùng-thử-f-launcher)
   - [7. Dùng thử cổng nhà phát triển](#7-dùng-thử-cổng-nhà-phát-triển)
-  - [8. Dừng và xóa dữ liệu](#8-dừng-và-xóa-dữ-liệu)
+  - [8. Viết app con bằng F-SDK](#8-viết-app-con-bằng-f-sdk)
+  - [9. Dừng và xóa dữ liệu](#9-dừng-và-xóa-dữ-liệu)
 - [Địa chỉ các dịch vụ](#địa-chỉ-các-dịch-vụ)
 - [Cấu hình](#cấu-hình)
 - [Kiểm thử](#kiểm-thử)
@@ -280,7 +282,56 @@ cargo run -p feco-server --bin feco-catalog -- resolve <id> upheld "<ghi chú>" 
    export FECO_TUF_SIGN_KEYS=.dev/tuf/keys/targets.pk8,.dev/tuf/keys/snapshot.pk8,.dev/tuf/keys/timestamp.pk8
    ```
 
-### 8. Dừng và xóa dữ liệu
+### 8. Viết app con bằng F-SDK
+
+F-SDK (`sdk/`, license MIT OR Apache-2.0) gói gọn đăng nhập và API cho app con. Khi F-Launcher mở
+app, nó truyền `FECO_LAUNCH_CODE`, `FECO_CLIENT_ID`, `FECO_ISSUER_URL` và `FECO_SERVER_URL`; F-SDK
+đổi mã khởi chạy lấy token. Khi người dùng mở app trực tiếp, F-SDK mở trình duyệt đăng nhập bằng
+PKCE và nhận kết quả ở địa chỉ loopback (mặc định `http://127.0.0.1:47280/callback`, đổi bằng
+`FSDK_REDIRECT_URI`; địa chỉ này phải có trong danh sách chuyển hướng của app). Scope mặc định là
+`openid offline_access profile`; thêm `purchases` để đọc quyền sử dụng (`FSDK_SCOPES`).
+
+```rust
+let config = fsdk::Config::from_env()?;           // hoặc fsdk::Config::new(client_id, issuer, server)
+let session = fsdk::session(&config).await?;      // launcher nếu có mã khởi chạy, không thì trình duyệt
+let me = session.me().await?;                     // chỉ các trường thuộc scope đã đồng ý
+let owner = session.entitlements().await?.iter().any(|e| e.kind == "owner");
+```
+
+| Ngôn ngữ | Thư mục | App mẫu |
+|---|---|---|
+| Rust | `sdk/rust` (crate `fsdk`) | `fsdk::session_from_launcher()`, `fsdk::login_with_browser()` |
+| C | `sdk/c` (thư viện `fsdk_c`, header `sdk/c/include/fsdk.h`) | `sdk/c/examples/login.c` |
+| Python ≥ 3.9 | `sdk/python` (gói `fsdk`, gọi thư viện C qua `ctypes`) | `sdk/python/examples/login.py` |
+| TypeScript, Node.js ≥ 22.6 | `sdk/typescript` (gói `@f-eco/sdk`, viết thuần trên OIDC) | `sdk/typescript/examples/login.ts` |
+
+Chạy thử app mẫu Python và TypeScript với app `tools/feco-demo-app` đã tạo ở bước 5 (thêm
+`http://127.0.0.1:47280/callback` vào địa chỉ chuyển hướng, hoặc đặt `FSDK_REDIRECT_URI` bằng một
+địa chỉ đã khai báo):
+
+```bash
+cargo build -p fsdk-c
+export FECO_CLIENT_ID=<client_id> FECO_ISSUER_URL=http://127.0.0.1:4444/ FECO_SERVER_URL=http://127.0.0.1:8080/
+FSDK_LIBRARY=target/debug/libfsdk_c.so python sdk/python/examples/login.py   # Windows: fsdk_c.dll, macOS: libfsdk_c.dylib
+node sdk/typescript/examples/login.ts
+```
+
+Muốn tích hợp mà không dùng F-SDK: dùng thư viện OIDC chuẩn bất kỳ trỏ tới
+`http://127.0.0.1:4444/.well-known/openid-configuration` (ví dụ Authlib:
+`examples/standard-oidc/authlib_login.py`). Nhận sự kiện `user.revoked`, `user.deleted`,
+`app.version.revoked`, `entitlement.changed`: nhập địa chỉ webhook trên trang app ở cổng nhà phát
+triển, lưu khóa ký (hiện một lần) và kiểm chữ ký bằng `fsdk::verify_webhook` (hoặc `verify_webhook`
+của bản Python, `verifyWebhook` của bản TypeScript). Danh sách mã lỗi và chính sách phiên bản API:
+http://127.0.0.1:8080/developer/docs.
+
+Cho tới khi có đơn xây app và thanh toán (nhóm 12–13), cấp quyền sử dụng bằng tay:
+
+```bash
+cargo run -p feco-server --bin feco-catalog -- grant <app> <email> owner custom-build:<mã đơn>
+cargo run -p feco-server --bin feco-catalog -- ungrant <app> <email> owner
+```
+
+### 9. Dừng và xóa dữ liệu
 
 - Dừng `feco-server` và app mẫu bằng `Ctrl+C`.
 - Cách A: `docker compose -f infra/docker-compose.yml down`. Lệnh này dừng và xóa mọi dữ liệu dev, vì compose không dùng volume.
@@ -364,6 +415,14 @@ npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
 FECO_E2E=1 cargo test -p feco-server --test e2e_auth
 ```
 
+E2E của F-SDK (`sdk_end_to_end`) còn chạy app mẫu Python (cần `python` và thư viện `fsdk_c`, test tự dựng nếu thiếu) và TypeScript (cần `node` ≥ 22.6); máy không có thì bỏ qua, trừ khi đặt `FECO_E2E_SDKS=1`. Bản Authlib của `standard_oidc_library_integration` chạy khi đã `pip install authlib requests`. Test riêng của từng binding:
+
+```bash
+cargo build -p fsdk-c
+FSDK_LIBRARY=target/debug/libfsdk_c.so python -m unittest discover -s sdk/python/tests
+(cd sdk/typescript && node --test test/)
+```
+
 **Chuỗi tin cậy TUF**: `cargo test -p feco-tuf` chạy các tình huống tấn công (gói bị sửa, metadata bị sửa, khóa lạ, rollback, đóng băng) cùng thu hồi và xoay khóa. Diễn tập toàn bộ quy trình bằng công cụ dòng lệnh, in biên bản Markdown:
 
 ```bash
@@ -414,6 +473,8 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu, F-Store; công cụ `feco-catalog`; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
 | `clients/feco-launcher` | F-Launcher: thư viện (đăng nhập, cài/cập nhật/gỡ qua TUF, mã khởi chạy, API cục bộ) và giao diện egui |
 | `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me`; khi được launcher mở thì đăng nhập bằng mã khởi chạy |
+| `sdk/` | F-SDK: `rust` (crate `fsdk`), `c` (C ABI `fsdk_c` và header), `python` (binding `ctypes`), `typescript` (gói `@f-eco/sdk`) |
+| `examples/standard-oidc` | App tích hợp bằng thư viện OIDC chuẩn (Authlib), không dùng F-SDK |
 | `tools/f-dev` | CLI cho nhà phát triển: `f-dev validate`, `f-dev publish` |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |
 | `infra/` | Hạ tầng dev: `docker-compose.yml`, cấu hình Kratos (schema, mẫu email) và Hydra |

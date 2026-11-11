@@ -412,6 +412,8 @@ struct DocsPage {
     i18n: Lang,
     server: String,
     hydra: String,
+    /// (mã, HTTP, cách xử lý).
+    errors: Vec<(&'static str, u16, &'static str)>,
 }
 
 /// GET /developer/docs (công khai)
@@ -421,6 +423,12 @@ pub async fn docs(State(state): State<Arc<AppState>>, lang: Lang) -> Response {
             i18n: lang,
             server: state.public_url.to_string(),
             hydra: state.hydra_public.to_string(),
+            errors: crate::errors::CODES
+                .iter()
+                .map(|(code, status, vi, en)| {
+                    (*code, *status, if lang == Lang::Vi { *vi } else { *en })
+                })
+                .collect(),
         },
         lang,
         StatusCode::OK,
@@ -768,6 +776,7 @@ pub async fn app_action(
                 Ok("redirects")
             }
             "secret" => Err(dev::rotate_secret(&state, &m, &app).await?),
+            "webhook" => Err(dev::register_webhook(&state, &m, &app, form.get("url")).await?),
             "manifest" => {
                 dev::save_manifest(&state.db, &m, &app, form.get("manifest")).await?;
                 Ok("manifest")

@@ -125,3 +125,28 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 39. **Người duyệt** hiện ghi tên qua biến `FECO_REVIEWER` của công cụ dòng lệnh. Bảng quản trị cần
     vai trò người duyệt (có quyền duyệt nhưng không quản trị toàn hệ thống) và có cần hai người cho
     thao tác gỡ khẩn cấp không (đã hỏi ở câu 24).
+
+## Nhóm 10: F-SDK
+
+40. **Binding Python dùng `ctypes`, không dùng PyO3** như design D7: `ctypes` gọi thẳng thư viện C ABI
+    (một thư viện dùng cho mọi phiên bản Python, không cần biên dịch lại cho từng bản, và chính C ABI
+    cũng được kiểm qua đó). Đổi lại, gói Python phải kèm thư viện `fsdk_c` cho từng nền tảng. Có chấp
+    nhận thay đổi này không? Tương tự, header `fsdk.h` đang viết tay thay vì sinh bằng `cbindgen`;
+    có cần CI sinh lại và so sánh header không?
+41. **Sandbox cho app mẫu** (task 10.2): app mẫu đang được kiểm trên hạ tầng dev cô lập của lần chạy
+    test. Môi trường sandbox dành cho nhà phát triển (task 8.6) chưa có; khi có, F-SDK cần một cấu
+    hình trỏ tới sandbox (địa chỉ issuer và máy chủ riêng).
+42. **Quyền sử dụng** hiện được cấp bằng tay (`feco-catalog grant`). Nhóm 12–13 sẽ cấp tự động khi bàn
+    giao đơn xây app hay thanh toán. Cần chốt: một người có thể có nhiều quyền cùng loại từ nhiều
+    nguồn không (hiện mỗi loại một bản ghi), và gói thuê bao hết hạn thì có gửi
+    `entitlement.changed` không (hiện chỉ gửi khi cấp hoặc thu hồi).
+43. **Gói TypeScript** chạy thẳng tệp `.ts` trên Node.js ≥ 22.6 và chỉ có luồng đăng nhập qua máy chủ
+    loopback (app desktop). Design D7 muốn chạy được cả trong trình duyệt: cần luồng chuyển hướng
+    trong trình duyệt và nơi giữ refresh token an toàn. Khi phát hành lên npm cần dựng sang
+    JavaScript, và cần xác nhận ai giữ tên `@f-eco` trên npm.
+44. **Báo lỗi khi app gặp sự cố** chỉ gửi phiên bản (đếm số lần), không gửi stack trace hay thông tin
+    máy, để không thu thập dữ liệu cá nhân. Nhà phát triển có cần thêm thông tin (ví dụ hệ điều
+    hành) không, và có cần người dùng đồng ý riêng không?
+45. **Ngừng hỗ trợ phiên bản API**: chính sách giữ ít nhất 12 tháng đã ghi trong tài liệu, nhưng chưa
+    có phiên bản nào bị ngừng nên header `Deprecation`/`Sunset` chưa được gắn. Ai quyết định và
+    thông báo ngừng hỗ trợ (email cho nhà phát triển có app đang gọi phiên bản đó)?

@@ -790,6 +790,28 @@ pub async fn rotate_secret(state: &AppState, m: &Membership, app: &DevApp) -> De
     Ok(secret)
 }
 
+/// Đăng ký địa chỉ nhận webhook (https) và tạo khóa ký mới; khóa chỉ hiện một lần.
+pub async fn register_webhook(
+    state: &AppState,
+    m: &Membership,
+    app: &DevApp,
+    url: &str,
+) -> DevResult<String> {
+    need_release(m.role)?;
+    let url = url.trim();
+    let ok = url::Url::parse(url).is_ok_and(|u| {
+        u.scheme() == "https"
+            || (u.scheme() == "http" && matches!(u.host_str(), Some("127.0.0.1" | "localhost")))
+    });
+    if !ok {
+        return Err(invalid(
+            "Địa chỉ webhook phải là https:// (http chỉ cho 127.0.0.1 khi dev).",
+            "The webhook URL must use https:// (http only for 127.0.0.1 during development).",
+        ));
+    }
+    Ok(crate::store::register_webhook(&state.db, &state.data_key, &app.client_id, url).await?)
+}
+
 /// Xóa app: chỉ Chủ sở hữu. App biến khỏi danh mục; OAuth client bị xóa.
 pub async fn delete_app(state: &AppState, m: &Membership, app: &DevApp) -> DevResult<()> {
     if !m.role.can_delete() {

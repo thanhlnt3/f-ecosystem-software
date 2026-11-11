@@ -27,6 +27,10 @@ Kiểm duyệt (người duyệt ghi tên bằng FECO_REVIEWER, mặc định ad
   feco-catalog emergency <app> <version|all> <lý do>   thu hồi khẩn cấp (danh mục, TUF, email)
   feco-catalog alerts                             cảnh báo kiểm duyệt chưa xử lý
   feco-catalog add-signature <sha256> <tên>       thêm vào cơ sở dữ liệu mã độc
+
+Quyền sử dụng (tạm, tới nhóm 12-13):
+  feco-catalog grant <app> <email> owner|license|subscription <nguồn>
+  feco-catalog ungrant <app> <email> owner|license|subscription
 ";
 
 #[tokio::main]
@@ -174,6 +178,53 @@ async fn run(args: Vec<String>) -> Result<(), String> {
                     a.id, a.created_at, a.kind, a.message, a.details
                 );
             }
+        }
+        "grant" | "ungrant" => {
+            let app = arg(&args, 1)?;
+            let client_id: String = sqlx::query_scalar(
+                "SELECT client_id FROM catalog_apps WHERE id = $1
+                 UNION SELECT client_id FROM developer_apps WHERE app_id = $1 LIMIT 1",
+            )
+            .bind(app)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(e)?
+            .ok_or("không có app này")?;
+            let email = arg(&args, 2)?;
+            let subject = state
+                .kratos
+                .list_identities()
+                .await
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .find(|i| i["traits"]["email"] == email)
+                .and_then(|i| i["id"].as_str().and_then(|s| s.parse().ok()))
+                .ok_or("không có người dùng với email này")?;
+            let kind = arg(&args, 3)?;
+            let done = if command == "grant" {
+                feco_server::entitlements::grant(
+                    &state,
+                    &client_id,
+                    subject,
+                    kind,
+                    arg(&args, 4)?,
+                    None,
+                )
+                .await
+                .map_err(e)?
+            } else {
+                feco_server::entitlements::revoke(&state, &client_id, subject, kind)
+                    .await
+                    .map_err(e)?
+            };
+            println!(
+                "{}",
+                if done {
+                    "đã cập nhật quyền và báo cho app (entitlement.changed)"
+                } else {
+                    "không có thay đổi"
+                }
+            );
         }
         "add-signature" => {
             sqlx::query("INSERT INTO malware_signatures (sha256, name) VALUES ($1, $2) ON CONFLICT DO NOTHING")

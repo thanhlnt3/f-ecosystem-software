@@ -3,7 +3,8 @@
 //! App nhận qua biến môi trường:
 //! - `FECO_LAUNCH_CODE`: mã dùng một lần, sống 60 giây, đổi lấy token tại
 //!   `POST {FECO_SERVER_URL}v1/launch-codes/exchange`.
-//! - `FECO_CLIENT_ID`, `FECO_SERVER_URL`, `FECO_APP_DATA_DIR`.
+//! - `FECO_CLIENT_ID`, `FECO_SERVER_URL`, `FECO_ISSUER_URL`, `FECO_APP_DATA_DIR` (F-SDK đọc các
+//!   biến này).
 //! - `FECO_LAUNCHER_URL`, `FECO_LAUNCHER_SECRET`: API cục bộ để xin mã mới (xem [`crate::broker`]).
 //!
 //! Mọi biến `FECO_*` khác của launcher bị gỡ khỏi môi trường của app.
@@ -15,6 +16,8 @@ use std::process::Command;
 pub struct LaunchEnv {
     pub launch_code: Option<String>,
     pub server_url: String,
+    /// Máy chủ OAuth 2.0 / OIDC (`FECO_ISSUER_URL`).
+    pub issuer_url: String,
     pub broker_url: Option<String>,
     pub broker_secret: Option<String>,
 }
@@ -29,6 +32,7 @@ pub fn command(plan: &LaunchPlan, env: &LaunchEnv) -> Command {
     }
     cmd.env("FECO_APP_DATA_DIR", &plan.data_dir);
     cmd.env("FECO_SERVER_URL", &env.server_url);
+    cmd.env("FECO_ISSUER_URL", &env.issuer_url);
     if let Some(client_id) = &plan.client_id {
         cmd.env("FECO_CLIENT_ID", client_id);
     }

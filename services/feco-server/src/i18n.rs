@@ -419,6 +419,15 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "policy.intro" => ("Mọi app con trên F-Eco phải tuân thủ các điều khoản dưới đây. Phiên bản vi phạm bị từ chối kèm điều khoản bị vi phạm và cách khắc phục; nhà phát triển kháng nghị được một lần cho mỗi lần từ chối.", "Every app on F-Eco must follow the clauses below. Versions that break them are rejected with the clause and how to fix it; developers can appeal each rejection once."),
         "policy.clause" => ("Điều", "Clause"),
         "policy.review" => ("Phiên bản đầu tiên của mỗi app, và phiên bản xin thêm scope dữ liệu hay quyền hệ thống, được người duyệt kiểm tra trong 3 ngày làm việc. Các phiên bản khác được duyệt tự động nếu qua kiểm tra tự động (quét mã độc bằng hai engine, chữ ký mã, kiến trúc, packer).", "The first version of each app, and versions that ask for more data scopes or system permissions, are checked by a reviewer within 3 working days. Other versions are approved automatically if they pass the automated checks (two malware engines, code signing, architecture, packers)."),
+        "dev.webhook" => ("Địa chỉ nhận webhook", "Webhook URL"),
+        "dev.webhook_note" => ("Lưu sẽ tạo khóa ký mới (hiện một lần); khóa cũ hết hiệu lực.", "Saving creates a new signing key (shown once); the old key stops working."),
+        "dev.webhook_save" => ("Lưu và tạo khóa ký", "Save and create signing key"),
+        "dev.docs_events" => ("Sự kiện (webhook)", "Events (webhooks)"),
+        "dev.docs_events_note" => ("Nền tảng gửi POST JSON có chữ ký HMAC tới địa chỉ webhook của app. App không trả 2xx thì nền tảng gửi lại sau 1, 5, 30 phút rồi giãn dần, trong tối đa 72 giờ. F-SDK có hàm kiểm chữ ký.", "The platform POSTs signed JSON to the app's webhook URL. If the app does not answer 2xx, it retries after 1, 5 and 30 minutes, then less often, for up to 72 hours. F-SDK has a signature check helper."),
+        "dev.docs_errors" => ("Mã lỗi", "Error codes"),
+        "dev.docs_errors_note" => ("Mọi lỗi API trả JSON như dưới đây. Ghi lại request_id khi liên hệ hỗ trợ.", "Every API error returns JSON like this. Keep the request_id when contacting support."),
+        "dev.docs_versioning" => ("Phiên bản API", "API versions"),
+        "dev.docs_versioning_note" => ("Phiên bản nằm trong đường dẫn (/v1/...). Một phiên bản được giữ ít nhất 12 tháng sau khi công bố ngừng hỗ trợ; trong thời gian đó phản hồi có header Deprecation và Sunset.", "The version is part of the path (/v1/...). A version is kept for at least 12 months after its deprecation is announced; during that time responses carry Deprecation and Sunset headers."),
         _ => {
             tracing::warn!(key, "thiếu bản dịch");
             ("", "")

@@ -525,6 +525,7 @@ async fn launch_command_passes_only_app_specific_values() {
         &LaunchEnv {
             launch_code: Some("ma-mot-lan".into()),
             server_url: "http://127.0.0.1:8080/".into(),
+            issuer_url: "http://127.0.0.1:4444/".into(),
             broker_url: Some("http://127.0.0.1:5000/".into()),
             broker_secret: Some("bi-mat".into()),
         },
