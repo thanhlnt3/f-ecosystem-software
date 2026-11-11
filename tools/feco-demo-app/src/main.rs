@@ -9,9 +9,8 @@
 //! Chỉ dùng cho dev: app tự đăng ký qua API quản trị của Hydra. App thật được đăng ký qua
 //! cổng nhà phát triển (nhóm task 8).
 //!
-//! Khi được F-Launcher mở (có biến `FECO_LAUNCH_CODE`), app không mở trình duyệt: nó đổi mã
-//! khởi chạy lấy authorization code tại `POST /v1/launch-codes/exchange`, rồi đổi code lấy token
-//! tại Hydra bằng PKCE verifier của chính nó.
+//! Khi được F-Launcher mở (có biến `FECO_LAUNCH_CODE`), app không mở trình duyệt: nó đăng nhập
+//! bằng F-SDK (`fsdk::session_from_launch`), F-SDK đổi mã khởi chạy lấy token bằng PKCE.
 
 use std::{process::ExitCode, sync::Arc, time::Duration};
 
@@ -103,77 +102,33 @@ async fn register(http: &reqwest::Client, admin: &str) -> Result<String, String>
         .ok_or(format!("Hydra không trả client_id: {res}"))
 }
 
-/// Được F-Launcher mở: đăng nhập bằng mã khởi chạy dùng một lần, không cần trình duyệt.
-async fn run_from_launcher(
-    http: &reqwest::Client,
-    opts: &Opts,
-    launch_code: &str,
-) -> Result<(), String> {
+/// Được F-Launcher mở: đăng nhập bằng F-SDK với mã khởi chạy dùng một lần, không cần trình duyệt.
+async fn run_from_launcher(opts: &Opts, launch_code: &str) -> Result<(), String> {
+    let env = |k: &str, default: String| std::env::var(k).unwrap_or(default);
     let client_id =
         std::env::var("FECO_CLIENT_ID").map_err(|_| "thiếu FECO_CLIENT_ID".to_owned())?;
-    let server = std::env::var("FECO_SERVER_URL").unwrap_or_else(|_| format!("{}/", opts.api));
-    println!("Demo App được F-Launcher mở (client_id = {client_id}).");
-    let verifier = random_hex(32);
-    let challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .encode(sha2::Sha256::digest(verifier.as_bytes()));
-    let res = http
-        .post(format!(
-            "{}v1/launch-codes/exchange",
-            server.trim_end_matches('/').to_owned() + "/"
-        ))
-        .json(&json!({
-            "code": launch_code,
-            "client_id": client_id,
-            "redirect_uri": CALLBACK,
-            "code_challenge": challenge,
-            "scope": opts.scope,
-        }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    let status = res.status();
-    let body: Value = res.json().await.map_err(|e| e.to_string())?;
-    let Some(code) = body["authorization_code"].as_str() else {
-        if body["error"] == "consent_required" {
-            return Err("bạn chưa đồng ý cho app này; chạy `cargo run -p feco-demo-app -- --client-id <ID>` một lần để đồng ý qua trình duyệt".into());
-        }
-        return Err(format!("đổi mã khởi chạy thất bại ({status}): {body}"));
+    let issuer = env("FECO_ISSUER_URL", format!("{}/", opts.hydra_public));
+    let server = env("FECO_SERVER_URL", format!("{}/", opts.api));
+    println!("Demo App được F-Launcher mở (client_id = {client_id}), đăng nhập bằng F-SDK.");
+    let config = fsdk::Config::new(&client_id, &issuer, &server)
+        .map_err(|e| e.to_string())?
+        .redirect_uri(CALLBACK)
+        .scopes(&env("FSDK_SCOPES", opts.scope.clone()));
+    let launch = fsdk::Launch {
+        code: launch_code.to_owned(),
     };
-    let form = form_urlencoded::Serializer::new(String::new())
-        .append_pair("grant_type", "authorization_code")
-        .append_pair("code", code)
-        .append_pair("redirect_uri", CALLBACK)
-        .append_pair("client_id", &client_id)
-        .append_pair("code_verifier", &verifier)
-        .finish();
-    let tokens: Value = http
-        .post(format!("{}/oauth2/token", opts.hydra_public))
-        .header("content-type", "application/x-www-form-urlencoded")
-        .body(form)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json()
-        .await
-        .map_err(|e| e.to_string())?;
-    let access = tokens["access_token"]
-        .as_str()
-        .ok_or(format!("không đổi được code lấy token: {tokens}"))?;
-    let me: Value = http
-        .get(format!(
-            "{}v1/me",
-            server.trim_end_matches('/').to_owned() + "/"
-        ))
-        .bearer_auth(access)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json()
-        .await
-        .map_err(|e| e.to_string())?;
+    let session = match fsdk::session_from_launch(&config, &launch).await {
+        Err(fsdk::Error::ConsentRequired) => {
+            return Err("bạn chưa đồng ý cho app này; chạy `cargo run -p feco-demo-app -- --client-id <ID>` một lần để đồng ý qua trình duyệt".into())
+        }
+        other => other.map_err(|e| e.to_string())?,
+    };
+    let me = session.me().await.map_err(|e| e.to_string())?;
+    println!("Scope được cấp: {}", session.granted_scopes().await);
     println!(
-        "Đã đăng nhập không cần trình duyệt. GET /v1/me:\n{}",
-        serde_json::to_string_pretty(&me).unwrap_or_default()
+        "Đã đăng nhập không cần trình duyệt. GET /v1/me:
+{}",
+        serde_json::to_string_pretty(&me.raw).unwrap_or_default()
     );
     Ok(())
 }
@@ -202,7 +157,7 @@ async fn run(opts: Opts) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
     if let Ok(code) = std::env::var("FECO_LAUNCH_CODE") {
-        let result = run_from_launcher(&http, &opts, &code).await;
+        let result = run_from_launcher(&opts, &code).await;
         if let Err(e) = &result {
             eprintln!("Lỗi: {e}");
         }

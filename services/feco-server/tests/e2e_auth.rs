@@ -3389,9 +3389,6 @@ fn repo_root() -> std::path::PathBuf {
 
 /// Thư viện C ABI của F-SDK cho binding Python; tự dựng nếu chưa có.
 fn fsdk_c_library() -> std::path::PathBuf {
-    let target = std::env::var("CARGO_TARGET_DIR")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| repo_root().join("target"));
     let name = if cfg!(windows) {
         "fsdk_c.dll"
     } else if cfg!(target_os = "macos") {
@@ -3399,18 +3396,26 @@ fn fsdk_c_library() -> std::path::PathBuf {
     } else {
         "libfsdk_c.so"
     };
-    let lib = target.join("debug").join(name);
-    if !lib.exists() {
+    built("fsdk-c", name)
+}
+
+/// Tệp trong `target/debug` do gói `package` dựng ra; tự dựng nếu chưa có.
+fn built(package: &str, file: &str) -> std::path::PathBuf {
+    let target = std::env::var("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| repo_root().join("target"));
+    let path = target.join("debug").join(file);
+    if !path.exists() {
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
         let ok = std::process::Command::new(cargo)
-            .args(["build", "-p", "fsdk-c"])
+            .args(["build", "-p", package])
             .current_dir(repo_root())
             .status()
             .unwrap()
             .success();
-        assert!(ok && lib.exists(), "không dựng được {}", lib.display());
+        assert!(ok && path.exists(), "không dựng được {}", path.display());
     }
-    lib
+    path
 }
 
 /// App mẫu của một binding: trình chạy (thử lần lượt), tham số, biến môi trường thêm.
@@ -3442,12 +3447,20 @@ fn run_example(programs: &[&str], args: &[String], env: &[(&str, String)]) -> Op
             out.status,
             String::from_utf8_lossy(&out.stderr)
         );
-        let line = stdout
+        let start = stdout
             .lines()
-            .rev()
-            .find(|l| l.starts_with('{'))
-            .expect("JSON");
-        return Some(serde_json::from_str(line).unwrap());
+            .position(|l| l.starts_with('{'))
+            .unwrap_or_else(|| panic!("không có JSON: {stdout}"));
+        let json: String = stdout
+            .lines()
+            .skip(start)
+            .take_while(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            );
+        return Some(serde_json::from_str(&json).unwrap());
     }
     assert!(!required, "thiếu trình chạy {programs:?}");
     eprintln!("bỏ qua app mẫu {args:?}: máy không có {programs:?}");
@@ -3617,6 +3630,19 @@ async fn sdk_end_to_end() {
             env: vec![],
         },
     ];
+    // Demo App (tools/feco-demo-app) dùng F-SDK khi F-Launcher mở nó.
+    let demo_app = if cfg!(windows) {
+        "feco-demo-app.exe"
+    } else {
+        "feco-demo-app"
+    };
+    examples.push(Example {
+        programs: vec![built("feco-demo-app", demo_app)
+            .to_string_lossy()
+            .into_owned()],
+        args: vec![],
+        env: vec![],
+    });
     if let Ok(c_example) = std::env::var("FSDK_C_EXAMPLE") {
         let lib_dir = library.parent().unwrap().to_string_lossy().into_owned();
         examples.push(Example {

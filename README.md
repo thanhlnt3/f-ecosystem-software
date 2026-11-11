@@ -198,8 +198,8 @@ bộ mà script dưới đây dựng sẵn, với Demo App ở bước 5 làm ap
    `%LOCALAPPDATA%\F-Eco\Launcher\apps` (macOS: `~/Library/Application Support/F-Eco/Launcher`).
 6. Lần đầu, cho Demo App quyền qua trình duyệt một lần: `cargo run -p feco-demo-app -- --client-id
    $(cat .dev/demo-client-id)`. Sau đó tab **App của tôi** → **Mở**: launcher xin mã khởi chạy dùng
-   một lần (sống 60 giây) và chạy Demo App; Demo App tự đổi mã lấy token, không mở trình duyệt, rồi
-   in kết quả `/v1/me`.
+   một lần (sống 60 giây) và chạy Demo App; Demo App dùng F-SDK (`fsdk::session_from_launch`) đổi
+   mã lấy token, không mở trình duyệt, rồi in scope được cấp và kết quả `/v1/me`.
 7. Thử cập nhật, quay lại, thu hồi:
 
    ```bash
