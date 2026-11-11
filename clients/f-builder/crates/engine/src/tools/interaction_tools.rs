@@ -764,6 +764,10 @@ fn refusal(kind: ActionKind, chosen: bool) -> String {
 /// deleting outside the project, changing system files or settings, shutting down, publishing
 /// anywhere, and tools with no rule. `Some(why)` refuses it.
 pub fn never_unasked(ws: Option<&Workspace>, tool: &str, input: &Value) -> Option<String> {
+    // What the policy itself allows (a write inside the project) is never refused.
+    if decide(ws, tool, input) == Decision::Allow {
+        return None;
+    }
     let kind = kind_of(ws, tool, input);
     (kind.default_in(true) == Approval::Refuse).then(|| refusal(kind, false))
 }
@@ -1117,7 +1121,9 @@ mod tests {
         assert!(matches!(decide(Some(&w), "Write", &through("x.txt")), Decision::Ask { .. }));
         assert!(matches!(decide(Some(&w), "Edit", &through("new/y.txt")), Decision::Ask { .. }));
         assert_eq!(decide(Some(&w), "Write", &json!({"file_path": w.app_dir().join("ok.txt").display().to_string()})), Decision::Allow);
-        assert_eq!(never_unasked(Some(&w), "Write", &through("x.txt")), None, "an ordinary folder may be asked about");
+        // Out of the project through a link: Auto mode refuses it (tasks.md 11.5), like any write
+        // outside the project.
+        assert!(never_unasked(Some(&w), "Write", &through("x.txt")).is_some_and(|m| m.contains("outside the project")));
     }
 
     #[test]
@@ -1710,7 +1716,8 @@ mod tests {
             assert!(matches!(outcome(Some(&w), true, "Bash", &json!({"command": cmd})), Outcome::Ask { .. }), "{cmd}");
         }
         // The builder writes only inside the project (11.5): outside it, refused without asking.
-        let outside = call("Write", json!({"file_path": "C:/Users/me/Documents/Unreal Projects/Game/x.ini", "content": ""}));
+        let elsewhere = if cfg!(windows) { "C:/Users/me/Documents/Unreal Projects/Game/x.ini" } else { "/home/me/Documents/Unreal Projects/Game/x.ini" };
+        let outside = call("Write", json!({"file_path": elsewhere, "content": ""}));
         assert_eq!(outside["result"]["behavior"], "deny");
         // These are refused, again without asking: the builder finds another way.
         for cmd in [
