@@ -41,8 +41,16 @@ fn rsa_key() -> &'static RsaPrivateKey {
 fn p256_key() -> &'static P256Sk {
     static KEY: OnceLock<P256Sk> = OnceLock::new();
     KEY.get_or_init(|| {
+        // From random bytes: p256's own generator takes another rand_core than the rsa key's.
+        use rand::RngCore;
         let mut rng = rand::thread_rng();
-        P256Sk::random(&mut rng)
+        loop {
+            let mut bytes = [0u8; 32];
+            rng.fill_bytes(&mut bytes);
+            if let Ok(key) = P256Sk::from_slice(&bytes) {
+                break key;
+            }
+        }
     })
 }
 
@@ -55,7 +63,7 @@ pub fn rsa_spki() -> Vec<u8> {
 /// The P-256 key's `subjectPublicKeyInfo` (DER).
 pub fn p256_spki() -> Vec<u8> {
     let vk = P256Vk::from(p256_key());
-    let point = vk.to_encoded_point(false);
+    let point = vk.to_sec1_point(false);
     seq(&[seq(&[der_oid("1.2.840.10045.2.1"), der_oid("1.2.840.10045.3.1.7")]), bit_string(point.as_bytes())])
 }
 
@@ -67,7 +75,7 @@ pub fn rsa_sign_sha256(msg: &[u8]) -> Vec<u8> {
 
 /// Sign `msg` with the P-256 key (ECDSA, SHA-256); returns an ASN.1 DER signature.
 pub fn p256_sign_sha256(msg: &[u8]) -> Vec<u8> {
-    let sig: P256Sig = p256_key().sign(msg);
+    let sig: P256Sig = p256::ecdsa::signature::Signer::sign(p256_key(), msg);
     sig.to_der().as_bytes().to_vec()
 }
 
