@@ -1699,6 +1699,48 @@ mod picking_up_a_build {
         std::fs::read_to_string(&b.prompts).unwrap_or_default().matches("===").count()
     }
 
+    /// tasks.md 11.2 (spec app-builder, "Tạo từ mô tả"): before a project described in words only
+    /// is built, its platform and interface language are asked as cards; the answers reach the
+    /// request and the builder's brief. Callers that show no cards (agents, tests) never wait.
+    #[test]
+    fn a_project_in_words_only_is_asked_its_platform_and_language_before_building() {
+        let b = bench();
+        let ws = Workspace::create(&b.projects, "x", "Ứng dụng quản lý chi tiêu gia đình, có biểu đồ theo tháng", TargetRef::None).unwrap();
+        let mut opts = RunOptions { clarify: true, backend: Some("Stand-in".into()), ..RunOptions::default() };
+        opts.kinds.register(Arc::new(FlakyKind));
+        let run = RebuildRun::start(&b.hub, Workspace::open(&ws.root).unwrap(), opts).unwrap();
+        let began = Instant::now();
+        let (mut asked, mut ok) = (Vec::new(), None);
+        while ok.is_none() {
+            assert!(began.elapsed() < Duration::from_secs(30), "the run never finished; asked {asked:?}");
+            match run.rx.recv_timeout(Duration::from_secs(30)) {
+                Ok(RunEvent::Ask(r)) => {
+                    assert_eq!(prompts_given(&b), 0, "asked before the builder starts");
+                    let choice = if asked.is_empty() { "A website, opened in a browser" } else { "Vietnamese" };
+                    assert!(r.choices.iter().any(|c| c == choice), "{r:?}");
+                    asked.push(r.title.clone());
+                    run.answer(&r.id, &Answer { choice: Some(choice.into()), ..Default::default() }).unwrap();
+                }
+                Ok(RunEvent::Finished { ok: o, .. }) => ok = Some(o),
+                Ok(_) => {}
+                Err(e) => panic!("the run went away: {e}"),
+            }
+        }
+        assert_eq!(asked, ["Where will the app run?", "Which language should the app's interface use?"]);
+        let request = Workspace::open(&ws.root).unwrap().manifest.request;
+        assert!(request.contains("a website that runs in the browser") && request.contains("in Vietnamese"), "{request}");
+        let prompts = std::fs::read_to_string(&b.prompts).unwrap_or_default();
+        assert!(prompts.contains("a website that runs in the browser"), "the builder is told: {prompts}");
+        // Its history has the run.
+        let runs = f_builder_engine::run_history::read(&ws.root);
+        assert_eq!(runs.len(), 1, "{runs:?}");
+        assert_eq!(runs[0].kind, f_builder_engine::run_history::RunKind::Start);
+        // Without `clarify` (an agent started it), nothing is asked.
+        let other = Workspace::create(&b.projects, "y", "Sổ ghi chép", TargetRef::None).unwrap();
+        let (_, feed) = try_it(&b, &other);
+        assert!(!feed.iter().any(|i| matches!(i, feed::FeedItem::Ask { .. })), "{feed:?}");
+    }
+
     fn studied(feed: &[feed::FeedItem]) -> bool {
         feed.iter().any(|i| matches!(i, feed::FeedItem::Step { step: Step::Study, .. }))
     }
@@ -3995,4 +4037,35 @@ fn a_build_says_when_it_waits_for_an_analysis_started_earlier() {
         })
         .collect();
     assert!(said.iter().any(|t| t.contains("waiting for Ghidra's analysis of this program, started earlier")), "{said:?}");
+}
+
+/// tasks.md 11.2 (spec app-builder, "Tạo từ OpenSpec"): a project started from a folder with
+/// `openspec/changes/<name>/` takes the spec as its binding input, leaves it as it is, and builds
+/// the app in app/ beside it.
+#[test]
+fn a_project_started_from_an_openspec_is_built_by_it_in_app() {
+    use f_builder_engine::workspace::ExistingFiles;
+    let d = tempfile::tempdir().unwrap();
+    let folder = d.path().join("chi-tieu");
+    let write = |rel: &str, text: &str| {
+        let p = folder.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    write("openspec/changes/add-chi-tieu/proposal.md", "# Quản lý chi tiêu");
+    write("openspec/changes/add-chi-tieu/tasks.md", "- [ ] 1.1 Ghi khoản chi");
+    write("openspec/changes/add-chi-tieu/specs/budget/spec.md", "### Requirement: Ghi khoản chi\n#### Scenario: Thêm khoản chi\n");
+    let ws = Workspace::create_at(&folder, "Chi tiêu", "Xây theo spec này", TargetRef::None, Some(ExistingFiles::StartFrom)).unwrap();
+    assert!(!ws.manifest.app_in_root, "the app goes beside the spec");
+    assert_eq!(ws.app_dir(), folder.join("app"));
+    let b = brief(&ws, "app", false, false, None, false, None);
+    assert!(b.contains("openspec/changes/add-chi-tieu/ (1 requirements, 1 scenarios, capabilities: budget)"), "{b}");
+    assert!(b.contains("The spec is the binding source of what to build"), "{b}");
+    assert!(b.contains("Keep the spec files exactly as they are") && b.contains("Build the app in app/"), "{b}");
+    // Nothing is asked first: the spec says what to build.
+    assert!(super::clarify::questions(&ws, "vi").is_empty());
+    // Without an OpenSpec, nothing about one is said.
+    let plain = tempfile::tempdir().unwrap();
+    let ws = Workspace::create(plain.path(), "p", "Sổ ghi chép", TargetRef::None).unwrap();
+    assert!(!brief(&ws, "app", false, false, None, false, None).contains("OpenSpec"));
 }

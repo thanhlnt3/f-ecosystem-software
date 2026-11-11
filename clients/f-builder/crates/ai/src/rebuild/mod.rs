@@ -19,7 +19,7 @@
 
 use crate::cli_agents::{Builder, CliSpec};
 use crate::{AgentEvent, AiHub, BackendKind, Conversation, Role};
-use f_builder_engine::inbox::{Answer, Inbox, InboxDir, Request};
+use f_builder_engine::inbox::{Answer, Inbox, InboxDir, Request, RequestKind};
 use f_builder_engine::project::{Project, Purpose};
 use f_builder_engine::questions::AskedQuestion;
 use f_builder_engine::workspace::progress::{AppFingerprintCache, BuildProgress};
@@ -41,6 +41,7 @@ use std::time::{Duration, Instant};
 pub mod activity;
 mod brief;
 mod check;
+pub mod clarify;
 pub mod feed;
 mod kept_check;
 pub mod kinds;
@@ -157,6 +158,10 @@ pub struct RunOptions {
     /// A free session is read first; this is the fallback while it is held; the saved settings
     /// are the last fallback.
     pub clean_room: Option<bool>,
+    /// Ask the person what a project described in words only doesn't say (platform, language)
+    /// before its first build (tasks.md 11.2). Only for callers that show the questions to someone:
+    /// the app, and the CLI when not unattended.
+    pub clarify: bool,
 }
 
 impl Default for RunOptions {
@@ -174,6 +179,7 @@ impl Default for RunOptions {
             adapters: Default::default(),
             wake: Wake::default(),
             clean_room: None,
+            clarify: false,
         }
     }
 }
@@ -316,6 +322,15 @@ impl RebuildRun {
             .spawn(move || {
                 let mut ctx = ctx;
                 let mut ws = ws;
+                use f_builder_engine::run_history::{self, RunKind, RunRecord};
+                let kind = if opts.message.is_some() {
+                    RunKind::Change
+                } else if opts.continuing || ws.builder_started() {
+                    RunKind::Continue
+                } else {
+                    RunKind::Start
+                };
+                let mut record = RunRecord::new(f_builder_engine::inbox::now_ms(), kind, opts.shown.as_deref().or(opts.message.as_deref()));
                 // A clone can run for hours: keep the computer from sleeping until it ends.
                 let awake = f_builder_platform::keep_awake();
                 let _here = self_check::BuildingHere::new(&ws.root);
@@ -324,6 +339,12 @@ impl RebuildRun {
                     ctx.run(&mut ws, entry, api, extractor, &opts)
                 }));
                 let (ok, message, paused) = run_outcome(result, &mut ws);
+                record.ended_ms = f_builder_engine::inbox::now_ms();
+                (record.ok, record.paused, record.outcome) = (ok, paused, message.clone());
+                record.status = Workspace::open(&ws.root).ok().map(|w| w.manifest.status.label().to_string());
+                if let Err(e) = run_history::append(&ws.root, &record) {
+                    log::warn!("The run wasn't added to the project's history: {}", e.message);
+                }
                 ctx.record_usage(None);
                 // The CLI can exit as soon as it sees completion: release the helper while its
                 // supervisor threads are still available to stop it.
@@ -829,6 +850,11 @@ impl Worker {
             ToolError::new(ErrorCode::BadSettings, "No kind of project matches this request.")
                 .with_remediation("Describe what to make: a website, an app or a game.")
         };
+        // A project described in words only is asked what it doesn't say before its stack is chosen.
+        if opts.clarify && ws.manifest.stack.is_empty() && opts.message.is_none() && !opts.continuing && !ws.builder_started() {
+            let language = self.engine.session().settings.language.clone();
+            self.clarify(ws, &language)?;
+        }
         if ws.manifest.stack.is_empty() {
             let deep = !self.engine.session().clean_room();
             ws.manifest.stack = project::first_stack(&opts.kinds, ws, deep).ok_or_else(no_kind)?.to_string();
@@ -1395,6 +1421,30 @@ impl Worker {
         self.reset_progress_after_notes |= new_request;
     }
 
+    /// tasks.md 11.2 (spec app-builder "Tạo từ mô tả"): ask the platform and the interface language
+    /// when a project described in words doesn't say, before anything is built, and add the answers
+    /// to its request. No answer within [`CLARIFY_WAIT`] leaves the choice to the builder.
+    fn clarify(&mut self, ws: &mut Workspace, language: &str) -> Result<(), ToolError> {
+        let asks = clarify::questions(ws, language);
+        if asks.is_empty() {
+            return Ok(());
+        }
+        let mut added = Vec::new();
+        for q in &asks {
+            let shown: Vec<String> = q.choices.iter().map(|(c, _)| c.clone()).collect();
+            let id = self.inbox.post(RequestKind::Question, &q.title, "", shown, true, None)?;
+            self.relay_inbox();
+            let stop = self.stop.clone();
+            let answer = self.inbox.wait(&id, CLARIFY_WAIT, &|| stop.is_cancelled());
+            self.stop.check()?;
+            if let Some(a) = answer {
+                added.push(clarify::added(q, a.choice.as_deref(), a.text.as_deref()));
+            }
+        }
+        ws.manifest.request = clarify::with_answers(&ws.manifest.request, &added);
+        ws.save()
+    }
+
     fn relay_inbox(&mut self) {
         for r in self.inbox.pending() {
             if self.seen.insert(r.id.clone()) {
@@ -1403,6 +1453,9 @@ impl Worker {
         }
     }
 }
+
+/// How long the questions before a first build wait for an answer.
+const CLARIFY_WAIT: Duration = Duration::from_secs(30 * 60);
 
 /// What the run says, and the status it leaves on the project, when it ends: paused, failed, or
 /// a caught bug. A caught bug must not leave the saved status as it last was ("Checking" while

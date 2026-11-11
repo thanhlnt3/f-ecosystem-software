@@ -148,6 +148,9 @@ pub(super) fn brief(kind: &dyn TargetKind, cx: &BriefCx, extra: Option<&str>) ->
     if let Some(note) = start_files_note(m) {
         s.push_str(&format!("\n\n{note}"));
     }
+    if let Some(note) = openspec_note(ws) {
+        s.push_str(&format!("\n\n{note}"));
+    }
     if let Some(e) = extra.filter(|e| e.trim() != m.request.trim()) {
         s.push_str(&format!("\n\nThe person also said: \"{e}\""));
     }
@@ -172,6 +175,37 @@ pub(super) fn start_files_note(m: &f_builder_engine::workspace::Manifest) -> Opt
             "The person started this project in a folder of their own, which already had these files: {names}. They're material to start from: read them first (code, notes, pictures, designs), build on what they show and bring into app/ whatever the app uses. Leave the originals where they are, unchanged."
         )
     })
+}
+
+/// A project started from a folder holding an OpenSpec (tasks.md 11.2, spec app-builder "Tạo từ
+/// OpenSpec"): the spec is the binding source of the requirements, read first and left unchanged,
+/// and the app is built in app/ beside it.
+pub(super) fn openspec_note(ws: &Workspace) -> Option<String> {
+    if ws.manifest.app_in_root {
+        return None;
+    }
+    let changes = f_builder_engine::openspec::changes(&ws.root);
+    if changes.is_empty() {
+        return None;
+    }
+    let list = changes
+        .iter()
+        .map(|c| {
+            let caps = if c.capabilities.is_empty() { String::new() } else { format!(", capabilities: {}", c.capabilities.join(", ")) };
+            format!("- {}/ ({} requirements, {} scenarios{caps})", c.dir, c.requirements, c.scenarios)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(format!(
+        "This project is built from an OpenSpec in the person's folder:\n{list}\n\n\
+         The spec is the binding source of what to build. Before writing code, read each change's proposal.md (why), design.md \
+         (the decisions already taken: follow them), every specs/<capability>/spec.md (the requirements) and tasks.md (the work, in \
+         order). Every `### Requirement` must be met (SHALL and MUST are not optional), and every `#### Scenario` is an acceptance \
+         test: write a test for each one in app/ and run it. Work through tasks.md in its order. Keep the spec files exactly as \
+         they are; record progress in app/SPEC-STATUS.md (each task done, with one line on how it was verified, and each \
+         requirement with the tests that cover it). Where the spec is unclear or contradicts itself, don't guess: add an open \
+         question (core_unknown_add) and write it in app/QUESTIONS.md, then carry on with the parts that are clear. Build the app in app/."
+    ))
 }
 
 /// Realistic assets with fal.ai: what each tool makes and costs (prices from the asset table,

@@ -149,6 +149,7 @@ fn run(cli: &Cli, a: &RebuildArgs) -> Result<bool, ToolError> {
         good_enough,
         beginner: !cli.json,
         clean_room: Some(engine.session().clean_room()),
+        clarify: !a.unattended,
         ..RunOptions::default()
     };
     let mut run = RebuildRun::start(&hub, ws, opts)?;

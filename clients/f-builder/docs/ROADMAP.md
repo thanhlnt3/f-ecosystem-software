@@ -13,10 +13,10 @@ dòng `- [x]` là việc đã xong. Kế hoạch của Craft Anything 0.6.0 (b�
 - [ ] Dựng lại `packaging/macos/dmg/DS_Store` bằng `generate.py` (cần resvg, ds_store, mac_alias)
 
 ### R11.2 Tạo dự án và bốn bước
-- [ ] Nhận thư mục OpenSpec (`openspec/changes/<tên>/`) làm tài liệu đầu vào, app dựng trong `app/`
-- [ ] Hỏi nền tảng và ngôn ngữ trước khi xây khi dự án tạo từ mô tả còn thiếu
-- [ ] Lịch sử các lượt trong thư mục dự án
-- [ ] Mở lại dự án bị gián đoạn thì đề xuất Tiếp tục
+- [x] Nhận thư mục OpenSpec (`openspec/changes/<tên>/`) làm tài liệu đầu vào, app dựng trong `app/`
+- [x] Hỏi nền tảng và ngôn ngữ trước khi xây khi dự án tạo từ mô tả còn thiếu
+- [x] Lịch sử các lượt trong thư mục dự án
+- [x] Mở lại dự án bị gián đoạn thì đề xuất Tiếp tục
 
 ### R11.3 Không bị treo im lặng
 - [x] Cảnh báo sau 10 phút không tiến triển (nhật ký, file, CPU) với Tiếp tục chờ, Chạy lại bước, Dừng

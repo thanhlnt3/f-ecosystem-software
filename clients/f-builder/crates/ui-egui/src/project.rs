@@ -155,6 +155,7 @@ impl BuilderApp {
             max_rounds: build.max_rounds,
             good_enough: build.good_enough,
             clean_room: Some(!self.settings.deep_mode),
+            clarify: true,
             ..RunOptions::default()
         }
     }
