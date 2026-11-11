@@ -26,6 +26,9 @@ pub mod mailer;
 pub mod oauth;
 pub mod pairwise;
 pub mod ratelimit;
+
+pub mod review;
+pub mod scan;
 pub mod security;
 pub mod store;
 pub mod store_web;
@@ -88,6 +91,10 @@ pub struct AppState {
     /// Kho TUF để ký target khi phát hành (không cấu hình thì bỏ qua bước ký).
     pub tuf: Option<feco_config::TufConfig>,
     pub tuf_lock: tokio::sync::Mutex<()>,
+    /// ClamAV, engine quét thứ hai của khâu kiểm duyệt.
+    pub clamd: Option<std::net::SocketAddr>,
+    /// Địa chỉ nhận cảnh báo kiểm duyệt.
+    pub admin_emails: Vec<String>,
 }
 
 /// Ngưỡng giới hạn tần suất (yêu cầu mỗi phút).
@@ -152,6 +159,8 @@ impl AppState {
             package_dir: config.developer.package_dir.clone(),
             tuf: config.developer.tuf.clone(),
             tuf_lock: tokio::sync::Mutex::new(()),
+            clamd: config.developer.clamd,
+            admin_emails: config.developer.admin_emails.clone(),
         })
     }
 }
@@ -230,6 +239,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/dev/versions/{id}/submit", post(dev_web::api_submit))
         .route("/developer", get(dev_web::home))
         .route("/developer/docs", get(dev_web::docs))
+        .route("/policy/content", get(dev_web::content_policy))
         .route("/developer/register", post(dev_web::register))
         .route("/developer/apps/{id}", get(dev_web::app_page))
         .route("/developer/apps/{id}/{action}", post(dev_web::app_action))
@@ -310,6 +320,8 @@ mod tests {
             package_dir: std::env::temp_dir(),
             tuf: None,
             tuf_lock: tokio::sync::Mutex::new(()),
+            clamd: None,
+            admin_emails: Vec::new(),
         }
     }
 

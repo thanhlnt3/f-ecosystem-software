@@ -61,6 +61,7 @@ struct HomePage {
     invitations: Vec<InviteView>,
     agreement_version: &'static str,
     agreement_current: bool,
+    suspended: bool,
     name: String,
     organization: bool,
     role: String,
@@ -85,6 +86,7 @@ pub struct VersionView {
     pub releasable: bool,
     pub released: bool,
     pub note: String,
+    pub appealable: bool,
 }
 
 #[derive(Template)]
@@ -175,7 +177,8 @@ fn status_label(lang: Lang, status: &str) -> String {
 }
 
 fn ok_message(lang: Lang, key: Option<&str>) -> Vec<Msg> {
-    const KEYS: [&str; 10] = [
+    const KEYS: [&str; 11] = [
+        "appealed",
         "registered",
         "agreement",
         "verified",
@@ -225,6 +228,7 @@ async fn render_home(
             invitations: Vec::new(),
             agreement_version: dev::AGREEMENT_VERSION,
             agreement_current: false,
+            suspended: false,
             name: String::new(),
             organization: false,
             role: String::new(),
@@ -257,6 +261,7 @@ async fn render_home(
             },
             Some(m) => {
                 page.agreement_current = m.account.agreement_current();
+                page.suspended = m.account.suspended;
                 page.name = m.account.display_name.clone();
                 page.organization = m.account.kind == "organization";
                 page.role = role_label(lang, m.role);
@@ -317,7 +322,16 @@ async fn render_app(
                 draft: v.status == "draft",
                 releasable: ["approved", "released", "paused"].contains(&v.status.as_str()),
                 released: v.status == "released",
-                status: status_label(lang, &v.status),
+                status: match (v.status.as_str(), v.review_stage.as_deref()) {
+                    ("pending_review", Some("manual")) => format!(
+                        "{} ({})",
+                        lang.t("dev.status.manual_review"),
+                        v.manual_reason.clone().unwrap_or_default()
+                    ),
+                    ("pending_review", Some("checks")) => lang.t("dev.status.checks").to_owned(),
+                    _ => status_label(lang, &v.status),
+                },
+                appealable: v.appealable,
                 channel: v.channel.unwrap_or_default(),
                 percent: v.rollout_percent,
                 missing: v
@@ -407,6 +421,48 @@ pub async fn docs(State(state): State<Arc<AppState>>, lang: Lang) -> Response {
             i18n: lang,
             server: state.public_url.to_string(),
             hydra: state.hydra_public.to_string(),
+        },
+        lang,
+        StatusCode::OK,
+        None,
+    )
+}
+
+pub struct ClauseView {
+    pub number: &'static str,
+    pub title: &'static str,
+    pub rule: &'static str,
+}
+
+#[derive(Template)]
+#[template(path = "policy.html")]
+struct PolicyPage {
+    i18n: Lang,
+    clauses: Vec<ClauseView>,
+}
+
+/// GET /policy/content (công khai): chính sách nội dung (spec app-review).
+pub async fn content_policy(lang: Lang) -> Response {
+    let clauses = crate::review::CLAUSES
+        .iter()
+        .filter(|c| c.code != "technical")
+        .map(|c| match lang {
+            Lang::Vi => ClauseView {
+                number: c.number,
+                title: c.title_vi,
+                rule: c.rule_vi,
+            },
+            Lang::En => ClauseView {
+                number: c.number,
+                title: c.title_en,
+                rule: c.rule_en,
+            },
+        })
+        .collect();
+    html(
+        PolicyPage {
+            i18n: lang,
+            clauses,
         },
         lang,
         StatusCode::OK,
@@ -792,6 +848,10 @@ pub async fn version_action(
             "pause" => {
                 dev::pause(&state, &m, id).await?;
                 "released"
+            }
+            "appeal" => {
+                crate::review::appeal(&state.db, &m, id, form.get("message")).await?;
+                "appealed"
             }
             _ => {
                 return Err(DevError::Problem(Problem {

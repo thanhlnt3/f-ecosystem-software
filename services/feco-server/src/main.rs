@@ -71,6 +71,25 @@ fn spawn_background_jobs(state: Arc<AppState>) {
             }
         }
     });
+    // Kiểm duyệt: chạy hàng đợi kiểm tra tự động mỗi 10 giây, xếp lịch quét lại mỗi giờ
+    // (spec app-review, "Kiểm tra tự động", "Kiểm tra lại định kỳ").
+    let s = state.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(10));
+        let mut last_rescan = std::time::Instant::now() - Duration::from_secs(3600);
+        loop {
+            tick.tick().await;
+            if last_rescan.elapsed() >= Duration::from_secs(3600) {
+                last_rescan = std::time::Instant::now();
+                if let Err(e) = feco_server::review::enqueue_rescans(&s.db).await {
+                    tracing::error!(error = %e, "không xếp được lịch quét lại");
+                }
+            }
+            if let Err(e) = feco_server::review::process_due(&s).await {
+                tracing::error!(error = %e, "không chạy được hàng đợi kiểm duyệt");
+            }
+        }
+    });
     // Mỗi giờ: xóa tài khoản đã chờ đủ 30 ngày, nhật ký truy cập quá 90 ngày, file xuất
     // dữ liệu đã hết hạn.
     tokio::spawn(async move {

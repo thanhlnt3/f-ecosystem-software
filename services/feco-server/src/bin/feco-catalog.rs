@@ -1,22 +1,32 @@
-//! Công cụ quản trị danh mục tạm thời, cho tới khi có cổng nhà phát triển (nhóm 8), kiểm duyệt
-//! (nhóm 9) và bảng quản trị (nhóm 14). Đọc cấu hình giống `feco-server` (`FECO_ENV`,
+//! Công cụ quản trị danh mục và kiểm duyệt tạm thời, cho tới khi có bảng quản trị (nhóm 14). Đọc cấu hình giống `feco-server` (`FECO_ENV`,
 //! `FECO_DATABASE_URL`...).
 
 use std::process::ExitCode;
 
 use feco_config::Config;
-use feco_server::{catalog, store, store_web, AppState};
+use feco_server::{catalog, review, store, store_web, AppState};
 
 const USAGE: &str = "\
 feco-catalog: quản trị danh mục F-Store (tạm thời)
 
   feco-catalog add-app <app.json>                 thêm hoặc cập nhật app (xem docs/catalog-app.example.json)
   feco-catalog release <app> <version> <platform> <size-bytes> <tuf-target> [changelog]
-  feco-catalog revoke <app> <version>             thu hồi một phiên bản khỏi danh mục
-  feco-catalog remove <app> <lý do>               gỡ app khỏi danh mục
-  feco-catalog review <app> <version> approve|reject [ghi chú]   kết quả kiểm duyệt (tạm, tới nhóm 9)
+  feco-catalog remove <app> <lý do>               gỡ app khỏi danh mục (không đụng tới TUF)
   feco-catalog reports                            hàng chờ báo cáo vi phạm
   feco-catalog resolve <report-id> upheld|rejected <ghi chú>
+
+Kiểm duyệt (người duyệt ghi tên bằng FECO_REVIEWER, mặc định admin):
+  feco-catalog scan                               chạy hàng đợi kiểm tra tự động, xếp lịch quét lại 7 ngày
+  feco-catalog queue                              hàng chờ duyệt thủ công
+  feco-catalog approve <app> <version> [ghi chú]
+  feco-catalog reject <app> <version> <điều khoản> <ghi chú>   điều khoản: malware, undeclared_data,
+                                                  hidden_mining, drm_copyright, brand_impersonation,
+                                                  illegal_content, misleading, technical
+  feco-catalog appeals                            kháng nghị đang mở
+  feco-catalog appeal <app> <version> uphold|overturn <ghi chú>
+  feco-catalog emergency <app> <version|all> <lý do>   thu hồi khẩn cấp (danh mục, TUF, email)
+  feco-catalog alerts                             cảnh báo kiểm duyệt chưa xử lý
+  feco-catalog add-signature <sha256> <tên>       thêm vào cơ sở dữ liệu mã độc
 ";
 
 #[tokio::main]
@@ -49,6 +59,7 @@ async fn run(args: Vec<String>) -> Result<(), String> {
         .run(&state.db)
         .await
         .map_err(|e| e.to_string())?;
+    let reviewer = std::env::var("FECO_REVIEWER").unwrap_or_else(|_| "admin".into());
     match command.as_str() {
         "add-app" => {
             let json = std::fs::read_to_string(arg(&args, 1)?).map_err(|e| e.to_string())?;
@@ -75,13 +86,6 @@ async fn run(args: Vec<String>) -> Result<(), String> {
                 .map_err(e)?;
             println!("đã phát hành {app} {} ({})", v.version, v.platform);
         }
-        "revoke" => {
-            let n =
-                catalog::revoke_version(&state.db, &state.catalog, arg(&args, 1)?, arg(&args, 2)?)
-                    .await
-                    .map_err(e)?;
-            println!("đã thu hồi {n} bản ghi phiên bản");
-        }
         "remove" => {
             let removed =
                 catalog::remove_app(&state.db, &state.catalog, arg(&args, 1)?, arg(&args, 2)?)
@@ -96,34 +100,89 @@ async fn run(args: Vec<String>) -> Result<(), String> {
                 }
             );
         }
-        "review" => {
-            let approve = match arg(&args, 3)? {
-                "approve" => true,
-                "reject" => false,
+        "scan" => {
+            let queued = review::enqueue_rescans(&state.db).await.map_err(e)?;
+            let done = review::process_due(&state).await.map_err(e)?;
+            println!("đã xếp lịch quét lại {queued} phiên bản; đã chạy {done} job");
+        }
+        "queue" => {
+            for q in review::manual_queue(&state.db).await.map_err(e)? {
+                println!("{} {} — {}", q.app_id, q.version, q.reason);
+            }
+        }
+        "approve" | "reject" => {
+            let (app, version) = (arg(&args, 1)?, arg(&args, 2)?);
+            let id = review::version_id(&state.db, app, version)
+                .await
+                .map_err(e)?
+                .ok_or("không có phiên bản này")?;
+            if command == "approve" {
+                let note = args.get(3).cloned().unwrap_or_default();
+                review::approve(&state, id, &reviewer, &note)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                println!("đã duyệt {app} {version}");
+            } else {
+                review::reject(&state, id, &reviewer, arg(&args, 3)?, arg(&args, 4)?)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                println!("đã từ chối {app} {version} và gửi email cho nhà phát triển");
+            }
+        }
+        "appeals" => {
+            for a in review::open_appeals(&state.db).await.map_err(e)? {
+                println!(
+                    "{} {} (điều khoản {}) — {}",
+                    a.app_id,
+                    a.version,
+                    a.reject_code.unwrap_or_default(),
+                    a.message
+                );
+            }
+        }
+        "appeal" => {
+            let (app, version) = (arg(&args, 1)?, arg(&args, 2)?);
+            let id = review::version_id(&state.db, app, version)
+                .await
+                .map_err(e)?
+                .ok_or("không có phiên bản này")?;
+            let overturn = match arg(&args, 3)? {
+                "overturn" => true,
+                "uphold" => false,
                 other => {
                     return Err(format!(
-                        "kết quả phải là approve hoặc reject, không phải {other}"
+                        "kết quả phải là uphold hoặc overturn, không phải {other}"
                     ))
                 }
             };
-            let note = args.get(4).cloned().unwrap_or_default();
-            let done = feco_server::developer::review(
-                &state.db,
-                arg(&args, 1)?,
-                arg(&args, 2)?,
-                approve,
-                &note,
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-            println!(
-                "{}",
-                if done {
-                    "đã ghi kết quả kiểm duyệt"
-                } else {
-                    "không có phiên bản đang chờ duyệt"
-                }
-            );
+            review::resolve_appeal(&state, id, &reviewer, overturn, arg(&args, 4)?)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!("đã xử lý kháng nghị và gửi email cho nhà phát triển");
+        }
+        "emergency" => {
+            let version = Some(arg(&args, 2)?).filter(|v| *v != "all");
+            let n = review::revoke(&state, arg(&args, 1)?, version, &reviewer, arg(&args, 3)?)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!("đã thu hồi {n} phiên bản và báo cho nhà phát triển");
+        }
+        "alerts" => {
+            for a in review::open_alerts(&state.db).await.map_err(e)? {
+                println!(
+                    "#{} {} [{}] {}\n  {}",
+                    a.id, a.created_at, a.kind, a.message, a.details
+                );
+            }
+        }
+        "add-signature" => {
+            sqlx::query("INSERT INTO malware_signatures (sha256, name) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+                .bind(arg(&args, 1)?.to_ascii_lowercase())
+                .bind(arg(&args, 2)?)
+                .execute(&state.db)
+                .await
+                .map_err(e)?;
+            println!("đã thêm chữ ký mã độc");
         }
         "reports" => {
             for r in catalog::open_reports(&state.db).await.map_err(e)? {

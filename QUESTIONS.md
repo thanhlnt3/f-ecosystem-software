@@ -107,3 +107,21 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 33. **Phát hành dần dựa trên mã thiết bị ngẫu nhiên của launcher** (không gắn tài khoản). Người dùng
     có nhiều máy có thể nhận bản khác nhau trên mỗi máy. Có chấp nhận không, hay chia nhóm theo
     tài khoản?
+
+## Nhóm 9: kiểm duyệt
+
+34. **Dịch vụ quét thương mại** (design D6): cần chọn nhà cung cấp có hợp đồng cho phép dùng thương
+    mại. Hiện hai engine là engine chữ ký của F-Eco (EICAR và cơ sở dữ liệu SHA-256) và ClamAV; engine
+    chữ ký chỉ bắt được mẫu đã biết, nên production cần thêm dịch vụ thương mại.
+35. **ClamAV là GPL-2.0**: chạy thành dịch vụ riêng, không phân phối cho người dùng, nhưng phải ghi
+    vào `third_party/license-exceptions.toml` (kèm người duyệt và ngày) khi đưa ảnh container
+    ClamAV vào hạ tầng. Ai là người duyệt ngoại lệ này?
+36. **Máy ảo dùng một lần** cho job quét và cho người duyệt chạy thử app: phụ thuộc nhà cung cấp hạ
+    tầng (task 1.4). Hiện job chạy phân tích tĩnh trong tiến trình worker, không chạy tệp nào.
+37. **Tạm khóa khi phát hiện mã độc** chặn tạo app và nộp phiên bản, nhưng các bản đang phát hành của
+    tài khoản vẫn còn. Có thu hồi luôn mọi bản đang phát hành của tài khoản đó không, hay chờ điều tra?
+38. **Mục tiêu 3 ngày làm việc cho 90% lượt duyệt thủ công**: cần lịch ngày làm việc (ngày lễ Việt
+    Nam) và bảng quản trị có số liệu thời gian duyệt (nhóm 14) để đo và cảnh báo.
+39. **Người duyệt** hiện ghi tên qua biến `FECO_REVIEWER` của công cụ dòng lệnh. Bảng quản trị cần
+    vai trò người duyệt (có quyền duyệt nhưng không quản trị toàn hệ thống) và có cần hai người cho
+    thao tác gỡ khẩn cấp không (đã hỏi ở câu 24).

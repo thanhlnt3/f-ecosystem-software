@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–8):
+> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–9):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện tiếng Việt và tiếng Anh.
@@ -12,8 +12,9 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 > - F-Store (`/store`): danh mục app đã duyệt, tìm không phân biệt dấu tiếng Việt, lọc theo danh mục, hệ điều hành, giá, nhà phát triển đã xác minh; trang chi tiết có scope dữ liệu kèm mục đích, license, chính sách quyền riêng tư, lịch sử thay đổi; đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi phạm.
 >
 > - Cổng nhà phát triển (`/developer`): đăng ký cá nhân hoặc tổ chức (cần email đã xác minh và TOTP), Thỏa thuận nhà phát triển, xác minh tên miền bằng DNS TXT, nhóm và vai trò, client ID cùng địa chỉ chuyển hướng, manifest `f-app.toml`, nộp gói qua web hoặc CLI `f-dev`, kiểm tra chữ ký mã, kênh stable/beta và phát hành dần theo phần trăm, số liệu tổng hợp.
+> - Kiểm duyệt: hàng đợi kiểm tra tự động (quét mã độc bằng engine chữ ký của F-Eco và ClamAV, chữ ký mã, kiến trúc, packer), quy tắc duyệt thủ công hay tự động, chính sách nội dung (`/policy/content`), từ chối kèm điều khoản và cách sửa, kháng nghị, gỡ khẩn cấp, quét lại 7 ngày.
 >
-> Chưa có: kiểm duyệt (phiên bản tạm được duyệt bằng công cụ `feco-catalog`), bảng quản trị, môi trường sandbox, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
+> Chưa có: bảng quản trị (người duyệt tạm dùng công cụ `feco-catalog`), máy ảo chạy thử app, môi trường sandbox, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
 
 ## Mục lục
 
@@ -249,11 +250,24 @@ cargo run -p feco-server --bin feco-catalog -- resolve <id> upheld "<ghi chú>" 
    Lệnh in "Chờ duyệt" và mã phiên bản. Gói Windows có tệp chạy chưa ký Authenticode bị từ chối;
    gói macOS phải được ký Developer ID và đính vé notarize. Cũng nộp được qua trang app (dán
    manifest, tải file `.zip` cho từng nền tảng, bấm **Gửi duyệt**).
-5. Duyệt tạm bằng tay (khâu kiểm duyệt tự động là nhóm 9):
+5. Kiểm duyệt. `feco-server` chạy hàng đợi kiểm tra tự động mỗi 10 giây (cũng chạy tay được bằng
+   `scan`). Bản đầu tiên của app, hoặc bản thêm scope hay quyền hệ thống, vào hàng chờ duyệt thủ
+   công; các bản khác qua kiểm tra thì được duyệt tự động. Cho tới khi có bảng quản trị (nhóm 14):
 
    ```bash
-   cargo run -p feco-server --bin feco-catalog -- review <app> <phiên bản> approve "Đạt"
+   cargo run -p feco-server --bin feco-catalog -- scan                     # chạy hàng đợi, xếp lịch quét lại 7 ngày
+   cargo run -p feco-server --bin feco-catalog -- queue                    # hàng chờ duyệt thủ công
+   cargo run -p feco-server --bin feco-catalog -- approve <app> <phiên bản> "Đạt"
+   cargo run -p feco-server --bin feco-catalog -- reject <app> <phiên bản> brand_impersonation "<ghi chú>"
+   cargo run -p feco-server --bin feco-catalog -- appeals                  # kháng nghị đang mở
+   cargo run -p feco-server --bin feco-catalog -- appeal <app> <phiên bản> overturn "<ghi chú>"
+   cargo run -p feco-server --bin feco-catalog -- emergency <app> all "<lý do>"   # gỡ khẩn cấp
+   cargo run -p feco-server --bin feco-catalog -- alerts                   # cảnh báo mã độc, phát hiện muộn
    ```
+
+   Điều khoản dùng khi từ chối: xem http://127.0.0.1:8080/policy/content. Nhà phát triển nhận
+   email (Mailpit) nêu điều khoản và cách sửa, và bấm **Kháng nghị** trên trang app (một lần cho
+   mỗi lần từ chối). Không có ClamAV thì chỉ engine chữ ký của F-Eco chạy (đủ để thử với mẫu EICAR).
 
 6. Trên trang app, chọn kênh `stable` hoặc `beta` và phần trăm (10%, 50%, 100%) rồi bấm **Phát
    hành** (cần vai trò Quản trị hoặc Chủ sở hữu). App xuất hiện ở F-Store; scope và mục đích trên
@@ -299,6 +313,7 @@ Các API chính của `feco-server`:
 | `GET /v1/catalog/{id}/update?platform=&device=&channel=` | Phiên bản một launcher nên dùng, theo kênh và phần trăm phát hành dần |
 | `/developer`, `/developer/apps/{id}`, `/developer/docs` | Cổng nhà phát triển và tài liệu |
 | `POST /v1/dev/apps/{app}/versions`, `PUT /v1/dev/versions/{id}/packages/{platform}`, `POST /v1/dev/versions/{id}/submit` | API cho CLI `f-dev` (token `fdev_...`): nộp `f-app.toml`, tải gói (header `X-Feco-Sha256`, tối đa 2 GB), gửi duyệt |
+| `/policy/content` | Chính sách nội dung (các điều khoản dùng khi từ chối phiên bản) |
 | `POST /v1/apps/crashes` | App báo một lần lỗi khi chạy (`{"version"}`, access token của app); chỉ dùng cho số liệu tổng hợp |
 | `POST /v1/launch-codes/exchange` | App con: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → `authorization_code` để đổi lấy token tại Hydra bằng PKCE. Chỉ cấp lại scope người dùng đã đồng ý; chưa đồng ý thì trả `consent_required` |
 | `GET /v1/me` | Dữ liệu người dùng theo scope của access token (`Authorization: Bearer …`); `?fields=email,phone_number` để chọn trường. Lỗi trả JSON `{error, message, message_vi, request_id}` |
@@ -324,6 +339,8 @@ Các API chính của `feco-server`:
 | `FECO_RATE_APP_PER_MIN` / `FECO_RATE_USER_PER_MIN` | `1200` / `120` | Số lần gọi `/v1/me` mỗi phút của một app / một người dùng |
 | `FECO_DNS_SERVERS` | `1.1.1.1:53,8.8.8.8:53` | Máy chủ DNS dùng để tra bản ghi TXT khi xác minh tên miền của nhà phát triển |
 | `FECO_PACKAGE_DIR` | `infra/.data/packages` | Thư mục lưu gói nhà phát triển tải lên. Bắt buộc ở production |
+| `FECO_CLAMD_ADDR` | không đặt | ClamAV (`clamd`, ví dụ `127.0.0.1:3310`), engine quét thứ hai của khâu kiểm duyệt. Bắt buộc ở production |
+| `FECO_ADMIN_EMAILS` | không đặt | Email nhận cảnh báo kiểm duyệt (mã độc, phát hiện muộn), ngăn bởi dấu phẩy. Bắt buộc ở production |
 | `FECO_TUF_REPO` / `FECO_TUF_SIGN_KEYS` | không đặt | Kho TUF và các file khóa targets, snapshot, timestamp để ký gói khi phát hành. Không đặt thì bỏ qua bước ký |
 | `FECO_LAUNCHER_CLIENT_ID` | không đặt | Client ID của F-Launcher trong Hydra. Có thì bật mã khởi chạy app con (`/v1/launch-codes`) và launcher không phải qua màn hình đồng ý |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |

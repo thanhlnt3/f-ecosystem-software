@@ -406,6 +406,19 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "dev.ok.package" => ("Đã nhận gói.", "Package received."),
         "dev.ok.submitted" => ("Đã gửi duyệt.", "Submitted for review."),
         "dev.ok.released" => ("Đã cập nhật việc phát hành.", "Release updated."),
+        "dev.status.revoked" => ("Đã thu hồi", "Revoked"),
+        "dev.status.checks" => ("Chờ duyệt: đang kiểm tra tự động", "Pending review: automated checks"),
+        "dev.status.manual_review" => ("Chờ duyệt thủ công", "Pending manual review"),
+        "dev.appeal" => ("Kháng nghị", "Appeal"),
+        "dev.appeal_reason" => ("Lý do kháng nghị (mỗi lần từ chối được kháng nghị một lần)", "Why you disagree (each rejection can be appealed once)"),
+        "dev.appeal_submit" => ("Gửi kháng nghị", "Send appeal"),
+        "dev.ok.appealed" => ("Đã gửi kháng nghị. Bạn sẽ nhận email khi có kết quả.", "Appeal sent. You will get an email with the result."),
+        "dev.suspended" => ("Tài khoản nhà phát triển đang bị tạm khóa chờ điều tra. Bạn không tạo app hay nộp phiên bản được cho tới khi F-Eco mở khóa.", "This developer account is suspended pending investigation. You cannot create apps or submit versions until F-Eco lifts the suspension."),
+        "policy.title" => ("Chính sách nội dung", "Content policy"),
+        "policy.link" => ("Đọc chính sách nội dung của F-Eco", "Read the F-Eco content policy"),
+        "policy.intro" => ("Mọi app con trên F-Eco phải tuân thủ các điều khoản dưới đây. Phiên bản vi phạm bị từ chối kèm điều khoản bị vi phạm và cách khắc phục; nhà phát triển kháng nghị được một lần cho mỗi lần từ chối.", "Every app on F-Eco must follow the clauses below. Versions that break them are rejected with the clause and how to fix it; developers can appeal each rejection once."),
+        "policy.clause" => ("Điều", "Clause"),
+        "policy.review" => ("Phiên bản đầu tiên của mỗi app, và phiên bản xin thêm scope dữ liệu hay quyền hệ thống, được người duyệt kiểm tra trong 3 ngày làm việc. Các phiên bản khác được duyệt tự động nếu qua kiểm tra tự động (quét mã độc bằng hai engine, chữ ký mã, kiến trúc, packer).", "The first version of each app, and versions that ask for more data scopes or system permissions, are checked by a reviewer within 3 working days. Other versions are approved automatically if they pass the automated checks (two malware engines, code signing, architecture, packers)."),
         _ => {
             tracing::warn!(key, "thiếu bản dịch");
             ("", "")
@@ -463,6 +476,7 @@ mod tests {
             include_str!("../templates/developer.html"),
             include_str!("../templates/developer_app.html"),
             include_str!("../templates/developer_docs.html"),
+            include_str!("../templates/policy.html"),
         ];
         for key in [
             "dev.status.draft",
@@ -481,6 +495,10 @@ mod tests {
             "dev.ok.package",
             "dev.ok.submitted",
             "dev.ok.released",
+            "dev.ok.appealed",
+            "dev.status.revoked",
+            "dev.status.checks",
+            "dev.status.manual_review",
         ] {
             assert!(
                 !t(Lang::Vi, key).is_empty() && !t(Lang::En, key).is_empty(),

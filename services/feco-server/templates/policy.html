@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("policy.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("policy.title") }}</h1>
+<p>{{ i18n.t("policy.intro") }}</p>
+<ol id="clauses" style="list-style:none;padding:0">
+{% for c in clauses %}
+  <li class="review"><strong>{{ i18n.t("policy.clause") }} {{ c.number }}. {{ c.title }}</strong><p>{{ c.rule }}</p></li>
+{% endfor %}
+</ol>
+<p class="muted">{{ i18n.t("policy.review") }}</p>
+<div class="links"><a href="/developer/docs">{{ i18n.t("dev.docs") }}</a><a href="/store">F-Store</a></div>
+{% endblock %}

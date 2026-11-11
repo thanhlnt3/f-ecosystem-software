@@ -36,7 +36,17 @@
 {% for v in versions %}
 <div class="review version" data-version="{{ v.version }}">
   <div><strong>{{ v.version }}</strong> · <span class="status">{{ v.status }}</span>{% if !v.channel.is_empty() %} · {{ v.channel }} {{ v.percent }}%{% endif %} · <span class="muted">{{ v.platforms }}</span></div>
-  {% if !v.note.is_empty() %}<p class="muted">{{ v.note }}</p>{% endif %}
+  {% if !v.note.is_empty() %}<p class="muted review-note" style="white-space:pre-line">{{ v.note }}</p>{% endif %}
+  {% if v.appealable && can_edit %}
+  <details><summary>{{ i18n.t("dev.appeal") }}</summary>
+  <form method="post" action="/developer/versions/{{ v.id }}/appeal" class="appeal-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label>{{ i18n.t("dev.appeal_reason") }}</label>
+    <textarea name="message" maxlength="4000" required></textarea>
+    <button type="submit">{{ i18n.t("dev.appeal_submit") }}</button>
+  </form>
+  </details>
+  {% endif %}
   {% if v.draft && can_edit %}
   {% for p in v.missing %}
   <form method="post" action="/developer/versions/{{ v.id }}/packages" enctype="multipart/form-data">

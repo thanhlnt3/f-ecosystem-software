@@ -126,6 +126,10 @@ pub struct DeveloperConfig {
     /// Thư mục lưu gói nhà phát triển tải lên.
     pub package_dir: PathBuf,
     pub tuf: Option<TufConfig>,
+    /// ClamAV (`clamd`), engine quét thứ hai cạnh engine chữ ký của F-Eco. Bắt buộc ở production.
+    pub clamd: Option<SocketAddr>,
+    /// Địa chỉ nhận cảnh báo kiểm duyệt (mã độc, phát hiện muộn).
+    pub admin_emails: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -435,10 +439,29 @@ fn developer_config<'a>(
         (Some(_), None) => return Err(ConfigError::Missing("FECO_TUF_SIGN_KEYS")),
         (None, Some(_)) => return Err(ConfigError::Missing("FECO_TUF_REPO")),
     };
+    let clamd = match get("FECO_CLAMD_ADDR") {
+        Some(v) => Some(v.parse::<SocketAddr>().map_err(|_| ConfigError::Invalid {
+            var: "FECO_CLAMD_ADDR",
+            reason: format!("{v:?} không phải địa chỉ ip:cổng"),
+        })?),
+        None if environment.is_production() => return Err(ConfigError::Missing("FECO_CLAMD_ADDR")),
+        None => None,
+    };
+    let admin_emails: Vec<String> = get("FECO_ADMIN_EMAILS")
+        .unwrap_or_default()
+        .split(',')
+        .map(|e| e.trim().to_owned())
+        .filter(|e| !e.is_empty())
+        .collect();
+    if environment.is_production() && admin_emails.is_empty() {
+        return Err(ConfigError::Missing("FECO_ADMIN_EMAILS"));
+    }
     Ok(DeveloperConfig {
         dns_servers,
         package_dir,
         tuf,
+        clamd,
+        admin_emails,
     })
 }
 
@@ -730,6 +753,54 @@ mod tests {
         assert_eq!(c.auth.kratos_admin_url.as_str(), "http://127.0.0.1:4434/");
         assert_eq!(c.auth.smtp_url.as_str(), "smtp://127.0.0.1:1025");
         assert_eq!(c.auth.challenge, ChallengeProvider::Test);
+    }
+
+    #[test]
+    fn review_engines_and_alert_recipients() {
+        let dev = Config::from_vars(&with_env(
+            "dev",
+            &[
+                ("FECO_CLAMD_ADDR", "127.0.0.1:3310"),
+                ("FECO_ADMIN_EMAILS", "a@f-eco.example, b@f-eco.example"),
+            ],
+        ))
+        .unwrap();
+        assert_eq!(dev.developer.clamd, Some("127.0.0.1:3310".parse().unwrap()));
+        assert_eq!(
+            dev.developer.admin_emails,
+            ["a@f-eco.example", "b@f-eco.example"]
+        );
+        let none = Config::from_vars(&with_env("dev", &[])).unwrap();
+        assert_eq!(none.developer.clamd, None);
+
+        // Production: ClamAV (engine thứ hai) và người nhận cảnh báo là bắt buộc.
+        let vars: HashMap<String, String> = [("FECO_PACKAGE_DIR", "/srv/packages")]
+            .map(|(k, v)| (k.into(), v.into()))
+            .into();
+        let get = |k: &str| vars.get(k).map(String::as_str);
+        assert_eq!(
+            developer_config(Environment::Production, &get).unwrap_err(),
+            ConfigError::Missing("FECO_CLAMD_ADDR")
+        );
+        let vars: HashMap<String, String> = [
+            ("FECO_PACKAGE_DIR", "/srv/packages"),
+            ("FECO_CLAMD_ADDR", "10.0.0.5:3310"),
+        ]
+        .map(|(k, v)| (k.into(), v.into()))
+        .into();
+        let get = |k: &str| vars.get(k).map(String::as_str);
+        assert_eq!(
+            developer_config(Environment::Production, &get).unwrap_err(),
+            ConfigError::Missing("FECO_ADMIN_EMAILS")
+        );
+        let bad = with_env("dev", &[("FECO_CLAMD_ADDR", "clamav")]);
+        assert!(matches!(
+            Config::from_vars(&bad).unwrap_err(),
+            ConfigError::Invalid {
+                var: "FECO_CLAMD_ADDR",
+                ..
+            }
+        ));
     }
 
     #[test]

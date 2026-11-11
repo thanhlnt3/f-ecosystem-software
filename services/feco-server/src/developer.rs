@@ -52,7 +52,7 @@ pub enum DevError {
 
 pub type DevResult<T> = Result<T, DevError>;
 
-fn problem(
+pub(crate) fn problem(
     status: StatusCode,
     code: &'static str,
     vi: impl Into<String>,
@@ -170,6 +170,8 @@ pub struct Account {
     pub domain_verified: bool,
     pub agreement_version: Option<String>,
     pub agreement_accepted_at: Option<OffsetDateTime>,
+    /// Bị tạm khóa chờ điều tra (ví dụ khi gói có mã độc).
+    pub suspended: bool,
 }
 
 impl Account {
@@ -193,6 +195,14 @@ pub struct Membership {
 
 impl Membership {
     fn need_agreement(&self) -> DevResult<()> {
+        if self.account.suspended {
+            return Err(problem(
+                StatusCode::FORBIDDEN,
+                "account_suspended",
+                "Tài khoản nhà phát triển đang bị tạm khóa chờ điều tra.",
+                "This developer account is suspended pending investigation.",
+            ));
+        }
         if self.account.agreement_current() {
             Ok(())
         } else {
@@ -217,11 +227,13 @@ type AccountRow = (
     Option<OffsetDateTime>,
     Option<String>,
     Option<OffsetDateTime>,
+    bool,
 );
 
 const ACCOUNT_COLUMNS: &str =
     "a.id, a.kind, a.display_name, a.legal_name, a.business_id, a.domain, \
-     a.domain_token, a.domain_verified_at, a.agreement_version, a.agreement_accepted_at";
+     a.domain_token, a.domain_verified_at, a.agreement_version, a.agreement_accepted_at, \
+     a.suspended_at IS NOT NULL";
 
 fn account_from(r: AccountRow) -> Account {
     Account {
@@ -235,6 +247,7 @@ fn account_from(r: AccountRow) -> Account {
         domain_verified: r.7.is_some(),
         agreement_version: r.8,
         agreement_accepted_at: r.9,
+        suspended: r.10,
     }
 }
 
@@ -819,6 +832,12 @@ pub struct VersionInfo {
     /// Nền tảng đã có gói.
     pub uploaded: Vec<String>,
     pub review_note: Option<String>,
+    /// `checks`: đang kiểm tra tự động; `manual`: chờ duyệt thủ công; `done`.
+    pub review_stage: Option<String>,
+    /// Lý do phải duyệt thủ công.
+    pub manual_reason: Option<String>,
+    /// Đang bị từ chối và lần từ chối này chưa được kháng nghị.
+    pub appealable: bool,
 }
 
 type VersionRow = (
@@ -830,10 +849,16 @@ type VersionRow = (
     i32,
     Value,
     Option<String>,
+    Option<String>,
+    Option<String>,
+    bool,
 );
 
 const VERSION_COLUMNS: &str =
-    "v.id, v.app_id, v.version, v.status, v.channel, v.rollout_percent, v.manifest, v.review_note";
+    "v.id, v.app_id, v.version, v.status, v.channel, v.rollout_percent, v.manifest, v.review_note, \
+     v.review_stage, v.manual_reason, \
+     v.status = 'rejected' AND NOT EXISTS (SELECT 1 FROM review_appeals ra \
+         WHERE ra.version_id = v.id AND ra.reject_no = v.reject_count)";
 
 async fn version_info(db: &Db, r: VersionRow) -> DevResult<VersionInfo> {
     let uploaded: Vec<String> = sqlx::query_scalar(
@@ -854,6 +879,9 @@ async fn version_info(db: &Db, r: VersionRow) -> DevResult<VersionInfo> {
         platforms: manifest.platforms.iter().map(|p| p.key()).collect(),
         uploaded,
         review_note: r.7,
+        review_stage: r.8,
+        manual_reason: r.9,
+        appealable: r.10,
     })
 }
 
@@ -1195,34 +1223,15 @@ pub async fn submit(db: &Db, m: &Membership, version_id: Uuid) -> DevResult<Vers
         ));
     }
     sqlx::query(
-        "UPDATE app_versions SET status = 'pending_review', submitted_at = now() WHERE id = $1",
+        "UPDATE app_versions SET status = 'pending_review', review_stage = 'checks',
+             submitted_at = now() WHERE id = $1",
     )
     .bind(version_id)
     .execute(db)
     .await?;
+    // Kiểm tra tự động (nhóm 9) chạy ở worker nền; xem `review::process_due`.
+    crate::review::enqueue(db, version_id, "submit").await?;
     Ok(version(db, m, version_id).await?.0)
-}
-
-/// Kết quả kiểm duyệt. Nhóm 9 (kiểm duyệt) gọi hàm này; tạm thời dùng qua `feco-catalog`.
-pub async fn review(
-    db: &Db,
-    app_id: &str,
-    version: &str,
-    approve: bool,
-    note: &str,
-) -> DevResult<bool> {
-    let n = sqlx::query(
-        "UPDATE app_versions SET status = $3, reviewed_at = now(), review_note = $4
-         WHERE app_id = $1 AND version = $2 AND status = 'pending_review'",
-    )
-    .bind(app_id)
-    .bind(version)
-    .bind(if approve { "approved" } else { "rejected" })
-    .bind(note)
-    .execute(db)
-    .await?
-    .rows_affected();
-    Ok(n > 0)
 }
 
 /// Phát hành một phiên bản đã duyệt lên kênh `stable` hoặc `beta` cho `percent`% người dùng, hoặc

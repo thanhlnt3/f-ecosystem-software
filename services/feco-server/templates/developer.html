@@ -41,6 +41,7 @@
   <button type="submit">{{ i18n.t("dev.register") }}</button>
 </form>
 {% else %}
+{% if suspended %}<div class="msg error" id="suspended">{{ i18n.t("dev.suspended") }}</div>{% endif %}
 <div class="facts">
   <span class="muted">{{ i18n.t("dev.account") }}</span><span><strong>{{ name }}</strong>{% if domain_verified %}<span class="badge ok" id="verified">{{ i18n.t("store.verified") }}</span>{% endif %}</span>
   <span class="muted">{{ i18n.t("dev.your_role") }}</span><span id="role">{{ role }}</span>

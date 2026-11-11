@@ -21,6 +21,8 @@ pub enum Actor {
     /// Người dùng chưa xác định (ví dụ lần đăng nhập sai).
     Anonymous,
     App(String),
+    /// Quản trị viên hoặc người kiểm duyệt (tên hoặc email).
+    Admin(String),
     System,
 }
 
@@ -30,6 +32,7 @@ impl Actor {
             Actor::User(id) => ("user", Some(id.to_string())),
             Actor::Anonymous => ("user", None),
             Actor::App(c) => ("app", Some(c.clone())),
+            Actor::Admin(a) => ("admin", Some(a.clone())),
             Actor::System => ("system", None),
         }
     }

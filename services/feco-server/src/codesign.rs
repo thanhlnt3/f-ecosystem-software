@@ -143,15 +143,29 @@ pub fn macho(file: &[u8]) -> Signature {
 pub mod fixtures {
     use super::SIGNED_DATA_OID;
 
-    /// Tệp PE32+ tối thiểu; `signed` thì kèm bảng chứng thư Authenticode.
+    /// Tệp PE32+ x64 tối thiểu; `signed` thì kèm bảng chứng thư Authenticode.
     pub fn pe(signed: bool) -> Vec<u8> {
+        pe_for(0x8664, signed, &[])
+    }
+
+    /// Tệp PE32+ với kiến trúc `machine` (0x8664 x64, 0xaa64 arm64) và tối đa hai section.
+    pub fn pe_for(machine: u16, signed: bool, sections: &[&str]) -> Vec<u8> {
         let mut f = vec![0u8; 0x200];
         f[..2].copy_from_slice(b"MZ");
         f[0x3c..0x40].copy_from_slice(&0x80u32.to_le_bytes());
         f[0x80..0x84].copy_from_slice(b"PE\0\0");
+        f[0x84..0x86].copy_from_slice(&machine.to_le_bytes());
+        let count = sections.len().min(2) as u16;
+        f[0x86..0x88].copy_from_slice(&count.to_le_bytes());
+        f[0x94..0x96].copy_from_slice(&240u16.to_le_bytes());
         let optional = 0x80 + 24;
         f[optional..optional + 2].copy_from_slice(&0x20bu16.to_le_bytes());
         f[optional + 108..optional + 112].copy_from_slice(&16u32.to_le_bytes());
+        for (i, name) in sections.iter().enumerate().take(2) {
+            let at = optional + 240 + i * 40;
+            let n = name.len().min(8);
+            f[at..at + n].copy_from_slice(&name.as_bytes()[..n]);
+        }
         if signed {
             let mut der = vec![0x30, 0x82, 0x01, 0x00];
             der.extend_from_slice(&SIGNED_DATA_OID);
@@ -172,6 +186,8 @@ pub mod fixtures {
     pub fn macho(cms: Option<u32>) -> Vec<u8> {
         let mut f = vec![0u8; 32];
         f[..4].copy_from_slice(&0xfeed_facfu32.to_le_bytes());
+        // CPU_TYPE_ARM64.
+        f[4..8].copy_from_slice(&0x0100_000cu32.to_le_bytes());
         let Some(cms) = cms else {
             return f;
         };

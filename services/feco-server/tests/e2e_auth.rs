@@ -35,6 +35,10 @@ static LAUNCHER: OnceLock<String> = OnceLock::new();
 static DNS: OnceLock<feco_server::dns::testing::Records> = OnceLock::new();
 /// Kho TUF mà máy chủ kiểm thử ký target khi phát hành.
 static TUF_REPO: OnceLock<std::path::PathBuf> = OnceLock::new();
+/// Cấu hình của máy chủ kiểm thử, để `local_state` dùng cùng cấu hình.
+static SERVER_VARS: OnceLock<HashMap<String, String>> = OnceLock::new();
+/// Người nhận cảnh báo kiểm duyệt.
+const ADMIN_EMAIL: &str = "kiem-duyet@f-eco.test";
 
 /// Dựng kho TUF tạm; trả (thư mục kho, danh sách file khóa targets, snapshot, timestamp).
 async fn init_tuf(work: &std::path::Path) -> (std::path::PathBuf, String) {
@@ -115,6 +119,9 @@ fn e2e_ready() -> bool {
                 let _ = std::fs::remove_dir_all(&work);
                 let (tuf_repo, tuf_keys) = init_tuf(&work).await;
                 let _ = TUF_REPO.set(tuf_repo.clone());
+                let clamd = feco_server::scan::testing::serve_clamd("127.0.0.1:0")
+                    .await
+                    .unwrap();
                 let vars: HashMap<String, String> = [
                     ("FECO_ENV", "dev".to_owned()),
                     ("FECO_LAUNCHER_CLIENT_ID", launcher.clone()),
@@ -125,10 +132,13 @@ fn e2e_ready() -> bool {
                     ),
                     ("FECO_TUF_REPO", tuf_repo.to_string_lossy().into_owned()),
                     ("FECO_TUF_SIGN_KEYS", tuf_keys),
+                    ("FECO_CLAMD_ADDR", clamd.to_string()),
+                    ("FECO_ADMIN_EMAILS", ADMIN_EMAIL.to_owned()),
                 ]
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v))
                 .collect();
+                let _ = SERVER_VARS.set(vars.clone());
                 let config = Config::from_vars(&vars).unwrap();
                 let state = std::sync::Arc::new(AppState::from_config(&config).unwrap());
                 store::MIGRATOR
@@ -154,10 +164,12 @@ fn e2e_ready() -> bool {
 
 /// AppState riêng cho runtime của từng test (pool kết nối CSDL gắn với runtime tạo ra nó).
 pub fn local_state() -> AppState {
-    let vars: HashMap<String, String> = [("FECO_ENV", "dev")]
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
+    let vars: HashMap<String, String> = SERVER_VARS.get().cloned().unwrap_or_else(|| {
+        [("FECO_ENV", "dev")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    });
     AppState::from_config(&Config::from_vars(&vars).unwrap()).unwrap()
 }
 
@@ -2597,14 +2609,16 @@ async fn developer_portal_end_to_end() {
         .to_owned();
     assert!(version_id.parse::<uuid::Uuid>().is_ok(), "{out}");
 
-    // Chưa duyệt thì chưa phát hành được; duyệt xong (nhóm 9 sẽ làm tự động).
+    // Chưa duyệt thì chưa phát hành được; bản đầu tiên qua kiểm tra tự động rồi duyệt thủ công.
     let release_path = format!("/developer/versions/{version_id}/release");
     let full: [(&str, &str); 2] = [("channel", "stable"), ("percent", "100")];
     let (status, _) = post(&adm_c, &release_path, &csrf_adm, &full).await;
     assert_eq!(status, 409, "chưa qua kiểm duyệt");
-    assert!(developer::review(&st.db, &app_id, "1.2.0", true, "Đạt")
+    feco_server::review::process_due(&st).await.unwrap();
+    let id = version_id.parse().unwrap();
+    feco_server::review::approve(&st, id, "e2e", "Đạt")
         .await
-        .unwrap());
+        .unwrap();
 
     // Scenario "Phát triển viên phát hành".
     let (status, body) = post(&dev_c, &release_path, &csrf_dev, &full).await;
@@ -2664,9 +2678,8 @@ async fn developer_portal_end_to_end() {
         .unwrap()
         .trim()
         .to_owned();
-    assert!(developer::review(&st.db, &app_id, "1.3.0", true, "Đạt")
-        .await
-        .unwrap());
+    // Không đổi scope hay quyền: duyệt tự động.
+    feco_server::review::process_due(&st).await.unwrap();
     let next_release = format!("/developer/versions/{next_id}/release");
     let (_, page) = post(
         &adm_c,
@@ -2869,4 +2882,431 @@ async fn developer_portal_end_to_end() {
         .await
         .unwrap();
     assert_eq!(res.status(), 404);
+}
+
+// ---------- Nhóm 9: kiểm duyệt (spec app-review) ----------
+
+/// Nhà phát triển cá nhân đã chấp nhận thỏa thuận, có một app desktop và token cho `f-dev`.
+/// Trả (trình duyệt, email, token).
+async fn developer_with_app(
+    prefix: &str,
+    display: &str,
+    app_id: &str,
+) -> (reqwest::Client, String, String) {
+    let (c, email) = developer_user(prefix, display).await;
+    let page = get(&c, "/developer").await;
+    let form = parse_form_where(&page, "#register-form");
+    let page = submit(
+        &c,
+        &form,
+        &[
+            ("kind", "individual"),
+            ("display_name", display),
+            ("accept_agreement", "on"),
+        ],
+    )
+    .await;
+    let csrf = csrf_of(&page);
+    let (_, page) = post(
+        &c,
+        "/developer/apps",
+        &csrf,
+        &[
+            ("app_id", app_id),
+            ("name", "SoundLab"),
+            ("kind", "desktop"),
+            ("redirects", APP_CALLBACK),
+        ],
+    )
+    .await;
+    assert!(page.contains("client-id"), "{page}");
+    let (_, page) = post(&c, "/developer/tokens", &csrf, &[("name", "ci")]).await;
+    (c, email, text_of(&page, "#secret code"))
+}
+
+/// Thư mục gói với các tệp cho trước.
+fn dist_with(
+    root: &std::path::Path,
+    name: &str,
+    files: Vec<(&str, Vec<u8>)>,
+) -> std::path::PathBuf {
+    let dir = root.join(name);
+    for (file, bytes) in files {
+        let path = dir.join(file);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, bytes).unwrap();
+    }
+    dir
+}
+
+/// Nộp một phiên bản bằng `f-dev`; trả mã phiên bản.
+async fn submit_version(
+    work: &std::path::Path,
+    token: &str,
+    manifest: &str,
+    dist: &std::path::Path,
+) -> uuid::Uuid {
+    let file = work.join(format!("f-app-{}.toml", uuid::Uuid::new_v4()));
+    std::fs::write(&file, manifest).unwrap();
+    let out = f_dev_publish(&file, dist, token)
+        .await
+        .expect("nộp phiên bản");
+    assert!(out.contains("Chờ duyệt"), "{out}");
+    out.rsplit("mã phiên bản: ")
+        .next()
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap()
+}
+
+async fn version_state(st: &AppState, id: uuid::Uuid) -> (String, Option<String>, String) {
+    let (status, stage, note): (String, Option<String>, Option<String>) =
+        sqlx::query_as("SELECT status, review_stage, review_note FROM app_versions WHERE id = $1")
+            .bind(id)
+            .fetch_one(&st.db)
+            .await
+            .unwrap();
+    (status, stage, note.unwrap_or_default())
+}
+
+/// Spec app-review: kiểm tra tự động (EICAR qua hai engine, kiến trúc, packer), duyệt thủ công
+/// hay tự động, từ chối theo chính sách kèm email và kháng nghị một lần, quét lại định kỳ, gỡ
+/// khẩn cấp lan tới danh mục, launcher và nhà phát triển.
+#[tokio::test]
+async fn app_review_end_to_end() {
+    use feco_server::{codesign::fixtures, review, scan};
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let st = local_state();
+    let stamp = (SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        % 1_000_000_000_000)
+        .to_string();
+    let work = tempfile::tempdir().unwrap();
+    let signed_exe = || ("SoundLab.exe", fixtures::pe(true));
+
+    // --- Scenario "Phát hiện mã độc" (mẫu thử EICAR).
+    let bad_app = format!("fakecleaner-{stamp}");
+    let (bad_c, bad_email, bad_token) =
+        developer_with_app("malware", &format!("Bad {stamp}"), &bad_app).await;
+    // Gói zip dựng sẵn (nén deflate): tệp EICAR không bao giờ nằm trần trên đĩa, nên phần mềm
+    // diệt virus của máy chạy test không cách ly nó trước khi máy chủ kịp quét.
+    let infected = work.path().join("infected");
+    std::fs::create_dir_all(&infected).unwrap();
+    {
+        use std::io::Write;
+        let file = std::fs::File::create(infected.join("windows-x64.zip")).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for (name, bytes) in [signed_exe(), ("data/eicar.com", scan::eicar())] {
+            zip.start_file(name, options).unwrap();
+            zip.write_all(&bytes).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    let id = submit_version(
+        work.path(),
+        &bad_token,
+        &app_manifest(&bad_app, "1.0.0"),
+        &infected,
+    )
+    .await;
+    review::process_due(&st).await.unwrap();
+    let (status, _, note) = version_state(&st, id).await;
+    assert_eq!(status, "rejected");
+    assert!(
+        note.starts_with("Bị từ chối: mã độc") && note.contains("data/eicar.com"),
+        "{note}"
+    );
+    let page = get(&bad_c, &format!("/developer/apps/{bad_app}")).await;
+    assert!(page.contains("Bị từ chối: mã độc"), "{page}");
+    let home = get(&bad_c, "/developer").await;
+    assert!(home.contains("đang bị tạm khóa chờ điều tra"), "{home}");
+    let alert = wait_mail(ADMIN_EMAIL, &format!("Phát hiện mã độc trong {bad_app}")).await;
+    assert!(
+        alert.contains("tạm khóa") && alert.contains("EICAR"),
+        "{alert}"
+    );
+    assert!(wait_mail(&bad_email, "bị từ chối").await.contains("Mã độc"));
+    let err = f_dev_publish(&work.path().join("x.toml"), &infected, &bad_token)
+        .await
+        .unwrap_err();
+    assert!(err.contains("x.toml"), "{err}");
+    std::fs::write(
+        work.path().join("again.toml"),
+        app_manifest(&bad_app, "1.0.1"),
+    )
+    .unwrap();
+    let err = f_dev_publish(&work.path().join("again.toml"), &infected, &bad_token)
+        .await
+        .unwrap_err();
+    assert!(err.contains("đang bị tạm khóa chờ điều tra"), "{err}");
+
+    // Nhà phát triển thứ hai: SoundLab.
+    let app = format!("soundlab-r{stamp}");
+    let display = format!("Good {stamp}");
+    let (c, email, token) = developer_with_app("review", &display, &app).await;
+
+    // --- Scenario "Kiến trúc không khớp".
+    let arm = dist_with(
+        work.path(),
+        "arm",
+        vec![("SoundLab.exe", fixtures::pe_for(0xaa64, true, &[]))],
+    );
+    let id = submit_version(work.path(), &token, &app_manifest(&app, "0.9.0"), &arm).await;
+    review::process_due(&st).await.unwrap();
+    let (status, _, note) = version_state(&st, id).await;
+    assert_eq!(status, "rejected");
+    assert!(
+        note.contains(
+            "Kiến trúc không khớp: f-app.toml khai báo windows-x64 nhưng SoundLab.exe là arm64"
+        ),
+        "{note}"
+    );
+    // Gói bị làm rối bằng packer.
+    let packed = dist_with(
+        work.path(),
+        "packed",
+        vec![(
+            "SoundLab.exe",
+            fixtures::pe_for(0x8664, true, &["UPX0", "UPX1"]),
+        )],
+    );
+    let id = submit_version(work.path(), &token, &app_manifest(&app, "0.9.1"), &packed).await;
+    review::process_due(&st).await.unwrap();
+    let (status, _, note) = version_state(&st, id).await;
+    assert_eq!(status, "rejected");
+    assert!(note.contains("làm rối bằng UPX"), "{note}");
+
+    // --- Bản đầu tiên qua kiểm tra tự động: vào hàng chờ duyệt thủ công.
+    let marker = format!("build {stamp}");
+    let clean = dist_with(
+        work.path(),
+        "clean",
+        vec![
+            signed_exe(),
+            ("data/build.txt", marker.clone().into_bytes()),
+        ],
+    );
+    let v120 = submit_version(work.path(), &token, &app_manifest(&app, "1.2.0"), &clean).await;
+    review::process_due(&st).await.unwrap();
+    assert_eq!(version_state(&st, v120).await.1.as_deref(), Some("manual"));
+    let queue = review::manual_queue(&st.db).await.unwrap();
+    let item = queue
+        .iter()
+        .find(|q| q.version_id == v120)
+        .expect("trong hàng chờ");
+    assert_eq!(item.reason, "Phiên bản đầu tiên của app");
+    let page = get(&c, &format!("/developer/apps/{app}")).await;
+    assert!(page.contains("Chờ duyệt thủ công"), "{page}");
+    review::approve(&st, v120, "e2e", "Đạt").await.unwrap();
+    let csrf = csrf_of(&page);
+    let (_, page) = post(
+        &c,
+        &format!("/developer/versions/{v120}/release"),
+        &csrf,
+        &[("channel", "stable"), ("percent", "100")],
+    )
+    .await;
+    assert!(page.contains("Đang phát hành"), "{page}");
+
+    // --- Scenario "Bản cập nhật không đổi quyền": 1.2.1 được duyệt tự động.
+    let v121 = submit_version(work.path(), &token, &app_manifest(&app, "1.2.1"), &clean).await;
+    review::process_due(&st).await.unwrap();
+    let (status, stage, note) = version_state(&st, v121).await;
+    assert_eq!(
+        (status.as_str(), stage.as_deref()),
+        ("approved", Some("done"))
+    );
+    assert!(note.starts_with("Duyệt tự động"), "{note}");
+
+    // --- Scenario "Thêm scope": 1.3.0 thêm `phone` vào hàng chờ duyệt thủ công.
+    let with_phone = app_manifest(&app, "1.3.0").replace(
+        "[permissions]",
+        "[scopes.phone]\npurpose = \"Gửi mã xác nhận\"\n\n[permissions]",
+    );
+    let v130 = submit_version(work.path(), &token, &with_phone, &clean).await;
+    review::process_due(&st).await.unwrap();
+    assert_eq!(version_state(&st, v130).await.1.as_deref(), Some("manual"));
+    let queue = review::manual_queue(&st.db).await.unwrap();
+    assert_eq!(
+        queue
+            .iter()
+            .find(|q| q.version_id == v130)
+            .map(|q| q.reason.as_str()),
+        Some("Thêm scope dữ liệu: phone")
+    );
+
+    // --- Scenario "Bị từ chối": email nêu điều khoản và cách sửa, kèm nút Kháng nghị.
+    review::reject(
+        &st,
+        v130,
+        "e2e",
+        "undeclared_data",
+        "App dùng email để gửi tiếp thị trong khi khai báo \"chỉ để đăng nhập\".",
+    )
+    .await
+    .unwrap();
+    let mail = wait_mail(&email, &format!("{app} 1.3.0 bị từ chối")).await;
+    assert!(
+        mail.contains("Điều 2 chính sách nội dung: Thu thập hoặc dùng dữ liệu trái khai báo"),
+        "{mail}"
+    );
+    assert!(
+        mail.contains("Cách khắc phục:") && mail.contains("Kháng nghị"),
+        "{mail}"
+    );
+    assert!(mail.contains(&format!("/developer/apps/{app}")), "{mail}");
+    // Kháng nghị một lần qua cổng.
+    let page = get(&c, &format!("/developer/apps/{app}")).await;
+    let form = parse_form_where(&page, ".appeal-form");
+    let page = submit(
+        &c,
+        &form,
+        &[(
+            "message",
+            "Email chỉ dùng để đăng nhập; chúng tôi đã gỡ bản tin.",
+        )],
+    )
+    .await;
+    assert!(page.contains("Đã gửi kháng nghị"), "{page}");
+    let (status, body) = post(
+        &c,
+        &format!("/developer/versions/{v130}/appeal"),
+        &csrf_of(&page),
+        &[("message", "Lần hai")],
+    )
+    .await;
+    assert_eq!(status, 409, "{body}");
+    assert!(
+        body.contains("Mỗi lần từ chối chỉ được kháng nghị một lần"),
+        "{body}"
+    );
+    assert!(review::open_appeals(&st.db)
+        .await
+        .unwrap()
+        .iter()
+        .any(|a| a.version_id == v130));
+    review::resolve_appeal(&st, v130, "e2e", true, "Đã xác minh bản tin đã gỡ")
+        .await
+        .unwrap();
+    assert_eq!(version_state(&st, v130).await.0, "approved");
+    assert!(
+        wait_mail(&email, &format!("Kết quả kháng nghị {app} 1.3.0"))
+            .await
+            .contains("được chấp nhận")
+    );
+
+    // --- Scenario "Giả mạo thương hiệu" (bản thêm quyền camera nên vào duyệt thủ công).
+    let fake_brand = with_phone
+        .replace("version = \"1.3.0\"", "version = \"1.4.0\"")
+        .replace("name = \"SoundLab\"", "name = \"MegaOffice Pro\"")
+        .replace("microphone = true", "microphone = true\ncamera = true");
+    let v140 = submit_version(work.path(), &token, &fake_brand, &clean).await;
+    review::process_due(&st).await.unwrap();
+    assert_eq!(version_state(&st, v140).await.1.as_deref(), Some("manual"));
+    review::reject(
+        &st,
+        v140,
+        "e2e",
+        "brand_impersonation",
+        "Tên và biểu tượng giống bộ ứng dụng văn phòng MegaOffice.",
+    )
+    .await
+    .unwrap();
+    let (status, _, note) = version_state(&st, v140).await;
+    assert_eq!(status, "rejected");
+    assert!(note.contains("Giả mạo thương hiệu"), "{note}");
+    let policy = get(&c, "/policy/content").await;
+    assert!(
+        policy.contains("Giả mạo thương hiệu") && policy.contains("Đào tiền mã hóa ẩn"),
+        "{policy}"
+    );
+
+    // --- Scenario "Phát hiện muộn": cơ sở dữ liệu mã độc mới nhận ra một tệp trong bản 1.2.0
+    // đã phát hành 20 ngày; quản trị viên nhận cảnh báo kèm số người đang cài.
+    feco_server::catalog::record_install(&st.db, uuid::Uuid::new_v4(), &app, Some("1.2.0"))
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO malware_signatures (sha256, name) VALUES ($1, $2)")
+        .bind(scan::sha256_hex(marker.as_bytes()))
+        .bind(format!("Trojan.Late.{stamp}"))
+        .execute(&st.db)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE app_versions SET released_at = now() - interval '20 days',
+             last_scanned_at = now() - interval '20 days' WHERE id = $1",
+    )
+    .bind(v120)
+    .execute(&st.db)
+    .await
+    .unwrap();
+    assert!(review::enqueue_rescans(&st.db).await.unwrap() >= 1);
+    review::process_due(&st).await.unwrap();
+    let alert = wait_mail(
+        ADMIN_EMAIL,
+        &format!("Quét lại phát hiện mã độc trong {app} 1.2.0"),
+    )
+    .await;
+    assert!(alert.contains("1 người dùng đang cài"), "{alert}");
+    assert!(alert.contains("Thu hồi khẩn cấp"), "{alert}");
+
+    // --- Scenario "Thu hồi toàn bộ app" (đo thời gian lan tới danh mục).
+    let before = catalog_ids(&format!("q=good%20{stamp}")).await;
+    assert!(before.contains(&app), "{before:?}");
+    let started = std::time::Instant::now();
+    let n = review::revoke(&st, &app, None, "e2e", "Lừa đảo")
+        .await
+        .unwrap();
+    assert!(n >= 2, "thu hồi mọi phiên bản: {n}");
+    let res = reqwest::get(format!("{BASE}/v1/catalog/{app}"))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 404);
+    assert!(!catalog_ids(&format!("q={stamp}")).await.contains(&app));
+    let elapsed = started.elapsed();
+    assert!(elapsed < Duration::from_secs(5 * 60), "{elapsed:?}");
+    eprintln!("app bị thu hồi biến khỏi danh mục sau {elapsed:?}");
+    // Launcher: metadata TUF mới có bản ghi thu hồi cho mọi phiên bản đã ký của app.
+    let repo = feco_tuf::Repo::open(TUF_REPO.get().unwrap());
+    let tuf =
+        feco_tuf::Client::for_local_repo(&repo, &repo.root_path(1), work.path().join("tuf-client"))
+            .await
+            .unwrap();
+    let synced = tuf.sync().await.unwrap();
+    // Chỉ 1.2.0 đã được phát hành (đã ký thành target).
+    {
+        let version = "1.2.0";
+        let target = format!("{app}-{version}-windows-x64.zip");
+        let revoked = synced
+            .revocation(&target)
+            .unwrap_or_else(|| panic!("thiếu bản ghi thu hồi {target}"));
+        assert_eq!(revoked.reason, "Lừa đảo");
+        assert!(!synced.targets.contains_key(&target));
+    }
+    let mail = wait_mail(&email, &format!("{app}: thu hồi khẩn cấp")).await;
+    assert!(
+        mail.contains("toàn bộ app") && mail.contains("Lừa đảo"),
+        "{mail}"
+    );
+    let actions: Vec<String> = sqlx::query_scalar("SELECT action FROM audit_log WHERE target = $1")
+        .bind(&app)
+        .fetch_all(&st.db)
+        .await
+        .unwrap();
+    for a in [
+        "review.approve",
+        "review.reject",
+        "review.appeal",
+        "review.revoke",
+    ] {
+        assert!(actions.contains(&a.to_owned()), "{a}: {actions:?}");
+    }
 }
