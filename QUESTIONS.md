@@ -161,3 +161,16 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     lần phát hành đầu (đổi sau sẽ mất cài đặt cũ của người dùng).
 48. **Cửa sổ DMG trên macOS**: `packaging/macos/dmg/DS_Store` của bản gốc mang tên ổ đĩa cũ nên đã
     gỡ; cần dựng lại bằng `generate.py` (cần resvg, `ds_store`, `mac_alias`) khi làm đóng gói macOS.
+49. **"Chạy mã do agent tạo"** (spec app-builder, "Chạy lệnh có kiểm soát"): F-Builder hỏi trước khi
+    chạy app (`cargo run`, `node app.js`, `python main.py`…), nhưng vẫn cho chạy bản dựng và test, và
+    lần chạy app để chụp màn hình hay tự kiểm tra (`--screenshot`, `--self-test`) vì đó là bước Kiểm
+    tra của chính F-Builder. Cách hiểu này có đúng ý spec không?
+50. **Một xác nhận cho hai việc**: xác nhận "phần mềm của tôi / tôi có quyền phân tích" khi đọc sâu
+    cũng cho phép dùng tên sản phẩm tham khảo trong app mới. Có cần tách thành hai xác nhận không?
+51. **Nộp từ F-Builder** dùng token nhà phát triển (tạo ở cổng, lưu trong kho bảo mật) thay vì đăng nhập
+    F-Eco bằng F-SDK như design D8 nói, vì API nộp của cổng dùng token nhà phát triển. Có cần cổng nhận
+    access token OAuth (scope nhà phát triển) để F-Builder đăng nhập một lần không?
+52. **Gói nộp** hiện chỉ có tệp chạy chính của app (đủ cho app Rust một tệp). App có tài nguyên, thư
+    viện kèm (Electron, Godot, Python) cần quy ước thư mục đóng gói trong `f-app.toml` hoặc `dist/`.
+53. **Đơn "Nhờ F-Eco xây hộ"** được tạo nháp trong thư mục dự án; gửi đơn chờ API đơn hàng của nhóm 12
+    (đính kèm spec, mã nguồn, giới hạn kích thước).

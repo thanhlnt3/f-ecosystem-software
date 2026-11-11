@@ -384,6 +384,7 @@ impl ChatModel for Tunneled {
 pub fn tools() -> Vec<f_builder_engine::ToolSpec> {
     let mut v = rebuild::tools::specs();
     v.extend(key_tools::specs());
+    v.extend(rebuild::store::specs());
     v.extend(model_tools::specs());
     v.extend(model_options::specs());
     v

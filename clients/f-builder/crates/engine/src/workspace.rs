@@ -1107,6 +1107,13 @@ pub enum ActionKind {
     System,
     /// Tools with no rule of their own.
     OtherTools,
+    /// Installing packages or libraries (`npm install`, `cargo add`, `pip install`…).
+    Install,
+    /// Commands that reach the network (`curl`, `wget`, `git clone`…).
+    Network,
+    /// Running the code the builder made (`cargo run`, `npm start`, `node app.js`…), outside the
+    /// build and its tests.
+    RunCode,
 }
 
 /// What an action of one [`ActionKind`] gets.
@@ -1150,7 +1157,14 @@ pub struct KindRow {
 pub const ACTION_KINDS: &[KindRow] = &[
     KindRow { kind: ActionKind::Web, name: "web", what: "reading the web", auto: Approval::Allow, manual: Approval::Allow },
     KindRow { kind: ActionKind::Commands, name: "commands", what: "commands outside the usual build commands", auto: Approval::Allow, manual: Approval::Ask },
-    KindRow { kind: ActionKind::OutsideFiles, name: "outside_files", what: "changing files outside the project", auto: Approval::Allow, manual: Approval::Ask },
+    // The builder writes only inside the project (tasks.md 11.5): Auto mode doesn't let it out.
+    KindRow {
+        kind: ActionKind::OutsideFiles,
+        name: "outside_files",
+        what: "changing files outside the project",
+        auto: Approval::Refuse,
+        manual: Approval::Ask,
+    },
     KindRow { kind: ActionKind::Publish, name: "publish", what: "pushing or publishing anything", auto: Approval::Refuse, manual: Approval::Ask },
     KindRow {
         kind: ActionKind::DeleteOutside,
@@ -1171,6 +1185,17 @@ pub const ACTION_KINDS: &[KindRow] = &[
         name: "other_tools",
         what: "tools with no approval rule of their own",
         auto: Approval::Refuse,
+        manual: Approval::Ask,
+    },
+    // tasks.md 11.5 (spec app-builder "Chạy lệnh có kiểm soát"): asked even in Auto mode, unless the
+    // project allows them ("allow without asking").
+    KindRow { kind: ActionKind::Install, name: "install", what: "installing packages or libraries", auto: Approval::Ask, manual: Approval::Ask },
+    KindRow { kind: ActionKind::Network, name: "network", what: "commands that reach the network", auto: Approval::Ask, manual: Approval::Ask },
+    KindRow {
+        kind: ActionKind::RunCode,
+        name: "run_code",
+        what: "running the app it made, outside the build and its tests",
+        auto: Approval::Ask,
         manual: Approval::Ask,
     },
 ];

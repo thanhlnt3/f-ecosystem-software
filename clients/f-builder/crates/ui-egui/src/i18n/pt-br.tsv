@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	A etapa {step} não av
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	Nada novo no registro, nenhum arquivo mudou e seus programas não usaram a CPU. Pode estar travado.
 Keep waiting	Continuar esperando
 Rerun step	Repetir a etapa
+Installing packages	Instalar pacotes
+Network commands	Comandos de rede
+Running the app	Executar o app
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	Instalar pacotes, comandos de rede e executar o app perguntam antes, mesmo no modo automático, a menos que você permita aqui.
+Submit to F-Store	Enviar para a F-Store
+Ask F-Eco to build it	Pedir à F-Eco para construir

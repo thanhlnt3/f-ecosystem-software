@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	Bước {step} không 
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	Nhật ký không có gì mới, không tệp nào thay đổi và các chương trình của nó không dùng CPU. Có thể nó đang bị treo.
 Keep waiting	Tiếp tục chờ
 Rerun step	Chạy lại bước
+Installing packages	Cài thư viện
+Network commands	Lệnh mạng
+Running the app	Chạy app
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	Cài thư viện, lệnh mạng và chạy app luôn hỏi trước, kể cả ở chế độ tự động, trừ khi bạn cho phép ở đây.
+Submit to F-Store	Nộp lên F-Store
+Ask F-Eco to build it	Nhờ F-Eco xây hộ

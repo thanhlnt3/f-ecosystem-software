@@ -32,7 +32,21 @@ ArtCraft bảo trợ.
   bằng khóa API, khóa lưu trong kho bảo mật của hệ điều hành.
 - Hỏi trước khi chạy lệnh có rủi ro, ghi nhớ lựa chọn "luôn cho phép" theo dự án.
 
-Phần F-Eco thêm (nhóm task 11.2–11.6) và việc còn mở: `docs/ROADMAP.md`.
+F-Eco thêm (nhóm task 11.2–11.6):
+
+- Xây theo OpenSpec: chọn thư mục có `openspec/changes/<tên>/`, spec là nguồn yêu cầu bắt buộc, app
+  dựng trong `app/` bên cạnh. Dự án chỉ có mô tả thì được hỏi nền tảng và ngôn ngữ trước khi xây.
+  Mỗi dự án có lịch sử các lượt (`runs.jsonl`).
+- Không bị treo im lặng: một bước 10 phút không có tiến triển (nhật ký, tệp, CPU) thì báo kèm Tiếp
+  tục chờ, Chạy lại bước, Dừng; lượt kết thúc khi agent đã bàn giao kết quả.
+- Đọc sâu cần xác nhận quyền phân tích (ghi vào dự án) và dự án đọc sâu không nộp được lên F-Store;
+  bước Kiểm tra cảnh báo khi app mới chứa tên sản phẩm tham khảo.
+- Khóa API chỉ ở kho bảo mật của hệ điều hành. Cài thư viện, lệnh mạng, chạy app luôn hỏi trước (kể
+  cả chế độ tự động) trừ khi dự án cho phép; không ghi ngoài thư mục dự án.
+- Nộp lên F-Store (manifest nháp để xem lại, rồi nộp qua cổng nhà phát triển, "Chờ duyệt") và "Nhờ
+  F-Eco xây hộ" (đơn nháp kèm spec).
+
+Việc còn mở: `docs/ROADMAP.md`.
 
 ## Dựng và chạy
 

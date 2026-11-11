@@ -25,6 +25,11 @@ toml = { workspace = true }
 # tính năng `rustls` mặc định của ureq vẫn dùng.
 ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "_ring", "platform-verifier", "gzip"] }
 dirs = "6"
+# Gói và đơn gửi F-Eco (tasks.md 11.6).
+zip = { version = "9", default-features = false, features = ["deflate"] }
+sha2 = { workspace = true }
+# Trình kiểm tra f-app.toml mà cổng nhà phát triển F-Eco dùng.
+feco-manifest = { path = "../../../../crates/feco-manifest" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", default-features = false, features = ["async-secret-service", "async-io", "crypto-rust"] }

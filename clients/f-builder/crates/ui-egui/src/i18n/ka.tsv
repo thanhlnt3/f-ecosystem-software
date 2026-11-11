@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	ნაბიჯი {st
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	ჟურნალში ახალი არაფერია, არცერთი ფაილი არ შეცვლილა და მის პროგრამებს პროცესორი არ გამოუყენებიათ. შესაძლოა გაჭედილია.
 Keep waiting	ლოდინის გაგრძელება
 Rerun step	ნაბიჯის თავიდან გაშვება
+Installing packages	პაკეტების დაყენება
+Network commands	ქსელური ბრძანებები
+Running the app	აპის გაშვება
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	პაკეტების დაყენება, ქსელური ბრძანებები და აპის გაშვება ჯერ გეკითხებათ, ავტომატურ რეჟიმშიც, თუ აქ არ დაუშვებთ.
+Submit to F-Store	F-Store-ში გაგზავნა
+Ask F-Eco to build it	F-Eco-ს აწყობის თხოვნა

@@ -1,5 +1,8 @@
-//! API keys: the OS keychain first, then a clearly labelled owner-only fallback file, then the
-//! usual environment variables. Keys are never logged or written to project files.
+//! API keys: the OS keychain (Windows Credential Manager, macOS Keychain), then the usual
+//! environment variables. Keys are never logged, never written to project or settings files, and
+//! never sent to F-Eco (tasks.md 11.5, spec app-builder "Dùng khóa API riêng"). When the keychain
+//! can't save a key, it isn't saved anywhere else: the person is told. Only test and demo stores
+//! ([`KeyStore::file_only`]) keep keys in a file.
 
 use crate::BackendKind;
 use f_builder_engine::tools::asset_tools::AssetKeys;
@@ -10,7 +13,8 @@ use std::time::Duration;
 
 /// Service name in the OS keychain.
 pub const SERVICE: &str = "io.github.thanhlnt3.f-builder";
-/// Set to `1` to skip the OS keychain (tests, headless servers).
+/// Set to `1` to skip the OS keychain (headless servers): keys then come from environment variables
+/// only, and none can be saved.
 pub const NO_KEYCHAIN_ENV: &str = "F_BUILDER_NO_KEYCHAIN";
 /// The keychain can block (a locked desktop keyring); never wait longer than this.
 const KEYCHAIN_TIMEOUT: Duration = Duration::from_secs(3);
@@ -68,21 +72,27 @@ pub fn env_var(kind: BackendKind) -> Option<&'static str> {
 pub struct KeyStore {
     file: PathBuf,
     use_keychain: bool,
+    /// Keys may be kept in `file` (test and demo stores only).
+    file_store: bool,
 }
 
 impl KeyStore {
-    /// The default store: keychain + `<config dir>/ai-keys.toml`.
+    /// The default store: the OS keychain only.
     pub fn system() -> Self {
         let no_chain = std::env::var(NO_KEYCHAIN_ENV).is_ok_and(|v| v == "1");
-        KeyStore { file: f_builder_engine::settings::config_dir().join("ai-keys.toml"), use_keychain: !no_chain }
+        KeyStore { file: f_builder_engine::settings::config_dir().join("ai-keys.toml"), use_keychain: !no_chain, file_store: false }
     }
 
-    /// A file-only store (tests).
+    /// A store that keeps keys in `file`, never in the keychain: tests and the demo app only, so
+    /// they never touch the person's keychain.
     pub fn file_only(file: PathBuf) -> Self {
-        KeyStore { file, use_keychain: false }
+        KeyStore { file, use_keychain: false, file_store: true }
     }
 
     fn read_file(&self) -> toml::Table {
+        if !self.file_store {
+            return toml::Table::new();
+        }
         std::fs::read_to_string(&self.file).ok().and_then(|t| toml::from_str(&t).ok()).unwrap_or_default()
     }
 
@@ -108,7 +118,7 @@ impl KeyStore {
         f_builder_platform::write_atomic_private(&self.file, format!("{FILE_HEADER}{body}").as_bytes())
     }
 
-    /// The stored key for a backend (keychain, then fallback file).
+    /// The stored key for a backend.
     pub fn get(&self, backend: &str) -> Option<String> {
         if self.use_keychain
             && let Some(k) = keychain::get(backend)
@@ -129,13 +139,15 @@ impl KeyStore {
             return Err(ToolError::invalid("The key is empty."));
         }
         if self.use_keychain && keychain::set(backend, key) {
-            // Don't leave a stale copy in the fallback file (the keychain's copy is read first).
-            if let Ok(mut t) = self.read_file_to_change()
-                && t.remove(backend).is_some()
-            {
-                self.write_file(&t)?;
-            }
             return Ok("keychain");
+        }
+        if !self.file_store {
+            return Err(ToolError::new(ErrorCode::NoPermission, "The system's secure store (keychain) couldn't save the key, so it wasn't saved.")
+                .with_remediation(if self.use_keychain {
+                    "Unlock your keychain (Windows: Credential Manager; macOS: Keychain Access) and save the key again, or set the provider's environment variable."
+                } else {
+                    "The keychain is turned off (F_BUILDER_NO_KEYCHAIN=1): set the provider's environment variable instead."
+                }));
         }
         let mut t = self.read_file_to_change()?;
         t.insert(backend.to_string(), toml::Value::String(key.to_string()));
@@ -147,9 +159,11 @@ impl KeyStore {
         if self.use_keychain {
             keychain::delete(backend);
         }
-        let mut t = self.read_file_to_change()?;
-        if t.remove(backend).is_some() {
-            self.write_file(&t)?;
+        if self.file_store {
+            let mut t = self.read_file_to_change()?;
+            if t.remove(backend).is_some() {
+                self.write_file(&t)?;
+            }
         }
         // A locked or busy keychain may have refused, and it's read first, so the key would still
         // work. Reading back, not the delete's result: with no keychain at all the delete fails too.
@@ -208,6 +222,65 @@ mod keychain {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// tasks.md 11.5 (spec app-builder "Dùng khóa API riêng"): the person's store keeps keys in the
+    /// keychain only; when it can't, the key isn't saved, and no file is written.
+    #[test]
+    fn the_system_store_never_falls_back_to_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("ai-keys.toml");
+        // As `system()` with the keychain off, pointed at a temp folder.
+        let s = KeyStore { file: file.clone(), use_keychain: false, file_store: false };
+        let e = s.set("anthropic", "sk-test-not-a-real-key").unwrap_err();
+        assert_eq!(e.code, ErrorCode::NoPermission);
+        assert!(e.message.contains("wasn't saved"), "{}", e.message);
+        assert!(!file.exists(), "no key file is written");
+        // A key file left by an older build isn't read either.
+        std::fs::write(&file, "anthropic = \"sk-test-old\"\n").unwrap();
+        assert_eq!(s.get("anthropic"), None);
+        s.delete("anthropic").unwrap();
+        assert!(file.exists(), "and isn't touched");
+    }
+
+    /// The key doesn't reach the settings file (which people copy between computers) or any other
+    /// file in the config folder.
+    #[test]
+    fn a_saved_key_is_in_no_settings_or_other_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let keys = dir.path().join("keys").join("ai-keys.toml");
+        std::fs::create_dir_all(keys.parent().unwrap()).unwrap();
+        let engine = std::sync::Arc::new(f_builder_engine::Engine::new(f_builder_engine::testing::session()));
+        let hub = crate::AiHub::with_stores(engine, dir.path().join("settings.toml"), KeyStore::file_only(keys.clone()));
+        let mut cfg = hub.config();
+        cfg.upsert(crate::BackendEntry {
+            config: crate::BackendConfig {
+                name: "Claude".into(),
+                kind: BackendKind::Anthropic,
+                model: "claude".into(),
+                base_url: None,
+                ssh_host: None,
+                enabled: true,
+            },
+            options: crate::BackendOptions::default(),
+        });
+        hub.save_config(&cfg).unwrap();
+        hub.keys.set("Claude", "sk-test-secret-1234567890").unwrap();
+        for e in walk(dir.path()) {
+            if e != keys {
+                let text = std::fs::read(&e).unwrap_or_default();
+                assert!(!String::from_utf8_lossy(&text).contains("sk-test-secret-1234567890"), "the key is in {}", e.display());
+            }
+        }
+    }
+
+    fn walk(root: &std::path::Path) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        for e in std::fs::read_dir(root).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() { out.extend(walk(&p)) } else { out.push(p) }
+        }
+        out
+    }
 
     /// A second provider with no environment variable, so nothing here reads the real one.
     struct Other;

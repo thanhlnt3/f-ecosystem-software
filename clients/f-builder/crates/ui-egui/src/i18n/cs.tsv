@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	Krok {step} neudělal 
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	V protokolu nic nového, žádný soubor se nezměnil a jeho programy nevyužily procesor. Možná se zasekl.
 Keep waiting	Čekat dál
 Rerun step	Spustit krok znovu
+Installing packages	Instalace balíčků
+Network commands	Síťové příkazy
+Running the app	Spuštění aplikace
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	Instalace balíčků, síťové příkazy a spuštění aplikace se nejdřív ptají, i v automatickém režimu, pokud je tu nepovolíte.
+Submit to F-Store	Odeslat do F-Store
+Ask F-Eco to build it	Nechat F-Eco postavit

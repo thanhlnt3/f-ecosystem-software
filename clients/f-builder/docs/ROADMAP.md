@@ -25,15 +25,18 @@ dòng `- [x]` là việc đã xong. Kế hoạch của Craft Anything 0.6.0 (b�
 
 ### R11.4 Clean room và thương hiệu
 - [x] Xác nhận quyền phân tích khi bật đọc sâu, ghi vào dự án
-- [ ] Chặn nộp lên F-Store khi dự án có lượt chạy ở chế độ đọc sâu
+- [x] Chặn nộp lên F-Store khi dự án có lượt chạy ở chế độ đọc sâu
 - [x] Bước Kiểm tra cảnh báo khi giao diện app mới chứa tên sản phẩm tham khảo
 
 ### R11.5 Khóa API và chạy lệnh
-- [ ] Khóa API chỉ lưu trong kho bảo mật của hệ điều hành (bỏ tệp dự phòng dạng chữ)
-- [ ] Hỏi trước khi cài thư viện, chạy lệnh mạng, chạy mã agent tạo; gợi ý `--ignore-scripts` cho npm
-- [ ] Agent chỉ ghi file trong thư mục dự án (kể cả ở chế độ tự động)
+- [x] Khóa API chỉ lưu trong kho bảo mật của hệ điều hành (bỏ tệp dự phòng dạng chữ)
+- [x] Hỏi trước khi cài thư viện, chạy lệnh mạng, chạy mã agent tạo; gợi ý `--ignore-scripts` cho npm
+- [x] Agent chỉ ghi file trong thư mục dự án (kể cả ở chế độ tự động)
 
 ### R11.6 Nộp app và nhờ xây hộ
-- [ ] Tạo `f-app.toml` nháp và gói cài đặt từ dự án Sẵn sàng, nộp qua API cổng nhà phát triển
+- [x] Tạo `f-app.toml` nháp và gói cài đặt từ dự án Sẵn sàng, nộp qua API cổng nhà phát triển
+- [ ] Gói nhiều tệp (thư mục tài nguyên cạnh chương trình); hiện chỉ đóng gói tệp chạy chính
+- [ ] E2E nộp với môi trường sandbox (chờ task 8.6)
 - [ ] Đăng nhập F-Eco bằng F-SDK
-- [ ] "Nhờ F-Eco xây hộ": tạo đơn nháp đính kèm spec (chờ nhóm 12)
+- [x] "Nhờ F-Eco xây hộ": tạo đơn nháp đính kèm spec
+- [ ] Gửi đơn nháp tới F-Eco (chờ API đơn hàng, nhóm 12)

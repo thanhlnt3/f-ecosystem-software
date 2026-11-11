@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	{step}步驟已有 {mi
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	日誌沒有新內容，沒有檔案變動，它的程式也沒有使用 CPU。可能卡住了。
 Keep waiting	繼續等待
 Rerun step	重新執行此步驟
+Installing packages	安裝套件
+Network commands	網路命令
+Running the app	執行應用程式
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	安裝套件、網路命令和執行應用程式都會先詢問，即使在自動模式下也是如此，除非你在這裡允許。
+Submit to F-Store	提交到 F-Store
+Ask F-Eco to build it	請 F-Eco 代為建置

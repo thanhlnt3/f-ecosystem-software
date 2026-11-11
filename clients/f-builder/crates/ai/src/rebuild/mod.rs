@@ -54,6 +54,7 @@ pub mod runs;
 pub mod self_check;
 pub mod stacks;
 pub mod stand_in;
+pub mod store;
 mod study;
 #[cfg(test)]
 mod tests;

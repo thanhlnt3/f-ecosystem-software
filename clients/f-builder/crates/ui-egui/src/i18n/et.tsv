@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	Samm {step} pole {minu
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	Logis pole midagi uut, ükski fail ei muutunud ja selle programmid ei kasutanud protsessorit. See võib olla kinni jäänud.
 Keep waiting	Oota edasi
 Rerun step	Käivita samm uuesti
+Installing packages	Pakettide paigaldamine
+Network commands	Võrgukäsud
+Running the app	Rakenduse käivitamine
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	Pakettide paigaldamine, võrgukäsud ja rakenduse käivitamine küsivad enne, ka automaatrežiimis, kui sa neid siin ei luba.
+Submit to F-Store	Saada F-Store'i
+Ask F-Eco to build it	Lase F-Ecol see ehitada

@@ -148,9 +148,6 @@ pub enum Decision {
 
 /// Build commands that are fine to run inside the project without asking.
 const SAFE_COMMANDS: &[&str] = &[
-    "npm install",
-    "npm i ",
-    "npm ci",
     "npm run build",
     "npm run lint",
     "npm run test",
@@ -176,15 +173,12 @@ const SAFE_COMMANDS: &[&str] = &[
     "npx prettier",
     "node --version",
     "cargo build",
-    // Runs the builder's own game (e.g. `cargo run -- --screenshot …`).
-    "cargo run",
     "cargo check",
     "cargo test",
     "cargo fmt",
     "cargo clippy",
     "cargo new",
     "cargo init",
-    "cargo add",
     "cargo tree",
     "cargo --version",
     "rustc --version",
@@ -205,6 +199,97 @@ const SAFE_COMMANDS: &[&str] = &[
     "wc ",
     "echo ",
 ];
+
+/// Installing packages (tasks.md 11.5): the first words of such a command.
+const INSTALLS: &[&str] = &[
+    "npm install",
+    "npm i ",
+    "npm ci",
+    "npm add",
+    "yarn add",
+    "yarn install",
+    "pnpm add",
+    "pnpm install",
+    "pnpm i ",
+    "bun add",
+    "bun install",
+    "pip install",
+    "pip3 install",
+    "python -m pip install",
+    "python3 -m pip install",
+    "uv add",
+    "uv pip install",
+    "poetry add",
+    "cargo add",
+    "cargo install",
+    "go get",
+    "go install",
+    "dotnet add package",
+    "gem install",
+    "composer require",
+    "composer install",
+    "flutter pub add",
+    "dart pub add",
+];
+
+/// Commands that reach the network: their first word (tasks.md 11.5).
+const NETWORK: &[&str] = &["curl", "wget", "invoke-webrequest", "iwr", "irm", "invoke-restmethod", "scp", "ssh", "sftp", "ftp", "nc", "telnet"];
+/// Git commands that reach the network.
+const GIT_NETWORK: &[&str] = &["git clone", "git fetch", "git pull", "git submodule update", "git ls-remote"];
+
+/// Running the app the builder made, outside its build and tests (tasks.md 11.5).
+const RUNS_CODE: &[&str] = &[
+    "cargo run",
+    "npm start",
+    "npm run start",
+    "yarn start",
+    "pnpm start",
+    "bun run",
+    "deno run",
+    "go run",
+    "dotnet run",
+    "java -jar",
+    "node ",
+    "python ",
+    "python3 ",
+    "py ",
+    "ruby ",
+    "php ",
+    "flutter run",
+    "godot ",
+];
+
+/// Whether `part` (one command, lower case) starts with any of `starts`, on whole words.
+fn starts_with_any(part: &str, starts: &[&str]) -> bool {
+    let padded = format!("{part} ");
+    starts.iter().any(|s| padded.starts_with(s) && (s.ends_with(' ') || padded.get(s.len()..).is_some_and(|r| r.starts_with(' '))))
+}
+
+/// The kind a command needs approval for, when it's one of those asked even in Auto mode.
+fn guarded_kind(part: &str) -> Option<ActionKind> {
+    let p = part.trim().to_ascii_lowercase();
+    if starts_with_any(&p, INSTALLS) {
+        Some(ActionKind::Install)
+    } else if NETWORK.contains(&p.split_whitespace().next().unwrap_or_default()) || starts_with_any(&p, GIT_NETWORK) {
+        Some(ActionKind::Network)
+    } else if starts_with_any(&p, RUNS_CODE) || p.starts_with("./") || p.starts_with(".\\") {
+        Some(ActionKind::RunCode)
+    } else {
+        None
+    }
+}
+
+/// The app run as F-Builder's checks run it (a screenshot or its self-test), which is part of
+/// checking the build rather than running it for its own sake.
+fn check_run(part: &str) -> bool {
+    part.split_whitespace().any(|w| w == "--screenshot" || w == "--self-test")
+}
+
+/// An npm-family install that would run the packages' install scripts.
+fn runs_install_scripts(part: &str) -> bool {
+    let p = part.to_ascii_lowercase();
+    ["npm", "yarn", "pnpm", "bun"].iter().any(|m| p.starts_with(m)) && starts_with_any(&p, INSTALLS) && !p.contains("--ignore-scripts")
+}
 
 /// Commands that never finish on their own; the app previews the build itself.
 const SERVER_COMMANDS: &[&str] = &[
@@ -321,7 +406,18 @@ fn own_program(part: &str, app: &Path) -> bool {
 fn decide_command(cmd: &str, app: &Path) -> Decision {
     let c = cmd.trim();
     let first = c.split_whitespace().next().unwrap_or_default();
-    let ask = || Decision::Ask { title: format!("Run a command: `{}`", c.chars().take(300).collect::<String>()), kind: format!("bash:{first}") };
+    let shown = c.chars().take(300).collect::<String>();
+    let ask = || {
+        // The first install in a project is asked, with the safer way to do it (tasks.md 11.5).
+        let title = if c.split("&&").any(runs_install_scripts) {
+            format!("Install packages: `{shown}`. Tip: add --ignore-scripts so the packages' install scripts don't run.")
+        } else if c.split("&&").any(|p| guarded_kind(p) == Some(ActionKind::Install)) {
+            format!("Install packages: `{shown}`")
+        } else {
+            format!("Run a command: `{shown}`")
+        };
+        Decision::Ask { title, kind: format!("bash:{first}") }
+    };
     if c.is_empty() {
         return Decision::Deny("Empty command.".into());
     }
@@ -341,7 +437,12 @@ fn decide_command(cmd: &str, app: &Path) -> Decision {
                 _ => return ask(),
             }
         }
-        if !(safe_command(part) || engine_build(part) || own_program(part, app)) {
+        // Installs, network commands and running the app ask first, even in Auto mode (11.5).
+        if guarded_kind(part).is_some() && !check_run(part) {
+            return ask();
+        }
+        let checks_by_running = check_run(part) && part.trim_start().starts_with("cargo run");
+        if !(safe_command(part) || engine_build(part) || own_program(part, app) || checks_by_running) {
             return ask();
         }
     }
@@ -381,8 +482,11 @@ pub fn decide(ws: Option<&Workspace>, tool: &str, input: &Value) -> Decision {
             let checks = ws.map(Workspace::checks_dir);
             // Followed through links, so a link in app/ can't lead a write out of it; and wherever
             // the agent opens a relative path from, so `f-builder.json` isn't taken for app/f-builder.json.
+            // Anywhere else in the project folder is still the project (tasks.md 11.5: the builder
+            // writes only inside it); outside it, Auto mode refuses.
             let ours = |p: &Path| {
-                app.as_ref().is_some_and(|app| really_inside(app, p) || checks.as_ref().is_some_and(|c| really_inside(c, p)))
+                (app.as_ref().is_some_and(|app| really_inside(app, p) || checks.as_ref().is_some_and(|c| really_inside(c, p)))
+                    || ws.is_some_and(|w| really_inside(&w.root, p)))
                     && !ws.is_some_and(|w| w.is_own_record(p))
             };
             if opened_at(ws, &target).iter().all(|p| p.as_deref().is_some_and(ours)) {
@@ -610,6 +714,14 @@ pub fn kinds_of(ws: Option<&Workspace>, tool: &str, input: &Value) -> Vec<Action
     if DELETES.iter().any(|k| c.contains(k)) && deletes_outside(command, ws) {
         kinds.push(ActionKind::DeleteOutside);
     }
+    for part in c.split("&&").flat_map(|p| p.split([';', '|'])) {
+        if let Some(k) = guarded_kind(part)
+            && !check_run(part)
+            && !kinds.contains(&k)
+        {
+            kinds.push(k);
+        }
+    }
     if kinds.is_empty() {
         kinds.push(ActionKind::Commands);
     }
@@ -621,7 +733,16 @@ pub fn kinds_of(ws: Option<&Workspace>, tool: &str, input: &Value) -> Vec<Action
 /// system changes are allowed whole: "always" on a push allows pushing, and an earlier "always" on
 /// some other command that starts the same way (`cd`) doesn't.
 fn remembers_actions(kind: ActionKind) -> bool {
-    matches!(kind, ActionKind::Web | ActionKind::Commands | ActionKind::OutsideFiles | ActionKind::OtherTools)
+    matches!(
+        kind,
+        ActionKind::Web
+            | ActionKind::Commands
+            | ActionKind::OutsideFiles
+            | ActionKind::OtherTools
+            | ActionKind::Install
+            | ActionKind::Network
+            | ActionKind::RunCode
+    )
 }
 
 /// What the builder is told when an action of `kind` is refused: by the project's own choice
@@ -927,9 +1048,10 @@ mod tests {
         let mut asked = false;
         assert_eq!(approve_with(inbox(), false, false, "Write", &inside, &|| false, &mut || asked = true).unwrap(), Ok(()));
         assert!(!asked, "allowed by the policy without asking");
-        // Outside the project in Auto mode: allowed without asking; with nobody to ask: refused.
+        // Outside the project in Auto mode: refused (the builder writes only inside it, 11.5); with
+        // nobody to ask: refused.
         let outside = json!({"file_path": "/elsewhere/notes.txt"});
-        assert_eq!(approve_with(inbox(), true, false, "Write", &outside, &|| false, &mut || {}).unwrap(), Ok(()));
+        assert!(approve_with(inbox(), true, false, "Write", &outside, &|| false, &mut || {}).unwrap().is_err());
         assert!(approve_with(None, false, false, "Write", &outside, &|| false, &mut || {}).unwrap().is_err());
     }
 
@@ -1107,15 +1229,61 @@ mod tests {
         assert_eq!(off_limits(Some(&cw), "Read", &write(&cw.app_dir().join("main.rs"))), None);
     }
 
+    /// tasks.md 11.5 (spec app-builder "Chạy lệnh có kiểm soát", scenario "Agent muốn cài thư
+    /// viện"): installing, network commands and running the app ask even in Auto mode, the first
+    /// npm install suggests --ignore-scripts, and "allow without asking" for the project lets them
+    /// through. F-Builder's own check runs (a screenshot, the self-test) go ahead.
+    #[test]
+    fn installs_network_and_running_the_app_ask_unless_the_project_allows_them() {
+        let (_d, mut w) = ws();
+        let app = w.app_dir();
+        let bash = |c: &str| json!({"command": c});
+        let Decision::Ask { title, .. } = decide_command("npm install", &app) else { panic!("asked") };
+        assert!(title.contains("--ignore-scripts"), "{title}");
+        let Decision::Ask { title, .. } = decide_command("npm install --ignore-scripts", &app) else { panic!("asked") };
+        assert!(!title.contains("Tip"), "{title}");
+        for (cmd, kind) in [
+            ("npm install", ActionKind::Install),
+            ("pip install requests", ActionKind::Install),
+            ("cargo add serde", ActionKind::Install),
+            ("curl https://example.com/x.sh", ActionKind::Network),
+            ("git clone https://example.com/r.git", ActionKind::Network),
+            ("node app.js", ActionKind::RunCode),
+            ("cargo run", ActionKind::RunCode),
+        ] {
+            assert_eq!(kind_of(Some(&w), "Bash", &bash(cmd)), kind, "{cmd}");
+            assert!(matches!(outcome(Some(&w), true, "Bash", &bash(cmd)), Outcome::Ask { .. }), "asked even in Auto mode: {cmd}");
+        }
+        // A dev server never exits: refused outright, as before (F-Builder serves the build).
+        assert!(matches!(outcome(Some(&w), true, "Bash", &bash("npm start")), Outcome::Refuse(_)));
+        // The checks' own runs and the build go ahead.
+        assert_eq!(decide_command("cargo run -- --screenshot shots/now.png", &app), Decision::Allow);
+        assert_eq!(outcome(Some(&w), true, "Bash", &bash("cargo build")), Outcome::Allow);
+        // "Allow without asking" for this project.
+        w.set_person(|m| {
+            for k in [ActionKind::Install, ActionKind::Network, ActionKind::RunCode] {
+                m.approvals.insert(k, Approval::Allow);
+            }
+        })
+        .unwrap();
+        let w = Workspace::open(&w.root).unwrap();
+        for cmd in ["npm install", "curl https://example.com", "node app.js"] {
+            assert_eq!(outcome(Some(&w), true, "Bash", &bash(cmd)), Outcome::Allow, "{cmd}");
+        }
+        // Still only inside the project: a write outside it isn't let through by Auto mode.
+        assert!(matches!(outcome(Some(&w), true, "Write", &json!({"file_path": "/elsewhere/x.txt"})), Outcome::Refuse(_)));
+    }
+
     #[test]
     fn commands() {
         let (_d, w) = ws();
         let app = w.app_dir();
-        assert_eq!(decide_command("npm install", &app), Decision::Allow);
-        assert_eq!(decide_command("npm install && npm run build", &app), Decision::Allow);
+        // Installing packages is asked first (tasks.md 11.5).
+        assert!(matches!(decide_command("npm install", &app), Decision::Ask { .. }));
+        assert!(matches!(decide_command("npm install && npm run build", &app), Decision::Ask { .. }));
         assert_eq!(decide_command("npx shadcn@latest init --yes --defaults && npx shadcn@latest add --yes button sheet", &app), Decision::Allow);
         assert!(matches!(decide_command("npx next dev", &app), Decision::Deny(_)), "a dev server never exits");
-        assert_eq!(decide_command("cd web && npm ci", &app), Decision::Allow);
+        assert!(matches!(decide_command("cd web && npm ci", &app), Decision::Ask { .. }));
         assert_eq!(decide_command("cargo build --release", &app), Decision::Allow);
         assert!(matches!(decide_command("npm run dev", &app), Decision::Deny(_)));
         assert!(matches!(decide_command("npm install && npm start", &app), Decision::Deny(_)));
@@ -1284,8 +1452,8 @@ mod tests {
         assert_eq!(decide(Some(&w), "Write", &write("app/src/main.rs")), Decision::Allow);
         let full = w.app_dir().join("src/main.rs");
         assert_eq!(decide(Some(&w), "Write", &write(&full.display().to_string())), Decision::Allow);
-        // A bare name could be the project folder's or app/'s: asked about, not refused.
-        assert!(matches!(decide(Some(&w), "Write", &write("src/main.rs")), Decision::Ask { .. }));
+        // A bare name is the project folder's or app/'s: inside the project either way (11.5).
+        assert_eq!(decide(Some(&w), "Write", &write("src/main.rs")), Decision::Allow);
         assert_eq!(kind_of(Some(&w), "Write", &write("src/main.rs")), ActionKind::OutsideFiles);
     }
 
@@ -1393,7 +1561,8 @@ mod tests {
             "cd /d/repos/git && ls",
             "npm install && echo published",
         ] {
-            assert_eq!(kind(reads), ActionKind::Commands, "{reads}");
+            // Not a push or a publish (some reach the network or install, which are asked: 11.5).
+            assert!(!matches!(kind(reads), ActionKind::Publish | ActionKind::System), "{reads}");
         }
     }
 
@@ -1530,12 +1699,19 @@ mod tests {
             e.call("core_action_approve", json!({"tool_name": tool, "input": input}), crate::CallOptions::new(crate::Caller::Mcp)).unwrap().to_json()
         };
         let root = w.root.display().to_string().replace('\\', "/");
-        // Anything that used to ask now goes ahead, with nobody asked.
-        for cmd in ["python -I c:/tmp/dz5/props.py", "git clone https://example.com/x", &format!("rm -rf \"{root}/app/Build\""), "rm -rf ./Intermediate"] {
+        // What can be undone goes ahead, with nobody asked.
+        for cmd in [&format!("rm -rf \"{root}/app/Build\""), "rm -rf ./Intermediate"] {
             assert_eq!(call("Bash", json!({"command": cmd}))["result"]["behavior"], "allow", "{cmd}");
         }
         assert_eq!(call("PowerShell", json!({"command": "Get-ChildItem D:/SteamLibrary"}))["result"]["behavior"], "allow");
-        assert_eq!(call("Write", json!({"file_path": "C:/Users/me/Documents/Unreal Projects/Game/x.ini", "content": ""}))["result"]["behavior"], "allow");
+        // Running a script and reaching the network are asked even in Auto mode (tasks.md 11.5);
+        // looked at without waiting for an answer here.
+        for cmd in ["python -I c:/tmp/dz5/props.py", "git clone https://example.com/x"] {
+            assert!(matches!(outcome(Some(&w), true, "Bash", &json!({"command": cmd})), Outcome::Ask { .. }), "{cmd}");
+        }
+        // The builder writes only inside the project (11.5): outside it, refused without asking.
+        let outside = call("Write", json!({"file_path": "C:/Users/me/Documents/Unreal Projects/Game/x.ini", "content": ""}));
+        assert_eq!(outside["result"]["behavior"], "deny");
         // These are refused, again without asking: the builder finds another way.
         for cmd in [
             "git push origin main",

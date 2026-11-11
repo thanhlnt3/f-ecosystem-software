@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	Шаг «{step}» не
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	В журнале ничего нового, ни один файл не изменился, и его программы не использовали процессор. Возможно, он завис.
 Keep waiting	Подождать ещё
 Rerun step	Повторить шаг
+Installing packages	Установка пакетов
+Network commands	Сетевые команды
+Running the app	Запуск приложения
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	Установка пакетов, сетевые команды и запуск приложения сначала спрашивают, даже в автоматическом режиме, если вы не разрешите их здесь.
+Submit to F-Store	Отправить в F-Store
+Ask F-Eco to build it	Попросить F-Eco собрать

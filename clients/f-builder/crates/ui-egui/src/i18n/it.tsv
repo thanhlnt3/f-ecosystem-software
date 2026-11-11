@@ -1468,3 +1468,9 @@ The {step} step has made no progress in {minutes} minutes	Il passaggio {step} no
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	Niente di nuovo nel registro, nessun file modificato e i suoi programmi non hanno usato la CPU. Potrebbe essere bloccato.
 Keep waiting	Continua ad aspettare
 Rerun step	Ripeti il passaggio
+Installing packages	Installare pacchetti
+Network commands	Comandi di rete
+Running the app	Avviare l'app
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	Installare pacchetti, i comandi di rete e avviare l'app chiedono prima, anche in modalità automatica, se non li consenti qui.
+Submit to F-Store	Invia a F-Store
+Ask F-Eco to build it	Chiedi a F-Eco di costruirla

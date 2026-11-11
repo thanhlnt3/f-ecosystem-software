@@ -21,6 +21,9 @@ const LABELS: &[(ActionKind, &str)] = &[
     (ActionKind::DeleteOutside, "Deleting outside the project"),
     (ActionKind::System, "System changes"),
     (ActionKind::OtherTools, "Other tools"),
+    (ActionKind::Install, "Installing packages"),
+    (ActionKind::Network, "Network commands"),
+    (ActionKind::RunCode, "Running the app"),
 ];
 
 /// Other words for a kind after `/approvals`, as well as its own name (`publish`).
@@ -34,6 +37,10 @@ const ALIASES: &[(&str, ActionKind)] = &[
     ("delete", ActionKind::DeleteOutside),
     ("deletes", ActionKind::DeleteOutside),
     ("tools", ActionKind::OtherTools),
+    ("packages", ActionKind::Install),
+    ("npm", ActionKind::Install),
+    ("net", ActionKind::Network),
+    ("run", ActionKind::RunCode),
 ];
 
 /// The choices, as shown and as typed after `/approvals` (in any case); none is Default.
@@ -151,6 +158,8 @@ pub(crate) fn menu(app: &mut BuilderApp, ui: &mut Ui, root: &Path) {
         ui.add_space(4.0);
         let note = tr("Default follows Auto mode: with it on, what can be undone goes ahead and the rest is refused; with it off, the builder asks.");
         ui.add(egui::Label::new(RichText::new(note).size(theme::SMALL).color(t.text_faint)).wrap());
+        let guarded = tr("Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.");
+        ui.add(egui::Label::new(RichText::new(guarded).size(theme::SMALL).color(t.text_faint)).wrap());
     });
     if let Some((kind, choice)) = picked {
         app.set_approval(root, kind, choice);

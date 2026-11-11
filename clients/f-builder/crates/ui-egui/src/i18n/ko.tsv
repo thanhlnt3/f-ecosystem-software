@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	{step} 단계가 {minu
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	로그에 새 내용이 없고, 바뀐 파일이 없으며, 프로그램이 CPU를 쓰지 않았습니다. 멈췄을 수 있습니다.
 Keep waiting	계속 기다리기
 Rerun step	단계 다시 실행
+Installing packages	패키지 설치
+Network commands	네트워크 명령
+Running the app	앱 실행
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	패키지 설치, 네트워크 명령, 앱 실행은 자동 모드에서도 여기서 허용하지 않으면 먼저 묻습니다.
+Submit to F-Store	F-Store에 제출
+Ask F-Eco to build it	F-Eco에 제작 요청

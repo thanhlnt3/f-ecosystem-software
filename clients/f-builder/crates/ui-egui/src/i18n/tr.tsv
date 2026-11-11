@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	{step} adımı {minute
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	Günlükte yeni bir şey yok, hiçbir dosya değişmedi ve programları CPU kullanmadı. Takılmış olabilir.
 Keep waiting	Beklemeye devam et
 Rerun step	Adımı yeniden çalıştır
+Installing packages	Paket yükleme
+Network commands	Ağ komutları
+Running the app	Uygulamayı çalıştırma
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	Paket yükleme, ağ komutları ve uygulamayı çalıştırma, burada izin vermezseniz otomatik modda bile önce sorar.
+Submit to F-Store	F-Store'a gönder
+Ask F-Eco to build it	F-Eco'dan yapmasını iste

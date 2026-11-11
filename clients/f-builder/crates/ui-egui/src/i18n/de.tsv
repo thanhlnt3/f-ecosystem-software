@@ -1466,3 +1466,9 @@ The {step} step has made no progress in {minutes} minutes	Der Schritt {step} hat
 Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	Nichts Neues im Protokoll, keine Datei geändert, und seine Programme haben keine CPU genutzt. Er hängt möglicherweise.
 Keep waiting	Weiter warten
 Rerun step	Schritt neu starten
+Installing packages	Pakete installieren
+Network commands	Netzwerkbefehle
+Running the app	Die App ausführen
+Installing packages, network commands and running the app ask first, even in Auto mode, unless you allow them here.	Pakete installieren, Netzwerkbefehle und das Ausführen der App fragen zuerst, auch im Automodus, außer Sie erlauben sie hier.
+Submit to F-Store	An F-Store senden
+Ask F-Eco to build it	Von F-Eco bauen lassen

@@ -1750,7 +1750,8 @@ mod picking_up_a_build {
         let program = b.projects.join("Original.exe");
         std::fs::write(&program, b"MZ not really a program").unwrap();
         let target = TargetRef::Local { path: program };
-        let wait_finish = |run: &RebuildRun, mut on: Box<dyn FnMut(&RebuildRun, &Request)>| -> (bool, String) {
+        type OnAsk = Box<dyn FnMut(&RebuildRun, &Request)>;
+        let wait_finish = |run: &RebuildRun, mut on: OnAsk| -> (bool, String) {
             let began = Instant::now();
             loop {
                 assert!(began.elapsed() < Duration::from_secs(30), "the run never finished");

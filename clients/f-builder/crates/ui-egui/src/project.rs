@@ -1265,6 +1265,17 @@ fn feed(app: &mut BuilderApp, ui: &mut Ui, ws: &Workspace) {
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| outcome_button(app, ui, ws, 44.0, 13.0));
             });
+            // tasks.md 11.6: from here to F-Store, or to F-Eco's custom builds.
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let project = serde_json::json!({"project": ws.root});
+                if widgets::secondary(ui, Some("upload"), "Submit to F-Store").clicked() {
+                    app.act("project_store_submit", project.clone(), tr("Submit to F-Store"));
+                }
+                if widgets::secondary(ui, Some("hammer"), "Ask F-Eco to build it").clicked() {
+                    app.act("project_order_draft", project, tr("Ask F-Eco to build it"));
+                }
+            });
         });
         ui.add_space(10.0);
     }
