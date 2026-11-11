@@ -1498,13 +1498,13 @@ impl Worker {
         self.relay_inbox();
         let stop = self.stop.clone();
         let answer = self.inbox.wait(&id, CLARIFY_WAIT, &|| stop.is_cancelled());
-        self.stop.check()?;
-        if answer.is_some_and(|a| a.allow == Some(true)) {
+        // The person's answer is kept even when the run was stopped right after it.
+        let allowed = answer.is_some_and(|a| a.allow == Some(true));
+        if allowed {
             ws.set_person(|m| m.rights_confirmed_ms = Some(f_builder_engine::inbox::now_ms()))?;
-            Ok(())
-        } else {
-            Err(refused())
         }
+        self.stop.check()?;
+        if allowed { Ok(()) } else { Err(refused()) }
     }
 
     fn relay_inbox(&mut self) {

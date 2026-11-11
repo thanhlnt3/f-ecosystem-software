@@ -1790,7 +1790,24 @@ mod picking_up_a_build {
         );
         let m = Workspace::open(&ws.root).unwrap().manifest;
         assert!(m.rights_confirmed_ms.is_some(), "the confirmation is kept");
-        assert!(m.deep_used, "the project is marked as deeply read");
+
+        // With the rights confirmed, a run reads deeply without asking, and the project is marked
+        // as deeply read before it studies the original.
+        let opts = RunOptions { backend: Some("Stand-in".into()), ..RunOptions::default() };
+        let run = RebuildRun::start(&b.hub, Workspace::open(&ws.root).unwrap(), opts).unwrap();
+        let began = Instant::now();
+        loop {
+            assert!(began.elapsed() < Duration::from_secs(30), "the run never studied");
+            match run.rx.recv_timeout(Duration::from_secs(30)) {
+                Ok(RunEvent::Step { step: Step::Study, .. }) => break,
+                Ok(RunEvent::Ask(r)) => panic!("nothing is asked once confirmed: {r:?}"),
+                Ok(RunEvent::Finished { message, .. }) => panic!("finished before studying: {message}"),
+                Ok(_) => {}
+                Err(e) => panic!("the run went away: {e}"),
+            }
+        }
+        run.stop();
+        assert!(Workspace::open(&ws.root).unwrap().manifest.deep_used, "the project is marked as deeply read");
     }
 
     fn studied(feed: &[feed::FeedItem]) -> bool {
