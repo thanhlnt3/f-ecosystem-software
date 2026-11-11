@@ -3383,30 +3383,6 @@ fn open_in(user: reqwest::Client) -> impl FnOnce(&url::Url) -> Result<(), String
     }
 }
 
-/// HTTP cho thư viện `openidconnect` (không theo chuyển hướng, như thư viện yêu cầu).
-async fn oidc_http(
-    req: axum::http::Request<Vec<u8>>,
-) -> Result<axum::http::Response<Vec<u8>>, std::io::Error> {
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(std::io::Error::other)?;
-    let (parts, body) = req.into_parts();
-    let res = client
-        .request(parts.method, parts.uri.to_string())
-        .headers(parts.headers)
-        .body(body)
-        .send()
-        .await
-        .map_err(std::io::Error::other)?;
-    let mut out = axum::http::Response::builder().status(res.status());
-    for (k, v) in res.headers() {
-        out = out.header(k, v);
-    }
-    let bytes = res.bytes().await.map_err(std::io::Error::other)?;
-    out.body(bytes.to_vec()).map_err(std::io::Error::other)
-}
-
 fn repo_root() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -3748,74 +3724,15 @@ async fn sdk_end_to_end() {
     assert!(docs.contains("12 tháng") || docs.contains("12 months"));
 }
 
-/// tasks.md 10.4 (spec app-sdk, "Chuẩn mở cho xác thực"): app dùng thư viện OIDC chuẩn
-/// (`openidconnect`, không dùng F-SDK) khám phá cấu hình, đăng nhập bằng PKCE và kiểm chữ ký
-/// ID token qua JWKS. Bản Python dùng Authlib chạy trong CI (`FECO_E2E_SDKS=1`).
+/// tasks.md 10.4 (spec app-sdk, "Chuẩn mở cho xác thực"): app Python dùng thư viện OIDC phổ biến
+/// (Authlib, không dùng F-SDK) khám phá cấu hình, đăng nhập bằng PKCE và kiểm chữ ký ID token qua
+/// JWKS; ID token bị sửa thì bị từ chối. Cần `pip install authlib requests` (CI đặt
+/// `FECO_E2E_SDKS=1` nên thiếu là lỗi).
 #[tokio::test]
 async fn standard_oidc_library_integration() {
-    use openidconnect::{
-        core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata},
-        AuthorizationCode, ClientId, CsrfToken, IssuerUrl, Nonce, OAuth2TokenResponse,
-        PkceCodeChallenge, RedirectUrl, Scope, TokenResponse,
-    };
     if !e2e_ready() {
         return;
     }
-    let _serial = SERIAL.lock().await;
-    let (email, password) = unique("oidc");
-    let user = app_browser();
-    register_in(&user, &email, &password, "Hải Đỗ").await;
-    let client_id = create_sdk_app("OidcChuan").await;
-
-    let issuer = IssuerUrl::new(format!("{HYDRA_PUBLIC}/")).unwrap();
-    let metadata = CoreProviderMetadata::discover_async(issuer, &oidc_http)
-        .await
-        .expect("tài liệu khám phá");
-    let client =
-        CoreClient::from_provider_metadata(metadata, ClientId::new(client_id.clone()), None)
-            .set_redirect_uri(RedirectUrl::new(APP_CALLBACK.into()).unwrap());
-    let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
-    let (auth_url, csrf, nonce) = client
-        .authorize_url(
-            CoreAuthenticationFlow::AuthorizationCode,
-            CsrfToken::new_random,
-            Nonce::new_random,
-        )
-        .add_scope(Scope::new("profile".into()))
-        .set_pkce_challenge(challenge)
-        .url();
-    let res = user.get(auth_url).send().await.unwrap();
-    let a = answer_consent(&user, finish(res, String::new()).await, "accept", &[]).await;
-    let callback = a.callback.expect("về callback");
-    assert_eq!(
-        query(&callback, "state").as_deref(),
-        Some(csrf.secret().as_str())
-    );
-    let token = client
-        .exchange_code(AuthorizationCode::new(query(&callback, "code").unwrap()))
-        .unwrap()
-        .set_pkce_verifier(verifier)
-        .request_async(&oidc_http)
-        .await
-        .expect("đổi code lấy token");
-    let id_token = token.id_token().expect("có ID token");
-    let claims = id_token
-        .claims(&client.id_token_verifier(), &nonce)
-        .expect("chữ ký ID token hợp lệ qua JWKS");
-    let (status, me_body) = me(token.access_token().secret(), None).await;
-    assert_eq!(status, 200);
-    assert_eq!(me_body["sub"], claims.subject().as_str());
-    // ID token bị sửa thì thư viện từ chối.
-    let forged: openidconnect::core::CoreIdToken = {
-        let raw = id_token.to_string();
-        let mut parts: Vec<&str> = raw.split('.').collect();
-        let other_sig = "AAAA";
-        parts[2] = other_sig;
-        parts.join(".").parse().unwrap()
-    };
-    assert!(forged.claims(&client.id_token_verifier(), &nonce).is_err());
-
-    // Cùng kịch bản bằng Python + Authlib (thư viện OIDC phổ biến), nếu máy có Authlib.
     let python = ["python3", "python"].into_iter().find(|p| {
         std::process::Command::new(p)
             .args(["-c", "import authlib, requests"])
@@ -3825,11 +3742,16 @@ async fn standard_oidc_library_integration() {
     let Some(python) = python else {
         assert!(
             std::env::var("FECO_E2E_SDKS").is_err(),
-            "CI phải có Authlib để chạy bản Python"
+            "CI phải có Authlib để chạy kiểm thử này"
         );
-        eprintln!("bỏ qua bản Python: chưa cài authlib, requests");
+        eprintln!("bỏ qua: chưa cài authlib, requests (pip install authlib requests)");
         return;
     };
+    let _serial = SERIAL.lock().await;
+    let (email, password) = unique("oidc");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Hải Đỗ").await;
+    let client_id = create_sdk_app("OidcChuan").await;
     let mut child = std::process::Command::new(python)
         .args([
             "examples/standard-oidc/authlib_login.py",
@@ -3849,7 +3771,6 @@ async fn standard_oidc_library_integration() {
     stdout.read_line(&mut line).unwrap();
     let auth_url = line.trim().to_owned();
     assert!(auth_url.starts_with(HYDRA_PUBLIC), "{auth_url}");
-    // Đã đồng ý ở trên: Hydra chuyển thẳng về callback.
     let res = user.get(&auth_url).send().await.unwrap();
     let mut a = finish(res, String::new()).await;
     if a.consent_page.is_some() {
@@ -3865,7 +3786,15 @@ async fn standard_oidc_library_integration() {
         "{rest}\n{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let claims: Value = serde_json::from_str(rest.trim()).unwrap();
-    assert_eq!(claims["sub"], me_body["sub"], "{claims}");
-    assert_eq!(claims["aud"], client_id.as_str());
+    let out: Value = serde_json::from_str(rest.trim()).unwrap();
+    assert_eq!(out["aud"], client_id.as_str(), "{out}");
+    assert_eq!(out["iss"], format!("{HYDRA_PUBLIC}/"), "{out}");
+    assert_eq!(out["tampered_rejected"], true, "{out}");
+    let (status, me_body) = me(out["access_token"].as_str().unwrap(), None).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        me_body["sub"], out["sub"],
+        "sub trong ID token trùng /v1/me"
+    );
+    assert_ne!(me_body["sub"], subject_of(&email).await.to_string());
 }

@@ -415,12 +415,12 @@ npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
 FECO_E2E=1 cargo test -p feco-server --test e2e_auth
 ```
 
-E2E của F-SDK (`sdk_end_to_end`) còn chạy app mẫu Python (cần `python` và thư viện `fsdk_c`, test tự dựng nếu thiếu) và TypeScript (cần `node` ≥ 22.6); máy không có thì bỏ qua, trừ khi đặt `FECO_E2E_SDKS=1`. Bản Authlib của `standard_oidc_library_integration` chạy khi đã `pip install authlib requests`. Test riêng của từng binding:
+E2E của F-SDK (`sdk_end_to_end`) còn chạy app mẫu Python (cần `python` và thư viện `fsdk_c`, test tự dựng nếu thiếu) và TypeScript (cần `node` ≥ 22.6); máy không có thì bỏ qua, trừ khi đặt `FECO_E2E_SDKS=1`. `standard_oidc_library_integration` (app Python dùng Authlib, không dùng F-SDK) chạy khi đã `pip install authlib requests`. Test riêng của từng binding:
 
 ```bash
 cargo build -p fsdk-c
 FSDK_LIBRARY=target/debug/libfsdk_c.so python -m unittest discover -s sdk/python/tests
-(cd sdk/typescript && node --test test/)
+(cd sdk/typescript && node --test test/fsdk.test.ts)
 ```
 
 **Chuỗi tin cậy TUF**: `cargo test -p feco-tuf` chạy các tình huống tấn công (gói bị sửa, metadata bị sửa, khóa lạ, rollback, đóng băng) cùng thu hồi và xoay khóa. Diễn tập toàn bộ quy trình bằng công cụ dòng lệnh, in biên bản Markdown:

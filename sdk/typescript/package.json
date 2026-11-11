@@ -9,7 +9,7 @@
     "node": ">=22.6"
   },
   "scripts": {
-    "test": "node --test test/"
+    "test": "node --test test/fsdk.test.ts"
   },
   "repository": {
     "type": "git",

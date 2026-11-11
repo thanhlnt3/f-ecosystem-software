@@ -58,6 +58,14 @@ def main() -> int:
         },
     )
     claims.validate()
+    # ID token bị sửa chữ ký phải bị từ chối.
+    header, payload, signature = token["id_token"].split(".")
+    forged = ".".join([header, payload, signature[::-1]])
+    try:
+        jwt.decode(forged, keys)
+        tampered_rejected = False
+    except Exception:  # noqa: BLE001 - mọi lỗi kiểm chữ ký đều là "từ chối"
+        tampered_rejected = True
     aud = claims["aud"] if isinstance(claims["aud"], list) else [claims["aud"]]
     print(
         json.dumps(
@@ -65,6 +73,9 @@ def main() -> int:
                 "sub": claims["sub"],
                 "aud": client_id if client_id in aud else aud,
                 "iss": claims["iss"],
+                "tampered_rejected": tampered_rejected,
+                # Chỉ để kiểm thử so `sub` với /v1/me; app thật không in token.
+                "access_token": token["access_token"],
             }
         )
     )

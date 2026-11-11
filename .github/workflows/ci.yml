@@ -86,7 +86,7 @@ jobs:
         run: python -m unittest discover -s sdk/python/tests -v
       - name: Gói TypeScript
         working-directory: sdk/typescript
-        run: node --test test/
+        run: node --test test/fsdk.test.ts
 
   infra:
     # tasks.md 1.4: hạ tầng dev khởi động được và các dịch vụ sẵn sàng.
