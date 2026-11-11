@@ -85,6 +85,10 @@
       "format": "uint64",
       "minimum": 0
     },
+    "deep_used": {
+      "description": "A run read the reference deeply (its code, unpacked or decompiled). Never cleared: what such\na run learned stays in the app, which is for private use and isn't submitted to F-Store.",
+      "type": "boolean"
+    },
     "generate_assets": {
       "description": "The person lets the builder generate pictures and 3D models (paid, so off until they turn\nit on; it also needs a key for an asset provider).",
       "type": "boolean",
@@ -123,6 +127,15 @@
     "request": {
       "description": "What the person asked for, in their words.",
       "type": "string"
+    },
+    "rights_confirmed_ms": {
+      "description": "When the person confirmed the reference is their own software or that they may analyse it\n(tasks.md 11.4); deep reading and the reference's name in the app need it. The person's.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
     },
     "stack": {
       "description": "The stack chosen for the build (\"React + TypeScript (Vite)\", \"Rust + Bevy\"…).",

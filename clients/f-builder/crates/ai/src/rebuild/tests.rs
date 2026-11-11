@@ -1706,7 +1706,7 @@ mod picking_up_a_build {
     fn a_project_in_words_only_is_asked_its_platform_and_language_before_building() {
         let b = bench();
         let ws = Workspace::create(&b.projects, "x", "Ứng dụng quản lý chi tiêu gia đình, có biểu đồ theo tháng", TargetRef::None).unwrap();
-        let mut opts = RunOptions { clarify: true, backend: Some("Stand-in".into()), ..RunOptions::default() };
+        let mut opts = RunOptions { asks_person: true, backend: Some("Stand-in".into()), ..RunOptions::default() };
         opts.kinds.register(Arc::new(FlakyKind));
         let run = RebuildRun::start(&b.hub, Workspace::open(&ws.root).unwrap(), opts).unwrap();
         let began = Instant::now();
@@ -1735,10 +1735,61 @@ mod picking_up_a_build {
         let runs = f_builder_engine::run_history::read(&ws.root);
         assert_eq!(runs.len(), 1, "{runs:?}");
         assert_eq!(runs[0].kind, f_builder_engine::run_history::RunKind::Start);
-        // Without `clarify` (an agent started it), nothing is asked.
+        // Without `asks_person` (an agent started it), nothing is asked.
         let other = Workspace::create(&b.projects, "y", "Sổ ghi chép", TargetRef::None).unwrap();
         let (_, feed) = try_it(&b, &other);
         assert!(!feed.iter().any(|i| matches!(i, feed::FeedItem::Ask { .. })), "{feed:?}");
+    }
+
+    /// tasks.md 11.4 (spec app-builder "Bật chế độ đọc sâu"): reading a reference deeply needs the
+    /// person's word that they may, kept in the project; with nobody to ask the run stops first.
+    #[test]
+    fn deep_reading_a_reference_asks_for_the_rights_and_keeps_the_answer() {
+        let b = bench();
+        b.hub.engine.session().settings.deep_mode = true;
+        let program = b.projects.join("Original.exe");
+        std::fs::write(&program, b"MZ not really a program").unwrap();
+        let target = TargetRef::Local { path: program };
+        let wait_finish = |run: &RebuildRun, mut on: Box<dyn FnMut(&RebuildRun, &Request)>| -> (bool, String) {
+            let began = Instant::now();
+            loop {
+                assert!(began.elapsed() < Duration::from_secs(30), "the run never finished");
+                match run.rx.recv_timeout(Duration::from_secs(30)) {
+                    Ok(RunEvent::Ask(r)) => on(run, &r),
+                    Ok(RunEvent::Finished { ok, message, .. }) => return (ok, message),
+                    Ok(_) => {}
+                    Err(e) => panic!("the run went away: {e}"),
+                }
+            }
+        };
+        // Started by an agent or a test (nobody to ask): refused before anything is read.
+        let ws = Workspace::create(&b.projects, "a", "Make one like it", target.clone()).unwrap();
+        let opts = RunOptions { backend: Some("Stand-in".into()), ..RunOptions::default() };
+        let run = RebuildRun::start(&b.hub, Workspace::open(&ws.root).unwrap(), opts).unwrap();
+        let (ok, message) = wait_finish(&run, Box::new(|_, r| panic!("nothing is asked: {r:?}")));
+        assert!(!ok && message.contains("confirmation"), "{message}");
+        let m = Workspace::open(&ws.root).unwrap().manifest;
+        assert!(m.rights_confirmed_ms.is_none() && !m.deep_used && !ws.capture_dir().exists(), "nothing was read");
+
+        // In the app: an approval card; allowing it is kept in the project.
+        let ws = Workspace::create(&b.projects, "b", "Make one like it", target).unwrap();
+        let opts = RunOptions { asks_person: true, backend: Some("Stand-in".into()), ..RunOptions::default() };
+        let run = RebuildRun::start(&b.hub, Workspace::open(&ws.root).unwrap(), opts).unwrap();
+        let mut asked = Vec::new();
+        let _ = wait_finish(
+            &run,
+            Box::new(move |run, r| {
+                assert_eq!(r.kind, f_builder_engine::inbox::RequestKind::Approval, "{r:?}");
+                assert!(r.title.starts_with("May you analyse Original.exe"), "{r:?}");
+                asked.push(r.id.clone());
+                run.answer(&r.id, &Answer { allow: Some(true), ..Default::default() }).unwrap();
+                // Only the answer is under test: stop before it studies the program.
+                run.stop();
+            }),
+        );
+        let m = Workspace::open(&ws.root).unwrap().manifest;
+        assert!(m.rights_confirmed_ms.is_some(), "the confirmation is kept");
+        assert!(m.deep_used, "the project is marked as deeply read");
     }
 
     fn studied(feed: &[feed::FeedItem]) -> bool {
@@ -2841,6 +2892,11 @@ impl TargetKind for LaterChecks {
 }
 
 /// The app's sheet only.
+/// The results other than the reference-name check, which every run with a reference ends with.
+fn others(results: Vec<CheckResult>) -> Vec<CheckResult> {
+    results.into_iter().filter(|r| r.check != kinds::brand::BrandCheck::ID).collect()
+}
+
 const APP_SHEET_ONLY: LaterChecks = LaterChecks(&AppKind, 3);
 
 #[test]
@@ -2853,13 +2909,13 @@ fn apps_keep_the_sheet_only_when_deep_mode_decompiles_a_program() {
     assert!(!brief(&prog, "app", false, false, None, false, None).contains("app/mechanics.json"), "Clean room doesn't ask for it");
 
     // Deep mode on a program: the sheet is checked (and missing here).
-    let r = check_worker(&prog, true).run_checks(&prog, &APP_SHEET_ONLY, 1).unwrap();
+    let r = others(check_worker(&prog, true).run_checks(&prog, &APP_SHEET_ONLY, 1).unwrap());
     assert_eq!(r.len(), 1);
     assert!(r[0].check == "mechanics" && !r[0].passed, "{:?}", r[0]);
     // Clean room, or nothing to decompile: skipped, leaving no result.
-    assert!(check_worker(&prog, false).run_checks(&prog, &APP_SHEET_ONLY, 1).unwrap().is_empty());
+    assert!(others(check_worker(&prog, false).run_checks(&prog, &APP_SHEET_ONLY, 1).unwrap()).is_empty());
     let fresh = Workspace::create(d.path(), "Fresh", "A notes app", TargetRef::None).unwrap();
-    assert!(check_worker(&fresh, true).run_checks(&fresh, &APP_SHEET_ONLY, 1).unwrap().is_empty());
+    assert!(others(check_worker(&fresh, true).run_checks(&fresh, &APP_SHEET_ONLY, 1).unwrap()).is_empty());
 }
 
 #[test]
@@ -2886,7 +2942,7 @@ fn a_game_is_ready_only_when_it_plays_and_credits_the_originals_files() {
 
     // Deep mode on a program: the original's files must be credited and the README says they're private.
     const CREDITS_ONLY: LaterChecks = LaterChecks(&GameKind, 4);
-    let r = check_worker(&ws, true).run_checks(&ws, &CREDITS_ONLY, 1).unwrap();
+    let r = others(check_worker(&ws, true).run_checks(&ws, &CREDITS_ONLY, 1).unwrap());
     assert_eq!(r.len(), 1);
     assert!(r[0].check == "credits" && !r[0].passed && r[0].note.contains("app/CREDITS.md") && r[0].note.contains(PRIVATE_USE_NOTE), "{:?}", r[0]);
     std::fs::create_dir_all(ws.app_dir()).unwrap();
@@ -2906,11 +2962,11 @@ fn a_game_is_ready_only_when_it_plays_and_credits_the_originals_files() {
 ",
     )
     .unwrap();
-    assert!(check_worker(&ws, true).run_checks(&ws, &CREDITS_ONLY, 2).unwrap()[0].passed);
+    assert!(others(check_worker(&ws, true).run_checks(&ws, &CREDITS_ONLY, 2).unwrap())[0].passed);
     // Clean room copies none of the original's files, and a game without a target has none: skipped.
-    assert!(check_worker(&ws, false).run_checks(&ws, &CREDITS_ONLY, 1).unwrap().is_empty());
+    assert!(others(check_worker(&ws, false).run_checks(&ws, &CREDITS_ONLY, 1).unwrap()).is_empty());
     let snake = Workspace::create(d.path(), "Snake", "A snake game", TargetRef::None).unwrap();
-    assert!(check_worker(&snake, true).run_checks(&snake, &CREDITS_ONLY, 1).unwrap().is_empty());
+    assert!(others(check_worker(&snake, true).run_checks(&snake, &CREDITS_ONLY, 1).unwrap()).is_empty());
 }
 
 #[test]
@@ -4068,4 +4124,28 @@ fn a_project_started_from_an_openspec_is_built_by_it_in_app() {
     let plain = tempfile::tempdir().unwrap();
     let ws = Workspace::create(plain.path(), "p", "Sổ ghi chép", TargetRef::None).unwrap();
     assert!(!brief(&ws, "app", false, false, None, false, None).contains("OpenSpec"));
+}
+
+/// tasks.md 11.4 (spec app-builder, "Tên gốc trong giao diện"): the Check step warns when the new
+/// app shows the reference product's name, and lets it be once the person confirmed their rights.
+#[test]
+fn the_check_warns_when_the_app_shows_the_references_name() {
+    const ONLY_BRAND: LaterChecks = LaterChecks(&WebsiteKind, 99);
+    let d = tempfile::tempdir().unwrap();
+    let mut ws = Workspace::create(d.path(), "Wiki", "Make one like it", TargetRef::Website { url: "https://www.notion.so/".into() }).unwrap();
+    std::fs::create_dir_all(ws.app_dir().join("src")).unwrap();
+    std::fs::write(ws.app_dir().join("index.html"), "<html><head><title>My wiki</title></head></html>\n").unwrap();
+    let results = check_worker(&ws, false).run_checks(&ws, &ONLY_BRAND, 1).unwrap();
+    assert!(results.len() == 1 && results[0].passed, "{results:?}");
+
+    std::fs::write(ws.app_dir().join("index.html"), "<html>\n<head><title>Notion Clone</title></head></html>\n").unwrap();
+    let results = check_worker(&ws, false).run_checks(&ws, &ONLY_BRAND, 1).unwrap();
+    assert_eq!(results.len(), 1);
+    assert!(!results[0].passed, "{results:?}");
+    assert!(results[0].note.starts_with("The interface contains the reference product's name: \"notion\" in app"), "{}", results[0].note);
+    assert!(results[0].note.contains("index.html:2"), "{}", results[0].note);
+
+    ws.set_person(|m| m.rights_confirmed_ms = Some(1)).unwrap();
+    let results = check_worker(&ws, false).run_checks(&ws, &ONLY_BRAND, 1).unwrap();
+    assert!(results[0].passed, "allowed once the person confirmed: {results:?}");
 }

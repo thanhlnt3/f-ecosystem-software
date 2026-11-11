@@ -158,10 +158,11 @@ pub struct RunOptions {
     /// A free session is read first; this is the fallback while it is held; the saved settings
     /// are the last fallback.
     pub clean_room: Option<bool>,
-    /// Ask the person what a project described in words only doesn't say (platform, language)
-    /// before its first build (tasks.md 11.2). Only for callers that show the questions to someone:
-    /// the app, and the CLI when not unattended.
-    pub clarify: bool,
+    /// The caller shows the run's own questions to the person (the app, and the CLI when not
+    /// unattended): what a project described in words only doesn't say, before its first build
+    /// (tasks.md 11.2), and the rights to a reference before reading it deeply (11.4). Without it
+    /// the run asks nothing it would have to wait for.
+    pub asks_person: bool,
 }
 
 impl Default for RunOptions {
@@ -179,7 +180,7 @@ impl Default for RunOptions {
             adapters: Default::default(),
             wake: Wake::default(),
             clean_room: None,
-            clarify: false,
+            asks_person: false,
         }
     }
 }
@@ -850,10 +851,20 @@ impl Worker {
             ToolError::new(ErrorCode::BadSettings, "No kind of project matches this request.")
                 .with_remediation("Describe what to make: a website, an app or a game.")
         };
+        let language = self.engine.session().settings.language.clone();
         // A project described in words only is asked what it doesn't say before its stack is chosen.
-        if opts.clarify && ws.manifest.stack.is_empty() && opts.message.is_none() && !opts.continuing && !ws.builder_started() {
-            let language = self.engine.session().settings.language.clone();
+        if opts.asks_person && ws.manifest.stack.is_empty() && opts.message.is_none() && !opts.continuing && !ws.builder_started() {
             self.clarify(ws, &language)?;
+        }
+        // Deep reading a reference needs the person's word that they may (tasks.md 11.4), and
+        // marks the project as deeply read for good.
+        let deep_now = !self.engine.session().clean_room();
+        if deep_now && ws.manifest.target != TargetRef::None {
+            self.confirm_rights(ws, opts.asks_person, &language)?;
+            if !ws.manifest.deep_used {
+                ws.manifest.deep_used = true;
+                ws.save()?;
+            }
         }
         if ws.manifest.stack.is_empty() {
             let deep = !self.engine.session().clean_room();
@@ -1443,6 +1454,56 @@ impl Worker {
         }
         ws.manifest.request = clarify::with_answers(&ws.manifest.request, &added);
         ws.save()
+    }
+
+    /// tasks.md 11.4 (spec app-builder "Bật chế độ đọc sâu"): before a reference is read deeply,
+    /// the person confirms it is their own software or that they may analyse it, and that is kept in
+    /// the project. Without someone to ask, or with a refusal, the run stops and says how to go on.
+    fn confirm_rights(&mut self, ws: &mut Workspace, can_ask: bool, language: &str) -> Result<(), ToolError> {
+        if ws.manifest.rights_confirmed_ms.is_some() {
+            return Ok(());
+        }
+        let vi = language.to_ascii_lowercase().starts_with("vi");
+        let refused = || {
+            let (message, fix) = if vi {
+                (
+                    "Chế độ đọc sâu cần bạn xác nhận có quyền phân tích phần mềm tham khảo.",
+                    "Xác nhận khi được hỏi, hoặc tắt chế độ đọc sâu để xây ở chế độ clean room (CLI: --rights-confirmed).",
+                )
+            } else {
+                (
+                    "Deep mode needs your confirmation that you may analyse the reference software.",
+                    "Confirm when asked, or turn Deep mode off to build in clean room (CLI: --rights-confirmed).",
+                )
+            };
+            ToolError::new(ErrorCode::ConsentRequired, message).with_remediation(fix)
+        };
+        if !can_ask {
+            return Err(refused());
+        }
+        let target = ws.manifest.target.label();
+        let (title, detail) = if vi {
+            (
+                format!("Bạn có quyền phân tích {target} không?"),
+                "Chế độ đọc sâu đọc mã, giải nén và dịch ngược phần mềm tham khảo. Chỉ dùng với phần mềm của bạn hoặc phần mềm bạn có quyền phân tích. Kết quả chỉ để dùng riêng: dự án này sẽ không nộp được lên F-Store.".to_string(),
+            )
+        } else {
+            (
+                format!("May you analyse {target}?"),
+                "Deep mode reads the reference's code, unpacks and decompiles it. Use it only on your own software or software you may analyse. What it makes is for private use: this project can't be submitted to F-Store.".to_string(),
+            )
+        };
+        let id = self.inbox.post(RequestKind::Approval, &title, &detail, Vec::new(), false, None)?;
+        self.relay_inbox();
+        let stop = self.stop.clone();
+        let answer = self.inbox.wait(&id, CLARIFY_WAIT, &|| stop.is_cancelled());
+        self.stop.check()?;
+        if answer.is_some_and(|a| a.allow == Some(true)) {
+            ws.set_person(|m| m.rights_confirmed_ms = Some(f_builder_engine::inbox::now_ms()))?;
+            Ok(())
+        } else {
+            Err(refused())
+        }
     }
 
     fn relay_inbox(&mut self) {

@@ -24,9 +24,9 @@ dòng `- [x]` là việc đã xong. Kế hoạch của Craft Anything 0.6.0 (b�
 - [x] Máy chủ MCP hủy các lệnh đang chờ khi stdin đóng
 
 ### R11.4 Clean room và thương hiệu
-- [ ] Xác nhận quyền phân tích khi bật đọc sâu, ghi vào dự án
+- [x] Xác nhận quyền phân tích khi bật đọc sâu, ghi vào dự án
 - [ ] Chặn nộp lên F-Store khi dự án có lượt chạy ở chế độ đọc sâu
-- [ ] Bước Kiểm tra cảnh báo khi giao diện app mới chứa tên sản phẩm tham khảo
+- [x] Bước Kiểm tra cảnh báo khi giao diện app mới chứa tên sản phẩm tham khảo
 
 ### R11.5 Khóa API và chạy lệnh
 - [ ] Khóa API chỉ lưu trong kho bảo mật của hệ điều hành (bỏ tệp dự phòng dạng chữ)

@@ -48,6 +48,10 @@ pub struct RebuildArgs {
     /// Answer questions with the first choice and refuse approvals, without asking.
     #[arg(long)]
     pub unattended: bool,
+    /// The reference is your own software, or you may analyse it: Deep mode may read it, and its
+    /// name may appear in the app. Kept in the project.
+    #[arg(long)]
+    pub rights_confirmed: bool,
     /// What to build with: an engine (unity, unreal, godot, rust) or a stack's full name.
     /// New projects only; otherwise it's chosen from the request and target.
     #[arg(long)]
@@ -133,6 +137,10 @@ fn run(cli: &Cli, a: &RebuildArgs) -> Result<bool, ToolError> {
             (ws, None)
         }
     };
+    let mut ws = ws;
+    if a.rights_confirmed && ws.manifest.rights_confirmed_ms.is_none() {
+        ws.set_person(|m| m.rights_confirmed_ms = Some(f_builder_engine::inbox::now_ms()))?;
+    }
     println!("Project: {}", ws.root.display());
     // The saved builder may be off or gone; say who builds once the run has started, so a failed
     // start doesn't claim an AI that never ran.
@@ -149,7 +157,7 @@ fn run(cli: &Cli, a: &RebuildArgs) -> Result<bool, ToolError> {
         good_enough,
         beginner: !cli.json,
         clean_room: Some(engine.session().clean_room()),
-        clarify: !a.unattended,
+        asks_person: !a.unattended,
         ..RunOptions::default()
     };
     let mut run = RebuildRun::start(&hub, ws, opts)?;

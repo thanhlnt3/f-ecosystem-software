@@ -4,6 +4,7 @@
 //! trait and calling [`KindRegistry::register`].
 
 mod app;
+pub mod brand;
 mod game;
 pub mod mechanics;
 pub mod own;
@@ -211,6 +212,11 @@ impl From<&CancelToken> for CheckStop {
 }
 
 impl CheckCx<'_> {
+    /// The app's interface language (e.g. "vi"), for notes the person reads.
+    pub fn language(&self) -> String {
+        self.worker.engine.session().settings.language.clone()
+    }
+
     /// Run an engine tool (the same ones the builder has).
     pub fn call(&self, tool: &str, params: Value) -> Result<ToolOutput, ToolError> {
         within_limit(self.until, Instant::now())?;
@@ -285,7 +291,9 @@ impl Worker {
             .into_iter()
             .filter(|c| c.kinds.is_empty() || c.kinds.iter().any(|k| k == kind.id()))
             .map(|check| Box::new(plugin_check::PluginJudge { check, kind: kind.id() }) as Box<dyn Check>);
-        let all: Vec<Box<dyn Check>> = if ws.manifest.own_project() { own::checks() } else { kind.checks(ws) };
+        let mut all: Vec<Box<dyn Check>> = if ws.manifest.own_project() { own::checks() } else { kind.checks(ws) };
+        // Last, once the build works: the reference's name mustn't be in the new app (tasks.md 11.4).
+        all.push(Box::new(brand::BrandCheck));
         // A check that doesn't run in this run leaves no result, and isn't numbered or named.
         let checks: Vec<Box<dyn Check>> = all.into_iter().chain(plugin_checks).filter(|c| c.applies(&cx)).collect();
         let mut out = Vec::new();

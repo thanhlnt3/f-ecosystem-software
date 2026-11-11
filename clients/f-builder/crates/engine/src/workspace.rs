@@ -78,10 +78,10 @@ fn copy_tree(from: &Path, to: &Path, skip: &dyn Fn(&Path) -> bool, depth: usize)
 }
 
 /// The current `f-builder.json` format version. Bumping it means appending a step to [`MANIFEST_STEPS`].
-pub const MANIFEST_VERSION: u32 = 4;
+pub const MANIFEST_VERSION: u32 = 5;
 
 /// The steps that bring an older `f-builder.json` forward; step `i` goes from version `i` to `i + 1`.
-const MANIFEST_STEPS: &[versioned::Step<Value>] = &[manifest_v0_to_v1, manifest_v1_to_v2, manifest_v2_to_v3, manifest_v3_to_v4];
+const MANIFEST_STEPS: &[versioned::Step<Value>] = &[manifest_v0_to_v1, manifest_v1_to_v2, manifest_v2_to_v3, manifest_v3_to_v4, manifest_v4_to_v5];
 const _: () = assert!(MANIFEST_STEPS.len() == MANIFEST_VERSION as usize, "one step per f-builder.json version");
 
 /// Version 0 (no `version` field) has the same shape as version 1; only the number is new.
@@ -113,6 +113,14 @@ fn manifest_v3_to_v4(doc: &mut Value) -> Result<(), String> {
         obj.insert("agent_session_deep".into(), Value::Bool(true));
     }
     Ok(())
+}
+
+/// Version 5 adds when the person confirmed they own the reference or may analyse it
+/// (`rights_confirmed_ms`) and whether a run read it deeply (`deep_used`); neither is set for an
+/// older project. The number is new so an older build, which would drop both when it saves (a
+/// deeply-read project could then be submitted), opens such a project read-only instead.
+fn manifest_v4_to_v5(doc: &mut Value) -> Result<(), String> {
+    if doc.is_object() { Ok(()) } else { Err("the manifest isn't a JSON object".into()) }
 }
 
 /// Read a `f-builder.json` document of any version this build understands. A newer manifest is read
@@ -451,6 +459,14 @@ pub struct Manifest {
     /// Kept in the project so "Try again" can't restart the count.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub not_working_checks: u32,
+    /// When the person confirmed the reference is their own software or that they may analyse it
+    /// (tasks.md 11.4); deep reading and the reference's name in the app need it. The person's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rights_confirmed_ms: Option<u64>,
+    /// A run read the reference deeply (its code, unpacked or decompiled). Never cleared: what such
+    /// a run learned stays in the app, which is for private use and isn't submitted to F-Store.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub deep_used: bool,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -491,6 +507,8 @@ impl Manifest {
             approvals: Default::default(),
             awaiting_check: false,
             not_working_checks: 0,
+            rights_confirmed_ms: None,
+            deep_used: false,
         }
     }
 
@@ -515,6 +533,7 @@ impl Manifest {
         self.questions = other.questions;
         self.approvals.clone_from(&other.approvals);
         self.name.clone_from(&other.name);
+        self.rights_confirmed_ms = other.rights_confirmed_ms;
     }
 }
 

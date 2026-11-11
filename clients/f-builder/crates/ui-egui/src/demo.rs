@@ -243,6 +243,8 @@ fn workspace(slug: &str, name: &str, request: &str, target: TargetRef, status: S
             approvals: Default::default(),
             awaiting_check: false,
             not_working_checks: 0,
+            rights_confirmed_ms: None,
+            deep_used: false,
         },
     }
 }
