@@ -424,6 +424,8 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "dev.webhook_save" => ("Lưu và tạo khóa ký", "Save and create signing key"),
         "dev.docs_events" => ("Sự kiện (webhook)", "Events (webhooks)"),
         "dev.docs_events_note" => ("Nền tảng gửi POST JSON có chữ ký HMAC tới địa chỉ webhook của app. App không trả 2xx thì nền tảng gửi lại sau 1, 5, 30 phút rồi giãn dần, trong tối đa 72 giờ. F-SDK có hàm kiểm chữ ký.", "The platform POSTs signed JSON to the app's webhook URL. If the app does not answer 2xx, it retries after 1, 5 and 30 minutes, then less often, for up to 72 hours. F-SDK has a signature check helper."),
+        "dev.docs_error_code" => ("Mã", "Code"),
+        "dev.docs_error_howto" => ("Cách xử lý", "What to do"),
         "dev.docs_errors" => ("Mã lỗi", "Error codes"),
         "dev.docs_errors_note" => ("Mọi lỗi API trả JSON như dưới đây. Ghi lại request_id khi liên hệ hỗ trợ.", "Every API error returns JSON like this. Keep the request_id when contacting support."),
         "dev.docs_versioning" => ("Phiên bản API", "API versions"),

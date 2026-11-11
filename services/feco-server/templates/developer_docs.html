@@ -58,7 +58,8 @@ F-Eco-Signature: t=&lt;giây unix&gt;,v1=HMAC-SHA256(khóa ký, "&lt;t&gt;.&lt;t
 <p>{{ i18n.t("dev.docs_errors_note") }}</p>
 <pre><code>{"error": "invalid_token", "message": "...", "message_vi": "...", "request_id": "..."}</code></pre>
 <table id="error-codes">
-{% for (code, status, howto) in errors %}<tr><td><code>{{ code }}</code></td><td>{{ status }}</td><td>{{ howto }}</td></tr>{% endfor %}
+<tr><th>{{ i18n.t("dev.docs_error_code") }}</th><th>HTTP</th><th>{{ i18n.t("dev.docs_error_howto") }}</th></tr>
+{% for (code, status, howto) in errors %}<tr><td class="code"><code>{{ code }}</code></td><td>{{ status }}</td><td>{{ howto }}</td></tr>{% endfor %}
 </table>
 
 <h2 id="versioning">{{ i18n.t("dev.docs_versioning") }}</h2>

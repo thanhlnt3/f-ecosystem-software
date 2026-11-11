@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Môi trường dev cho F-Launcher (README, bước 7). Cần Hydra đang chạy (bước 2).
 #
-#   scripts/dev-launcher.sh setup     # khóa + kho TUF cục bộ, client OAuth của launcher và Demo App
+#   scripts/dev-launcher.sh setup     # khóa + kho TUF cục bộ, client OAuth của launcher, Demo App
+#                                     # và app mẫu F-SDK
 #   scripts/dev-launcher.sh publish   # ký một phiên bản Demo App mới (để thử cập nhật, quay lại)
 #   scripts/dev-launcher.sh revoke    # thu hồi phiên bản Demo App mới nhất
 #   scripts/dev-launcher.sh refresh   # ký lại timestamp (hết hạn sau 1 giờ)
-#   scripts/dev-launcher.sh env       # in biến môi trường cho feco-server và launcher
+#   scripts/dev-launcher.sh env       # in biến môi trường cho feco-server, launcher và app mẫu F-SDK
 #
 # setup và publish cũng ghi Demo App vào danh mục F-Store (cần PostgreSQL đang chạy).
 #
@@ -75,6 +76,17 @@ create_client() {
   echo "$id"
 }
 
+# Tạo client nếu file chưa có client ID, hoặc client đó không còn trong Hydra (Hydra dev giữ
+# dữ liệu trong bộ nhớ nên khởi động lại là mất).
+ensure_client() {
+  local file="$DEV/$1" id
+  id="$(cat "$file" 2>/dev/null || true)"
+  if [[ -n "$id" ]] && curl -sf -o /dev/null "$HYDRA_ADMIN/admin/clients/$id"; then
+    return
+  fi
+  create_client "$2" > "$file"
+}
+
 setup() {
   build
   mkdir -p "$KEYS"
@@ -85,22 +97,24 @@ setup() {
     "$TUF" init --repo "$REPO" --root "$(k root-1),$(k root-2),$(k root-3)" --targets "$(k targets)" \
       --snapshot "$(k snapshot)" --timestamp "$(k timestamp)" --sign "$(k root-1),$(k root-2),$(RELEASE_KEYS)"
   fi
-  if [[ ! -s "$DEV/launcher-client-id" ]]; then
-    create_client '{"client_name":"F-Launcher","grant_types":["authorization_code","refresh_token"],
+  ensure_client launcher-client-id '{"client_name":"F-Launcher","grant_types":["authorization_code","refresh_token"],
       "response_types":["code"],"scope":"openid offline_access profile",
-      "redirect_uris":["http://127.0.0.1:47201/callback"],"token_endpoint_auth_method":"none"}' \
-      > "$DEV/launcher-client-id"
-  fi
-  if [[ ! -s "$DEV/demo-client-id" ]]; then
-    create_client '{"client_name":"Demo App","grant_types":["authorization_code","refresh_token"],
+      "redirect_uris":["http://127.0.0.1:47201/callback"],"token_endpoint_auth_method":"none"}'
+  ensure_client demo-client-id '{"client_name":"Demo App","grant_types":["authorization_code","refresh_token"],
       "response_types":["code"],"scope":"openid offline_access profile email locale phone",
       "redirect_uris":["http://127.0.0.1:9999/cb"],"token_endpoint_auth_method":"none",
       "subject_type":"pairwise","policy_uri":"https://demo.example/privacy",
       "metadata":{"developer":"F-Eco (app mẫu)","scopes":{
         "profile":{"required":true,"purpose_vi":"Hiển thị tên của bạn trong app","purpose_en":"Show your name in the app"},
-        "email":{"required":false,"purpose_vi":"Gửi thông báo về tài khoản","purpose_en":"Send account notifications"}}}}' \
-      > "$DEV/demo-client-id"
-  fi
+        "email":{"required":false,"purpose_vi":"Gửi thông báo về tài khoản","purpose_en":"Send account notifications"}}}}'
+  # App mẫu F-SDK (sdk/*/examples): nhận kết quả đăng nhập ở địa chỉ loopback mặc định của F-SDK.
+  ensure_client sdk-client-id '{"client_name":"QuanLyKho (app mẫu F-SDK)","grant_types":["authorization_code","refresh_token"],
+      "response_types":["code"],"scope":"openid offline_access profile email purchases",
+      "redirect_uris":["http://127.0.0.1:47280/callback"],"token_endpoint_auth_method":"none",
+      "subject_type":"pairwise","policy_uri":"https://demo.example/privacy",
+      "metadata":{"developer":"F-Eco (app mẫu)","scopes":{
+        "profile":{"required":true,"purpose_vi":"Hiển thị tên của bạn trong app","purpose_en":"Show your name in the app"},
+        "purchases":{"required":true,"purpose_vi":"Kiểm tra bạn có quyền dùng app","purpose_en":"Check that you may use the app"}}}}'
   catalog_app
   publish
   env_vars
@@ -158,6 +172,12 @@ export FECO_LAUNCHER_CLIENT_ID=$(cat "$DEV/launcher-client-id")
 export FECO_LAUNCHER_CLIENT_ID=$(cat "$DEV/launcher-client-id")
 export FECO_LAUNCHER_TUF='$repo_native'
 cargo run -p feco-launcher
+
+# App mẫu F-SDK (README, bước 8):
+export FECO_CLIENT_ID=$(cat "$DEV/sdk-client-id")
+export FECO_ISSUER_URL=http://127.0.0.1:4444/
+export FECO_SERVER_URL=http://127.0.0.1:8080/
+export FSDK_SCOPES="openid offline_access profile purchases"
 EOF
 }
 

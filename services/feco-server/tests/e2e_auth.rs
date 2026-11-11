@@ -3718,7 +3718,7 @@ async fn sdk_end_to_end() {
         .await
         .unwrap();
     let rows = Html::parse_document(&docs)
-        .select(&Selector::parse("#error-codes tr").unwrap())
+        .select(&Selector::parse("#error-codes td.code").unwrap())
         .count();
     assert_eq!(rows, feco_server::errors::CODES.len());
     assert!(docs.contains("12 tháng") || docs.contains("12 months"));

@@ -29,8 +29,8 @@ Kiểm duyệt (người duyệt ghi tên bằng FECO_REVIEWER, mặc định ad
   feco-catalog add-signature <sha256> <tên>       thêm vào cơ sở dữ liệu mã độc
 
 Quyền sử dụng (tạm, tới nhóm 12-13):
-  feco-catalog grant <app> <email> owner|license|subscription <nguồn>
-  feco-catalog ungrant <app> <email> owner|license|subscription
+  feco-catalog grant <app|client ID> <email> owner|license|subscription <nguồn>
+  feco-catalog ungrant <app|client ID> <email> owner|license|subscription
 ";
 
 #[tokio::main]
@@ -189,7 +189,9 @@ async fn run(args: Vec<String>) -> Result<(), String> {
             .fetch_optional(&state.db)
             .await
             .map_err(e)?
-            .ok_or("không có app này")?;
+            // App chưa có trong danh mục hay cổng (ví dụ app mẫu F-SDK): nhận thẳng client ID.
+            .or_else(|| app.parse::<uuid::Uuid>().ok().map(|_| app.to_owned()))
+            .ok_or("không có app này (nhập mã app hoặc client ID)")?;
             let email = arg(&args, 2)?;
             let subject = state
                 .kratos

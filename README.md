@@ -305,15 +305,22 @@ let owner = session.entitlements().await?.iter().any(|e| e.kind == "owner");
 | Python ≥ 3.9 | `sdk/python` (gói `fsdk`, gọi thư viện C qua `ctypes`) | `sdk/python/examples/login.py` |
 | TypeScript, Node.js ≥ 22.6 | `sdk/typescript` (gói `@f-eco/sdk`, viết thuần trên OIDC) | `sdk/typescript/examples/login.ts` |
 
-Chạy thử app mẫu Python và TypeScript với app `tools/feco-demo-app` đã tạo ở bước 5 (thêm
-`http://127.0.0.1:47280/callback` vào địa chỉ chuyển hướng, hoặc đặt `FSDK_REDIRECT_URI` bằng một
-địa chỉ đã khai báo):
+Chạy thử app mẫu. `scripts/dev-launcher.sh setup` (bước 6) đã tạo sẵn app "QuanLyKho (app mẫu
+F-SDK)" trong Hydra; `scripts/dev-launcher.sh env` in các biến cần đặt:
 
 ```bash
 cargo build -p fsdk-c
-export FECO_CLIENT_ID=<client_id> FECO_ISSUER_URL=http://127.0.0.1:4444/ FECO_SERVER_URL=http://127.0.0.1:8080/
+eval "$(scripts/dev-launcher.sh env | sed -n '/App mẫu F-SDK/,$p')"     # đặt FECO_CLIENT_ID, FECO_ISSUER_URL, ...
 FSDK_LIBRARY=target/debug/libfsdk_c.so python sdk/python/examples/login.py   # Windows: fsdk_c.dll, macOS: libfsdk_c.dylib
 node sdk/typescript/examples/login.ts
+```
+
+Lần đầu, app mở trình duyệt để bạn đăng nhập và đồng ý cho "QuanLyKho" xem tên và quyền sử dụng;
+terminal in `/v1/me` (có `sub` riêng của app, không có email) và `"entitlements": []`. Cấp quyền
+`owner` rồi chạy lại để thấy quyền:
+
+```bash
+cargo run -p feco-server --bin feco-catalog -- grant "$FECO_CLIENT_ID" <email của bạn> owner custom-build:DEMO-1
 ```
 
 Muốn tích hợp mà không dùng F-SDK: dùng thư viện OIDC chuẩn bất kỳ trỏ tới
@@ -327,8 +334,8 @@ http://127.0.0.1:8080/developer/docs.
 Cho tới khi có đơn xây app và thanh toán (nhóm 12–13), cấp quyền sử dụng bằng tay:
 
 ```bash
-cargo run -p feco-server --bin feco-catalog -- grant <app> <email> owner custom-build:<mã đơn>
-cargo run -p feco-server --bin feco-catalog -- ungrant <app> <email> owner
+cargo run -p feco-server --bin feco-catalog -- grant <app hoặc client ID> <email> owner custom-build:<mã đơn>
+cargo run -p feco-server --bin feco-catalog -- ungrant <app hoặc client ID> <email> owner
 ```
 
 ### 9. Dừng và xóa dữ liệu
