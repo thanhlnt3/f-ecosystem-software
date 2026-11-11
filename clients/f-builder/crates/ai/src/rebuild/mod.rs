@@ -57,6 +57,7 @@ mod study;
 #[cfg(test)]
 mod tests;
 pub mod tools;
+pub mod watchdog;
 
 use brief::*;
 pub use kinds::{
@@ -94,6 +95,10 @@ pub enum RunEvent {
         /// The person paused it: not a failure.
         paused: bool,
     },
+    /// `step` has made no progress for [`watchdog::STALL_AFTER`]: nothing said, no file changed,
+    /// no CPU used by the programs it started. The person chooses Keep waiting, Rerun step or Stop;
+    /// any later event of the run means it moved again.
+    Stalled { step: Step, quiet: Duration },
 }
 
 /// Called after each event a run sends, so a window draws it at once instead of checking on a
@@ -305,6 +310,7 @@ impl RebuildRun {
         };
         let r2 = running.clone();
         let key_store = hub.keys.clone();
+        let (tx_watch, wake_watch) = (ctx.tx.clone(), ctx.wake.clone());
         std::thread::Builder::new()
             .name("rebuild".into())
             .spawn(move || {
@@ -327,6 +333,7 @@ impl RebuildRun {
             })
             .map_err(|e| ToolError::internal(e.to_string()))?;
         let activity = feed.lock().unwrap_or_else(PoisonError::into_inner).activity();
+        watch_for_stalls(&running, &stop, &activity, &root, &tx_watch, &wake_watch);
         Ok(RebuildRun { rx, stop, inbox, running, preview, notes, clean_room, feed, root, started: Instant::now(), activity })
     }
 
@@ -512,6 +519,43 @@ struct UsageClock {
 const USAGE_FLUSH: Duration = Duration::from_secs(60);
 
 /// Record `e` in the feed, send it and wake the window, under one lock.
+/// Look at the run every [`watchdog::SAMPLE_EVERY`] while it runs, and say when its step has made
+/// no progress for [`watchdog::STALL_AFTER`] (tasks.md 11.3). The warning goes straight to the run's
+/// events, not through the feed: it isn't progress, and it isn't kept in the project.
+fn watch_for_stalls(running: &Arc<AtomicBool>, stop: &CancelToken, activity: &Arc<activity::Activity>, root: &Path, tx: &Sender<RunEvent>, wake: &Wake) {
+    let (running, stop, activity, root, tx, wake) = (running.clone(), stop.clone(), activity.clone(), root.to_path_buf(), tx.clone(), wake.clone());
+    let spawned = std::thread::Builder::new().name("rebuild-watchdog".into()).spawn(move || {
+        let mut dog = watchdog::Watchdog::new(watchdog::STALL_AFTER, Instant::now());
+        let me = std::process::id();
+        let mut next = Instant::now();
+        while running.load(Ordering::SeqCst) && !stop.is_cancelled() {
+            std::thread::sleep(Duration::from_millis(250));
+            if Instant::now() < next {
+                continue;
+            }
+            next = Instant::now() + watchdog::SAMPLE_EVERY;
+            let quiet = activity.quiet_for();
+            // Nothing slow is read while the run is talking.
+            if quiet < watchdog::SAMPLE_EVERY {
+                dog.observe(Instant::now(), quiet, 0, None);
+                continue;
+            }
+            let files = watchdog::files_fingerprint(&root);
+            let cpu = f_builder_platform::cpu::descendants_cpu_time(me);
+            if dog.observe(Instant::now(), quiet, files, cpu) && running.load(Ordering::SeqCst) {
+                let step = activity.step().unwrap_or(Step::Build);
+                if tx.send(RunEvent::Stalled { step, quiet }).is_err() {
+                    return;
+                }
+                wake.call();
+            }
+        }
+    });
+    if let Err(e) = spawned {
+        log::warn!("The no-progress watchdog didn't start: {e}");
+    }
+}
+
 fn emit_event(feed: &Mutex<feed::FeedLog>, tx: &Sender<RunEvent>, wake: &Wake, e: RunEvent) {
     let mut feed = feed.lock().unwrap_or_else(PoisonError::into_inner);
     feed.record(&e);

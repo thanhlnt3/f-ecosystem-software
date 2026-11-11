@@ -3177,3 +3177,49 @@ fn a_very_long_app_file_name_keeps_start_inside_the_window() {
     let start = h.get_by_label("Start").rect();
     assert!(start.left() >= 0.0 && start.right() <= content.right(), "Start ({start:?}) stays inside the window ({content:?})");
 }
+
+/// tasks.md 11.3 (spec app-builder, "Bước kiểm tra bị kẹt"): a step with no progress for 10 minutes
+/// shows a warning with three choices. Keep waiting hides it; Rerun step stops the run to start the
+/// step again; any later event of the run (it moved) takes the warning away.
+#[test]
+fn a_stalled_step_is_shown_with_keep_waiting_rerun_and_stop() {
+    use f_builder_ai::rebuild::{RunEvent, Step};
+    use f_builder_engine::workspace::{TargetRef, Workspace};
+    let d = tempfile::tempdir().unwrap();
+    let ws = Workspace::create(&d.path().join("projects"), "Site", "A website", TargetRef::None).unwrap();
+    let root = ws.root.clone();
+    let mut h = harness(move || {
+        let mut a = demo::app(demo::engine(Mode::Beginner, true));
+        a.workspace = Some(ws);
+        a.state.screen = Screen::Project;
+        a
+    });
+    h.run_steps(2);
+    let stall = |h: &mut Harness<'static, BuilderApp>| {
+        let root = h.state().workspace.as_ref().unwrap().root.clone();
+        h.state_mut().stalled.insert(root, (Step::Check, Duration::from_secs(10 * 60 + 15)));
+        h.run_steps(2);
+    };
+    stall(&mut h);
+    h.get_by_label("The Check step has made no progress in 10 minutes");
+    h.get_by_label("Keep waiting").click();
+    h.run_steps(2);
+    assert!(h.state().stalled.is_empty(), "Keep waiting hides it");
+    assert!(h.query_by_label("The Check step has made no progress in 10 minutes").is_none());
+
+    stall(&mut h);
+    h.get_by_label("Rerun step").click();
+    h.run_steps(2);
+    assert!(h.state().stalled.is_empty() && h.state().rerun.contains(&root), "Rerun step stops the run and remembers to continue");
+
+    stall(&mut h);
+    h.get_by_label("Stop").click();
+    h.run_steps(2);
+    assert!(h.state().stalled.is_empty(), "Stop pauses the run");
+
+    // The run moved: the warning goes by itself.
+    stall(&mut h);
+    let mut feed = Vec::new();
+    f_builder_ai::rebuild::feed::apply(&mut feed, &RunEvent::Stalled { step: Step::Check, quiet: Duration::from_secs(600) });
+    assert!(feed.is_empty(), "a stall isn't kept in the project's conversation");
+}

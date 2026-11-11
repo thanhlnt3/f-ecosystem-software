@@ -7,7 +7,7 @@
 
 use super::*;
 use f_builder_engine::journal;
-use f_builder_engine::workspace::{ACTIVITY_LOG, ACTIVITY_LOG_OLD};
+use f_builder_engine::workspace::{ACTIVITY_LOG, ACTIVITY_LOG_OLD, Step};
 use std::collections::VecDeque;
 use std::io::Write;
 use std::ops::Range;
@@ -146,6 +146,8 @@ struct Going {
 #[derive(Debug, Default)]
 struct State {
     lines: VecDeque<ActivityLine>,
+    /// The step the run is on (its last `RunEvent::Step`).
+    step: Option<Step>,
     going: Vec<Going>,
     last: Option<Action>,
     /// What the builder has said since the last full line.
@@ -208,7 +210,10 @@ impl Activity {
 
     fn lines_for(&self, e: &RunEvent, state: &mut State, new: &mut Vec<(LineKind, String)>) {
         match e {
-            RunEvent::Step { text, .. } => new.push((LineKind::Stage, text.clone())),
+            RunEvent::Step { step, text } => {
+                state.step = Some(*step);
+                new.push((LineKind::Stage, text.clone()));
+            }
             RunEvent::Agent(a) => match a {
                 AgentEvent::TextDelta { .. } => {}
                 AgentEvent::Status { text } => new.push((LineKind::Note, text.clone())),
@@ -258,11 +263,19 @@ impl Activity {
                 new.push((result, format!("Check {}: {}", c.check, c.note)));
             }
             RunEvent::Preview(url) => new.push((LineKind::Note, format!("Preview at {url}"))),
+            RunEvent::Stalled { step, quiet } => {
+                new.push((LineKind::Problem, format!("No progress in the {} step for {} minutes", step.label(), quiet.as_secs() / 60)))
+            }
             RunEvent::Finished { ok, message, paused } => {
                 state.going.clear();
                 new.push((if *ok || *paused { LineKind::Stage } else { LineKind::Problem }, message.clone()));
             }
         }
+    }
+
+    /// The step the run is on, once it has started one.
+    pub fn step(&self) -> Option<Step> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner).step
     }
 
     /// Note something about the log itself, for whoever is reading the lines.

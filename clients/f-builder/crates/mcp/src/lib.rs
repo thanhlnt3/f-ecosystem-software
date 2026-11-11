@@ -142,8 +142,21 @@ pub fn serve_stdio(engine: Arc<Engine>, opts: ServerOptions) -> std::io::Result<
     serve(engine, opts, stdin.lock(), Box::new(std::io::stdout()))
 }
 
-/// Serve on any line reader / writer pair until the reader ends. In-flight calls are finished
-/// before this returns.
+/// How long in-flight calls may still finish on their own once the input has ended (a script may
+/// send its requests and close its end before the answers come).
+#[cfg(not(test))]
+const EOF_GRACE: Duration = Duration::from_secs(30);
+#[cfg(test)]
+const EOF_GRACE: Duration = Duration::from_secs(1);
+
+/// How long in-flight calls get to end after they've been cancelled.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
+
+/// Serve on any line reader / writer pair until the reader ends. Calls still running then get
+/// [`EOF_GRACE`] to finish; whatever is still waiting after that (a question to the person or a
+/// check, which wait up to an hour) is cancelled and gets [`SHUTDOWN_GRACE`] to end. Before, such a
+/// call kept this process, and the coding agent waiting for it, alive after the agent's turn
+/// (tasks.md 11.3).
 pub fn serve<R: BufRead>(engine: Arc<Engine>, opts: ServerOptions, reader: R, writer: Box<dyn Write + Send>) -> std::io::Result<()> {
     let server = Arc::new(Server::new(engine, opts, writer));
     let mut workers: Vec<JoinHandle<()>> = Vec::new();
@@ -169,7 +182,18 @@ pub fn serve<R: BufRead>(engine: Arc<Engine>, opts: ServerOptions, reader: R, wr
         }
         workers.retain(|h| !h.is_finished());
     }
-    for h in workers {
+    let soft = Instant::now() + EOF_GRACE;
+    while workers.iter().any(|h| !h.is_finished()) && Instant::now() < soft {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    for token in server.inflight.lock().unwrap_or_else(PoisonError::into_inner).values() {
+        token.cancel();
+    }
+    let deadline = Instant::now() + SHUTDOWN_GRACE;
+    while workers.iter().any(|h| !h.is_finished()) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    for h in workers.into_iter().filter(|h| h.is_finished()) {
         let _ = h.join();
     }
     Ok(())

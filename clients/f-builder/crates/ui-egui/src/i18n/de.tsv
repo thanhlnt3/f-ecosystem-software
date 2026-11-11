@@ -1462,3 +1462,7 @@ In this project, {kind}: {choice}.	In diesem Projekt {kind}: {choice}.
 Couldn't change the approvals:	Die Freigaben konnten nicht geändert werden:
 What the builder may do without asking you, in this project.	Was der Builder in diesem Projekt tun darf, ohne dich zu fragen.
 Default follows Auto mode: with it on, what can be undone goes ahead and the rest is refused; with it off, the builder asks.	Standard folgt dem Automatikmodus: Ist er an, geschieht, was sich rückgängig machen lässt, und der Rest wird abgelehnt; ist er aus, fragt der Builder.
+The {step} step has made no progress in {minutes} minutes	Der Schritt {step} hat seit {minutes} Minuten keinen Fortschritt gemacht
+Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	Nichts Neues im Protokoll, keine Datei geändert, und seine Programme haben keine CPU genutzt. Er hängt möglicherweise.
+Keep waiting	Weiter warten
+Rerun step	Schritt neu starten

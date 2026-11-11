@@ -475,6 +475,14 @@ edit, right before committing.
 
 ## Design
 
+**A turn that waited for its agent to exit.** A run ended only when the coding agent's process
+exited, so an agent that printed its final result and then waited (for a background task, or for
+our tool server, which itself waited up to an hour for a check its last call had asked for) held
+the run for hours with nothing on screen. A protocol's "done" message ends the turn: give the
+process a short grace to exit, then stop its tree (`AFTER_RESULT_GRACE`). A server whose client has
+gone cancels what is still waiting (`EOF_GRACE`). And a watchdog says when a step has made no
+progress at all (`rebuild::watchdog`), so a hang nobody foresaw is still seen.
+
 **A round of checks that nothing could stop.** The builder's own checks ran one after another on
 the build's thread with no time limit, Pause was looked at only between tool calls, and the feed
 said only "checking its work against the original" for the whole round, so a check that stalled

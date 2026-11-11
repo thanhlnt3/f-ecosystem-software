@@ -34,10 +34,19 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Name our MCP server is registered under.
 pub const MCP_NAME: &str = "f-builder";
+
+/// How long an agent may keep running after it has printed its final result (its handoff). Agents
+/// normally exit at once; one that doesn't (a background shell task, a tool server that won't
+/// close) kept the run waiting for hours (tasks.md 11.3). After this the turn ends and its process
+/// tree is stopped.
+#[cfg(not(test))]
+const AFTER_RESULT_GRACE: Duration = Duration::from_secs(20);
+#[cfg(test)]
+const AFTER_RESULT_GRACE: Duration = Duration::from_secs(1);
 
 /// Known agent CLIs: (agent id, program, display name).
 pub const KNOWN: &[(&str, &str, &str)] = &[
@@ -996,6 +1005,9 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
     let failed_tools = Arc::new(AtomicBool::new(false));
     let (failed_tools2, failed_tools3) = (failed_tools.clone(), failed_tools.clone());
     let stop2 = stop.clone();
+    // When the agent printed its final result: the turn is over once it has had time to exit.
+    let result_at: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+    let (result_at2, result_at3) = (result_at.clone(), result_at.clone());
     let mut proc = (if remote.is_none() { adapter.process(&prog) } else { Process::new(&prog) })
         .args(&argv)
         .timeout(Duration::from_secs(spec.options.timeout_secs.unwrap_or(turn)))
@@ -1005,13 +1017,20 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
     }
     let mut proc = proc
         .stdout_cap(4 * 1024 * 1024)
-        .cancel_when(move || stop2.is_stopped() || failed_tools2.load(Ordering::SeqCst))
+        .cancel_when(move || {
+            stop2.is_stopped()
+                || failed_tools2.load(Ordering::SeqCst)
+                || result_at3.lock().unwrap_or_else(PoisonError::into_inner).is_some_and(|t| t.elapsed() >= AFTER_RESULT_GRACE)
+        })
         .on_stdout_line(move |l| {
             if failed_tools3.load(Ordering::SeqCst) {
                 return;
             }
             let mut p = p2.lock().unwrap_or_else(PoisonError::into_inner);
             let events = p.line(l);
+            if p.saw_result {
+                result_at2.lock().unwrap_or_else(PoisonError::into_inner).get_or_insert_with(Instant::now);
+            }
             if let (Some(dir), Some(id)) = (&records, &p.run_session) {
                 let mut h = held2.lock().unwrap_or_else(PoisonError::into_inner);
                 if h.is_none() {
@@ -1045,6 +1064,9 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
         proc = proc.stdin_bytes(adapter.stdin_text(&preamble, text));
     }
     let result = proc.run();
+    // Stopped by us because it outlived its own result: the turn finished, nothing failed.
+    let handed_off =
+        result_at.lock().unwrap_or_else(PoisonError::into_inner).is_some() && !stop.is_stopped() && matches!(&result, Err(e) if e.code == ErrorCode::Cancelled);
     let p = parser.lock().unwrap_or_else(PoisonError::into_inner);
     if p.session_missing {
         // The id it reported is the one it couldn't find: the next message starts a new session.
@@ -1052,7 +1074,7 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
     } else if let Some(id) = &p.session_id {
         *session.lock().unwrap_or_else(PoisonError::into_inner) = Some(id.clone());
     }
-    if p.failure.is_none() {
+    if p.failure.is_none() && !handed_off {
         let failed = match &result {
             Ok(out) if !out.success => Some(TurnFailure::process_exit(out.code)),
             Err(e) if e.code != ErrorCode::Cancelled => Some(TurnFailure::from_process(e)),
@@ -1061,10 +1083,20 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
         *failure.lock().unwrap_or_else(PoisonError::into_inner) = failed;
     }
     let unfinished = match &result {
+        _ if handed_off => false,
         Ok(out) => !out.success,
         Err(_) => true,
     };
     match result {
+        _ if handed_off => {
+            let _ = tx.send(AgentEvent::Status {
+                text: format!(
+                    "{} handed over its result but was still running {} s later, so F-Builder stopped it and ended the turn.",
+                    display_for(&agent),
+                    AFTER_RESULT_GRACE.as_secs()
+                ),
+            });
+        }
         // The protocol already named the required tool server. Stop the owned process without
         // replacing that useful error with the cancellation used to stop it.
         result if failed_tools.load(Ordering::SeqCst) => {
@@ -2275,6 +2307,49 @@ mod tests {
         let text: String = all.iter().filter_map(|e| if let AgentEvent::TextDelta { text } = e { Some(text.clone()) } else { None }).collect();
         assert!(text.contains("hello there"), "{all:?}");
         assert!(text.contains("Request"), "preamble is passed too");
+    }
+
+    /// tasks.md 11.3: an agent that prints its final result and then keeps running (a background
+    /// task, a tool server that won't close) no longer holds the turn open for hours: the turn ends
+    /// soon after the handoff, as a finished turn, and the agent is stopped.
+    #[cfg(unix)]
+    #[test]
+    fn a_turn_ends_once_the_agent_has_handed_over_even_if_it_keeps_running() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let program = dir.path().join("claude");
+        let script = concat!(
+            "#!/bin/sh\n",
+            "cat >/dev/null\n",
+            "echo '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"s1\"}'\n",
+            "echo '{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"Done\",\"session_id\":\"s1\"}'\n",
+            "sleep 600\n",
+        );
+        std::fs::write(&program, script).unwrap();
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let config = BackendConfig {
+            name: "Claude Code".into(),
+            kind: BackendKind::AgentCli,
+            model: "claude-code".into(),
+            base_url: None,
+            ssh_host: None,
+            enabled: true,
+        };
+        let options = BackendOptions { command: Some(program.display().to_string()), ..Default::default() };
+        let mut c = CliConversation::new(CliSpec::new(config, options, false, None));
+        let started = std::time::Instant::now();
+        c.send("Build it.");
+        let deadline = started + Duration::from_secs(30);
+        let mut all = Vec::new();
+        while !all.iter().any(|e| matches!(e, AgentEvent::TurnDone { .. })) {
+            assert!(std::time::Instant::now() < deadline, "the turn waited for the agent to exit: {all:?}");
+            all.extend(c.poll());
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!all.iter().any(|e| matches!(e, AgentEvent::Error { .. })), "a finished turn, not a failure: {all:?}");
+        assert!(!all.iter().any(|e| matches!(e, AgentEvent::Status { text } if text == "Stopped.")), "{all:?}");
+        assert!(all.iter().any(|e| matches!(e, AgentEvent::Status { text } if text.contains("handed over its result"))), "{all:?}");
+        assert!(c.last_failure().is_none(), "{:?}", c.last_failure());
     }
 
     #[cfg(unix)]

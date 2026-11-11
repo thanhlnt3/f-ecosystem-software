@@ -73,7 +73,8 @@ pub fn apply(feed: &mut Vec<FeedItem>, e: &RunEvent) {
         }
         RunEvent::Ask(r) => feed.push(FeedItem::Ask { request: r.clone(), answer: None }),
         RunEvent::Checked(c) => feed.push(FeedItem::Check(c.clone())),
-        RunEvent::Preview(_) => {}
+        // Shown while it lasts, not kept in the project (the app holds it until the run moves).
+        RunEvent::Preview(_) | RunEvent::Stalled { .. } => {}
         RunEvent::Finished { ok, message, paused } => {
             end_stream(feed);
             // #504: a run that ends with steps still open marks them stopped on the plan card,

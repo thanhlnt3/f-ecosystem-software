@@ -1462,3 +1462,7 @@ In this project, {kind}: {choice}.	Bu projede {kind}: {choice}.
 Couldn't change the approvals:	Onaylar değiştirilemedi:
 What the builder may do without asking you, in this project.	Oluşturucunun bu projede size sormadan yapabilecekleri.
 Default follows Auto mode: with it on, what can be undone goes ahead and the rest is refused; with it off, the builder asks.	Varsayılan, otomatik modu izler: açıkken geri alınabilenler yapılır, gerisi reddedilir; kapalıyken oluşturucu sorar.
+The {step} step has made no progress in {minutes} minutes	{step} adımı {minutes} dakikadır ilerlemedi
+Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	Günlükte yeni bir şey yok, hiçbir dosya değişmedi ve programları CPU kullanmadı. Takılmış olabilir.
+Keep waiting	Beklemeye devam et
+Rerun step	Adımı yeniden çalıştır

@@ -203,6 +203,14 @@ fn run(cli: &Cli, a: &RebuildArgs) -> Result<bool, ToolError> {
                     }
                 }
                 RunEvent::Preview(url) => println!("Preview: {url}"),
+                RunEvent::Stalled { step, quiet } => {
+                    end_line(&mut line_open);
+                    println!(
+                        "Warning: the {} step has made no progress in {} minutes. Keep waiting, or press Ctrl+C to stop and run it again with --resume.",
+                        step.label(),
+                        quiet.as_secs() / 60
+                    );
+                }
                 RunEvent::Finished { ok: o, message, paused } => {
                     end_line(&mut line_open);
                     println!(

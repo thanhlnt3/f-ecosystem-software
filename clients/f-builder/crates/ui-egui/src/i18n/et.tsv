@@ -1462,3 +1462,7 @@ In this project, {kind}: {choice}.	Selles projektis {kind}: {choice}.
 Couldn't change the approvals:	Kinnitusi ei õnnestunud muuta:
 What the builder may do without asking you, in this project.	Mida ehitaja tohib selles projektis sinult küsimata teha.
 Default follows Auto mode: with it on, what can be undone goes ahead and the rest is refused; with it off, the builder asks.	Vaikimisi järgib automaatrežiimi: kui see on sees, tehakse tagasipööratavad toimingud ära ja ülejäänud keeldutakse; kui see on väljas, küsib ehitaja.
+The {step} step has made no progress in {minutes} minutes	Samm {step} pole {minutes} minuti jooksul edasi liikunud
+Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	Logis pole midagi uut, ükski fail ei muutunud ja selle programmid ei kasutanud protsessorit. See võib olla kinni jäänud.
+Keep waiting	Oota edasi
+Rerun step	Käivita samm uuesti

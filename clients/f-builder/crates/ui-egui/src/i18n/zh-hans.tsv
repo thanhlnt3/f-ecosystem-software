@@ -1462,3 +1462,7 @@ In this project, {kind}: {choice}.	在这个项目中，{kind}：{choice}。
 Couldn't change the approvals:	无法更改审批：
 What the builder may do without asking you, in this project.	在这个项目中，构建助手无需问你就可以做的事。
 Default follows Auto mode: with it on, what can be undone goes ahead and the rest is refused; with it off, the builder asks.	默认跟随自动模式：开启时，可撤销的操作会执行，其余的会被拒绝；关闭时，构建助手会询问。
+The {step} step has made no progress in {minutes} minutes	{step}步骤已有 {minutes} 分钟没有进展
+Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	日志没有新内容，没有文件改动，它的程序也没有占用 CPU。可能卡住了。
+Keep waiting	继续等待
+Rerun step	重新运行此步骤

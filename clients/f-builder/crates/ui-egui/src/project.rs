@@ -245,6 +245,32 @@ impl BuilderApp {
         self.start_run_with(ws, opts);
     }
 
+    /// "Keep waiting" on a stalled step: the warning goes, and comes back after another stretch
+    /// with no progress.
+    pub fn keep_waiting(&mut self) {
+        if let Some(root) = self.workspace.as_ref().map(|w| w.root.clone()) {
+            self.stalled.remove(&root);
+        }
+    }
+
+    /// "Rerun step" on a stalled step: stop the run, then continue it once it has stopped, so the
+    /// step starts again from what the project recorded (a check runs again; a build step resumes
+    /// the builder's own session).
+    pub fn rerun_step(&mut self) {
+        let Some(root) = self.workspace.as_ref().map(|w| w.root.clone()) else { return };
+        self.stalled.remove(&root);
+        self.rerun.insert(root);
+        self.pause();
+    }
+
+    /// "Stop" on a stalled step: as Pause.
+    pub fn stop_stalled(&mut self) {
+        if let Some(root) = self.workspace.as_ref().map(|w| w.root.clone()) {
+            self.stalled.remove(&root);
+        }
+        self.pause();
+    }
+
     pub fn pause(&mut self) {
         let Some(root) = self.workspace.as_ref().map(|w| w.root.clone()) else { return };
         match self.runs.stop(&root) {
@@ -303,6 +329,13 @@ impl BuilderApp {
                 self.asking.insert(root.clone());
                 self.attention = true;
             }
+            // A stalled step stays reported until the run has anything else to say.
+            if let RunEvent::Stalled { step, quiet } = e {
+                self.stalled.insert(root.clone(), (*step, *quiet));
+                self.attention = true;
+            } else {
+                self.stalled.remove(root);
+            }
             let clock = self.usage.entry(root.clone()).or_default();
             match e {
                 RunEvent::Finished { .. } => {
@@ -334,6 +367,15 @@ impl BuilderApp {
             let join = |part: fn(&Note) -> &str| left.iter().map(part).collect::<Vec<_>>().join("\n\n");
             let (message, shown) = (join(|n| &n.text), join(|n| &n.shown));
             let pictures: Vec<PathBuf> = left.iter().flat_map(|n| n.pictures.clone()).collect();
+            let rerun = self.rerun.remove(&root);
+            if open.as_ref() == Some(&root) && rerun && left.is_empty() {
+                if let Some(ws) = self.workspace.as_mut() {
+                    let _ = ws.reload();
+                }
+                // "Rerun step": the run has stopped; carry on from what the project recorded.
+                self.continue_build();
+                continue;
+            }
             if open.as_ref() == Some(&root) {
                 if let Some(ws) = self.workspace.as_mut() {
                     let _ = ws.reload();
@@ -1225,6 +1267,9 @@ fn feed(app: &mut BuilderApp, ui: &mut Ui, ws: &Workspace) {
         });
         ui.add_space(10.0);
     }
+    if let Some((step, quiet)) = app.workspace.as_ref().and_then(|w| app.stalled.get(&w.root)).copied() {
+        stalled_card(app, ui, step, quiet);
+    }
     let items = &app.state.feed;
     // With a plan pinned below, it shows the work and the clock; one progress display, not two.
     let pinned = plan(items).is_some();
@@ -1266,6 +1311,45 @@ fn feed(app: &mut BuilderApp, ui: &mut Ui, ws: &Workspace) {
     }
     if retry {
         app.follow_up(None);
+    }
+}
+
+/// tasks.md 11.3: a step with no progress for a while (nothing in the log, no file changed, no CPU
+/// used by its programs) says so, with Keep waiting, Rerun step and Stop.
+fn stalled_card(app: &mut BuilderApp, ui: &mut Ui, step: f_builder_ai::rebuild::Step, quiet: std::time::Duration) {
+    let t = Tokens::get(ui.ctx());
+    let mut choice = None;
+    widgets::card(&t).inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            let (rect, _) = ui.allocate_exact_size(Vec2::splat(22.0), egui::Sense::hover());
+            icons::paint(ui, rect, "triangle-alert", 18.0, t.warning);
+            ui.vertical(|ui| {
+                let minutes = (quiet.as_secs() / 60).to_string();
+                let title = trf("The {step} step has made no progress in {minutes} minutes", &[("step", &tr(step.label())), ("minutes", &minutes)]);
+                ui.label(RichText::new(title).strong().color(t.text));
+                ui.label(RichText::new(tr("Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.")).color(t.text_dim));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if widgets::secondary(ui, None, "Keep waiting").clicked() {
+                        choice = Some(0);
+                    }
+                    if widgets::secondary(ui, Some("refresh-cw"), "Rerun step").clicked() {
+                        choice = Some(1);
+                    }
+                    if widgets::secondary(ui, Some("circle-stop"), "Stop").clicked() {
+                        choice = Some(2);
+                    }
+                });
+            });
+        });
+    });
+    ui.add_space(10.0);
+    match choice {
+        Some(0) => app.keep_waiting(),
+        Some(1) => app.rerun_step(),
+        Some(2) => app.stop_stalled(),
+        _ => {}
     }
 }
 

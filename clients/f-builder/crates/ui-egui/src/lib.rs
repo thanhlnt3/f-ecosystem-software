@@ -529,6 +529,11 @@ pub struct BuilderApp {
     pub asking: std::collections::HashSet<PathBuf>,
     /// Projects whose Pause was pressed and whose build hasn't stopped yet (#551).
     pub pausing: std::collections::HashSet<PathBuf>,
+    /// Projects whose build step has made no progress for a while (tasks.md 11.3): the step and
+    /// for how long. Cleared as soon as the run has anything else to say.
+    pub stalled: std::collections::HashMap<PathBuf, (f_builder_ai::rebuild::Step, std::time::Duration)>,
+    /// Projects whose stalled step was asked to run again: Continue starts once the run has stopped.
+    pub rerun: std::collections::HashSet<PathBuf>,
     /// A build asked something since the last frame: the taskbar flashes if the window is behind.
     attention: bool,
     /// Jobs whose result goes into the conversation (a first look, an answer without an AI):
@@ -611,6 +616,8 @@ impl BuilderApp {
             chat_jobs: Vec::new(),
             asking: Default::default(),
             pausing: Default::default(),
+            stalled: Default::default(),
+            rerun: Default::default(),
             pending_consent: Default::default(),
             next_consent: 1,
             attention: false,

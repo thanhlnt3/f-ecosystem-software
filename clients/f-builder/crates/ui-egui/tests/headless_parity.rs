@@ -65,6 +65,8 @@ const ACTIONS: &[Action] = &[
     a("pause",               "stop the running build",                         Tool(&["rebuild_stop"])),
     a("unsend",              "take back a note the builder hasn't read yet",   Tool(&["rebuild_note_withdraw"])),
     a("continue_build",      "carry on a build that stopped part-way",         Cli("rebuild <target> <request> --continue-in --resume")),
+    a("rerun_step",          "stop a stalled step and run it again",           Cli("rebuild <target> <request> --continue-in --resume")),
+    a("stop_stalled",        "stop a stalled build",                           Tool(&["rebuild_stop"])),
     a("open_preview",        "open the built website in the browser",          Tool(&["project_preview"])),
     a("play",                "play the built game or start the built app",     Tool(&["project_play"])),
     a("ask_about_build",     "a question about the build, answered without building", Tool(&["rebuild_question_ask"])),
@@ -144,6 +146,7 @@ const ACTIONS: &[Action] = &[
 /// `BuilderApp` methods that aren't person-facing actions: callbacks, polling, drawing, helpers.
 #[rustfmt::skip]
 const PLUMBING: &[(&str, &str)] = &[
+    ("keep_waiting", "hides the no-progress warning; the run itself is untouched"),
     ("load_agent_model_catalog", "worker dispatch shared by the model picker and its reload action"),
     ("stuck_banner", "draws what the lock watchdog found; `sync::problems` and its log are the headless side"),
     ("act", "runs a button's tool on a worker (play, preview, open folder)"),

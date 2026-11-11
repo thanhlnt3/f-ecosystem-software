@@ -19,9 +19,9 @@ dòng `- [x]` là việc đã xong. Kế hoạch của Craft Anything 0.6.0 (b�
 - [ ] Mở lại dự án bị gián đoạn thì đề xuất Tiếp tục
 
 ### R11.3 Không bị treo im lặng
-- [ ] Cảnh báo sau 10 phút không tiến triển (nhật ký, file, CPU) với Tiếp tục chờ, Chạy lại bước, Dừng
-- [ ] Kết thúc lượt khi agent đã bàn giao kết quả, kể cả khi tiến trình agent chưa thoát
-- [ ] Máy chủ MCP hủy các lệnh đang chờ khi stdin đóng
+- [x] Cảnh báo sau 10 phút không tiến triển (nhật ký, file, CPU) với Tiếp tục chờ, Chạy lại bước, Dừng
+- [x] Kết thúc lượt khi agent đã bàn giao kết quả, kể cả khi tiến trình agent chưa thoát
+- [x] Máy chủ MCP hủy các lệnh đang chờ khi stdin đóng
 
 ### R11.4 Clean room và thương hiệu
 - [ ] Xác nhận quyền phân tích khi bật đọc sâu, ghi vào dự án

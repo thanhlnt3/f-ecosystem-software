@@ -7,6 +7,7 @@
 
 pub mod cancel;
 pub mod capture;
+pub mod cpu;
 pub mod display;
 pub mod fs;
 pub mod process;

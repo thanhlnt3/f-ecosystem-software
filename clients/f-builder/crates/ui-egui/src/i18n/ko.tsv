@@ -1462,3 +1462,7 @@ In this project, {kind}: {choice}.	이 프로젝트에서 {kind}: {choice}.
 Couldn't change the approvals:	승인을 바꾸지 못했습니다:
 What the builder may do without asking you, in this project.	이 프로젝트에서 빌더가 묻지 않고 해도 되는 일입니다.
 Default follows Auto mode: with it on, what can be undone goes ahead and the rest is refused; with it off, the builder asks.	기본값은 자동 모드를 따릅니다. 켜져 있으면 되돌릴 수 있는 일은 진행하고 나머지는 거부하며, 꺼져 있으면 빌더가 묻습니다.
+The {step} step has made no progress in {minutes} minutes	{step} 단계가 {minutes}분 동안 진행되지 않았습니다
+Nothing new in the log, no file changed and its programs used no CPU. It may be stuck.	로그에 새 내용이 없고, 바뀐 파일이 없으며, 프로그램이 CPU를 쓰지 않았습니다. 멈췄을 수 있습니다.
+Keep waiting	계속 기다리기
+Rerun step	단계 다시 실행

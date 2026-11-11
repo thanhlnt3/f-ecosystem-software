@@ -362,6 +362,53 @@ fn always_for_this_project_on_a_consent_card_is_remembered() {
     assert_eq!(server.ask_consent("browser_other", "why", &cancelled), Some(false));
 }
 
+/// The agent's stdin to us: one request, then the end of input once `ready` says so.
+struct ThenEnd {
+    first: Vec<u8>,
+    sent: usize,
+    ready: Box<dyn Fn() -> bool>,
+}
+
+impl std::io::Read for ThenEnd {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        if self.sent < self.first.len() {
+            let n = out.len().min(self.first.len() - self.sent);
+            out[..n].copy_from_slice(&self.first[self.sent..self.sent + n]);
+            self.sent += n;
+            return Ok(n);
+        }
+        let until = Instant::now() + Duration::from_secs(10);
+        while !(self.ready)() && Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        Ok(0)
+    }
+}
+
+/// tasks.md 11.3 (spec app-builder, "Không bị treo im lặng"): when the agent that started us ends
+/// (our stdin closes) while one of its calls is still waiting (a question to the person, a check),
+/// the call is cancelled and the server returns at once, so it can't keep the agent alive. Before,
+/// it waited for the call: up to 30 minutes for a question, an hour for a check.
+#[test]
+fn a_waiting_call_ends_when_the_client_goes() {
+    use f_builder_engine::inbox::{Inbox, InboxDir};
+    use f_builder_engine::workspace::{Questions, TargetRef, Workspace};
+    let dir = tempfile::tempdir().unwrap();
+    let mut ws = Workspace::create(dir.path(), "t", "r", TargetRef::None).unwrap();
+    // The person asked to be asked, so the question waits for them even in Auto mode.
+    ws.set_person(|m| m.questions = Some(Questions::Ask)).unwrap();
+    let engine = Arc::new(Engine::new(f_builder_engine::testing::session()));
+    engine.session().ext.insert(Arc::new(InboxDir(ws.inbox_dir())));
+    let inbox = Inbox::new(ws.inbox_dir());
+    let ask = req(1, "tools/call", json!({"name": "core_person_ask", "arguments": {"question": "Màu nào?", "choices": ["Xanh", "Đỏ"]}}));
+    let reader = std::io::BufReader::new(ThenEnd { first: format!("{ask}\n").into_bytes(), sent: 0, ready: Box::new(move || !inbox.pending().is_empty()) });
+    let started = Instant::now();
+    let buf = Buf::default();
+    serve(engine, ServerOptions::default(), reader, Box::new(buf.clone())).unwrap();
+    assert!(!Inbox::new(ws.inbox_dir()).pending().is_empty() || started.elapsed() < Duration::from_secs(10), "the question was waiting");
+    assert!(started.elapsed() < Duration::from_secs(10) + EOF_GRACE + SHUTDOWN_GRACE + Duration::from_secs(2), "returned after {:?}", started.elapsed());
+}
+
 /// #855, #856: In restricted mode, tools that act on the machine (build_command_run, plugins_add,
 /// engines_install, adb_*) and web/capture tools (web_site_open, web_site_capture,
 /// web_page_states_capture) are omitted from tools/list even when --all-tools is set.
