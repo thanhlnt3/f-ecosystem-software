@@ -174,3 +174,27 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     viện kèm (Electron, Godot, Python) cần quy ước thư mục đóng gói trong `f-app.toml` hoặc `dist/`.
 53. **Đơn "Nhờ F-Eco xây hộ"** được tạo nháp trong thư mục dự án; gửi đơn chờ API đơn hàng của nhóm 12
     (đính kèm spec, mã nguồn, giới hạn kích thước).
+
+## Nhóm 12: Đơn xây app theo yêu cầu
+
+54. **Việc của đội F-Eco** (báo giá, bàn giao, trả lời, giải quyết tranh chấp, đánh dấu thanh toán)
+    tạm làm bằng `feco-catalog order-*` cho tới khi có bảng quản trị (nhóm 14). Kết quả thanh toán
+    (`order-paid`) sẽ do cổng thanh toán của nhóm 13 gọi. Gửi đơn từ F-Builder (task 11.6) cần một
+    API đơn hàng dùng token (hiện chỉ có biểu mẫu web với phiên đăng nhập); cần chốt cách xác thực.
+55. **App riêng tư chỉ ẩn, chưa khóa**: F-Store và F-Launcher chỉ hiện bản build bàn giao cho khách
+    hàng của đơn, nhưng metadata TUF và gói trên máy chủ phân phối vẫn công khai (ai biết tên target
+    thì tải được). Nếu mã nguồn hay bản build cần bí mật trước khi trả đủ, cần tải gói có xác thực
+    hoặc mã hóa gói theo khách hàng. Cần quyết định. Ngoài ra app phải được đặt riêng tư
+    (`feco-catalog private`) trước khi phát hành phiên bản đầu, để cờ riêng tư có trong chữ ký TUF.
+56. **Ngày làm việc** (hạn báo giá 3 ngày, phản hồi tranh chấp 2 ngày) hiện chỉ bỏ thứ Bảy và Chủ
+    nhật, chưa trừ ngày lễ Việt Nam (như câu 38). Hạn chỉ được nhắc trong email, chưa có cảnh báo khi
+    đội F-Eco trễ hạn.
+57. **Một số quy tắc chưa rõ trong spec, đang làm như sau**: báo giá cần ít nhất hai mốc (mốc đầu là
+    đặt cọc ≤ 30%); hủy sau đặt cọc giữ tiền đặt cọc khi `started_at` đã có, kể cả khi mốc 1 chưa
+    bàn giao; hoàn một phần khi tranh chấp phải lớn hơn 0 và nhỏ hơn giá mốc; tệp kèm mỗi tin nhắn
+    tối đa 50 MB; yêu cầu sửa không cần đính kèm. Đơn tự nghiệm thu mốc cuối sau 14 ngày cũng
+    chuyển "Hoàn tất" như khi khách nghiệm thu.
+58. **Điều khoản dịch vụ xây app** (`/policy/custom-build`) là bản nháp do tôi viết theo spec, cần
+    luật sư rà soát (task 12.6): đặc biệt điều khoản giữ tiền đặt cọc, quyền sở hữu mã nguồn mặc
+    định, thuế trong giá, và việc tự nghiệm thu sau 14 ngày. Đổi nội dung thì tăng `TOS_VERSION`;
+    đơn cũ giữ phiên bản đã chấp nhận.

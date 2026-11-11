@@ -1407,6 +1407,14 @@ async fn sign_target(
         .iter()
         .find(|p| p.key() == platform)
         .map(|p| p.entry.clone());
+    // App riêng tư (spec custom-build-orders): đánh dấu trong target để launcher chỉ hiện cho
+    // khách hàng của đơn.
+    let private: bool =
+        sqlx::query_scalar("SELECT private_to IS NOT NULL FROM catalog_apps WHERE id = $1")
+            .bind(&app.app_id)
+            .fetch_optional(&state.db)
+            .await?
+            .unwrap_or(false);
     let meta = feco_tuf::TargetMeta {
         app: app.app_id.clone(),
         version: manifest.version.clone(),
@@ -1414,6 +1422,7 @@ async fn sign_target(
         title: Some(manifest.name.clone()),
         entry,
         client_id: Some(app.client_id.clone()),
+        private,
     };
     let signers: Vec<_> = tuf.sign_keys.iter().map(feco_tuf::keys::source).collect();
     let repo = feco_tuf::Repo::open(&tuf.repo);

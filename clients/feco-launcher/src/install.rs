@@ -67,7 +67,13 @@ fn io(path: &Path) -> impl FnOnce(std::io::Error) -> LauncherError + '_ {
 /// Phân loại lỗi của chuỗi tin cậy: lỗi toàn vẹn (sai hash, sai chữ ký, metadata cũ hoặc hết
 /// hạn) khác với lỗi mạng.
 fn classify(e: feco_tuf::Error, package: bool) -> LauncherError {
-    let detail = format!("{e:?}");
+    // Bỏ backtrace khỏi chuỗi lỗi: tên hàm trong backtrace (ví dụ `CanonicalFormatter` của
+    // olpc-cjson) có thể trùng các từ khóa bên dưới và biến lỗi mạng thành "metadata giả".
+    let full = format!("{e:?}");
+    let detail = full
+        .split_once(", backtrace: Backtrace [")
+        .map_or(full.as_str(), |(head, _)| head)
+        .to_owned();
     const INTEGRITY: [&str; 9] = [
         "HashMismatch",
         "MaxSize",
@@ -196,9 +202,25 @@ impl Launcher {
         }
     }
 
-    /// Bản mới nhất của từng app trong danh mục.
+    /// Bản mới nhất của từng app trong danh mục. App riêng tư chỉ hiện khi máy chủ đã liệt kê nó
+    /// cho người dùng đang đăng nhập ([`Launcher::set_private_apps`]).
     pub fn catalog_latest(&self) -> Vec<&CatalogEntry> {
         catalog::latest(&self.state.catalog)
+            .into_iter()
+            .filter(|e| !e.private || self.state.private_apps.contains(&e.app))
+            .collect()
+    }
+
+    /// App riêng tư người dùng đang đăng nhập được thấy; rỗng khi chưa đăng nhập.
+    pub fn set_private_apps(
+        &mut self,
+        apps: std::collections::BTreeSet<String>,
+    ) -> Result<(), LauncherError> {
+        if self.state.private_apps == apps {
+            return Ok(());
+        }
+        self.state.private_apps = apps;
+        self.save()
     }
 
     pub fn revocation(&self, target: &str) -> Option<&Revocation> {

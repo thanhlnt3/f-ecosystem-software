@@ -715,6 +715,20 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
         Err(LauncherError::Offline(_)) => return Ok(String::new()),
         Err(e) => return Err(e.to_string()),
     }
+    // App riêng tư (bản build của đơn xây app): chỉ hiện những app máy chủ liệt kê cho người
+    // dùng đang đăng nhập; chưa đăng nhập thì ẩn hết. Không hỏi được thì giữ danh sách cũ.
+    match s.identity.access_token().await {
+        Ok(token) => match s.identity.auth.private_apps(&token).await {
+            Ok(apps) => {
+                let _ = l.set_private_apps(apps.into_iter().collect());
+            }
+            Err(e) => eprintln!("không lấy được app riêng tư: {e}"),
+        },
+        Err(AuthError::Offline(_)) => {}
+        Err(_) => {
+            let _ = l.set_private_apps(Default::default());
+        }
+    }
     // Phát hành dần: hỏi máy chủ thiết bị này được nhận bản nào của từng app đã cài.
     if let Ok(device) = l.device_id() {
         for (app, _) in l.installed() {

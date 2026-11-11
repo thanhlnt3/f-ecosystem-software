@@ -62,6 +62,10 @@ pub struct TargetMeta {
     /// Client ID OAuth của app, để launcher xin mã khởi chạy đúng app.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
+    /// App riêng tư (bản build bàn giao của đơn xây app): launcher chỉ hiện cho người dùng mà
+    /// máy chủ liệt kê ở `GET /v1/catalog/private`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub private: bool,
 }
 
 /// Một bản ghi thu hồi trong [`REVOCATIONS_TARGET`].

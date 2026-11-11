@@ -16,7 +16,7 @@ feco-tuf: quản lý kho TUF của F-Eco
   feco-tuf keyid <file>                      in key ID của một khóa
   feco-tuf init --repo DIR --root A,B,C --targets T --snapshot S --timestamp TS --sign K,...
   feco-tuf publish --repo DIR --file F --name N --app A --version V --platform P --sign T,S,TS
-                   [--title TÊN] [--entry FILE-CHẠY] [--client-id ID]
+                   [--title TÊN] [--entry FILE-CHẠY] [--client-id ID] [--private true]
   feco-tuf revoke --repo DIR --name N --reason TEXT --sign T,S,TS
   feco-tuf refresh --repo DIR --sign S,TS    ký lại snapshot và timestamp (chạy định kỳ)
   feco-tuf resign --repo DIR --sign T,S,TS   gia hạn targets khi không có phát hành mới
@@ -155,6 +155,7 @@ async fn run(raw: &[String]) -> Result<(), String> {
                 title: args.flags.get("title").cloned(),
                 entry: args.flags.get("entry").cloned(),
                 client_id: args.flags.get("client-id").cloned(),
+                private: args.flags.get("private").is_some_and(|v| v == "true"),
             };
             let name = args.get("name")?;
             args.repo()?

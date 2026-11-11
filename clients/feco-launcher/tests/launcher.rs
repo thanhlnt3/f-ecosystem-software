@@ -107,6 +107,8 @@ impl Fixture {
             title: Some(format!("{app} (tên hiển thị)")),
             entry: Some(format!("bin/{app}.cmd")),
             client_id: Some(format!("client-{app}")),
+            // Quy ước của bộ kiểm thử: app có tên kết thúc bằng "-rieng" là app riêng tư.
+            private: app.ends_with("-rieng"),
         };
         self.repo
             .publish(
@@ -582,4 +584,30 @@ async fn broker_refuses_codes_for_other_apps() {
     assert_eq!(res.status(), 200);
     let code: LaunchCode = res.json().await.unwrap();
     assert_eq!(code.code, "ma-cho-client-a");
+}
+
+/// Spec custom-build-orders, "Bàn giao mốc và nghiệm thu": bản build bàn giao là app riêng tư,
+/// chỉ hiện trong launcher của người dùng mà máy chủ liệt kê (`GET /v1/catalog/private`).
+#[tokio::test]
+async fn private_apps_show_only_for_their_customer() {
+    let f = Fixture::new().await;
+    f.publish_app("paintbox", "0.9.0").await;
+    f.publish_app("kho-rieng", "0.1.0").await;
+    let mut l = f.launcher().await;
+    l.sync(Timestamp::now()).await.unwrap();
+    let apps = |l: &Launcher| -> Vec<String> {
+        l.catalog_latest().iter().map(|e| e.app.clone()).collect()
+    };
+    assert_eq!(apps(&l), ["paintbox"], "chưa đăng nhập: app riêng tư bị ẩn");
+    assert!(
+        entry(&l, "kho-rieng", "0.1.0").private,
+        "cờ riêng tư đi theo chữ ký TUF"
+    );
+    l.set_private_apps(["kho-rieng".to_owned()].into()).unwrap();
+    assert_eq!(apps(&l), ["kho-rieng", "paintbox"]);
+    // Danh sách được lưu cùng trạng thái, và xóa khi người dùng đăng xuất.
+    let l2 = f.launcher().await;
+    assert_eq!(apps(&l2), ["kho-rieng", "paintbox"]);
+    l.set_private_apps(Default::default()).unwrap();
+    assert_eq!(apps(&l), ["paintbox"]);
 }

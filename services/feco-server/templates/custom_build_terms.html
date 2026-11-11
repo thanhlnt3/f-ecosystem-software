@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("order.tos") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("order.tos") }}</h1>
+<p class="muted">{{ i18n.t("order.tos_version") }} {{ version }}</p>
+<div class="msg info" id="draft-notice">{{ i18n.t("order.tos_draft") }}</div>
+<ol id="terms">
+{% for t in terms %}
+  <li class="review"><strong>{{ t.title }}</strong><p>{{ t.body }}</p></li>
+{% endfor %}
+</ol>
+<div class="links"><a href="/orders">{{ i18n.t("order.title") }}</a></div>
+{% endblock %}

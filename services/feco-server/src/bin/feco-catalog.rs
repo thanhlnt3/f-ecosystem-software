@@ -4,7 +4,23 @@
 use std::process::ExitCode;
 
 use feco_config::Config;
-use feco_server::{catalog, review, store, store_web, AppState};
+use feco_server::{catalog, orders, review, store, store_web, AppState};
+
+fn o_err(e: orders::OrderError) -> String {
+    e.to_string()
+}
+
+async fn subject_by_email(state: &AppState, email: &str) -> Result<uuid::Uuid, String> {
+    state
+        .kratos
+        .list_identities()
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|i| i["traits"]["email"] == email)
+        .and_then(|i| i["id"].as_str().and_then(|s| s.parse().ok()))
+        .ok_or_else(|| "không có người dùng với email này".to_owned())
+}
 
 const USAGE: &str = "\
 feco-catalog: quản trị danh mục F-Store (tạm thời)
@@ -31,6 +47,18 @@ Kiểm duyệt (người duyệt ghi tên bằng FECO_REVIEWER, mặc định ad
 Quyền sử dụng (tạm, tới nhóm 12-13):
   feco-catalog grant <app|client ID> <email> owner|license|subscription <nguồn>
   feco-catalog ungrant <app|client ID> <email> owner|license|subscription
+
+Đơn xây app (đội F-Eco ghi tên bằng FECO_REVIEWER; mã đơn dạng DH-000001):
+  feco-catalog orders [trạng thái]                 danh sách đơn (submitted, quoted, in_progress...)
+  feco-catalog order <mã đơn>                      chi tiết: mốc, yêu cầu thanh toán, tin nhắn, lịch sử
+  feco-catalog order-quote <mã đơn> <quote.json>   gửi báo giá (xem docs/order-quote.example.json)
+  feco-catalog order-paid <payment-request-id> [failed]   kết quả thanh toán (tạm, tới nhóm 13)
+  feco-catalog private <app> <email|none>          đặt app thành app riêng tư của một khách hàng
+  feco-catalog order-deliver <mã đơn> <mốc> <app> <phiên bản> <kết-quả-kiểm-tra.txt> [ghi chú]
+  feco-catalog order-message <mã đơn> <nội dung>
+  feco-catalog order-resolve <mã đơn> continue|full|partial <số tiền>   giải quyết tranh chấp
+  feco-catalog order-handover <mã đơn> <bàn-giao.zip>   gói bàn giao cuối (mã nguồn, spec, tài liệu, build)
+  feco-catalog order-due                           chạy ngay việc theo thời gian (nhắc, tự nghiệm thu)
 ";
 
 #[tokio::main]
@@ -271,6 +299,190 @@ async fn run(args: Vec<String>) -> Result<(), String> {
             } else {
                 println!("không có báo cáo đang mở với id này");
             }
+        }
+        "orders" => {
+            let status = match args.get(1) {
+                Some(s) => Some(orders::Status::parse(s).ok_or("trạng thái không hợp lệ")?),
+                None => None,
+            };
+            for o in orders::list_by_status(&state.db, status)
+                .await
+                .map_err(o_err)?
+            {
+                println!(
+                    "{} {:<12} {} — {} ({})",
+                    o.code,
+                    o.status.as_str(),
+                    o.created_at.date(),
+                    o.title,
+                    o.customer_email
+                );
+            }
+        }
+        "order" => {
+            let o = orders::by_code(&state.db, arg(&args, 1)?)
+                .await
+                .map_err(o_err)?;
+            println!(
+                "{} {} [{}] khách: {}",
+                o.code,
+                o.title,
+                o.status.as_str(),
+                o.customer_email
+            );
+            println!("{}\n", o.description);
+            if let Some(q) = orders::current_quote(&state.db, o.id)
+                .await
+                .map_err(o_err)?
+            {
+                println!("Báo giá {} ({}), tổng {}", q.number, q.status, q.total());
+                for m in &q.milestones {
+                    println!(
+                        "  mốc {} {} — {} [{}] trả={} sửa còn {}/{} build={} {}",
+                        m.position,
+                        m.title,
+                        m.amount_vnd,
+                        m.status,
+                        m.paid,
+                        m.revisions_left(),
+                        m.free_revisions,
+                        m.app_id.as_deref().unwrap_or("-"),
+                        m.app_version.as_deref().unwrap_or("")
+                    );
+                }
+            }
+            for p in orders::payment_requests(&state.db, o.id)
+                .await
+                .map_err(o_err)?
+            {
+                println!(
+                    "  thanh toán {} {} {} [{}] {}",
+                    p.id, p.kind, p.amount_vnd, p.status, p.reason
+                );
+            }
+            for f in orders::files(&state.db, o.id).await.map_err(o_err)? {
+                println!("  tệp {} {} ({} byte)", f.id, f.name, f.size);
+            }
+            for m in orders::messages(&state.db, o.id).await.map_err(o_err)? {
+                println!("  [{}] {} {}: {}", m.at, m.author, m.kind, m.body);
+            }
+            for ev in orders::history(&state.db, o.id).await.map_err(o_err)? {
+                println!(
+                    "  {} {} -> {} bởi {} {}",
+                    ev.at,
+                    ev.from.unwrap_or_default(),
+                    ev.to,
+                    ev.actor,
+                    ev.note
+                );
+            }
+        }
+        "order-quote" => {
+            let o = orders::by_code(&state.db, arg(&args, 1)?)
+                .await
+                .map_err(o_err)?;
+            let json = std::fs::read_to_string(arg(&args, 2)?).map_err(|e| e.to_string())?;
+            let q: orders::QuoteInput =
+                serde_json::from_str(&json).map_err(|e| format!("quote.json không hợp lệ: {e}"))?;
+            orders::create_quote(&state, o.id, &reviewer, &q, time::OffsetDateTime::now_utc())
+                .await
+                .map_err(o_err)?;
+            println!("đã gửi báo giá cho {} và email cho khách hàng", o.code);
+        }
+        "order-paid" => {
+            let id = arg(&args, 1)?
+                .parse()
+                .map_err(|_| "payment-request-id không hợp lệ")?;
+            let ok = args.get(2).map(String::as_str) != Some("failed");
+            orders::payment_settled(&state, id, ok, time::OffsetDateTime::now_utc())
+                .await
+                .map_err(o_err)?;
+            println!("đã ghi nhận kết quả thanh toán");
+        }
+        "private" => {
+            let app = arg(&args, 1)?;
+            let owner = match arg(&args, 2)? {
+                "none" => None,
+                email => Some(subject_by_email(&state, email).await?),
+            };
+            if catalog::set_private(&state.db, &state.catalog, app, owner)
+                .await
+                .map_err(e)?
+            {
+                println!("đã cập nhật");
+            } else {
+                println!("không có app này trong danh mục");
+            }
+        }
+        "order-deliver" => {
+            let o = orders::by_code(&state.db, arg(&args, 1)?)
+                .await
+                .map_err(o_err)?;
+            let position: i32 = arg(&args, 2)?.parse().map_err(|_| "mốc phải là số")?;
+            let d = orders::Delivery {
+                app_id: arg(&args, 3)?.to_owned(),
+                app_version: arg(&args, 4)?.to_owned(),
+                check_report: std::fs::read_to_string(arg(&args, 5)?).map_err(|e| e.to_string())?,
+                notes: args.get(6).cloned().unwrap_or_default(),
+            };
+            orders::deliver(
+                &state,
+                o.id,
+                position,
+                &reviewer,
+                &d,
+                time::OffsetDateTime::now_utc(),
+            )
+            .await
+            .map_err(o_err)?;
+            println!("đã bàn giao mốc {position} của {}", o.code);
+        }
+        "order-message" => {
+            let o = orders::by_code(&state.db, arg(&args, 1)?)
+                .await
+                .map_err(o_err)?;
+            orders::post_message(&state, o.id, Some(&reviewer), &args[2..].join(" "))
+                .await
+                .map_err(o_err)?;
+            println!("đã gửi tin nhắn");
+        }
+        "order-resolve" => {
+            let o = orders::by_code(&state.db, arg(&args, 1)?)
+                .await
+                .map_err(o_err)?;
+            let r = match arg(&args, 2)? {
+                "continue" => orders::Resolution::Continue,
+                "full" => orders::Resolution::FullRefund,
+                "partial" => orders::Resolution::PartialRefund(
+                    arg(&args, 3)?.parse().map_err(|_| "số tiền phải là số")?,
+                ),
+                other => {
+                    return Err(format!(
+                        "kết quả phải là continue, full hoặc partial, không phải {other}"
+                    ))
+                }
+            };
+            orders::resolve_dispute(&state, o.id, &reviewer, r)
+                .await
+                .map_err(o_err)?;
+            println!("đã giải quyết tranh chấp và báo cho khách hàng");
+        }
+        "order-handover" => {
+            let o = orders::by_code(&state.db, arg(&args, 1)?)
+                .await
+                .map_err(o_err)?;
+            let to = orders::handover_path(&state, &o);
+            if let Some(dir) = to.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+            }
+            std::fs::copy(arg(&args, 2)?, &to).map_err(|e| e.to_string())?;
+            println!("đã lưu gói bàn giao cuối của {}", o.code);
+        }
+        "order-due" => {
+            let n = orders::process_due(&state, time::OffsetDateTime::now_utc())
+                .await
+                .map_err(o_err)?;
+            println!("đã tự nghiệm thu {n} mốc");
         }
         other => return Err(format!("lệnh không hợp lệ: {other}\n\n{USAGE}")),
     }

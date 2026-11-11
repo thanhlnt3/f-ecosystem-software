@@ -16,6 +16,9 @@ pub struct CatalogEntry {
     pub sha256: String,
     pub entry: String,
     pub client_id: Option<String>,
+    /// App riêng tư: chỉ hiện khi máy chủ liệt kê cho người dùng đang đăng nhập.
+    #[serde(default)]
+    pub private: bool,
 }
 
 /// Mọi phiên bản đang phát hành cho nền tảng này, xếp theo app rồi phiên bản mới nhất trước.
@@ -38,6 +41,7 @@ pub fn build(state: &SyncState, platform: &str) -> Vec<CatalogEntry> {
                 sha256: t.sha256.clone(),
                 entry: meta.entry.clone()?,
                 client_id: meta.client_id.clone(),
+                private: meta.private,
             })
         })
         .collect();

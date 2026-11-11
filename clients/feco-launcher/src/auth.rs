@@ -373,6 +373,36 @@ impl Auth {
         Ok(body["version"].as_str().map(str::to_owned))
     }
 
+    /// App riêng tư của người dùng (ví dụ bản build bàn giao của đơn xây app).
+    pub async fn private_apps(&self, access: &str) -> Result<Vec<String>, AuthError> {
+        let url = self
+            .server
+            .join("v1/catalog/private")
+            .expect("URL máy chủ hợp lệ");
+        let res = self
+            .http
+            .get(url)
+            .bearer_auth(access)
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        match res.status() {
+            s if s.is_success() => {}
+            reqwest::StatusCode::UNAUTHORIZED => return Err(AuthError::Expired),
+            s => return Err(AuthError::Failed(format!("/v1/catalog/private trả {s}"))),
+        }
+        let body: Value = res
+            .json()
+            .await
+            .map_err(|e| AuthError::Failed(e.to_string()))?;
+        Ok(body["apps"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|a| a["id"].as_str().map(str::to_owned))
+            .collect())
+    }
+
     /// Báo F-Store rằng người dùng đã cài app (điều kiện để đánh giá; spec app-catalog).
     pub async fn record_install(
         &self,

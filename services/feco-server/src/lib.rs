@@ -26,6 +26,8 @@ pub mod kratos;
 pub mod launch;
 pub mod mailer;
 pub mod oauth;
+pub mod orders;
+pub mod orders_web;
 pub mod pairwise;
 pub mod ratelimit;
 
@@ -255,6 +257,24 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(dev_web::version_action),
         )
         .route("/developer/{action}", post(dev_web::account_action))
+        .route(
+            "/orders",
+            get(orders_web::list)
+                .post(orders_web::create)
+                // Tệp đính kèm tối đa 200 MB (orders_web tự đếm và chặn).
+                .layer(axum::extract::DefaultBodyLimit::max(210 * 1024 * 1024)),
+        )
+        .route("/orders/{id}", get(orders_web::show))
+        .route(
+            "/orders/{id}/messages",
+            post(orders_web::post_message)
+                .layer(axum::extract::DefaultBodyLimit::max(60 * 1024 * 1024)),
+        )
+        .route("/orders/{id}/files/{file}", get(orders_web::download_file))
+        .route("/orders/{id}/handover", get(orders_web::handover))
+        .route("/orders/{id}/{action}", post(orders_web::action))
+        .route("/policy/custom-build", get(orders_web::terms))
+        .route("/v1/catalog/private", get(store_web::api_private))
         .route("/store", get(store_web::list))
         .route("/store/{id}", get(store_web::show))
         .route("/store/{id}/reviews", post(store_web::submit_review))

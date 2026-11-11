@@ -53,6 +53,9 @@ pub struct LocalState {
     /// Phiên bản máy chủ cho phép thiết bị này nhận, theo từng app (phát hành dần).
     #[serde(default)]
     pub rollout: BTreeMap<String, String>,
+    /// App riêng tư mà máy chủ cho người dùng đang đăng nhập thấy (`GET /v1/catalog/private`).
+    #[serde(default)]
+    pub private_apps: std::collections::BTreeSet<String>,
 }
 
 impl LocalState {

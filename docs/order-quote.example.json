@@ -1,0 +1,11 @@
+{
+  "scope": "App quản lý kho cho cửa hàng: nhập, xuất, tồn kho, in mã vạch, báo cáo theo tháng. Windows 10 trở lên.",
+  "exclusions": "Đồng bộ với phần mềm kế toán; bản macOS; dữ liệu mẫu ngoài 100 mặt hàng.",
+  "ownership": "Khách hàng sở hữu toàn bộ mã nguồn của app sau khi thanh toán đủ. Thư viện bên thứ ba giữ giấy phép của chúng.",
+  "valid_days": 7,
+  "milestones": [
+    { "title": "Đặt cọc", "deliverable": "Spec chi tiết đã thống nhất", "amount_vnd": 9000000, "days": 7 },
+    { "title": "Bản chạy thử", "deliverable": "Nhập, xuất, tồn kho chạy được qua F-Launcher", "amount_vnd": 12000000, "days": 30, "free_revisions": 2 },
+    { "title": "Bản hoàn chỉnh", "deliverable": "In mã vạch, báo cáo, tài liệu hướng dẫn", "amount_vnd": 9000000, "days": 45 }
+  ]
+}

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ code }}{% endblock %}
+{% block content %}
+<p><a href="/orders">← {{ i18n.t("order.title") }}</a></p>
+<h1>{{ title }} <span class="muted" id="order-code">{{ code }}</span></h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status" style="white-space:pre-line">{{ m.text }}</div>{% endfor %}
+<div class="facts">
+  <span class="muted">{{ i18n.t("order.status") }}</span><strong id="order-status" data-status="{{ status_code }}">{{ status }}</strong>
+  <span class="muted">{{ i18n.t("order.platforms") }}</span><span>{{ platforms }}</span>
+  {% if !wanted_by.is_empty() %}<span class="muted">{{ i18n.t("order.wanted_by") }}</span><span>{{ wanted_by }}</span>{% endif %}
+  {% if !budget.is_empty() %}<span class="muted">{{ i18n.t("order.budget") }}</span><span>{{ budget }}</span>{% endif %}
+  {% if !quote_due.is_empty() %}<span class="muted">{{ i18n.t("order.quote_due") }}</span><span id="quote-due">{{ quote_due }}</span>{% endif %}
+  {% if !tos_version.is_empty() %}<span class="muted">{{ i18n.t("order.tos") }}</span><span><a href="/policy/custom-build">{{ tos_version }}</a></span>{% endif %}
+</div>
+<p style="white-space:pre-line">{{ description }}</p>
+{% if !files.is_empty() %}
+<ul id="request-files">{% for f in files %}<li><a href="/orders/{{ id }}/files/{{ f.id }}">{{ f.name }}</a> <span class="muted">{{ f.size }}</span></li>{% endfor %}</ul>
+{% endif %}
+
+{% match quote %}{% when Some with (q) %}
+<h2>{{ i18n.t("order.quote") }} {{ q.number }}</h2>
+<div id="quote" data-expired="{{ q.expired }}">
+<div class="facts">
+  <span class="muted">{{ i18n.t("order.total") }}</span><strong id="quote-total">{{ q.total }}</strong>
+  <span class="muted">{{ i18n.t("order.deposit") }}</span><span>{{ q.deposit }}</span>
+  <span class="muted">{{ i18n.t("order.valid_until") }}</span><span>{{ q.valid_until }}</span>
+</div>
+<h3>{{ i18n.t("order.scope") }}</h3><p style="white-space:pre-line">{{ q.scope }}</p>
+<h3>{{ i18n.t("order.exclusions") }}</h3><p style="white-space:pre-line">{{ q.exclusions }}</p>
+<h3>{{ i18n.t("order.ownership") }}</h3><p style="white-space:pre-line" id="ownership">{{ q.ownership }}</p>
+<table id="milestones">
+{% for m in q.milestones %}
+<tr class="milestone" data-position="{{ m.position }}"><td>
+  <strong>{{ i18n.t("order.milestone") }} {{ m.position }}: {{ m.title }}</strong> · {{ m.amount }} · <span class="ms-status">{{ m.status }}</span>{% if m.paid %} · {{ i18n.t("order.paid") }}{% endif %}<br>
+  <span class="muted">{{ m.deliverable }}</span><br>
+  <span class="muted">{{ m.days }} {{ i18n.t("order.days") }}{% if !m.due.is_empty() %} · {{ i18n.t("order.due") }} {{ m.due }}{% endif %} · <span class="revisions-left">{{ m.revisions_left }}</span>/{{ m.free_revisions }} {{ i18n.t("order.revisions") }}</span>
+  {% if !m.build.is_empty() %}
+  <div class="review">
+    <div>{{ i18n.t("order.build") }}: <code class="build">{{ m.build }}</code> · {{ m.delivered }}</div>
+    <p class="muted">{{ i18n.t("order.build_note") }}</p>
+    {% if !m.notes.is_empty() %}<p style="white-space:pre-line">{{ m.notes }}</p>{% endif %}
+    <details><summary>{{ i18n.t("order.checks") }}</summary><pre style="white-space:pre-wrap">{{ m.check_report }}</pre></details>
+  </div>
+  {% endif %}
+  {% if m.can_review %}
+  <form method="post" action="/orders/{{ id }}/accept-milestone" class="accept-milestone">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="hidden" name="milestone" value="{{ m.position }}">
+    <button type="submit">{{ i18n.t("order.accept_milestone") }}</button>
+  </form>
+  <details><summary>{{ i18n.t("order.revise") }}</summary>
+  <form method="post" action="/orders/{{ id }}/revise" class="revise">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="hidden" name="milestone" value="{{ m.position }}">
+    <textarea name="note" maxlength="10000" required placeholder="{{ i18n.t("order.revise_note") }}"></textarea>
+    <button type="submit" class="secondary">{{ i18n.t("order.revise") }}</button>
+  </form></details>
+  {% endif %}
+  {% if m.can_dispute %}
+  <details><summary>{{ i18n.t("order.dispute") }}</summary>
+  <form method="post" action="/orders/{{ id }}/dispute" class="dispute">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="hidden" name="milestone" value="{{ m.position }}">
+    <textarea name="note" maxlength="10000" required placeholder="{{ i18n.t("order.dispute_note") }}"></textarea>
+    <button type="submit" class="secondary">{{ i18n.t("order.dispute") }}</button>
+  </form></details>
+  {% endif %}
+</td></tr>
+{% endfor %}
+</table>
+{% if q.open %}
+<form method="post" action="/orders/{{ id }}/accept-quote" id="accept-quote">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <button type="submit" {% if q.expired %}disabled{% endif %}>{{ i18n.t("order.accept_quote") }}</button>
+</form>
+{% if q.expired %}<p class="muted" id="quote-expired">{{ i18n.t("order.quote_expired") }}</p>{% endif %}
+{% endif %}
+</div>
+{% when None %}{% endmatch %}
+
+{% if can_adjust %}
+<form method="post" action="/orders/{{ id }}/adjust" id="adjust">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  {% if quote_expired %}
+  <input type="hidden" name="note" value="">
+  <button type="submit" class="secondary" id="requote">{{ i18n.t("order.requote") }}</button>
+  {% else %}
+  <label for="adjust-note">{{ i18n.t("order.adjust") }}</label>
+  <textarea name="note" id="adjust-note" maxlength="10000" required></textarea>
+  <button type="submit" class="secondary">{{ i18n.t("order.adjust") }}</button>
+  {% endif %}
+</form>
+{% endif %}
+
+{% if !payments.is_empty() %}
+<h2>{{ i18n.t("order.payments") }}</h2>
+<table id="payments">
+{% for p in payments %}<tr class="payment"><td>{{ p.kind }}</td><td>{{ p.reason }}</td><td class="amount">{{ p.amount }}</td><td>{{ p.status }}</td></tr>{% endfor %}
+</table>
+<p class="muted">{{ i18n.t("order.payments_note") }}</p>
+{% endif %}
+
+<h2>{{ i18n.t("order.handover") }}</h2>
+{% if handover_ready %}
+<p><a href="/orders/{{ id }}/handover" id="handover">{{ i18n.t("order.download_handover") }}</a></p>
+{% else %}
+<p class="muted" id="handover-locked">{{ i18n.t("order.handover_locked") }}</p>
+{% endif %}
+
+<h2 id="thread">{{ i18n.t("order.messages") }}</h2>
+{% for m in thread %}
+<div class="review message{% if m.team %} reply{% endif %}">
+  <div><strong>{{ m.author }}</strong>{% if !m.kind.is_empty() %} · {{ m.kind }}{% endif %} · <span class="muted">{{ m.at }}</span></div>
+  <p style="white-space:pre-line">{{ m.body }}</p>
+  {% for f in m.files %}<div><a href="/orders/{{ id }}/files/{{ f.id }}">{{ f.name }}</a> <span class="muted">{{ f.size }}</span></div>{% endfor %}
+</div>
+{% endfor %}
+<form method="post" action="/orders/{{ id }}/messages" enctype="multipart/form-data" id="message-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <textarea name="body" maxlength="10000" required></textarea>
+  <input type="file" name="files" multiple>
+  <button type="submit" class="secondary">{{ i18n.t("order.send") }}</button>
+</form>
+
+<h2>{{ i18n.t("order.history") }}</h2>
+<table id="history">
+{% for e in history %}<tr class="event"><td class="muted">{{ e.at }}</td><td>{% if !e.from.is_empty() %}{{ e.from }} → {% endif %}<span class="to">{{ e.to }}</span></td><td>{{ e.actor }}</td><td class="muted">{{ e.note }}</td></tr>{% endfor %}
+</table>
+
+{% if can_cancel %}
+<details><summary>{{ i18n.t("order.cancel") }}</summary>
+<form method="post" action="/orders/{{ id }}/cancel" id="cancel">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <p class="muted">{{ i18n.t("order.cancel_note") }}</p>
+  <textarea name="note" maxlength="2000" placeholder="{{ i18n.t("order.cancel_reason") }}"></textarea>
+  <button type="submit" class="danger">{{ i18n.t("order.cancel") }}</button>
+</form></details>
+{% endif %}
+{% endblock %}

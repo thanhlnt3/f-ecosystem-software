@@ -242,8 +242,10 @@ type ReportRow = (
 const APP_COLUMNS: &str = "a.id, a.client_id, a.name, a.developer, a.developer_verified, \
      a.first_party, a.summary, a.category, a.price_vnd, a.updated_at";
 
-/// Điều kiện "đang hiện trong danh mục".
-const VISIBLE: &str = "a.status = 'listed' AND EXISTS (SELECT 1 FROM catalog_versions v \
+/// Điều kiện "đang hiện trong danh mục". App riêng tư (bản build bàn giao của đơn xây app, spec
+/// custom-build-orders) không hiện công khai: chỉ khách hàng của đơn thấy qua [`private_for`].
+const VISIBLE: &str =
+    "a.status = 'listed' AND a.private_to IS NULL AND EXISTS (SELECT 1 FROM catalog_versions v \
      WHERE v.app_id = a.id AND v.status = 'released')";
 
 async fn decorate(db: &Db, rows: Vec<AppRow>) -> sqlx::Result<Vec<Listing>> {
@@ -489,6 +491,36 @@ pub async fn remove_app(db: &Db, cache: &Cache, app: &str, reason: &str) -> sqlx
 }
 
 /// Ghi nhận người dùng đã cài app (launcher báo sau khi cài).
+/// App riêng tư của một người dùng (đã phát hành ít nhất một phiên bản).
+pub async fn private_for(db: &Db, subject: Uuid) -> sqlx::Result<Vec<Listing>> {
+    let rows: Vec<AppRow> = sqlx::query_as(&format!(
+        "SELECT {APP_COLUMNS} FROM catalog_apps a WHERE a.private_to = $1 AND a.status = 'listed'
+           AND EXISTS (SELECT 1 FROM catalog_versions v WHERE v.app_id = a.id AND v.status = 'released')
+         ORDER BY a.name"
+    ))
+    .bind(subject)
+    .fetch_all(db)
+    .await?;
+    decorate(db, rows).await
+}
+
+/// Đặt (hoặc bỏ, với `None`) người dùng duy nhất thấy một app trong danh mục.
+pub async fn set_private(
+    db: &Db,
+    cache: &Cache,
+    app: &str,
+    owner: Option<Uuid>,
+) -> sqlx::Result<bool> {
+    let n = sqlx::query("UPDATE catalog_apps SET private_to = $2 WHERE id = $1")
+        .bind(app)
+        .bind(owner)
+        .execute(db)
+        .await?
+        .rows_affected();
+    cache.clear();
+    Ok(n > 0)
+}
+
 pub async fn record_install(
     db: &Db,
     subject: Uuid,

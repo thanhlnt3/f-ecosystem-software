@@ -101,6 +101,14 @@ fn spawn_background_jobs(state: Arc<AppState>) {
                 Ok(n) => tracing::info!(deleted = n, "đã xóa tài khoản hết hạn chờ"),
                 Err(e) => tracing::error!(error = %e, "không dọn được tài khoản chờ xóa"),
             }
+            // Đơn xây app: nhắc nghiệm thu sau 7 ngày, tự nghiệm thu sau 14 ngày.
+            match feco_server::orders::process_due(&state, time::OffsetDateTime::now_utc()).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!(accepted = n, "đã tự nghiệm thu mốc quá 14 ngày"),
+                Err(e) => {
+                    tracing::error!(error = %e, "không chạy được việc theo thời gian của đơn hàng")
+                }
+            }
             if let Err(e) = store::purge_old_access_log(&state.db).await {
                 tracing::error!(error = %e, "không dọn được nhật ký truy cập cũ");
             }

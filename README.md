@@ -15,7 +15,9 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 > - Kiểm duyệt: hàng đợi kiểm tra tự động (quét mã độc bằng engine chữ ký của F-Eco và ClamAV, chữ ký mã, kiến trúc, packer), quy tắc duyệt thủ công hay tự động, chính sách nội dung (`/policy/content`), từ chối kèm điều khoản và cách sửa, kháng nghị, gỡ khẩn cấp, quét lại 7 ngày.
 > - F-SDK cho Rust, C (ABI ổn định), Python và TypeScript/Node.js: đăng nhập bằng mã khởi chạy của launcher hoặc qua trình duyệt (PKCE), tự làm mới token, `/v1/me`, kiểm tra quyền sử dụng (`/v1/entitlements`), báo lỗi khi chạy, kiểm chữ ký webhook. App dùng thư viện OIDC chuẩn không cần F-SDK. Mã lỗi thống nhất, liệt kê ở `/developer/docs`.
 >
-> Chưa có: bảng quản trị (người duyệt tạm dùng công cụ `feco-catalog`), máy ảo chạy thử app, môi trường sandbox, F-Builder, đơn hàng, thanh toán. Chưa dùng được cho người dùng cuối.
+> - Đơn xây app theo yêu cầu (`/orders`): gửi yêu cầu kèm tệp (tối đa 200 MB) và chấp nhận Điều khoản dịch vụ xây app (bản nháp), báo giá theo mốc (đặt cọc ≤ 30%, hạn 7 ngày, đề nghị điều chỉnh), bàn giao từng mốc dưới dạng app riêng tư trong F-Launcher, nghiệm thu, lượt sửa miễn phí, tự nghiệm thu sau 14 ngày, tin nhắn kèm tệp, hủy đơn, tranh chấp, tải bàn giao cuối khi đã trả đủ.
+>
+> Chưa có: bảng quản trị (người duyệt và đội F-Eco tạm dùng công cụ `feco-catalog`), máy ảo chạy thử app, môi trường sandbox, thanh toán (đơn hàng tạo yêu cầu thanh toán, tạm đánh dấu đã trả bằng `feco-catalog order-paid`). Chưa dùng được cho người dùng cuối.
 
 ## Mục lục
 
@@ -28,7 +30,8 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
   - [6. Dùng thử F-Launcher](#6-dùng-thử-f-launcher)
   - [7. Dùng thử cổng nhà phát triển](#7-dùng-thử-cổng-nhà-phát-triển)
   - [8. Viết app con bằng F-SDK](#8-viết-app-con-bằng-f-sdk)
-  - [9. Dừng và xóa dữ liệu](#9-dừng-và-xóa-dữ-liệu)
+  - [9. Dùng thử đơn xây app](#9-dùng-thử-đơn-xây-app)
+  - [10. Dừng và xóa dữ liệu](#10-dừng-và-xóa-dữ-liệu)
 - [Địa chỉ các dịch vụ](#địa-chỉ-các-dịch-vụ)
 - [Cấu hình](#cấu-hình)
 - [Kiểm thử](#kiểm-thử)
@@ -331,14 +334,42 @@ triển, lưu khóa ký (hiện một lần) và kiểm chữ ký bằng `fsdk::
 của bản Python, `verifyWebhook` của bản TypeScript). Danh sách mã lỗi và chính sách phiên bản API:
 http://127.0.0.1:8080/developer/docs.
 
-Cho tới khi có đơn xây app và thanh toán (nhóm 12–13), cấp quyền sử dụng bằng tay:
+Bàn giao mốc của đơn xây app (bước 9) tự cấp quyền `license` cho khách. Cho tới khi có thanh toán (nhóm 13), các quyền khác cấp bằng tay:
 
 ```bash
 cargo run -p feco-server --bin feco-catalog -- grant <app hoặc client ID> <email> owner custom-build:<mã đơn>
 cargo run -p feco-server --bin feco-catalog -- ungrant <app hoặc client ID> <email> owner
 ```
 
-### 9. Dừng và xóa dữ liệu
+### 9. Dùng thử đơn xây app
+
+1. Đăng nhập bằng tài khoản đã xác minh email, mở http://127.0.0.1:8080/orders (hoặc liên kết "Đơn xây app" ở trang chủ). Điền yêu cầu, đính kèm spec (tổng tối đa 200 MB), đọc và chấp nhận Điều khoản dịch vụ xây app (http://127.0.0.1:8080/policy/custom-build), bấm **Gửi yêu cầu**. Mailpit nhận email xác nhận kèm mã đơn (`DH-000001`), người nhận trong `FECO_ADMIN_EMAILS` nhận việc báo giá.
+2. Đóng vai đội F-Eco bằng `feco-catalog` (tên người làm lấy từ `FECO_REVIEWER`):
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- orders submitted                 # đơn chờ báo giá
+   cargo run -p feco-server --bin feco-catalog -- order-quote DH-000001 docs/order-quote.example.json
+   ```
+
+3. Trên trang đơn, xem báo giá (phạm vi, không bao gồm, quyền sở hữu mã nguồn, các mốc), bấm **Chấp nhận báo giá** hoặc **Đề nghị điều chỉnh**. Chấp nhận tạo yêu cầu thanh toán tiền đặt cọc. Chưa có cổng thanh toán (nhóm 13), nên đánh dấu đã trả bằng tay:
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- order DH-000001                  # xem mã yêu cầu thanh toán
+   cargo run -p feco-server --bin feco-catalog -- order-paid <payment-request-id>
+   ```
+
+4. Bàn giao một mốc: bản build là một app trong danh mục, đặt riêng tư cho khách **trước** khi phát hành (bước 6 và 7), rồi bàn giao kèm kết quả kiểm tra. App chỉ hiện trong F-Launcher của khách hàng đó.
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- private <app> <email khách>
+   cargo run -p feco-server --bin feco-catalog -- order-deliver DH-000001 1 <app> <phiên bản> ket-qua-kiem-tra.txt "Ghi chú thay đổi"
+   cargo run -p feco-server --bin feco-catalog -- order-message DH-000001 "Chị nhập kho theo lô hay theo từng món?"
+   ```
+
+5. Khách **Nghiệm thu mốc này**, **Yêu cầu sửa** (trừ lượt sửa miễn phí) hoặc **Mở tranh chấp** trên trang đơn. Quá 7 ngày không phản hồi thì nền tảng nhắc, 14 ngày thì tự nghiệm thu (máy chủ chạy việc này mỗi giờ; `feco-catalog order-due` chạy ngay). Tranh chấp được giải quyết bằng `order-resolve DH-000001 continue|full|partial <số tiền>`.
+6. Khi đơn Hoàn tất và đã trả đủ, đặt gói bàn giao cuối để khách tải về: `feco-catalog order-handover DH-000001 ban-giao.zip`.
+
+### 10. Dừng và xóa dữ liệu
 
 - Dừng `feco-server` và app mẫu bằng `Ctrl+C`.
 - Cách A: `docker compose -f infra/docker-compose.yml down`. Lệnh này dừng và xóa mọi dữ liệu dev, vì compose không dùng volume.
@@ -416,7 +447,7 @@ cargo run -p feco-license-check                 # license dịch vụ và ảnh 
 npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
 ```
 
-**Kiểm thử đầu-cuối** chạy với Kratos, Hydra, PostgreSQL và Mailpit thật, theo từng tình huống trong spec (đăng ký, xác minh, chống dò mật khẩu, TOTP, thiết bị, xóa tài khoản, khôi phục, đồng ý theo scope, pairwise, thu hồi, webhook, xuất dữ liệu). Cần hạ tầng ở bước 2 đang chạy, và cổng 8080 phải trống (dừng `feco-server` trước):
+**Kiểm thử đầu-cuối** chạy với Kratos, Hydra, PostgreSQL và Mailpit thật, theo từng tình huống trong spec (đăng ký, xác minh, chống dò mật khẩu, TOTP, thiết bị, xóa tài khoản, khôi phục, đồng ý theo scope, pairwise, thu hồi, webhook, xuất dữ liệu, danh mục, cổng nhà phát triển, kiểm duyệt, F-SDK, đơn xây app với thời gian mô phỏng). Cần hạ tầng ở bước 2 đang chạy, và cổng 8080 phải trống (dừng `feco-server` trước):
 
 ```bash
 FECO_E2E=1 cargo test -p feco-server --test e2e_auth
@@ -477,7 +508,7 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `crates/feco-config` | Đọc và kiểm tra cấu hình lúc khởi động |
 | `crates/feco-manifest` | Lược đồ và trình kiểm tra `f-app.toml` (dùng chung cho cổng, CLI và kiểm duyệt) |
 | `crates/feco-tuf` | Kho TUF (dựng, ký, thu hồi, xoay khóa) và client xác minh cho launcher; công cụ `feco-tuf` |
-| `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu, F-Store; công cụ `feco-catalog`; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
+| `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu, F-Store, đơn xây app (`/orders`); công cụ `feco-catalog`; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
 | `clients/f-builder` | F-Builder: công cụ tự xây app bằng coding agent, phát triển từ Craft Anything 0.6.0 (Cargo workspace riêng; xem `clients/f-builder/README.md` và `NOTICE`) |
 | `clients/feco-launcher` | F-Launcher: thư viện (đăng nhập, cài/cập nhật/gỡ qua TUF, mã khởi chạy, API cục bộ) và giao diện egui |
 | `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me`; khi được launcher mở thì đăng nhập bằng mã khởi chạy |

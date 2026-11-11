@@ -3824,3 +3824,739 @@ async fn standard_oidc_library_integration() {
     );
     assert_ne!(me_body["sub"], subject_of(&email).await.to_string());
 }
+
+// ---------- Đơn xây app theo yêu cầu (tasks.md 12.1–12.5) ----------
+
+/// Gửi yêu cầu xây app qua biểu mẫu multipart; trả (mã HTTP, trang cuối, địa chỉ cuối).
+async fn send_order_request(
+    c: &reqwest::Client,
+    title: &str,
+    accept_tos: bool,
+    files: Vec<(&str, reqwest::Body)>,
+) -> (u16, String, String) {
+    let csrf = csrf_of(&get(c, "/orders").await);
+    let mut form = reqwest::multipart::Form::new()
+        .text("feco_csrf", csrf)
+        .text("title", title.to_owned())
+        .text(
+            "description",
+            "Quản lý nhập, xuất, tồn kho; in mã vạch; báo cáo theo tháng.",
+        )
+        .text("platform", "windows")
+        .text("wanted_by", "2027-03-31")
+        .text("budget_vnd", "30.000.000");
+    if accept_tos {
+        form = form.text("accept_tos", "on");
+    }
+    for (name, body) in files {
+        form = form.part(
+            "files",
+            reqwest::multipart::Part::stream(body).file_name(name.to_owned()),
+        );
+    }
+    let res = c
+        .post(format!("{BASE}/orders"))
+        .multipart(form)
+        .send()
+        .await
+        .unwrap();
+    let status = res.status().as_u16();
+    let url = res.url().to_string();
+    (status, res.text().await.unwrap(), url)
+}
+
+fn order_id_of(url: &str) -> uuid::Uuid {
+    Regex::new(r"/orders/([0-9a-f-]{36})")
+        .unwrap()
+        .captures(url)
+        .unwrap_or_else(|| panic!("không phải trang đơn: {url}"))[1]
+        .parse()
+        .unwrap()
+}
+
+fn three_milestones(valid_days: Option<i64>) -> feco_server::orders::QuoteInput {
+    let m = |title: &str, amount: i64, days: i32| feco_server::orders::MilestoneInput {
+        title: title.into(),
+        deliverable: format!("Sản phẩm của {title}"),
+        amount_vnd: amount,
+        days,
+        free_revisions: None,
+    };
+    feco_server::orders::QuoteInput {
+        scope: "Nhập, xuất, tồn kho, in mã vạch, báo cáo.".into(),
+        exclusions: "Đồng bộ phần mềm kế toán.".into(),
+        ownership: "Khách hàng sở hữu toàn bộ mã nguồn sau khi thanh toán đủ.".into(),
+        valid_days,
+        milestones: vec![
+            m("Đặt cọc", 9_000_000, 7),
+            m("Bản chạy thử", 12_000_000, 30),
+            m("Bản hoàn chỉnh", 9_000_000, 45),
+        ],
+    }
+}
+
+async fn pending_charge(
+    db: &feco_server::store::Db,
+    order: uuid::Uuid,
+) -> (uuid::Uuid, i64, String) {
+    sqlx::query_as(
+        "SELECT id, amount_vnd, reason FROM payment_requests
+         WHERE order_id = $1 AND kind = 'charge' AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(order)
+    .fetch_one(db)
+    .await
+    .expect("có yêu cầu thanh toán đang chờ")
+}
+
+fn delivery(app: &str, version: &str) -> feco_server::orders::Delivery {
+    feco_server::orders::Delivery {
+        app_id: app.into(),
+        app_version: version.into(),
+        notes: format!("Bản {version}"),
+        check_report: "Nhập kho: đạt\nXuất kho: đạt".into(),
+    }
+}
+
+/// Spec custom-build-orders: gửi yêu cầu (tệp, giới hạn 200 MB, Điều khoản dịch vụ), máy trạng
+/// thái và lịch sử, báo giá theo mốc (đặt cọc, hết hạn, thương lượng), đặt cọc, bàn giao dạng app
+/// riêng tư, lượt sửa, nhắc sau 7 ngày và tự nghiệm thu sau 14 ngày (thời gian mô phỏng), tin nhắn,
+/// tranh chấp, bàn giao cuối chỉ khi trả đủ, hủy đơn.
+#[tokio::test]
+async fn custom_build_order_end_to_end() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::orders::{self, Resolution, Status};
+    use time::{Duration as Days, OffsetDateTime};
+    let state = local_state();
+    let db = state.db.clone();
+
+    // Khách hàng chưa xác minh email: không gửi được yêu cầu.
+    let (email, password) = unique("khach-xay-app");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Chị Hoa").await;
+    let page = get(&user, "/orders").await;
+    assert!(
+        page.contains("Hãy xác minh email trước khi gửi yêu cầu."),
+        "{page}"
+    );
+    verify_email(&user, &email).await;
+    let customer = subject_of(&email).await;
+
+    // Chưa chấp nhận Điều khoản dịch vụ: bị từ chối.
+    let (status, page, _) = send_order_request(&user, "Thiếu điều khoản", false, vec![]).await;
+    assert_eq!(status, 400, "{page}");
+    assert!(
+        page.contains("Bạn cần chấp nhận Điều khoản dịch vụ xây app"),
+        "{page}"
+    );
+
+    // Scenario "Tệp quá lớn": tổng vượt 200 MB thì bị từ chối, không tạo đơn.
+    let big = vec![0u8; 201 * 1024 * 1024];
+    let (status, page, _) = send_order_request(
+        &user,
+        "Tệp quá lớn",
+        true,
+        vec![("video.mp4", reqwest::Body::from(big))],
+    )
+    .await;
+    assert_eq!(status, 413, "{page}");
+    assert!(page.contains("vượt giới hạn 200 MB"), "{page}");
+    assert!(
+        orders::list_for(&db, customer).await.unwrap().is_empty(),
+        "không tạo đơn khi tệp quá lớn"
+    );
+
+    // Scenario "Gửi yêu cầu": đơn "Đã gửi", email xác nhận kèm mã đơn, đội F-Eco có việc báo giá.
+    let spec = b"%PDF-1.4 spec kho".to_vec();
+    let (status, page, url) = send_order_request(
+        &user,
+        "App quản lý kho cho cửa hàng",
+        true,
+        vec![("spec-kho.pdf", reqwest::Body::from(spec.clone()))],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    let id = order_id_of(&url);
+    assert!(page.contains(r#"data-status="submitted""#), "{page}");
+    assert!(page.contains("spec-kho.pdf"), "{page}");
+    let order = orders::get(&db, id).await.unwrap();
+    assert_eq!(order.tos_version.as_deref(), Some(orders::TOS_VERSION));
+    let mail = wait_mail(&email, &format!("Đã nhận yêu cầu {}", order.code)).await;
+    assert!(
+        mail.contains(&order.code) && mail.contains("3 ngày làm việc"),
+        "{mail}"
+    );
+    wait_mail(ADMIN_EMAIL, &format!("Đơn {} cần báo giá", order.code)).await;
+    // Tệp đính kèm tải lại được, và chỉ chủ đơn thấy đơn.
+    let file_id = orders::files(&db, id).await.unwrap()[0].id;
+    let bytes = user
+        .get(format!("{BASE}/orders/{id}/files/{file_id}"))
+        .send()
+        .await
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    assert_eq!(bytes.as_ref(), spec.as_slice());
+    let (other_email, other_password) = unique("nguoi-khac");
+    let other = app_browser();
+    register_in(&other, &other_email, &other_password, "Người khác").await;
+    let res = other
+        .get(format!("{BASE}/orders/{id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 404);
+
+    // Scenario "Chuyển trạng thái không hợp lệ".
+    let mut conn = db.acquire().await.unwrap();
+    let err = orders::transition(&mut conn, id, Status::Completed, orders::SYSTEM_ACTOR, "")
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("invalid_transition"), "{err}");
+    drop(conn);
+    assert_eq!(
+        orders::get(&db, id).await.unwrap().status,
+        Status::Submitted
+    );
+
+    // Báo giá đặt cọc quá 30% bị từ chối.
+    let mut greedy = three_milestones(None);
+    greedy.milestones[0].amount_vnd = 10_000_000;
+    greedy.milestones[2].amount_vnd = 8_000_000;
+    assert!(
+        orders::create_quote(&state, id, "Lan", &greedy, OffsetDateTime::now_utc())
+            .await
+            .is_err()
+    );
+
+    // Scenario "Báo giá hết hạn": nút Chấp nhận bị vô hiệu, có nút "Yêu cầu báo giá lại".
+    let past = OffsetDateTime::now_utc() - Days::days(8);
+    orders::create_quote(&state, id, "Lan", &three_milestones(None), past)
+        .await
+        .unwrap();
+    wait_mail(&email, &format!("Báo giá cho đơn {}", order.code)).await;
+    let page = get(&user, &format!("/orders/{id}")).await;
+    assert!(
+        page.contains("Khách hàng sở hữu toàn bộ mã nguồn"),
+        "quyền sở hữu hiện trước khi chấp nhận"
+    );
+    assert!(
+        page.contains(r#"<button type="submit" disabled>Chấp nhận báo giá</button>"#),
+        "{page}"
+    );
+    assert!(page.contains("Yêu cầu báo giá lại"), "{page}");
+    let (status, page) = post(
+        &user,
+        &format!("/orders/{id}/accept-quote"),
+        &csrf_of(&page),
+        &[],
+    )
+    .await;
+    assert_eq!(status, 409, "{page}");
+    assert!(page.contains("Báo giá đã hết hạn"), "{page}");
+
+    // Scenario "Thương lượng": đơn vẫn "Đã báo giá", đội F-Eco nhận đề nghị.
+    let page = get(&user, &format!("/orders/{id}")).await;
+    let (_, page) = post(
+        &user,
+        &format!("/orders/{id}/adjust"),
+        &csrf_of(&page),
+        &[("note", "Xin giãn mốc 2 thêm 10 ngày")],
+    )
+    .await;
+    assert!(page.contains(r#"data-status="quoted""#), "{page}");
+    assert!(page.contains("Xin giãn mốc 2 thêm 10 ngày"), "{page}");
+    wait_mail(
+        ADMIN_EMAIL,
+        &format!("Đơn {} đề nghị điều chỉnh", order.code),
+    )
+    .await;
+
+    // Scenario "Khách chấp nhận báo giá": báo giá mới 9 + 12 + 9 triệu → yêu cầu thanh toán 9 triệu.
+    orders::create_quote(
+        &state,
+        id,
+        "Lan",
+        &three_milestones(None),
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    let page = get(&user, &format!("/orders/{id}")).await;
+    assert!(
+        page.contains("Báo giá số 2") && page.contains("30.000.000 ₫"),
+        "{page}"
+    );
+    // Chưa trả đủ: bàn giao cuối bị khóa.
+    let res = user
+        .get(format!("{BASE}/orders/{id}/handover"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 403);
+    let (_, page) = post(
+        &user,
+        &format!("/orders/{id}/accept-quote"),
+        &csrf_of(&page),
+        &[],
+    )
+    .await;
+    assert!(
+        page.contains("Yêu cầu thanh toán tiền đặt cọc đã được tạo"),
+        "{page}"
+    );
+    let (deposit, amount, _) = pending_charge(&db, id).await;
+    assert_eq!(amount, 9_000_000);
+    assert_eq!(
+        orders::get(&db, id).await.unwrap().status,
+        Status::Quoted,
+        "chỉ bắt đầu khi đặt cọc thành công"
+    );
+
+    // Scenario "Đặt cọc thành công": "Đang thực hiện", email kèm lịch các mốc tính từ hôm nay.
+    let start = OffsetDateTime::now_utc();
+    orders::payment_settled(&state, deposit, true, start)
+        .await
+        .unwrap();
+    let o = orders::get(&db, id).await.unwrap();
+    assert_eq!(o.status, Status::InProgress);
+    let mail = wait_mail(&email, &format!("Đơn {} bắt đầu thực hiện", order.code)).await;
+    assert!(mail.contains("Mốc 3: Bản hoàn chỉnh"), "{mail}");
+    let q = orders::current_quote(&db, id).await.unwrap().unwrap();
+    assert_eq!(
+        q.milestones[1].due_at.unwrap().date(),
+        (start + Days::days(30)).date()
+    );
+
+    // App riêng tư: không hiện công khai, chỉ khách hàng của đơn thấy qua launcher.
+    let app = format!("kho-{}", &id.simple().to_string()[..8]);
+    let client_id = uuid::Uuid::new_v4().to_string();
+    feco_server::catalog::upsert_app(
+        &db,
+        &state.catalog,
+        &catalog_app(&app, &client_id, "Kho Cửa Hàng"),
+    )
+    .await
+    .unwrap();
+    // Đặt riêng tư trước khi phát hành, để app không hiện công khai lúc nào.
+    feco_server::catalog::set_private(&db, &state.catalog, &app, Some(customer))
+        .await
+        .unwrap();
+    for v in ["0.1.0", "0.2.0", "0.2.1", "0.2.2", "1.0.0"] {
+        feco_server::catalog::release_version(
+            &db,
+            &state.catalog,
+            &app,
+            &version(v, "windows-x64"),
+        )
+        .await
+        .unwrap();
+    }
+    assert!(
+        !catalog_ids("q=Kho").await.contains(&app),
+        "app riêng tư không hiện công khai"
+    );
+    let launcher = LAUNCHER.get().unwrap().clone();
+    let a = authorize(&user, &launcher, "openid offline_access profile").await;
+    let token = exchange(&launcher, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let private: Value = reqwest::Client::new()
+        .get(format!("{BASE}/v1/catalog/private"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(
+        private["apps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["id"] == app.as_str()),
+        "{private}"
+    );
+    assert!(
+        feco_server::catalog::private_for(&db, subject_of(&other_email).await)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    // Mốc 1: bàn giao (bản build qua launcher, ghi chú, kết quả kiểm tra) rồi khách nghiệm thu
+    // → yêu cầu thanh toán mốc 2.
+    assert!(
+        orders::deliver(&state, id, 1, "Lan", &delivery(&app, "9.9.9"), start)
+            .await
+            .is_err(),
+        "bản chưa phát hành"
+    );
+    orders::deliver(&state, id, 1, "Lan", &delivery(&app, "0.1.0"), start)
+        .await
+        .unwrap();
+    assert!(feco_server::entitlements::active(&db, &client_id, customer)
+        .await
+        .unwrap()
+        .iter()
+        .any(|e| e.kind == "license"));
+    let page = get(&user, &format!("/orders/{id}")).await;
+    assert!(
+        page.contains(r#"data-status="delivered""#) && page.contains(&format!("{app} 0.1.0")),
+        "{page}"
+    );
+    assert!(page.contains("Nhập kho: đạt"), "{page}");
+    let (_, page) = post(
+        &user,
+        &format!("/orders/{id}/accept-milestone"),
+        &csrf_of(&page),
+        &[("milestone", "1")],
+    )
+    .await;
+    assert!(page.contains(r#"data-status="in_progress""#), "{page}");
+    let (m2, amount, _) = pending_charge(&db, id).await;
+    assert_eq!(
+        amount, 12_000_000,
+        "Scenario \"Nghiệm thu mốc\": yêu cầu thanh toán mốc kế tiếp"
+    );
+    orders::payment_settled(&state, m2, true, start)
+        .await
+        .unwrap();
+
+    // Scenario "Yêu cầu sửa trong giới hạn": mốc 2 còn 2 lượt → quay lại thực hiện, còn 1 lượt.
+    orders::deliver(&state, id, 2, "Lan", &delivery(&app, "0.2.0"), start)
+        .await
+        .unwrap();
+    let page = get(&user, &format!("/orders/{id}")).await;
+    let (_, page) = post(
+        &user,
+        &format!("/orders/{id}/revise"),
+        &csrf_of(&page),
+        &[("milestone", "2"), ("note", "Xuất kho âm khi bấm hai lần")],
+    )
+    .await;
+    assert!(page.contains(r#"data-status="in_progress""#), "{page}");
+    let left = |q: orders::Quote| q.milestones[1].revisions_left();
+    assert_eq!(
+        left(orders::current_quote(&db, id).await.unwrap().unwrap()),
+        1
+    );
+    wait_mail(
+        ADMIN_EMAIL,
+        &format!("Đơn {} yêu cầu sửa mốc 2", order.code),
+    )
+    .await;
+    orders::deliver(&state, id, 2, "Lan", &delivery(&app, "0.2.1"), start)
+        .await
+        .unwrap();
+    assert_eq!(
+        orders::request_revision(&state, customer, id, 2, "Thiếu nút in")
+            .await
+            .unwrap(),
+        0
+    );
+    // Scenario "Hết lượt sửa miễn phí": cần báo giá bổ sung.
+    orders::deliver(&state, id, 2, "Lan", &delivery(&app, "0.2.2"), start)
+        .await
+        .unwrap();
+    let page = get(&user, &format!("/orders/{id}")).await;
+    let (status, page) = post(
+        &user,
+        &format!("/orders/{id}/revise"),
+        &csrf_of(&page),
+        &[("milestone", "2"), ("note", "Đổi màu nút")],
+    )
+    .await;
+    assert_eq!(status, 409, "{page}");
+    assert!(page.contains("cần báo giá bổ sung"), "{page}");
+
+    // Nghiệm thu theo thời gian (mô phỏng): nhắc sau 7 ngày, tự nghiệm thu sau 14 ngày.
+    // (Đơn còn sót từ lần chạy trước có thể cũng được xử lý, nên chỉ xét đơn này.)
+    orders::process_due(&state, start + Days::days(6))
+        .await
+        .unwrap();
+    assert_eq!(
+        mail_count(
+            &email,
+            &format!("Nhắc nghiệm thu mốc 2 của đơn {}", order.code)
+        )
+        .await,
+        0
+    );
+    orders::process_due(&state, start + Days::days(7) + Days::hours(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        orders::get(&db, id).await.unwrap().status,
+        Status::Delivered,
+        "chưa tự nghiệm thu trước 14 ngày"
+    );
+    wait_mail(
+        &email,
+        &format!("Nhắc nghiệm thu mốc 2 của đơn {}", order.code),
+    )
+    .await;
+    orders::process_due(&state, start + Days::days(8))
+        .await
+        .unwrap();
+    assert_eq!(
+        mail_count(
+            &email,
+            &format!("Nhắc nghiệm thu mốc 2 của đơn {}", order.code)
+        )
+        .await,
+        1,
+        "chỉ nhắc một lần"
+    );
+    assert!(
+        orders::process_due(&state, start + Days::days(14) + Days::hours(1))
+            .await
+            .unwrap()
+            >= 1
+    );
+    let history = orders::history(&db, id).await.unwrap();
+    assert!(
+        history
+            .iter()
+            .any(|e| e.actor == orders::SYSTEM_ACTOR && e.note == "Nghiệm thu mốc 2"),
+        "{history:?}"
+    );
+    let (m3, amount, _) = pending_charge(&db, id).await;
+    assert_eq!(amount, 9_000_000);
+
+    // Scenario "Gửi tin nhắn": đội F-Eco hỏi, khách nhận email và trả lời ngay trong đơn (có tệp).
+    orders::post_message(
+        &state,
+        id,
+        Some("Lan"),
+        "Chị nhập kho theo lô hay theo từng món ạ?",
+    )
+    .await
+    .unwrap();
+    wait_mail(&email, &format!("Tin nhắn mới trong đơn {}", order.code)).await;
+    let page = get(&user, &format!("/orders/{id}")).await;
+    assert!(
+        page.contains("Chị nhập kho theo lô hay theo từng món ạ?"),
+        "{page}"
+    );
+    let form = reqwest::multipart::Form::new()
+        .text("feco_csrf", csrf_of(&page))
+        .text("body", "Theo lô, mẫu phiếu đính kèm.")
+        .part(
+            "files",
+            reqwest::multipart::Part::bytes(b"lo,ma,sl".to_vec()).file_name("phieu-nhap.csv"),
+        );
+    let page = user
+        .post(format!("{BASE}/orders/{id}/messages"))
+        .multipart(form)
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(
+        page.contains("Theo lô, mẫu phiếu đính kèm.") && page.contains("phieu-nhap.csv"),
+        "{page}"
+    );
+    wait_mail(
+        ADMIN_EMAIL,
+        &format!("Tin nhắn mới trong đơn {}", order.code),
+    )
+    .await;
+
+    // Scenario "Mở tranh chấp" cho mốc 3: quản trị viên có việc kèm hạn 2 ngày làm việc; giải
+    // quyết bằng hoàn một phần.
+    orders::payment_settled(&state, m3, true, start)
+        .await
+        .unwrap();
+    let delivered = OffsetDateTime::now_utc();
+    orders::deliver(&state, id, 3, "Lan", &delivery(&app, "1.0.0"), delivered)
+        .await
+        .unwrap();
+    let page = get(&user, &format!("/orders/{id}")).await;
+    let (_, page) = post(
+        &user,
+        &format!("/orders/{id}/dispute"),
+        &csrf_of(&page),
+        &[
+            ("milestone", "3"),
+            ("note", "Báo cáo tháng không đúng spec mục 4"),
+        ],
+    )
+    .await;
+    assert!(page.contains(r#"data-status="disputed""#), "{page}");
+    let respond_by = orders::business_days_after(OffsetDateTime::now_utc(), 2);
+    let alert = wait_mail(ADMIN_EMAIL, &format!("Tranh chấp đơn {} mốc 3", order.code)).await;
+    assert!(
+        alert.contains(
+            &respond_by
+                .format(&time::macros::format_description!("[day]/[month]/[year]"))
+                .unwrap()
+        ),
+        "{alert}"
+    );
+    let refund = orders::resolve_dispute(&state, id, "admin", Resolution::PartialRefund(2_000_000))
+        .await
+        .unwrap();
+    assert!(refund.is_some());
+    assert_eq!(
+        orders::get(&db, id).await.unwrap().status,
+        Status::Delivered
+    );
+    wait_mail(&email, &format!("Kết quả tranh chấp đơn {}", order.code)).await;
+    // Quá 14 ngày sau bàn giao: không mở tranh chấp được nữa.
+    assert!(
+        orders::open_dispute(&state, customer, id, 3, "muộn", delivered + Days::days(15))
+            .await
+            .is_err()
+    );
+
+    // Nghiệm thu mốc cuối → Hoàn tất; đã trả đủ → tải được bàn giao cuối.
+    let page = get(&user, &format!("/orders/{id}")).await;
+    let (_, page) = post(
+        &user,
+        &format!("/orders/{id}/accept-milestone"),
+        &csrf_of(&page),
+        &[("milestone", "3")],
+    )
+    .await;
+    assert!(page.contains(r#"data-status="completed""#), "{page}");
+    assert!(page.contains(r#"id="handover""#), "{page}");
+    let zip = orders::handover_path(&state, &orders::get(&db, id).await.unwrap());
+    std::fs::create_dir_all(zip.parent().unwrap()).unwrap();
+    std::fs::write(&zip, b"PK\x05\x06 ban giao").unwrap();
+    let res = user
+        .get(format!("{BASE}/orders/{id}/handover"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 200);
+    assert_eq!(res.headers()["content-type"], "application/zip");
+    assert_eq!(res.bytes().await.unwrap().as_ref(), b"PK\x05\x06 ban giao");
+    // Lịch sử đầy đủ: ai, khi nào, từ đâu sang đâu.
+    let page = get(&user, &format!("/orders/{id}")).await;
+    for step in [
+        "Nháp",
+        "Đã gửi",
+        "Đã báo giá",
+        "Đang thực hiện",
+        "Đã bàn giao",
+        "Đang tranh chấp",
+        "Hoàn tất",
+        "Đội F-Eco (Lan)",
+        "Hệ thống",
+    ] {
+        assert!(page.contains(step), "lịch sử thiếu {step}");
+    }
+
+    // Scenario "Hủy khi đang ở mốc 2": hoàn mốc 2, giữ tiền đặt cọc.
+    let (_, page, url) = send_order_request(&user, "App bán hàng", true, vec![]).await;
+    assert!(page.contains(r#"data-status="submitted""#), "{page}");
+    let second = order_id_of(&url);
+    orders::create_quote(
+        &state,
+        second,
+        "Lan",
+        &three_milestones(None),
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    orders::accept_quote(&state, customer, second, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    let (dep, _, _) = pending_charge(&db, second).await;
+    orders::payment_settled(&state, dep, true, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    orders::deliver(
+        &state,
+        second,
+        1,
+        "Lan",
+        &delivery(&app, "0.1.0"),
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    orders::accept_milestone(
+        &state,
+        second,
+        1,
+        &orders::customer_actor(customer),
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    let (m2, _, _) = pending_charge(&db, second).await;
+    orders::payment_settled(&state, m2, true, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    let page = get(&user, &format!("/orders/{second}")).await;
+    let (_, page) = post(
+        &user,
+        &format!("/orders/{second}/cancel"),
+        &csrf_of(&page),
+        &[("note", "Đổi kế hoạch")],
+    )
+    .await;
+    assert!(page.contains(r#"data-status="cancelled""#), "{page}");
+    let refunds: Vec<(i64, String)> = sqlx::query_as(
+        "SELECT amount_vnd, reason FROM payment_requests WHERE order_id = $1 AND kind = 'refund'",
+    )
+    .bind(second)
+    .fetch_all(&db)
+    .await
+    .unwrap();
+    assert_eq!(
+        refunds,
+        vec![(12_000_000, "Hủy đơn: hoàn mốc 2".to_owned())],
+        "giữ tiền đặt cọc"
+    );
+
+    // Hủy trước khi đặt cọc: không mất phí, không có yêu cầu thanh toán nào còn chờ.
+    let (_, _, url) = send_order_request(&user, "App chấm công", true, vec![]).await;
+    let third = order_id_of(&url);
+    orders::create_quote(
+        &state,
+        third,
+        "Lan",
+        &three_milestones(None),
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    orders::accept_quote(&state, customer, third, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    assert!(orders::cancel(&state, customer, third, "")
+        .await
+        .unwrap()
+        .is_empty());
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM payment_requests WHERE order_id = $1 AND status = 'pending'",
+    )
+    .bind(third)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(pending, 0);
+    assert!(
+        orders::cancel(&state, customer, third, "").await.is_err(),
+        "đã hủy thì là điểm cuối"
+    );
+
+    // Điều khoản dịch vụ xây app (bản nháp, phiên bản đang áp dụng).
+    let terms = get(&reqwest::Client::new(), "/policy/custom-build").await;
+    assert!(
+        terms.contains(orders::TOS_VERSION) && terms.contains("Quyền sở hữu mã nguồn"),
+        "{terms}"
+    );
+}

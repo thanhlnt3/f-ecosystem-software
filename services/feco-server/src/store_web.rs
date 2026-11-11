@@ -645,6 +645,19 @@ pub struct InstallRequest {
 }
 
 /// POST /v1/catalog/installs (chỉ token của F-Launcher)
+/// GET /v1/catalog/private (access token của F-Launcher): app riêng tư của người dùng, ví dụ
+/// bản build bàn giao của đơn xây app (spec custom-build-orders, "Bàn giao mốc và nghiệm thu").
+pub async fn api_private(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let subject = match crate::launch::launcher_subject(&state, &headers).await {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    match catalog::private_for(&state.db, subject).await {
+        Ok(apps) => Json(json!({ "apps": apps })).into_response(),
+        Err(e) => api_unavailable(e),
+    }
+}
+
 pub async fn api_install(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

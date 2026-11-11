@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("order.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("order.title") }}</h1>
+<p class="muted">{{ i18n.t("order.intro") }}</p>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+
+<h2>{{ i18n.t("order.mine") }}</h2>
+{% if orders.is_empty() %}<p class="muted" id="no-orders">{{ i18n.t("order.none") }}</p>{% endif %}
+<table id="orders">
+{% for o in orders %}
+  <tr class="order" data-code="{{ o.code }}"><td><a href="/orders/{{ o.id }}">{{ o.code }}</a></td><td>{{ o.title }}</td><td class="status">{{ o.status }}</td><td class="muted">{{ o.created }}</td></tr>
+{% endfor %}
+</table>
+
+<h2>{{ i18n.t("order.new") }}</h2>
+{% if blocked %}
+<p class="muted">{{ i18n.t("order.verify_first") }}</p>
+{% else %}
+<form method="post" action="/orders" enctype="multipart/form-data" id="new-order">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="title">{{ i18n.t("order.project") }}</label>
+  <input type="text" name="title" id="title" maxlength="120" value="{{ title }}" required>
+  <label for="description">{{ i18n.t("order.description") }}</label>
+  <textarea name="description" id="description" required>{{ description }}</textarea>
+  <label>{{ i18n.t("order.platforms") }}</label>
+  <span><input type="checkbox" name="platform" value="windows" id="p-win" checked> <label for="p-win" style="display:inline">Windows</label></span>
+  <span><input type="checkbox" name="platform" value="macos" id="p-mac"> <label for="p-mac" style="display:inline">macOS</label></span>
+  <label for="wanted_by">{{ i18n.t("order.wanted_by") }}</label>
+  <input type="text" name="wanted_by" id="wanted_by" placeholder="2027-03-31">
+  <label for="budget">{{ i18n.t("order.budget") }}</label>
+  <input type="text" name="budget_vnd" id="budget" inputmode="numeric" placeholder="30000000">
+  <label for="files">{{ i18n.t("order.attachments") }}</label>
+  <input type="file" name="files" id="files" multiple>
+  <p class="muted">{{ i18n.t("order.attachments_note") }}</p>
+  <p><input type="checkbox" name="accept_tos" id="accept_tos" required>
+    <label for="accept_tos" style="display:inline">{{ i18n.t("order.accept_tos") }}</label>
+    <a href="/policy/custom-build" target="_blank">{{ i18n.t("order.tos") }}</a> ({{ tos_version }})</p>
+  <button type="submit">{{ i18n.t("order.submit") }}</button>
+</form>
+{% endif %}
+<div class="links"><a href="/">{{ i18n.t("home.title") }}</a><a href="/store">F-Store</a></div>
+{% endblock %}
