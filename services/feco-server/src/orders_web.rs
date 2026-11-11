@@ -601,6 +601,8 @@ pub struct PaymentView {
     pub amount: String,
     pub status: String,
     pub reason: String,
+    /// Trang thanh toán khi khoản phải thu còn chờ.
+    pub pay_url: String,
 }
 
 pub struct FileView {
@@ -848,6 +850,11 @@ async fn render_order(
                 amount: orders::vnd(p.amount_vnd),
                 status: payment_status(lang, &p.status),
                 reason: p.reason,
+                pay_url: if p.kind == "charge" && p.status == "pending" {
+                    format!("/payments/{}/pay", p.id)
+                } else {
+                    String::new()
+                },
             })
             .collect();
         let all_files = orders::files(&state.db, id).await?;

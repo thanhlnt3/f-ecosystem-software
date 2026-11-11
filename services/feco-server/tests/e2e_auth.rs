@@ -39,6 +39,30 @@ static TUF_REPO: OnceLock<std::path::PathBuf> = OnceLock::new();
 static SERVER_VARS: OnceLock<HashMap<String, String>> = OnceLock::new();
 /// Người nhận cảnh báo kiểm duyệt.
 const ADMIN_EMAIL: &str = "kiem-duyet@f-eco.test";
+/// Cổng ZaloPay giả của máy chủ kiểm thử (khóa chỉ dùng cho cổng giả này).
+static ZALOPAY: OnceLock<feco_server::zalopay::testing::FakeZaloPay> = OnceLock::new();
+const ZP_APP_ID: i64 = 2553;
+const ZP_KEY1: &str = "e2e-fake-key1";
+const ZP_KEY2: &str = "e2e-fake-key2";
+/// Toàn bộ nhật ký của máy chủ kiểm thử.
+static LOGS: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new(Vec::new());
+
+struct LogTee;
+
+impl std::io::Write for LogTee {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        LOGS.lock().unwrap().extend_from_slice(buf);
+        let line = String::from_utf8_lossy(buf);
+        if line.contains(" WARN ") || line.contains(" ERROR ") {
+            eprint!("{line}");
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
 
 /// Dựng kho TUF tạm; trả (thư mục kho, danh sách file khóa targets, snapshot, timestamp).
 async fn init_tuf(work: &std::path::Path) -> (std::path::PathBuf, String) {
@@ -98,11 +122,15 @@ fn e2e_ready() -> bool {
     }
     static STARTED: OnceLock<()> = OnceLock::new();
     STARTED.get_or_init(|| {
+        // Nhật ký của feco-server (tới mức debug) được giữ lại để quét dữ liệu thẻ (tasks.md 13.6);
+        // chỉ dòng cảnh báo và lỗi được in ra.
         let _ = tracing_subscriber::fmt()
             .with_env_filter(
                 tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| "warn".into()),
+                    .unwrap_or_else(|_| "warn,feco_server=debug".into()),
             )
+            .with_ansi(false)
+            .with_writer(|| LogTee)
             .try_init();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
@@ -122,6 +150,12 @@ fn e2e_ready() -> bool {
                 let clamd = feco_server::scan::testing::serve_clamd("127.0.0.1:0")
                     .await
                     .unwrap();
+                let zalopay =
+                    feco_server::zalopay::testing::FakeZaloPay::serve(ZP_APP_ID, ZP_KEY1, ZP_KEY2)
+                        .await
+                        .unwrap();
+                let zalopay_endpoint = zalopay.endpoint();
+                let _ = ZALOPAY.set(zalopay);
                 let vars: HashMap<String, String> = [
                     ("FECO_ENV", "dev".to_owned()),
                     ("FECO_LAUNCHER_CLIENT_ID", launcher.clone()),
@@ -134,6 +168,10 @@ fn e2e_ready() -> bool {
                     ("FECO_TUF_SIGN_KEYS", tuf_keys),
                     ("FECO_CLAMD_ADDR", clamd.to_string()),
                     ("FECO_ADMIN_EMAILS", ADMIN_EMAIL.to_owned()),
+                    ("FECO_ZALOPAY_APP_ID", ZP_APP_ID.to_string()),
+                    ("FECO_ZALOPAY_KEY1", ZP_KEY1.to_owned()),
+                    ("FECO_ZALOPAY_KEY2", ZP_KEY2.to_owned()),
+                    ("FECO_ZALOPAY_ENDPOINT", zalopay_endpoint),
                 ]
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v))
@@ -4558,5 +4596,564 @@ async fn custom_build_order_end_to_end() {
     assert!(
         terms.contains(orders::TOS_VERSION) && terms.contains("Quyền sở hữu mã nguồn"),
         "{terms}"
+    );
+}
+
+// ---------- Thanh toán và hóa đơn (tasks.md 13.1–13.6) ----------
+
+/// Chờ email có tiêu đề chứa `subject`; trả nội dung chữ và tên các tệp đính kèm.
+async fn wait_mail_with_files(to: &str, subject: &str) -> (String, Vec<String>) {
+    let http = reqwest::Client::new();
+    for _ in 0..60 {
+        let list: Value = http
+            .get(format!("{MAILPIT}/api/v1/messages"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let found = list["messages"].as_array().into_iter().flatten().find(|m| {
+            m["To"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|t| t["Address"] == to)
+                && m["Subject"].as_str().is_some_and(|s| s.contains(subject))
+        });
+        if let Some(m) = found {
+            let id = m["ID"].as_str().unwrap();
+            let msg: Value = http
+                .get(format!("{MAILPIT}/api/v1/message/{id}"))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            let files = msg["Attachments"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|a| a["FileName"].as_str().map(str::to_owned))
+                .collect();
+            return (msg["Text"].as_str().unwrap_or_default().to_owned(), files);
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    panic!("không thấy email tới {to} với tiêu đề chứa {subject:?}");
+}
+
+/// Khách chọn phương thức trên trang thanh toán; trả mã giao dịch (`app_trans_id`) mà F-Eco tạo
+/// trên cổng (trình duyệt được chuyển tới trang của cổng giả).
+async fn start_payment(c: &reqwest::Client, request: uuid::Uuid, method: &str) -> String {
+    let page = get(c, &format!("/payments/{request}/pay")).await;
+    let body = form_urlencoded::Serializer::new(String::new())
+        .append_pair("feco_csrf", &csrf_of(&page))
+        .append_pair("method", method)
+        .finish();
+    let res = c
+        .post(format!("{BASE}/payments/{request}/pay"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+    let url = res.url().clone();
+    assert!(
+        url.path().starts_with("/pay/"),
+        "phải chuyển sang trang của cổng: {url} {}",
+        res.text().await.unwrap()
+    );
+    url.path().trim_start_matches("/pay/").to_owned()
+}
+
+async fn zp_callback(body: &Value) -> Value {
+    reqwest::Client::new()
+        .post(format!("{BASE}/v1/payments/zalopay/callback"))
+        .json(body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+/// Toàn bộ dữ liệu trong cơ sở dữ liệu, mỗi dòng một bản ghi JSON.
+async fn dump_database(db: &feco_server::store::Db) -> String {
+    let tables: Vec<String> = sqlx::query_scalar("SELECT table_name::text FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'")
+        .fetch_all(db)
+        .await
+        .unwrap();
+    let mut out = String::new();
+    for t in tables {
+        let rows: Option<String> = sqlx::query_scalar(&format!(
+            "SELECT string_agg(row_to_json(x)::text, E'\\n') FROM \"{t}\" x"
+        ))
+        .fetch_one(db)
+        .await
+        .unwrap();
+        out.push_str(&rows.unwrap_or_default());
+        out.push('\n');
+    }
+    out
+}
+
+/// Spec payments: chọn phương thức, vòng đời giao dịch (webhook có chữ ký, trang chuyển hướng giả,
+/// liên kết hết hạn sau 15 phút), không thu hai lần, hoàn tiền (một phần, vượt số đã thu, hai người
+/// duyệt), hóa đơn cho khách doanh nghiệp, lịch sử và tải lại hóa đơn, đối soát giao dịch thiếu
+/// webhook, và quét nhật ký cùng cơ sở dữ liệu sau một giao dịch thẻ thử.
+#[tokio::test]
+async fn payments_end_to_end() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::{
+        orders::{self, Status},
+        payments::{self, Requester, Settled, TxStatus},
+    };
+    use time::{Duration as Span, OffsetDateTime};
+    let state = local_state();
+    let db = state.db.clone();
+    let fake = ZALOPAY.get().unwrap().clone();
+
+    let (email, password) = unique("khach-thanh-toan");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Anh Nam").await;
+    verify_email(&user, &email).await;
+    let customer = subject_of(&email).await;
+
+    // Thông tin xuất hóa đơn: doanh nghiệp cần mã số thuế hợp lệ.
+    let page = get(&user, "/payments").await;
+    assert!(page.contains("Bạn chưa có giao dịch nào."), "{page}");
+    let billing = |tax: &'static str| {
+        vec![
+            ("kind", "company"),
+            ("name", "Công ty TNHH Kho Vui"),
+            ("tax_code", tax),
+            ("address", "12 Láng Hạ, Hà Nội"),
+            ("email", email.as_str()),
+        ]
+    };
+    let (status, page) = post(
+        &user,
+        "/payments/billing",
+        &csrf_of(&page),
+        &billing("01012345"),
+    )
+    .await;
+    assert_eq!(status, 400, "{page}");
+    assert!(page.contains("mã số thuế hợp lệ"), "{page}");
+    let (_, page) = post(
+        &user,
+        "/payments/billing",
+        &csrf_of(&page),
+        &billing("0101234567"),
+    )
+    .await;
+    assert!(page.contains("Đã lưu thông tin xuất hóa đơn."), "{page}");
+
+    // Đơn 1 (9 + 12 + 9 triệu), khách chấp nhận báo giá: có yêu cầu thanh toán 9 triệu.
+    let (_, _, url) = send_order_request(&user, "App bán hàng có hóa đơn", true, vec![]).await;
+    let order = order_id_of(&url);
+    let now = OffsetDateTime::now_utc();
+    orders::create_quote(&state, order, "Lan", &three_milestones(None), now)
+        .await
+        .unwrap();
+    orders::accept_quote(&state, customer, order, now)
+        .await
+        .unwrap();
+    let (deposit, _, _) = pending_charge(&db, order).await;
+
+    // Scenario "Chọn phương thức": số tiền, nội dung mốc, bốn phương thức.
+    let page = get(&user, &format!("/orders/{order}")).await;
+    assert!(
+        page.contains(&format!("/payments/{deposit}/pay")),
+        "trang đơn có nút Thanh toán"
+    );
+    let page = get(&user, &format!("/payments/{deposit}/pay")).await;
+    assert!(
+        page.contains("9.000.000 ₫") && page.contains("Mốc 1: Đặt cọc"),
+        "{page}"
+    );
+    for m in [
+        "QR chuyển khoản (VietQR)",
+        "Thẻ ATM nội địa",
+        "Ví điện tử ZaloPay",
+        "Thẻ quốc tế (Visa, Mastercard, JCB)",
+    ] {
+        assert!(page.contains(m), "thiếu phương thức {m}");
+    }
+    // Người khác không mở được trang thanh toán của khách này.
+    let (other_email, other_password) = unique("khac-thanh-toan");
+    let other = app_browser();
+    register_in(&other, &other_email, &other_password, "Người khác").await;
+    assert_eq!(
+        other
+            .get(format!("{BASE}/payments/{deposit}/pay"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        404
+    );
+
+    // Scenario "Liên kết hết hạn": quá 15 phút chưa trả → Hết hạn, tạo được liên kết mới.
+    let first = start_payment(&user, deposit, "domestic_card").await;
+    assert_eq!(
+        start_payment(&user, deposit, "domestic_card").await,
+        first,
+        "liên kết còn hạn được dùng lại (idempotent)"
+    );
+    let created = fake.order(&first).unwrap();
+    assert_eq!(created.amount, 9_000_000);
+    assert!(
+        created.embed_data.contains("domestic_card")
+            && created.embed_data.contains("/payments/return"),
+        "{}",
+        created.embed_data
+    );
+    assert!(
+        !created.description.contains(&email),
+        "không gửi email khách cho cổng"
+    );
+    payments::process_due(&state, OffsetDateTime::now_utc() + Span::minutes(16))
+        .await
+        .unwrap();
+    assert_eq!(
+        payments::by_ref(&state, &first).await.unwrap().status,
+        TxStatus::Expired
+    );
+    let second = start_payment(&user, deposit, "domestic_card").await;
+    assert_ne!(second, first, "liên kết mới cho cùng mốc");
+    assert_eq!(payments::by_ref(&state, &second).await.unwrap().attempt, 2);
+
+    // Scenario "Trang chuyển hướng bị giả": tham số "thành công" không có tác dụng.
+    let fake_return = get(
+        &user,
+        &format!("/payments/return?apptransid={second}&status=1&checksum=gia"),
+    )
+    .await;
+    assert!(
+        fake_return.contains(r#"data-status="pending""#),
+        "{fake_return}"
+    );
+    assert_eq!(
+        payments::by_ref(&state, &second).await.unwrap().status,
+        TxStatus::Pending
+    );
+    assert_eq!(
+        orders::get(&db, order).await.unwrap().status,
+        Status::Quoted
+    );
+
+    // Khách đổi sang VietQR (lần thử 3) và mở thêm thẻ quốc tế (lần thử 4) ở tab khác.
+    let qr = start_payment(&user, deposit, "vietqr").await;
+    let card = start_payment(&user, deposit, "international_card").await;
+
+    // Scenario "Khách đóng trình duyệt sau khi trả tiền" + "Webhook đến hai lần": trả bằng thẻ
+    // trên trang của cổng, không quay về; cổng gửi webhook đã ký ba lần.
+    const PAN: &str = "4111111111111111";
+    const CVV: &str = "987";
+    let mut callback = fake.pay(&card, 36, Some(PAN));
+    // Phòng trường hợp cổng gửi kèm dữ liệu thẻ: F-Eco phải lọc trước khi lưu.
+    let mut data: Value = serde_json::from_str(callback["data"].as_str().unwrap()).unwrap();
+    data["card_number"] = Value::from(PAN);
+    data["cvv"] = Value::from(CVV);
+    let data = data.to_string();
+    callback = serde_json::json!({"data": data, "mac": feco_server::zalopay::hmac_hex(ZP_KEY2, &data), "type": 1});
+    let mut forged = callback.clone();
+    forged["mac"] = Value::from(feco_server::zalopay::hmac_hex("khoa-gia", &data));
+    assert_eq!(
+        zp_callback(&forged).await["return_code"],
+        -1,
+        "chữ ký sai bị từ chối"
+    );
+    assert_eq!(
+        payments::by_ref(&state, &card).await.unwrap().status,
+        TxStatus::Pending
+    );
+    for _ in 0..3 {
+        assert_eq!(zp_callback(&callback).await["return_code"], 1);
+    }
+    let paid_card = payments::by_ref(&state, &card).await.unwrap();
+    assert_eq!(paid_card.status, TxStatus::Succeeded);
+    let o = orders::get(&db, order).await.unwrap();
+    assert_eq!(
+        o.status,
+        Status::InProgress,
+        "đơn được cập nhật như bình thường"
+    );
+    wait_mail(&email, &format!("Đã nhận thanh toán đơn {}", o.code)).await;
+    assert_eq!(
+        mail_count(&email, &format!("Đã nhận thanh toán đơn {}", o.code)).await,
+        1,
+        "chỉ ghi nhận một lần"
+    );
+    let succeeded: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM payment_transactions WHERE request_id = $1 AND status = 'succeeded'",
+    )
+    .bind(deposit)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(succeeded, 1);
+
+    // Scenario "Khách doanh nghiệp": hóa đơn mang tên công ty và mã số thuế, gửi qua email.
+    let (mail, files) =
+        wait_mail_with_files(&email, &format!("Hóa đơn thanh toán đơn {}", o.code)).await;
+    assert!(
+        mail.contains("Công ty TNHH Kho Vui") && mail.contains("0101234567"),
+        "{mail}"
+    );
+    assert!(
+        files
+            .iter()
+            .any(|f| f.starts_with("FECO-NHAP-") && f.ends_with(".html")),
+        "{files:?}"
+    );
+
+    // Trang chuyển về sau khi đã trả: Thành công.
+    let back = get(&user, &format!("/payments/return?apptransid={card}")).await;
+    assert!(back.contains(r#"data-status="succeeded""#), "{back}");
+
+    // Scenario "Khách trả hai lần": trả tiếp bằng QR → giao dịch thứ hai tự hoàn, quản trị viên được báo.
+    let second_pay = fake.pay(&qr, 38, None);
+    assert_eq!(zp_callback(&second_pay).await["return_code"], 1);
+    let twice = payments::by_ref(&state, &qr).await.unwrap();
+    assert_eq!(twice.status, TxStatus::Succeeded);
+    assert_eq!(
+        twice.refunded_vnd, 9_000_000,
+        "đã hoàn toàn bộ giao dịch thứ hai"
+    );
+    assert_eq!(
+        fake.refunded(twice.gateway_trans_id.as_deref().unwrap()),
+        9_000_000,
+        "cổng nhận lệnh hoàn"
+    );
+    assert_eq!(
+        fake.refunded(paid_card.gateway_trans_id.as_deref().unwrap()),
+        0
+    );
+    wait_mail(ADMIN_EMAIL, &format!("Giao dịch {qr} thu thừa")).await;
+    wait_mail(&email, &format!("Hoàn tiền đơn {}", o.code)).await;
+    wait_mail_with_files(&email, &format!("Hóa đơn điều chỉnh đơn {}", o.code)).await;
+    // Giao dịch còn treo (lần thử 2) cổng cũng báo đã trả qua truy vấn chủ động: cũng tự hoàn.
+    let _ = fake.pay(&second, 39, None); // mất webhook
+    assert!(matches!(
+        payments::confirm(&state, &second, "query", OffsetDateTime::now_utc())
+            .await
+            .unwrap(),
+        TxStatus::Succeeded
+    ));
+    assert_eq!(
+        payments::by_ref(&state, &second)
+            .await
+            .unwrap()
+            .refunded_vnd,
+        9_000_000
+    );
+
+    // Scenario "Hoàn một phần" và "Hoàn vượt số đã thu" (giao dịch 9 triệu bằng thẻ).
+    let partial = payments::request_refund(
+        &state,
+        paid_card.id,
+        4_000_000,
+        "Tranh chấp mốc 1",
+        Requester::Admin("lan".into()),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        payments::refund(&state, partial).await.unwrap().status,
+        "succeeded"
+    );
+    assert_eq!(
+        fake.refunded(paid_card.gateway_trans_id.as_deref().unwrap()),
+        4_000_000
+    );
+    let err = payments::request_refund(
+        &state,
+        paid_card.id,
+        6_000_000,
+        "Hoàn thêm",
+        Requester::Admin("lan".into()),
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(err.to_string().contains("refund_exceeds_payment"), "{err}");
+    let page = get(&user, "/payments").await;
+    assert!(
+        page.contains("Đã hoàn một phần") && page.contains("Đã hoàn tiền"),
+        "{page}"
+    );
+
+    // Scenario "Tải lại hóa đơn": từ Lịch sử thanh toán; người khác không tải được.
+    let invoice = Regex::new(r#"href="(/payments/invoices/[0-9a-f-]{36})""#)
+        .unwrap()
+        .captures(&page)
+        .unwrap()[1]
+        .to_owned();
+    let doc = get(&user, &invoice).await;
+    assert!(
+        doc.contains("Công ty TNHH Kho Vui") && doc.contains("0101234567"),
+        "{doc}"
+    );
+    assert_eq!(
+        other
+            .get(format!("{BASE}{invoice}"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        404
+    );
+
+    // Đơn 2 (18 + 30 + 12 triệu): Scenario "Giao dịch thiếu webhook" qua đối soát hằng ngày.
+    let (_, _, url) = send_order_request(&user, "App chấm công", true, vec![]).await;
+    let order2 = order_id_of(&url);
+    let mut q = three_milestones(None);
+    for (m, amount) in q
+        .milestones
+        .iter_mut()
+        .zip([18_000_000, 30_000_000, 12_000_000])
+    {
+        m.amount_vnd = amount;
+    }
+    orders::create_quote(&state, order2, "Lan", &q, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    orders::accept_quote(&state, customer, order2, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    let (deposit2, _, _) = pending_charge(&db, order2).await;
+    let missing = start_payment(&user, deposit2, "zalopay_wallet").await;
+    let _ = fake.pay(&missing, 38, None); // cổng đã thu, webhook không tới
+    let today = OffsetDateTime::now_utc()
+        .to_offset(time::macros::offset!(+7))
+        .date();
+    let mismatches = payments::reconcile(&state, today, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    assert!(
+        mismatches
+            .iter()
+            .any(|m| m.gateway_ref == missing && m.kind == "missing_webhook"),
+        "{mismatches:?}"
+    );
+    assert_eq!(
+        payments::by_ref(&state, &missing).await.unwrap().status,
+        TxStatus::Succeeded
+    );
+    assert_eq!(
+        orders::get(&db, order2).await.unwrap().status,
+        Status::InProgress,
+        "đơn được cập nhật"
+    );
+    wait_mail(ADMIN_EMAIL, &format!("Đối soát ngày {today}")).await;
+    // Chạy lại: không còn chênh lệch thiếu webhook.
+    let again = payments::reconcile(&state, today, OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+    assert!(!again.iter().any(|m| m.gateway_ref == missing), "{again:?}");
+
+    // Scenario "Hoàn tiền lớn": 15 triệu chờ quản trị viên thứ hai phê duyệt.
+    let tx2 = payments::by_ref(&state, &missing).await.unwrap();
+    let big = payments::request_refund(
+        &state,
+        tx2.id,
+        15_000_000,
+        "Khách hủy phần lớn phạm vi",
+        Requester::Admin("lan".into()),
+        None,
+    )
+    .await
+    .unwrap();
+    let r = payments::refund(&state, big).await.unwrap();
+    assert_eq!(
+        (r.status.as_str(), r.label(true)),
+        ("pending_approval", "Chờ phê duyệt")
+    );
+    assert_eq!(
+        fake.refunded(tx2.gateway_trans_id.as_deref().unwrap()),
+        0,
+        "chưa gửi lệnh tới cổng"
+    );
+    let err = payments::approve_refund(&state, big, "lan")
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("second_approver_required"),
+        "{err}"
+    );
+    assert_eq!(
+        payments::approve_refund(&state, big, "minh")
+            .await
+            .unwrap()
+            .status,
+        "succeeded"
+    );
+    assert_eq!(
+        fake.refunded(tx2.gateway_trans_id.as_deref().unwrap()),
+        15_000_000
+    );
+    // Vượt số đã thu: 15 + 13 > 18 triệu.
+    assert!(payments::request_refund(
+        &state,
+        tx2.id,
+        13_000_000,
+        "Hoàn thêm",
+        Requester::Admin("lan".into()),
+        None
+    )
+    .await
+    .is_err());
+    // Callback trùng của một giao dịch đã ghi nhận vẫn là "Duplicate".
+    assert_eq!(
+        payments::settle(
+            &state,
+            &missing,
+            tx2.gateway_trans_id.as_deref().unwrap(),
+            18_000_000,
+            None,
+            "callback",
+            OffsetDateTime::now_utc()
+        )
+        .await
+        .unwrap(),
+        Settled::Duplicate
+    );
+
+    // tasks.md 13.6: sau giao dịch thẻ thử, không có số thẻ đầy đủ hay CVV trong nhật ký và CSDL.
+    assert!(
+        fake.inner.lock().unwrap().cards.iter().any(|c| c == PAN),
+        "khách đã nhập thẻ trên trang của cổng"
+    );
+    let dump = dump_database(&db).await;
+    let logs = String::from_utf8_lossy(&LOGS.lock().unwrap()).into_owned();
+    assert!(
+        logs.contains(&card),
+        "nhật ký có ghi về giao dịch này (đã bắt được nhật ký)"
+    );
+    for (name, text) in [("cơ sở dữ liệu", &dump), ("nhật ký", &logs)] {
+        assert!(
+            !text.contains(PAN) && !text.contains("4111 1111 1111 1111"),
+            "số thẻ trong {name}"
+        );
+        let lower = text.to_ascii_lowercase();
+        assert!(
+            !lower.contains("\"cvv\"") && !lower.contains("\"card_number\""),
+            "trường thẻ trong {name}"
+        );
+    }
+    assert!(
+        dump.contains(&card),
+        "bản sao CSDL có dữ liệu giao dịch (phép quét có nghĩa)"
     );
 }

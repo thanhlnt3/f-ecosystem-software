@@ -90,6 +90,28 @@ fn spawn_background_jobs(state: Arc<AppState>) {
             }
         }
     });
+    // Thanh toán: mỗi phút truy vấn chủ động giao dịch quá 15 phút và lệnh hoàn đang xử lý; mỗi
+    // giờ kiểm xem đã tới lúc đối soát ngày hôm trước chưa.
+    let s = state.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(60));
+        let mut n: u64 = 0;
+        loop {
+            tick.tick().await;
+            let now = time::OffsetDateTime::now_utc();
+            if let Err(e) = feco_server::payments::process_due(&s, now).await {
+                tracing::error!(error = %e, "không truy vấn được giao dịch đang chờ");
+            }
+            if n % 60 == 0 {
+                match feco_server::payments::reconcile_if_due(&s, now).await {
+                    Ok(Some(k)) => tracing::info!(mismatches = k, "đã đối soát ngày hôm trước"),
+                    Ok(None) => {}
+                    Err(e) => tracing::error!(error = %e, "đối soát thất bại"),
+                }
+            }
+            n += 1;
+        }
+    });
     // Mỗi giờ: xóa tài khoản đã chờ đủ 30 ngày, nhật ký truy cập quá 90 ngày, file xuất
     // dữ liệu đã hết hạn.
     tokio::spawn(async move {

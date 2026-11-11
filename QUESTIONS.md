@@ -198,3 +198,32 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     luật sư rà soát (task 12.6): đặc biệt điều khoản giữ tiền đặt cọc, quyền sở hữu mã nguồn mặc
     định, thuế trong giá, và việc tự nghiệm thu sau 14 ngày. Đổi nội dung thì tăng `TOS_VERSION`;
     đơn cũ giữ phiên bản đã chấp nhận.
+
+## Nhóm 13: Thanh toán và hóa đơn
+
+59. **ZaloPay là cổng đầu tiên** (chủ dự án chọn ngày 11/11/2026), thay VNPAY và MoMo trong design
+    D9; hai cổng này thêm sau qua adapter nếu cần. Bộ khóa sandbox mẫu `app_id` 2553 trong tài liệu
+    ZaloPay đã cũ (cổng báo "Chữ ký không hợp lệ"); bộ mẫu 2554 dùng được. F-Eco nên có tài khoản
+    sandbox riêng (đăng ký qua nhóm hỗ trợ của ZaloPay bằng số điện thoại và email) và khóa
+    production khi ký hợp đồng. Khóa chỉ đặt qua biến môi trường, không có trong mã nguồn.
+60. **Callback cần địa chỉ công khai**: ZaloPay không gọi được `127.0.0.1`, nên ở máy dev giao dịch
+    được cập nhật nhờ truy vấn chủ động (mỗi phút, và khi khách quay về trang chuyển hướng). Cần
+    staging có HTTPS công khai để thử callback thật, và một ví sandbox ZaloPay để thử hoàn tiền trên
+    giao dịch đã trả thật. Mã phương thức `preferred_payment_method` (`vietqr`, `domestic_card`,
+    `zalopay_wallet`, `international_card`) mới được sandbox chấp nhận khi tạo đơn, chưa kiểm
+    trang cổng hiện đúng phương thức.
+61. **Đối soát**: ZaloPay không công bố API báo cáo giao dịch, nên đối soát hằng ngày truy vấn từng
+    giao dịch F-Eco đã tạo trong ngày. Cách này không phát hiện giao dịch có trên cổng mà F-Eco
+    không hề tạo. Nếu hợp đồng có file đối soát (SFTP hoặc cổng merchant), cần thêm bước đọc file.
+62. **Hóa đơn điện tử**: hiện là bản nháp nội bộ (HTML, ghi rõ "BẢN NHÁP"). Cần chọn nhà cung cấp
+    (VNPT Invoice, Viettel S-Invoice, MISA meInvoice...), thông tin pháp lý của người bán (tên, mã
+    số thuế, địa chỉ), thuế suất GTGT của dịch vụ xây phần mềm (có thể thuộc diện không chịu thuế,
+    cần kế toán xác nhận), và quy trình ký số. Hóa đơn hiện ghi "đã gồm thuế" theo spec.
+63. **Người phê duyệt hoàn tiền** tạm xác định bằng `FECO_REVIEWER` của `feco-catalog`, chưa chống
+    giả mạo; bảng quản trị có passkey (nhóm 14) sẽ thay. Quy tắc đang dùng: lệnh của quản trị viên
+    dưới 10.000.000 ₫ chạy ngay; từ 10.000.000 ₫ cần thêm một người khác; lệnh do hệ thống tạo khi
+    khách hủy đơn cần một (hoặc hai) quản trị viên duyệt; hoàn tự động khi thu hai lần không cần
+    duyệt, kể cả từ 10.000.000 ₫, và quản trị viên được báo. Cần xác nhận.
+64. **4 số cuối thẻ**: callback của ZaloPay không có thông tin thẻ, nên `card_last4` để trống. Phí
+    giao dịch, phí hoàn (`refund_fee_amount`) chưa xử lý: F-Eco hoàn đúng số tiền yêu cầu.
+    `feco-catalog order-paid` (ghi nhận tay) chỉ còn dùng được ngoài production.

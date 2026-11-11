@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("pay.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("pay.title") }}</h1>
+<p>{{ i18n.t("pay.status") }}: <strong id="tx-status" data-status="{{ status }}">{{ label }}</strong></p>
+{% if status == "pending" %}<p class="muted">{{ i18n.t("pay.pending_note") }}</p>{% endif %}
+<div class="links">
+  {% if !order_id.is_empty() %}<a href="/orders/{{ order_id }}">{{ i18n.t("pay.back_to_order") }}</a>{% endif %}
+  <a href="/payments">{{ i18n.t("pay.history") }}</a>
+</div>
+{% endblock %}

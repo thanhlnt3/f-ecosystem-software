@@ -4,7 +4,7 @@
 use std::process::ExitCode;
 
 use feco_config::Config;
-use feco_server::{catalog, orders, review, store, store_web, AppState};
+use feco_server::{catalog, orders, payments, review, store, store_web, AppState};
 
 fn o_err(e: orders::OrderError) -> String {
     e.to_string()
@@ -52,13 +52,22 @@ Quyền sử dụng (tạm, tới nhóm 12-13):
   feco-catalog orders [trạng thái]                 danh sách đơn (submitted, quoted, in_progress...)
   feco-catalog order <mã đơn>                      chi tiết: mốc, yêu cầu thanh toán, tin nhắn, lịch sử
   feco-catalog order-quote <mã đơn> <quote.json>   gửi báo giá (xem docs/order-quote.example.json)
-  feco-catalog order-paid <payment-request-id> [failed]   kết quả thanh toán (tạm, tới nhóm 13)
+  feco-catalog order-paid <payment-request-id>     ghi nhận đã trả bằng tay (chỉ dev/staging, khi chưa nối cổng)
   feco-catalog private <app> <email|none>          đặt app thành app riêng tư của một khách hàng
   feco-catalog order-deliver <mã đơn> <mốc> <app> <phiên bản> <kết-quả-kiểm-tra.txt> [ghi chú]
   feco-catalog order-message <mã đơn> <nội dung>
   feco-catalog order-resolve <mã đơn> continue|full|partial <số tiền>   giải quyết tranh chấp
   feco-catalog order-handover <mã đơn> <bàn-giao.zip>   gói bàn giao cuối (mã nguồn, spec, tài liệu, build)
   feco-catalog order-due                           chạy ngay việc theo thời gian (nhắc, tự nghiệm thu)
+
+Thanh toán (quản trị viên ghi tên bằng FECO_REVIEWER):
+  feco-catalog payments <mã đơn>                   giao dịch, lệnh hoàn của một đơn
+  feco-catalog payment-check <mã giao dịch>        truy vấn chủ động cổng thanh toán
+  feco-catalog refund <transaction-id> <số tiền> <lý do>   hoàn toàn bộ hoặc một phần
+  feco-catalog refunds                             lệnh hoàn chờ phê duyệt hoặc đang xử lý
+  feco-catalog refund-approve <refund-id>          phê duyệt (từ 10.000.000 ₫ cần hai người khác nhau)
+  feco-catalog payments-due                        chạy ngay truy vấn giao dịch quá 15 phút, lệnh hoàn
+  feco-catalog reconcile [yyyy-mm-dd]              đối soát một ngày (mặc định hôm qua)
 ";
 
 #[tokio::main]
@@ -393,11 +402,127 @@ async fn run(args: Vec<String>) -> Result<(), String> {
             let id = arg(&args, 1)?
                 .parse()
                 .map_err(|_| "payment-request-id không hợp lệ")?;
-            let ok = args.get(2).map(String::as_str) != Some("failed");
-            orders::payment_settled(&state, id, ok, time::OffsetDateTime::now_utc())
+            let outcome = payments::record_manual(&state, id, time::OffsetDateTime::now_utc())
                 .await
                 .map_err(o_err)?;
-            println!("đã ghi nhận kết quả thanh toán");
+            println!("đã ghi nhận thanh toán thủ công: {outcome:?}");
+        }
+        "payments" => {
+            let o = orders::by_code(&state.db, arg(&args, 1)?)
+                .await
+                .map_err(o_err)?;
+            for r in orders::payment_requests(&state.db, o.id)
+                .await
+                .map_err(o_err)?
+            {
+                println!(
+                    "yêu cầu {} {} {} [{}] {}",
+                    r.id, r.kind, r.amount_vnd, r.status, r.reason
+                );
+                for t in payments::transactions_of_request(&state, r.id)
+                    .await
+                    .map_err(o_err)?
+                {
+                    println!(
+                        "  giao dịch {} {} lần {} {} {} [{}] hoàn {} {}",
+                        t.id,
+                        t.gateway_ref,
+                        t.attempt,
+                        t.method,
+                        t.amount_vnd,
+                        t.status.as_str(),
+                        t.refunded_vnd,
+                        t.gateway_trans_id.as_deref().unwrap_or("")
+                    );
+                }
+            }
+        }
+        "payment-check" => {
+            let status = payments::confirm(
+                &state,
+                arg(&args, 1)?,
+                "query",
+                time::OffsetDateTime::now_utc(),
+            )
+            .await
+            .map_err(o_err)?;
+            println!("trạng thái: {}", status.as_str());
+        }
+        "refund" => {
+            let tx = arg(&args, 1)?
+                .parse()
+                .map_err(|_| "transaction-id không hợp lệ")?;
+            let amount: i64 = arg(&args, 2)?
+                .replace(['.', ','], "")
+                .parse()
+                .map_err(|_| "số tiền phải là số")?;
+            let id = payments::request_refund(
+                &state,
+                tx,
+                amount,
+                &args[3..].join(" "),
+                payments::Requester::Admin(reviewer.clone()),
+                None,
+            )
+            .await
+            .map_err(o_err)?;
+            let r = payments::refund(&state, id).await.map_err(o_err)?;
+            println!("lệnh hoàn {id}: {}", r.label(true));
+        }
+        "refunds" => {
+            for r in payments::open_refunds(&state).await.map_err(o_err)? {
+                println!(
+                    "{} giao dịch {} {} [{}] cần {} duyệt, đã duyệt {:?} — {}",
+                    r.id,
+                    r.transaction_id,
+                    r.amount_vnd,
+                    r.status,
+                    r.approvals_needed(),
+                    r.approvals,
+                    r.reason
+                );
+            }
+        }
+        "refund-approve" => {
+            let id = arg(&args, 1)?
+                .parse()
+                .map_err(|_| "refund-id không hợp lệ")?;
+            let r = payments::approve_refund(&state, id, &reviewer)
+                .await
+                .map_err(o_err)?;
+            println!("lệnh hoàn {id}: {}", r.label(true));
+        }
+        "payments-due" => {
+            let r = payments::process_due(&state, time::OffsetDateTime::now_utc())
+                .await
+                .map_err(o_err)?;
+            println!(
+                "đã truy vấn {} giao dịch, {} lệnh hoàn",
+                r.checked, r.refunds_checked
+            );
+        }
+        "reconcile" => {
+            let now = time::OffsetDateTime::now_utc();
+            let day = match args.get(1) {
+                Some(d) => time::Date::parse(
+                    d,
+                    &time::macros::format_description!("[year]-[month]-[day]"),
+                )
+                .map_err(|_| "ngày phải dạng yyyy-mm-dd")?,
+                None => now
+                    .to_offset(time::macros::offset!(+7))
+                    .date()
+                    .previous_day()
+                    .ok_or("không có ngày hôm trước")?,
+            };
+            let m = payments::reconcile(&state, day, now).await.map_err(o_err)?;
+            println!("đối soát {day}: {} chênh lệch", m.len());
+            for x in m {
+                println!(
+                    "  {} {} F-Eco {} / cổng {}",
+                    x.gateway_ref, x.kind, x.local_amount, x.gateway_amount
+                );
+            }
         }
         "private" => {
             let app = arg(&args, 1)?;

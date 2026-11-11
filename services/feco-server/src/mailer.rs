@@ -5,7 +5,7 @@
 use std::sync::{Arc, Mutex};
 
 use lettre::{
-    message::{header::ContentType, Mailbox},
+    message::{header::ContentType, Attachment as MailAttachment, Mailbox, MultiPart, SinglePart},
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
 };
 use url::Url;
@@ -15,6 +15,16 @@ pub struct SentMail {
     pub to: String,
     pub subject: String,
     pub body: String,
+    /// Tên các tệp đính kèm.
+    pub attachments: Vec<String>,
+}
+
+/// Tệp đính kèm email (ví dụ hóa đơn).
+#[derive(Debug, Clone)]
+pub struct Attachment {
+    pub name: String,
+    pub content_type: String,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Clone)]
@@ -65,12 +75,34 @@ impl Mailer {
     }
 
     pub async fn send(&self, to: &str, subject: &str, body: &str) -> Result<(), MailError> {
+        self.send_with(to, subject, body, None).await
+    }
+
+    /// Gửi email kèm một tệp.
+    pub async fn send_with_attachment(
+        &self,
+        to: &str,
+        subject: &str,
+        body: &str,
+        attachment: &Attachment,
+    ) -> Result<(), MailError> {
+        self.send_with(to, subject, body, Some(attachment)).await
+    }
+
+    async fn send_with(
+        &self,
+        to: &str,
+        subject: &str,
+        body: &str,
+        attachment: Option<&Attachment>,
+    ) -> Result<(), MailError> {
         match self {
             Mailer::Memory(store) => {
                 store.lock().expect("khóa hộp thư").push(SentMail {
                     to: to.to_owned(),
                     subject: subject.to_owned(),
                     body: body.to_owned(),
+                    attachments: attachment.map(|a| a.name.clone()).into_iter().collect(),
                 });
                 Ok(())
             }
@@ -78,13 +110,27 @@ impl Mailer {
                 let to = to
                     .parse::<Mailbox>()
                     .map_err(|e| MailError::Address(e.to_string()))?;
-                let msg = Message::builder()
+                let builder = Message::builder()
                     .from(from.clone())
                     .to(to)
-                    .subject(subject)
-                    .header(ContentType::TEXT_PLAIN)
-                    .body(body.to_owned())
-                    .map_err(|e| MailError::Send(e.to_string()))?;
+                    .subject(subject);
+                let msg = match attachment {
+                    None => builder
+                        .header(ContentType::TEXT_PLAIN)
+                        .body(body.to_owned()),
+                    Some(a) => {
+                        let kind = ContentType::parse(&a.content_type)
+                            .map_err(|e| MailError::Send(e.to_string()))?;
+                        builder.multipart(
+                            MultiPart::mixed()
+                                .singlepart(SinglePart::plain(body.to_owned()))
+                                .singlepart(
+                                    MailAttachment::new(a.name.clone()).body(a.bytes.clone(), kind),
+                                ),
+                        )
+                    }
+                }
+                .map_err(|e| MailError::Send(e.to_string()))?;
                 transport
                     .send(msg)
                     .await

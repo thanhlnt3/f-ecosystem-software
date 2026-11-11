@@ -17,7 +17,9 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 >
 > - Đơn xây app theo yêu cầu (`/orders`): gửi yêu cầu kèm tệp (tối đa 200 MB) và chấp nhận Điều khoản dịch vụ xây app (bản nháp), báo giá theo mốc (đặt cọc ≤ 30%, hạn 7 ngày, đề nghị điều chỉnh), bàn giao từng mốc dưới dạng app riêng tư trong F-Launcher, nghiệm thu, lượt sửa miễn phí, tự nghiệm thu sau 14 ngày, tin nhắn kèm tệp, hủy đơn, tranh chấp, tải bàn giao cuối khi đã trả đủ.
 >
-> Chưa có: bảng quản trị (người duyệt và đội F-Eco tạm dùng công cụ `feco-catalog`), máy ảo chạy thử app, môi trường sandbox, thanh toán (đơn hàng tạo yêu cầu thanh toán, tạm đánh dấu đã trả bằng `feco-catalog order-paid`). Chưa dùng được cho người dùng cuối.
+> - Thanh toán qua ZaloPay (sandbox): chọn VietQR, thẻ ATM, ví ZaloPay hoặc thẻ quốc tế trên trang của cổng (F-Eco không nhận số thẻ), callback có chữ ký, truy vấn chủ động khi quá 15 phút, không thu hai lần, hoàn tiền (một phần, từ 10 triệu cần hai người duyệt), hóa đơn (bản nháp, chờ nhà cung cấp hóa đơn điện tử), lịch sử thanh toán, đối soát hằng ngày.
+>
+> Chưa có: bảng quản trị (người duyệt và đội F-Eco tạm dùng công cụ `feco-catalog`), máy ảo chạy thử app, môi trường sandbox, hóa đơn điện tử thật. Chưa dùng được cho người dùng cuối.
 
 ## Mục lục
 
@@ -31,7 +33,8 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
   - [7. Dùng thử cổng nhà phát triển](#7-dùng-thử-cổng-nhà-phát-triển)
   - [8. Viết app con bằng F-SDK](#8-viết-app-con-bằng-f-sdk)
   - [9. Dùng thử đơn xây app](#9-dùng-thử-đơn-xây-app)
-  - [10. Dừng và xóa dữ liệu](#10-dừng-và-xóa-dữ-liệu)
+  - [10. Dùng thử thanh toán ZaloPay](#10-dùng-thử-thanh-toán-zalopay)
+  - [11. Dừng và xóa dữ liệu](#11-dừng-và-xóa-dữ-liệu)
 - [Địa chỉ các dịch vụ](#địa-chỉ-các-dịch-vụ)
 - [Cấu hình](#cấu-hình)
 - [Kiểm thử](#kiểm-thử)
@@ -351,7 +354,7 @@ cargo run -p feco-server --bin feco-catalog -- ungrant <app hoặc client ID> <e
    cargo run -p feco-server --bin feco-catalog -- order-quote DH-000001 docs/order-quote.example.json
    ```
 
-3. Trên trang đơn, xem báo giá (phạm vi, không bao gồm, quyền sở hữu mã nguồn, các mốc), bấm **Chấp nhận báo giá** hoặc **Đề nghị điều chỉnh**. Chấp nhận tạo yêu cầu thanh toán tiền đặt cọc. Chưa có cổng thanh toán (nhóm 13), nên đánh dấu đã trả bằng tay:
+3. Trên trang đơn, xem báo giá (phạm vi, không bao gồm, quyền sở hữu mã nguồn, các mốc), bấm **Chấp nhận báo giá** hoặc **Đề nghị điều chỉnh**. Chấp nhận tạo yêu cầu thanh toán tiền đặt cọc; trả qua ZaloPay như bước 10, hoặc (khi chưa đặt khóa ZaloPay) đánh dấu đã trả bằng tay:
 
    ```bash
    cargo run -p feco-server --bin feco-catalog -- order DH-000001                  # xem mã yêu cầu thanh toán
@@ -369,7 +372,31 @@ cargo run -p feco-server --bin feco-catalog -- ungrant <app hoặc client ID> <e
 5. Khách **Nghiệm thu mốc này**, **Yêu cầu sửa** (trừ lượt sửa miễn phí) hoặc **Mở tranh chấp** trên trang đơn. Quá 7 ngày không phản hồi thì nền tảng nhắc, 14 ngày thì tự nghiệm thu (máy chủ chạy việc này mỗi giờ; `feco-catalog order-due` chạy ngay). Tranh chấp được giải quyết bằng `order-resolve DH-000001 continue|full|partial <số tiền>`.
 6. Khi đơn Hoàn tất và đã trả đủ, đặt gói bàn giao cuối để khách tải về: `feco-catalog order-handover DH-000001 ban-giao.zip`.
 
-### 10. Dừng và xóa dữ liệu
+### 10. Dùng thử thanh toán ZaloPay
+
+1. Lấy khóa sandbox ZaloPay (`app_id`, `key1`, `key2`) ở tài liệu https://docs.zalopay.vn (bộ mẫu `app_id` 2554 dùng được ngày 11/11/2026) hoặc tài khoản sandbox riêng. Đặt trước khi chạy `feco-server`; không ghi khóa vào tệp trong repo:
+
+   ```bash
+   export FECO_ZALOPAY_APP_ID=<app_id> FECO_ZALOPAY_KEY1=<key1> FECO_ZALOPAY_KEY2=<key2>
+   export FECO_ZALOPAY_ENDPOINT=https://sb-openapi.zalopay.vn
+   ```
+
+   Ngoài production chỉ nhận endpoint sandbox; trỏ tới `openapi.zalopay.vn` thì máy chủ từ chối khởi động.
+2. Trên trang đơn (bước 9), sau khi chấp nhận báo giá, bấm **Thanh toán** ở dòng tiền đặt cọc: trang hiện số tiền, nội dung mốc và bốn phương thức. Chọn một phương thức để sang trang của ZaloPay (trả bằng ứng dụng ZaloPay sandbox hoặc thẻ thử trong tài liệu ZaloPay). Liên kết hết hạn sau 15 phút.
+3. Ở máy dev, ZaloPay không gọi callback tới `127.0.0.1` được: trạng thái được cập nhật khi bạn quay về trang chuyển hướng (máy chủ truy vấn cổng), hoặc trong vòng một phút nhờ việc truy vấn chủ động. Đơn chuyển "Đang thực hiện", email kèm hóa đơn tới Mailpit.
+4. **Lịch sử thanh toán** (http://127.0.0.1:8080/payments): giao dịch, hoàn tiền, tải lại hóa đơn, và thông tin xuất hóa đơn (cá nhân hoặc doanh nghiệp có mã số thuế).
+5. Đóng vai quản trị viên:
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- payments DH-000001                       # giao dịch của đơn
+   FECO_REVIEWER=lan cargo run -p feco-server --bin feco-catalog -- refund <transaction-id> 4000000 "Tranh chấp mốc 2"
+   FECO_REVIEWER=minh cargo run -p feco-server --bin feco-catalog -- refund-approve <refund-id>   # từ 10 triệu cần người thứ hai
+   cargo run -p feco-server --bin feco-catalog -- reconcile                                # đối soát ngày hôm qua
+   ```
+
+Không có khóa ZaloPay thì trang thanh toán báo chưa cấu hình cổng; ở dev có thể ghi nhận tay bằng `feco-catalog order-paid <payment-request-id>`. Thử riêng chữ ký với sandbox thật: đặt `FECO_ZALOPAY_SANDBOX_APP_ID`, `_KEY1`, `_KEY2` rồi chạy `cargo test -p feco-server --test zalopay_sandbox`.
+
+### 11. Dừng và xóa dữ liệu
 
 - Dừng `feco-server` và app mẫu bằng `Ctrl+C`.
 - Cách A: `docker compose -f infra/docker-compose.yml down`. Lệnh này dừng và xóa mọi dữ liệu dev, vì compose không dùng volume.
@@ -447,7 +474,7 @@ cargo run -p feco-license-check                 # license dịch vụ và ảnh 
 npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
 ```
 
-**Kiểm thử đầu-cuối** chạy với Kratos, Hydra, PostgreSQL và Mailpit thật, theo từng tình huống trong spec (đăng ký, xác minh, chống dò mật khẩu, TOTP, thiết bị, xóa tài khoản, khôi phục, đồng ý theo scope, pairwise, thu hồi, webhook, xuất dữ liệu, danh mục, cổng nhà phát triển, kiểm duyệt, F-SDK, đơn xây app với thời gian mô phỏng). Cần hạ tầng ở bước 2 đang chạy, và cổng 8080 phải trống (dừng `feco-server` trước):
+**Kiểm thử đầu-cuối** chạy với Kratos, Hydra, PostgreSQL và Mailpit thật, theo từng tình huống trong spec (đăng ký, xác minh, chống dò mật khẩu, TOTP, thiết bị, xóa tài khoản, khôi phục, đồng ý theo scope, pairwise, thu hồi, webhook, xuất dữ liệu, danh mục, cổng nhà phát triển, kiểm duyệt, F-SDK, đơn xây app với thời gian mô phỏng, thanh toán với cổng ZaloPay giả cùng giao thức). Cần hạ tầng ở bước 2 đang chạy, và cổng 8080 phải trống (dừng `feco-server` trước):
 
 ```bash
 FECO_E2E=1 cargo test -p feco-server --test e2e_auth

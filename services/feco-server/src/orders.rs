@@ -1615,6 +1615,14 @@ pub async fn cancel(
         }
     }
     tx.commit().await?;
+    // Lệnh hoàn với cổng thanh toán; hủy đơn là việc của khách nên cần quản trị viên duyệt.
+    for r in &refunds {
+        if let Err(e) =
+            crate::payments::from_order_request(state, *r, crate::payments::Requester::System).await
+        {
+            tracing::error!(error = %e, "không tạo được lệnh hoàn khi hủy đơn");
+        }
+    }
     let note = if refunds.is_empty() {
         String::new()
     } else {
@@ -1803,6 +1811,17 @@ pub async fn resolve_dispute(
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    if let Some(r) = refund {
+        if let Err(e) = crate::payments::from_order_request(
+            state,
+            r,
+            crate::payments::Requester::Admin(admin.to_owned()),
+        )
+        .await
+        {
+            tracing::error!(error = %e, "không tạo được lệnh hoàn khi giải quyết tranh chấp");
+        }
+    }
     let what = match resolution {
         Resolution::Continue => "Đội F-Eco sẽ tiếp tục sửa mốc này.".to_string(),
         Resolution::PartialRefund(n) => format!("Bạn được hoàn {} cho mốc này.", vnd(n)),

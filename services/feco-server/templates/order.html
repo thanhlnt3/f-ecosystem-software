@@ -93,7 +93,7 @@
 {% if !payments.is_empty() %}
 <h2>{{ i18n.t("order.payments") }}</h2>
 <table id="payments">
-{% for p in payments %}<tr class="payment"><td>{{ p.kind }}</td><td>{{ p.reason }}</td><td class="amount">{{ p.amount }}</td><td>{{ p.status }}</td></tr>{% endfor %}
+{% for p in payments %}<tr class="payment"><td>{{ p.kind }}</td><td>{{ p.reason }}</td><td class="amount">{{ p.amount }}</td><td>{{ p.status }}</td><td class="row-actions">{% if !p.pay_url.is_empty() %}<a class="pay" href="{{ p.pay_url }}">{{ i18n.t("order.pay") }}</a>{% endif %}</td></tr>{% endfor %}
 </table>
 <p class="muted">{{ i18n.t("order.payments_note") }}</p>
 {% endif %}

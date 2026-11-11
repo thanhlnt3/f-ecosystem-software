@@ -74,12 +74,12 @@ Dự án mới (động lực: xem `proposal.md`, mục Why). Có ba ràng buộ
 - **Phương án đã cân nhắc**: viết mới từ đầu (mất nhiều tháng cho phần điều phối agent mà Craft Anything đã có).
 
 ### D9. Thanh toán
-- **Chọn**: một lớp điều phối thanh toán có adapter cho từng cổng; phiên bản đầu tích hợp **VNPAY** (VietQR, thẻ ATM nội địa, thẻ quốc tế) và **MoMo** (ví điện tử).
+- **Chọn**: một lớp điều phối thanh toán có adapter cho từng cổng; phiên bản đầu tích hợp **ZaloPay** (VietQR, thẻ ATM nội địa, ví ZaloPay, thẻ quốc tế qua trang cổng của ZaloPay; quyết định của chủ dự án ngày 11/11/2026, thay cho VNPAY và MoMo dự kiến ban đầu). VNPAY và MoMo thêm sau qua adapter.
   - Trạng thái giao dịch là một máy trạng thái lưu trong PostgreSQL. Mọi lệnh tạo giao dịch có khóa idempotency (mã mốc, lần thử).
   - Webhook được xác minh chữ ký theo tài liệu của từng cổng, rồi đưa vào outbox. Có thêm job truy vấn chủ động các giao dịch "Chờ thanh toán" quá 15 phút.
   - Đối soát hằng ngày bằng file hoặc API báo cáo của cổng.
 - **Lý do**: thanh toán qua trang hoặc thành phần nhúng của cổng giúp F-Eco không bao giờ chạm vào dữ liệu thẻ, nên phạm vi PCI DSS thu nhỏ còn mức tự đánh giá đơn giản nhất.
-- **Phương án đã cân nhắc**: Stripe (theo hiểu biết của mình, chưa nhận doanh nghiệp đăng ký tại Việt Nam; cần kiểm tra lại); OnePay, ZaloPay (thêm sau qua adapter).
+- **Phương án đã cân nhắc**: Stripe (theo hiểu biết của mình, chưa nhận doanh nghiệp đăng ký tại Việt Nam; cần kiểm tra lại); VNPAY, MoMo, OnePay (thêm sau qua adapter).
 
 ### D10. Hóa đơn điện tử
 - **Chọn**: tích hợp API của một nhà cung cấp hóa đơn điện tử được cấp phép tại Việt Nam (ví dụ VNPT Invoice, Viettel S-Invoice, MISA meInvoice). Hóa đơn được phát hành sau khi giao dịch Thành công; hoàn tiền thì lập hóa đơn điều chỉnh. Nhà cung cấp cụ thể là câu hỏi mở.

@@ -21,6 +21,9 @@ pub mod payment_hosts {
     pub const VNPAY_PRODUCTION: &[&str] = &["pay.vnpay.vn"];
     pub const MOMO_SANDBOX: &[&str] = &["test-payment.momo.vn"];
     pub const MOMO_PRODUCTION: &[&str] = &["payment.momo.vn"];
+    /// ZaloPay API v2 (docs.zalopay.vn): sandbox và production.
+    pub const ZALOPAY_SANDBOX: &[&str] = &["sb-openapi.zalopay.vn"];
+    pub const ZALOPAY_PRODUCTION: &[&str] = &["openapi.zalopay.vn"];
 }
 
 /// Giá trị bí mật: không bao giờ in ra qua `Debug` hay `Display`.
@@ -59,10 +62,21 @@ pub struct MomoConfig {
     pub endpoint: Url,
 }
 
+/// ZaloPay API v2: `key1` ký yêu cầu gửi đi, `key2` kiểm chữ ký callback.
+#[derive(Debug, Clone)]
+pub struct ZalopayConfig {
+    pub app_id: i64,
+    pub key1: Secret,
+    pub key2: Secret,
+    /// Gốc API, ví dụ `https://sb-openapi.zalopay.vn/`.
+    pub endpoint: Url,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct PaymentsConfig {
     pub vnpay: Option<VnpayConfig>,
     pub momo: Option<MomoConfig>,
+    pub zalopay: Option<ZalopayConfig>,
 }
 
 /// Nhà cung cấp thử thách chống bot (spec account-identity, "Chống dò mật khẩu").
@@ -253,6 +267,45 @@ impl Config {
         )
         .transpose()?;
 
+        let zalopay = group(
+            "ZaloPay",
+            [
+                ("FECO_ZALOPAY_APP_ID", get("FECO_ZALOPAY_APP_ID")),
+                ("FECO_ZALOPAY_KEY1", get("FECO_ZALOPAY_KEY1")),
+                ("FECO_ZALOPAY_KEY2", get("FECO_ZALOPAY_KEY2")),
+                ("FECO_ZALOPAY_ENDPOINT", get("FECO_ZALOPAY_ENDPOINT")),
+            ],
+        )?
+        .map(
+            |[app_id, key1, key2, endpoint]| -> Result<ZalopayConfig, ConfigError> {
+                // Cổng giả trên loopback (kiểm thử) chỉ được dùng ở dev.
+                let local = environment == Environment::Dev
+                    && Url::parse(endpoint).is_ok_and(|u| {
+                        u.scheme() == "http"
+                            && matches!(u.host_str(), Some("127.0.0.1" | "localhost"))
+                    });
+                let mut endpoint = if local {
+                    Url::parse(endpoint).expect("đã kiểm ở trên")
+                } else {
+                    parse_url("FECO_ZALOPAY_ENDPOINT", endpoint)?
+                };
+                if !endpoint.path().ends_with('/') {
+                    let path = format!("{}/", endpoint.path());
+                    endpoint.set_path(&path);
+                }
+                Ok(ZalopayConfig {
+                    app_id: app_id.parse().map_err(|_| ConfigError::Invalid {
+                        var: "FECO_ZALOPAY_APP_ID",
+                        reason: "phải là số".into(),
+                    })?,
+                    key1: Secret::new(key1),
+                    key2: Secret::new(key2),
+                    endpoint,
+                })
+            },
+        )
+        .transpose()?;
+
         let auth = auth_config(environment, &get)?;
         let security = security_config(environment, &get)?;
         let developer = developer_config(environment, &get)?;
@@ -264,7 +317,11 @@ impl Config {
             auth,
             security,
             developer,
-            payments: PaymentsConfig { vnpay, momo },
+            payments: PaymentsConfig {
+                vnpay,
+                momo,
+                zalopay,
+            },
         };
         config.validate()?;
         Ok(config)
@@ -281,6 +338,19 @@ impl Config {
                 payment_hosts::VNPAY_SANDBOX,
                 payment_hosts::VNPAY_PRODUCTION,
             )?;
+        }
+        if let Some(z) = &self.payments.zalopay {
+            let local = self.environment == Environment::Dev && z.endpoint.scheme() == "http";
+            if !local {
+                check_gateway(
+                    self.environment,
+                    "ZaloPay",
+                    "FECO_ZALOPAY_ENDPOINT",
+                    &z.endpoint,
+                    payment_hosts::ZALOPAY_SANDBOX,
+                    payment_hosts::ZALOPAY_PRODUCTION,
+                )?;
+            }
         }
         if let Some(m) = &self.payments.momo {
             check_gateway(
@@ -877,6 +947,50 @@ mod tests {
             Config::from_vars(&v).unwrap_err(),
             ConfigError::InsecureScheme { .. }
         ));
+    }
+
+    const ZALOPAY_SANDBOX: &[(&str, &str)] = &[
+        ("FECO_ZALOPAY_APP_ID", "2553"),
+        ("FECO_ZALOPAY_KEY1", "sandbox-key1"),
+        ("FECO_ZALOPAY_KEY2", "sandbox-key2"),
+        ("FECO_ZALOPAY_ENDPOINT", "https://sb-openapi.zalopay.vn"),
+    ];
+
+    /// Spec payments, "Staging dùng khóa thật", với ZaloPay.
+    #[test]
+    fn zalopay_sandbox_only_outside_production() {
+        let c = Config::from_vars(&with_env("staging", ZALOPAY_SANDBOX)).unwrap();
+        let z = c.payments.zalopay.as_ref().unwrap();
+        assert_eq!(z.app_id, 2553);
+        assert_eq!(z.endpoint.as_str(), "https://sb-openapi.zalopay.vn/");
+        let mut live = with_env("staging", ZALOPAY_SANDBOX);
+        live.insert(
+            "FECO_ZALOPAY_ENDPOINT".into(),
+            "https://openapi.zalopay.vn".into(),
+        );
+        assert!(matches!(
+            Config::from_vars(&live).unwrap_err(),
+            ConfigError::ProductionGatewayOutsideProduction {
+                gateway: "ZaloPay",
+                ..
+            }
+        ));
+        // Cổng giả trên loopback: chỉ ở dev, không ở staging.
+        let mut fake = with_env("dev", ZALOPAY_SANDBOX);
+        fake.insert(
+            "FECO_ZALOPAY_ENDPOINT".into(),
+            "http://127.0.0.1:9123".into(),
+        );
+        assert!(Config::from_vars(&fake).is_ok());
+        fake.insert("FECO_ENV".into(), "staging".into());
+        assert!(Config::from_vars(&fake).is_err());
+        let mut partial = with_env("dev", ZALOPAY_SANDBOX);
+        partial.remove("FECO_ZALOPAY_KEY2");
+        assert!(matches!(
+            Config::from_vars(&partial).unwrap_err(),
+            ConfigError::Incomplete { .. }
+        ));
+        assert!(!format!("{c:?}").contains("sandbox-key1"));
     }
 
     /// Spec platform-security: bí mật không xuất hiện trong nhật ký.

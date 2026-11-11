@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("pay.title") }}{% endblock %}
+{% block content %}
+<p><a href="/orders/{{ order_id }}">← {{ order_code }}</a></p>
+<h1>{{ i18n.t("pay.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<div class="facts">
+  <span class="muted">{{ i18n.t("pay.order") }}</span><span>{{ order_code }} · {{ order_title }}</span>
+  <span class="muted">{{ i18n.t("pay.for") }}</span><span id="pay-what">{{ what }}</span>
+  <span class="muted">{{ i18n.t("pay.amount") }}</span><strong id="pay-amount">{{ amount }}</strong>
+</div>
+{% if paid %}
+<div class="msg success" id="pay-done">{{ i18n.t("pay.already_paid") }}</div>
+{% else if !payable %}
+<div class="msg info">{{ i18n.t("pay.not_payable") }}</div>
+{% else if !gateway_ready %}
+<div class="msg error">{{ i18n.t("pay.unavailable") }}</div>
+{% else %}
+<form method="post" action="/payments/{{ request }}/pay" id="pay-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label>{{ i18n.t("pay.method") }}</label>
+  {% for m in methods %}
+  <div><input type="radio" name="method" value="{{ m.code }}" id="m-{{ m.code }}" required{% if loop.first %} checked{% endif %}>
+    <label for="m-{{ m.code }}" style="display:inline;font-weight:400">{{ m.label }}</label></div>
+  {% endfor %}
+  <p class="muted">{{ i18n.t("pay.gateway_note") }} {{ minutes }} {{ i18n.t("pay.minutes") }}.</p>
+  <button type="submit">{{ i18n.t("pay.continue") }} {{ amount }}</button>
+</form>
+{% endif %}
+<div class="links"><a href="/payments">{{ i18n.t("pay.history") }}</a></div>
+{% endblock %}

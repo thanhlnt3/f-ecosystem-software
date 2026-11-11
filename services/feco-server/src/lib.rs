@@ -29,6 +29,8 @@ pub mod oauth;
 pub mod orders;
 pub mod orders_web;
 pub mod pairwise;
+pub mod payments;
+pub mod payments_web;
 pub mod ratelimit;
 
 pub mod review;
@@ -39,6 +41,7 @@ pub mod store_web;
 pub mod throttle;
 pub mod views;
 pub mod webhooks;
+pub mod zalopay;
 
 use std::sync::Arc;
 
@@ -99,6 +102,8 @@ pub struct AppState {
     pub clamd: Option<std::net::SocketAddr>,
     /// Địa chỉ nhận cảnh báo kiểm duyệt.
     pub admin_emails: Vec<String>,
+    /// Cổng thanh toán ZaloPay (không cấu hình thì trang thanh toán báo chưa sẵn sàng).
+    pub zalopay: Option<zalopay::ZaloPay>,
 }
 
 /// Ngưỡng giới hạn tần suất (yêu cầu mỗi phút).
@@ -165,6 +170,7 @@ impl AppState {
             tuf_lock: tokio::sync::Mutex::new(()),
             clamd: config.developer.clamd,
             admin_emails: config.developer.admin_emails.clone(),
+            zalopay: config.payments.zalopay.as_ref().map(zalopay::ZaloPay::new),
         })
     }
 }
@@ -274,6 +280,18 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/orders/{id}/handover", get(orders_web::handover))
         .route("/orders/{id}/{action}", post(orders_web::action))
         .route("/policy/custom-build", get(orders_web::terms))
+        .route("/payments", get(payments_web::history))
+        .route("/payments/billing", post(payments_web::save_billing))
+        .route("/payments/return", get(payments_web::return_page))
+        .route("/payments/invoices/{id}", get(payments_web::invoice))
+        .route(
+            "/payments/{request}/pay",
+            get(payments_web::pay_page).post(payments_web::pay),
+        )
+        .route(
+            "/v1/payments/zalopay/callback",
+            post(payments_web::zalopay_callback),
+        )
         .route("/v1/catalog/private", get(store_web::api_private))
         .route("/store", get(store_web::list))
         .route("/store/{id}", get(store_web::show))
@@ -345,6 +363,7 @@ mod tests {
             tuf_lock: tokio::sync::Mutex::new(()),
             clamd: None,
             admin_emails: Vec::new(),
+            zalopay: None,
         }
     }
 

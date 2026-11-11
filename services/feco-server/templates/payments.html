@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("pay.history") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("pay.history") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+{% if items.is_empty() %}<p class="muted" id="no-payments">{{ i18n.t("pay.none") }}</p>{% endif %}
+<table id="history">
+{% for h in items %}
+<tr class="payment" data-ref="{{ h.reference }}" data-status="{{ h.status_code }}"><td>
+  <strong><a href="/orders/{{ h.order_id }}">{{ h.order_code }}</a> · {{ h.what }}</strong> · {{ h.amount }} · <span class="tx-status">{{ h.status }}</span><br>
+  <span class="muted">{{ h.method }} · {{ h.at }} · {{ i18n.t("pay.reference") }} <code>{{ h.reference }}</code></span>
+  {% for r in h.refunds %}<div class="refund">{{ i18n.t("pay.refund") }} {{ r.amount }} · {{ r.status }} · <span class="muted">{{ r.reason }}</span></div>{% endfor %}
+  {% for i in h.invoices %}<div><a class="invoice" href="/payments/invoices/{{ i.id }}">{{ i.kind }} {{ i.number }}</a> <span class="muted">{{ i.amount }}</span></div>{% endfor %}
+</td></tr>
+{% endfor %}
+</table>
+
+<h2>{{ i18n.t("pay.billing") }}</h2>
+<p class="muted">{{ i18n.t("pay.billing_note") }}</p>
+<form method="post" action="/payments/billing" id="billing-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <div><input type="radio" name="kind" value="individual" id="k-person"{% if !company %} checked{% endif %}> <label for="k-person" style="display:inline;font-weight:400">{{ i18n.t("pay.individual") }}</label></div>
+  <div><input type="radio" name="kind" value="company" id="k-company"{% if company %} checked{% endif %}> <label for="k-company" style="display:inline;font-weight:400">{{ i18n.t("pay.company") }}</label></div>
+  <label for="b-name">{{ i18n.t("pay.billing_name") }}</label>
+  <input type="text" name="name" id="b-name" value="{{ name }}" maxlength="200" required>
+  <label for="b-tax">{{ i18n.t("pay.tax_code") }}</label>
+  <input type="text" name="tax_code" id="b-tax" value="{{ tax_code }}" placeholder="0101234567">
+  <label for="b-address">{{ i18n.t("pay.address") }}</label>
+  <input type="text" name="address" id="b-address" value="{{ address }}">
+  <label for="b-email">{{ i18n.t("pay.invoice_email") }}</label>
+  <input type="email" name="email" id="b-email" value="{{ email }}" required>
+  <button type="submit" class="secondary">{{ i18n.t("pay.save") }}</button>
+</form>
+<div class="links"><a href="/orders">{{ i18n.t("order.title") }}</a><a href="/">{{ i18n.t("home.title") }}</a></div>
+{% endblock %}
