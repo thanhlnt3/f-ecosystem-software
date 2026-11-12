@@ -373,6 +373,31 @@ impl Auth {
         Ok(body["version"].as_str().map(str::to_owned))
     }
 
+    /// Trung tâm thông báo của người dùng (spec notifications: báo giá, đơn hàng, cập nhật app...).
+    pub async fn notifications(&self, access: &str) -> Result<Vec<Notification>, AuthError> {
+        let url = self
+            .server
+            .join("v1/notifications")
+            .expect("URL máy chủ hợp lệ");
+        let res = self
+            .http
+            .get(url)
+            .bearer_auth(access)
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        match res.status() {
+            s if s.is_success() => {}
+            reqwest::StatusCode::UNAUTHORIZED => return Err(AuthError::Expired),
+            s => return Err(AuthError::Failed(format!("/v1/notifications trả {s}"))),
+        }
+        let body: Value = res
+            .json()
+            .await
+            .map_err(|e| AuthError::Failed(e.to_string()))?;
+        Ok(parse_notifications(&body))
+    }
+
     /// App riêng tư của người dùng (ví dụ bản build bàn giao của đơn xây app).
     pub async fn private_apps(&self, access: &str) -> Result<Vec<String>, AuthError> {
         let url = self
@@ -507,4 +532,54 @@ pub async fn wait_for_callback(
         .get("code")
         .cloned()
         .ok_or_else(|| AuthError::Failed("callback không có code".into()))
+}
+
+/// Một thông báo trong trung tâm thông báo của launcher.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notification {
+    pub title: String,
+    pub body: String,
+    /// Địa chỉ màn hình liên quan (mở trong trình duyệt).
+    pub link: String,
+    pub created_at: String,
+    pub read: bool,
+}
+
+pub fn parse_notifications(body: &Value) -> Vec<Notification> {
+    body["notifications"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|n| {
+            Some(Notification {
+                title: n["title"].as_str()?.to_owned(),
+                body: n["body"].as_str().unwrap_or_default().to_owned(),
+                link: n["link"]
+                    .as_str()
+                    .filter(|l| l.starts_with("https://") || l.starts_with("http://"))
+                    .unwrap_or_default()
+                    .to_owned(),
+                created_at: n["created_at"].as_str().unwrap_or_default().to_owned(),
+                read: n["read"].as_bool().unwrap_or(false),
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod notification_tests {
+    use super::*;
+
+    #[test]
+    fn notifications_keep_only_web_links() {
+        let body = serde_json::json!({"notifications": [
+            {"title": "Báo giá cho đơn DH-000001", "body": "Đội F-Eco đã gửi báo giá.", "link": "https://f-eco.vn/orders/1#quote", "created_at": "2026-11-12T03:00:00Z", "read": false},
+            {"title": "Lạ", "body": "", "link": "file:///etc/passwd", "created_at": "", "read": true},
+            {"body": "thiếu tiêu đề"}
+        ]});
+        let n = parse_notifications(&body);
+        assert_eq!(n.len(), 2);
+        assert_eq!(n[0].link, "https://f-eco.vn/orders/1#quote");
+        assert!(n[1].link.is_empty(), "chỉ mở liên kết web");
+    }
 }

@@ -30,7 +30,7 @@ pub struct Attachment {
 #[derive(Clone)]
 pub enum Mailer {
     Smtp {
-        transport: AsyncSmtpTransport<Tokio1Executor>,
+        transport: Box<AsyncSmtpTransport<Tokio1Executor>>,
         from: Mailbox,
     },
     /// Lưu email trong bộ nhớ, dùng cho test.
@@ -48,25 +48,56 @@ pub enum MailError {
 }
 
 impl Mailer {
-    /// Tạo mailer SMTP từ địa chỉ dạng `smtp://host:port`. Hiện chỉ hỗ trợ SMTP
-    /// không mã hóa cho dev; SMTP có TLS được thêm cùng nhóm task thông báo (14.3).
+    /// Tạo mailer SMTP từ địa chỉ:
+    /// - `smtps://user:pass@host:465`: TLS ngay từ đầu (khuyến nghị cho production);
+    /// - `smtp://user:pass@host:587?tls=starttls`: STARTTLS bắt buộc;
+    /// - `smtp://host:1025`: không mã hóa, chỉ cho dev (Mailpit).
+    ///
+    /// Máy chủ chuyển tiếp ký DKIM cho tên miền gửi (xem `maildns`).
     pub fn smtp(url: &Url, from: &str) -> Result<Self, MailError> {
-        if url.scheme() != "smtp" {
-            return Err(MailError::Config(format!(
-                "chỉ hỗ trợ smtp:// ở bản hiện tại, nhận {}://",
-                url.scheme()
-            )));
-        }
         let host = url
             .host_str()
             .ok_or_else(|| MailError::Config("thiếu host".into()))?;
-        let transport = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
-            .port(url.port().unwrap_or(25))
-            .build();
+        let starttls = url
+            .query_pairs()
+            .any(|(k, v)| k == "tls" && v == "starttls");
+        let builder = match url.scheme() {
+            "smtps" => AsyncSmtpTransport::<Tokio1Executor>::relay(host)
+                .map_err(|e| MailError::Config(e.to_string()))?
+                .port(url.port().unwrap_or(465)),
+            "smtp" if starttls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(host)
+                .map_err(|e| MailError::Config(e.to_string()))?
+                .port(url.port().unwrap_or(587)),
+            "smtp" => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
+                .port(url.port().unwrap_or(25)),
+            other => {
+                return Err(MailError::Config(format!(
+                    "chỉ hỗ trợ smtp:// và smtps://, nhận {other}://"
+                )))
+            }
+        };
+        let builder = if url.username().is_empty() {
+            builder
+        } else {
+            let user = percent_decode(url.username());
+            let pass = percent_decode(url.password().unwrap_or_default());
+            builder.credentials(lettre::transport::smtp::authentication::Credentials::new(
+                user, pass,
+            ))
+        };
+        let transport = Box::new(builder.build());
         let from = from
             .parse::<Mailbox>()
             .map_err(|e| MailError::Address(e.to_string()))?;
         Ok(Mailer::Smtp { transport, from })
+    }
+
+    /// SMTP có mã hóa không (production phải có).
+    pub fn smtp_url_is_encrypted(url: &Url) -> bool {
+        url.scheme() == "smtps"
+            || url
+                .query_pairs()
+                .any(|(k, v)| k == "tls" && v == "starttls")
     }
 
     pub fn memory() -> (Self, Arc<Mutex<Vec<SentMail>>>) {
@@ -139,6 +170,13 @@ impl Mailer {
             }
         }
     }
+}
+
+fn percent_decode(s: &str) -> String {
+    form_urlencoded::parse(format!("x={s}").as_bytes())
+        .next()
+        .map(|(_, v)| v.into_owned())
+        .unwrap_or_default()
 }
 
 /// Nội dung các email cảnh báo, song ngữ Việt/Anh.
@@ -230,12 +268,23 @@ mod tests {
     }
 
     #[test]
-    fn smtp_requires_smtp_scheme() {
-        let url = Url::parse("smtps://mail.example.com").unwrap();
+    fn smtp_schemes_and_encryption() {
+        let from = "F-Eco <no-reply@f-eco.example>";
+        let url = Url::parse("http://mail.example.com").unwrap();
         assert!(matches!(
-            Mailer::smtp(&url, "F-Eco <no-reply@f-eco.example>"),
+            Mailer::smtp(&url, from),
             Err(MailError::Config(_))
         ));
+        for (raw, encrypted) in [
+            ("smtps://user:p%40ss@mail.example.com", true),
+            ("smtp://user:pass@mail.example.com:587?tls=starttls", true),
+            ("smtp://127.0.0.1:1025", false),
+        ] {
+            let url = Url::parse(raw).unwrap();
+            assert!(Mailer::smtp(&url, from).is_ok(), "{raw}");
+            assert_eq!(Mailer::smtp_url_is_encrypted(&url), encrypted, "{raw}");
+        }
+        assert_eq!(percent_decode("p%40ss"), "p@ss");
     }
 
     #[test]

@@ -1376,6 +1376,8 @@ pub async fn release(
     .execute(&state.db)
     .await?;
     state.catalog.clear();
+    // Báo người đã cài app (loại tùy chọn "cập nhật app", spec notifications).
+    crate::notifications::app_updated(state, &info.app_id, &manifest.name, &info.version).await;
     Ok(())
 }
 

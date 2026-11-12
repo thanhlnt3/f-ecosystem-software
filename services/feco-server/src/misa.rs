@@ -336,7 +336,10 @@ pub mod testing {
         pub addr: std::net::SocketAddr,
         /// Hóa đơn đã phát hành (thân `InvoiceData` nhận được).
         pub published: Arc<Mutex<Vec<Value>>>,
+        /// Số hóa đơn đã cấp, theo thứ tự (bắt đầu từ một số ngẫu nhiên mỗi lần chạy).
+        pub numbers: Arc<Mutex<Vec<String>>>,
         pub tokens_issued: Arc<Mutex<usize>>,
+        first: u64,
     }
 
     const TOKEN: &str = "fake-misa-token";
@@ -394,7 +397,8 @@ pub mod testing {
                 continue;
             }
             published.push(inv.clone());
-            let no = format!("{:08}", published.len());
+            let no = format!("{:08}", f.first + published.len() as u64);
+            f.numbers.lock().unwrap().push(no.clone());
             results.push(json!({"RefID": inv["RefID"], "TransactionID": format!("TRA{no}"), "InvTemplateNo": "1", "InvSeries": inv["InvSeries"], "InvNo": no, "InvDate": inv["InvDate"], "ErrorCode": null}));
         }
         Json(
@@ -426,7 +430,13 @@ pub mod testing {
                 client_secret: client_secret.to_owned(),
                 addr: listener.local_addr()?,
                 published: Arc::default(),
+                numbers: Arc::default(),
                 tokens_issued: Arc::default(),
+                first: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_micros() as u64
+                    % 90_000_000,
             };
             let app = Router::new()
                 .route("/apis/itg/meinvoice/invoice/token", post(token))
@@ -489,7 +499,11 @@ mod tests {
             .unwrap();
         assert_eq!(
             (p.series.as_str(), p.number.as_str(), p.date.as_str()),
-            ("1C26TFE", "00000001", "2026-11-12")
+            (
+                "1C26TFE",
+                fake.numbers.lock().unwrap()[0].as_str(),
+                "2026-11-12"
+            )
         );
         let inv = fake.published.lock().unwrap()[0].clone();
         assert_eq!(inv["BuyerTaxCode"], "0101234567");
@@ -520,7 +534,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(adj.number, "00000002");
+        assert_eq!(adj.number, fake.numbers.lock().unwrap()[1]);
         let inv = fake.published.lock().unwrap()[1].clone();
         assert_eq!(
             (
@@ -529,7 +543,7 @@ mod tests {
                 inv["OrgInvSeries"].as_str(),
                 inv["OrgInvNo"].as_str()
             ),
-            (Some(2), Some("1"), Some("C26TFE"), Some("00000001"))
+            (Some(2), Some("1"), Some("C26TFE"), Some(p.number.as_str()))
         );
         // Cá nhân: chỉ cần họ tên.
         let person = Buyer {

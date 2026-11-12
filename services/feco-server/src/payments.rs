@@ -1970,7 +1970,26 @@ async fn store_and_send(
     .await?
     .rows_affected();
     if inserted == 0 {
-        return Ok(());
+        // Đã có hóa đơn cho giao dịch (hoặc lệnh hoàn) này: phát hành lại là thừa. Nếu chưa có
+        // thì số hóa đơn bị trùng: phải báo, không được lặng lẽ bỏ qua.
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM invoices WHERE transaction_id = $1 AND kind = $2
+               AND refund_id IS NOT DISTINCT FROM $3)",
+        )
+        .bind(transaction)
+        .bind(kind)
+        .bind(refund)
+        .fetch_one(&state.db)
+        .await?;
+        if exists {
+            return Ok(());
+        }
+        return Err(problem(
+            StatusCode::CONFLICT,
+            "invoice_number_conflict",
+            format!("Số hóa đơn {number} đã tồn tại."),
+            format!("Invoice number {number} already exists."),
+        ));
     }
     let attachment = issued.attachment.unwrap_or_else(|| Attachment {
         name: format!("{number}.html"),

@@ -3,6 +3,7 @@
 //! Các API khác (danh mục, đơn hàng, thanh toán) được thêm theo từng nhóm task.
 
 pub mod account;
+pub mod admin;
 pub mod alerts;
 pub mod api;
 pub mod apps;
@@ -25,9 +26,11 @@ pub mod hydra;
 pub mod i18n;
 pub mod kratos;
 pub mod launch;
+pub mod maildns;
 pub mod mailer;
 pub mod misa;
 pub mod momo;
+pub mod notifications;
 pub mod oauth;
 pub mod orders;
 pub mod orders_web;
@@ -150,6 +153,12 @@ impl AppState {
     /// gọi [`store::MIGRATOR`] trước khi phục vụ yêu cầu.
     pub fn from_config(config: &Config) -> Result<Self, StartError> {
         let a = &config.auth;
+        // Production chỉ gửi email qua SMTP có mã hóa (spec notifications).
+        if config.environment.is_production() && !Mailer::smtp_url_is_encrypted(&a.smtp_url) {
+            return Err(StartError::Mail(MailError::Config(
+                "production phải dùng smtps:// hoặc smtp://...?tls=starttls".into(),
+            )));
+        }
         let db = sqlx::postgres::PgPoolOptions::new()
             .max_connections(10)
             .acquire_timeout(std::time::Duration::from_secs(5))
@@ -299,6 +308,36 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/orders/{id}/handover", get(orders_web::handover))
         .route("/orders/{id}/{action}", post(orders_web::action))
         .route("/policy/custom-build", get(orders_web::terms))
+        .route("/admin", get(admin::home))
+        .route("/admin/reviews", get(admin::reviews))
+        .route(
+            "/admin/reviews/{version}/{action}",
+            post(admin::review_action),
+        )
+        .route("/admin/orders", get(admin::orders_list))
+        .route("/admin/orders/{id}", get(admin::order_detail))
+        .route("/admin/orders/{id}/{action}", post(admin::order_action))
+        .route(
+            "/admin/refunds",
+            get(admin::refunds).post(admin::create_refund),
+        )
+        .route("/admin/refunds/{id}/approve", post(admin::approve_refund))
+        .route("/admin/users", get(admin::users))
+        .route("/admin/users/{id}/{action}", post(admin::user_action))
+        .route(
+            "/admin/members",
+            get(admin::members).post(admin::save_member),
+        )
+        .route("/notifications", get(notifications::center))
+        .route(
+            "/notifications/settings",
+            post(notifications::save_settings),
+        )
+        .route(
+            "/notifications/unsubscribe/{token}",
+            get(notifications::unsubscribe_page).post(notifications::unsubscribe),
+        )
+        .route("/v1/notifications", get(notifications::api_list))
         .route("/payments", get(payments_web::history))
         .route("/payments/billing", post(payments_web::save_billing))
         .route("/payments/return", get(payments_web::return_page))

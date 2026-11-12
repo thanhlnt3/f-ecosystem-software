@@ -60,6 +60,14 @@ Quyền sử dụng (tạm, tới nhóm 12-13):
   feco-catalog order-handover <mã đơn> <bàn-giao.zip>   gói bàn giao cuối (mã nguồn, spec, tài liệu, build)
   feco-catalog order-due                           chạy ngay việc theo thời gian (nhắc, tự nghiệm thu)
 
+Email:
+  feco-catalog mail-dns <tên miền> <selector DKIM> [include SPF] [email nhận báo cáo DMARC]
+                                                  kiểm tra SPF, DKIM, DMARC và gợi ý bản ghi
+
+Bảng quản trị:
+  feco-catalog admin-set <email> <vai trò,...|none>   vai trò: reviewer, support, project_manager,
+                                                  finance, sysadmin (cần passkey khi đăng nhập /admin)
+
 Thanh toán (quản trị viên ghi tên bằng FECO_REVIEWER):
   feco-catalog payments <mã đơn>                   giao dịch, lệnh hoàn của một đơn
   feco-catalog payment-check <mã giao dịch>        truy vấn chủ động cổng thanh toán
@@ -436,6 +444,60 @@ async fn run(args: Vec<String>) -> Result<(), String> {
                     );
                 }
             }
+        }
+        "mail-dns" => {
+            let (domain, selector) = (arg(&args, 1)?, arg(&args, 2)?);
+            let servers = if state.dns_servers.is_empty() {
+                vec!["1.1.1.1:53".parse().unwrap(), "8.8.8.8:53".parse().unwrap()]
+            } else {
+                state.dns_servers.clone()
+            };
+            let report = feco_server::maildns::check(&servers, domain, selector)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!("SPF:   {}", report.spf.as_deref().unwrap_or("(không có)"));
+            println!("DKIM:  {}", report.dkim.as_deref().unwrap_or("(không có)"));
+            println!("DMARC: {}", report.dmarc.as_deref().unwrap_or("(không có)"));
+            if report.ok() {
+                println!("đạt");
+            } else {
+                for p in &report.problems {
+                    println!("- {p}");
+                }
+                println!(
+                    "
+Bản ghi gợi ý:"
+                );
+                let include = args
+                    .get(3)
+                    .map(String::as_str)
+                    .unwrap_or("<include của máy chủ gửi>");
+                let rua = args
+                    .get(4)
+                    .cloned()
+                    .unwrap_or_else(|| format!("dmarc@{domain}"));
+                for (name, value) in
+                    feco_server::maildns::recommended(domain, selector, include, &rua)
+                {
+                    println!("  {name}  TXT  \"{value}\"");
+                }
+                return Err("tên miền chưa đủ SPF, DKIM, DMARC".into());
+            }
+        }
+        "admin-set" => {
+            let email = arg(&args, 1)?;
+            let roles: Vec<feco_server::admin::Role> = match arg(&args, 2)? {
+                "none" => Vec::new(),
+                list => list
+                    .split(',')
+                    .map(|r| {
+                        feco_server::admin::Role::parse(r.trim())
+                            .ok_or(format!("vai trò không hợp lệ: {r}"))
+                    })
+                    .collect::<Result<_, _>>()?,
+            };
+            feco_server::admin::set_member(&state, &reviewer, email, &roles).await?;
+            println!("đã cập nhật vai trò quản trị của {email}");
         }
         "payment-check" => {
             let status = payments::confirm(

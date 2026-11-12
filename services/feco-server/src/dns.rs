@@ -151,7 +151,14 @@ async fn ask(server: SocketAddr, sent: &[u8]) -> Result<Vec<String>, String> {
 /// Mọi bản ghi TXT của `domain`.
 pub async fn txt_records(servers: &[SocketAddr], domain: &str) -> Result<Vec<String>, DnsError> {
     let domain = domain.trim_end_matches('.').to_ascii_lowercase();
-    if !valid_domain(&domain) {
+    // Bản ghi email: `_dmarc.<miền>` và `<selector>._domainkey.<miền>`.
+    let checked = match domain.find("._domainkey.") {
+        Some(i) if valid_domain(&format!("{}.x", &domain[..i])) => {
+            domain[i + "._domainkey.".len()..].to_owned()
+        }
+        _ => domain.strip_prefix("_dmarc.").unwrap_or(&domain).to_owned(),
+    };
+    if !valid_domain(&checked) {
         return Err(DnsError::InvalidName);
     }
     let mut id = [0u8; 2];

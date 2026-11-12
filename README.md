@@ -19,7 +19,10 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 >
 > - Thanh toán qua ZaloPay (sandbox): chọn VietQR, thẻ ATM, ví ZaloPay hoặc thẻ quốc tế trên trang của cổng (F-Eco không nhận số thẻ), callback có chữ ký, truy vấn chủ động khi quá 15 phút, không thu hai lần, hoàn tiền (một phần, từ 10 triệu cần hai người duyệt), hóa đơn (bản nháp, chờ nhà cung cấp hóa đơn điện tử), lịch sử thanh toán, đối soát hằng ngày.
 >
-> Chưa có: bảng quản trị (người duyệt và đội F-Eco tạm dùng công cụ `feco-catalog`), máy ảo chạy thử app, môi trường sandbox, hóa đơn điện tử thật. Chưa dùng được cho người dùng cuối.
+> - Thanh toán còn qua VNPAY (QR, thẻ ATM, thẻ quốc tế) và MoMo (ví); hóa đơn điện tử qua MISA meInvoice khi cấu hình (chưa có tài khoản thử).
+> - Bảng quản trị (`/admin`) với 5 vai trò, bắt buộc passkey hoặc khóa bảo mật; thông báo qua email và trung tâm thông báo trên web và trong F-Launcher, tắt được loại tùy chọn, hủy đăng ký không cần đăng nhập.
+>
+> Chưa có: máy ảo chạy thử app, môi trường sandbox, tên miền email (SPF, DKIM, DMARC), tài khoản thử của VNPAY, MoMo, MISA. Chưa dùng được cho người dùng cuối.
 
 ## Mục lục
 
@@ -34,7 +37,8 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
   - [8. Viết app con bằng F-SDK](#8-viết-app-con-bằng-f-sdk)
   - [9. Dùng thử đơn xây app](#9-dùng-thử-đơn-xây-app)
   - [10. Dùng thử thanh toán ZaloPay](#10-dùng-thử-thanh-toán-zalopay)
-  - [11. Dừng và xóa dữ liệu](#11-dừng-và-xóa-dữ-liệu)
+  - [11. Dùng thử bảng quản trị và thông báo](#11-dùng-thử-bảng-quản-trị-và-thông-báo)
+  - [12. Dừng và xóa dữ liệu](#12-dừng-và-xóa-dữ-liệu)
 - [Địa chỉ các dịch vụ](#địa-chỉ-các-dịch-vụ)
 - [Cấu hình](#cấu-hình)
 - [Kiểm thử](#kiểm-thử)
@@ -396,7 +400,20 @@ cargo run -p feco-server --bin feco-catalog -- ungrant <app hoặc client ID> <e
 
 Không có khóa ZaloPay thì trang thanh toán báo chưa cấu hình cổng; ở dev có thể ghi nhận tay bằng `feco-catalog order-paid <payment-request-id>`. Thử riêng chữ ký với sandbox thật: đặt `FECO_ZALOPAY_SANDBOX_APP_ID`, `_KEY1`, `_KEY2` rồi chạy `cargo test -p feco-server --test zalopay_sandbox`.
 
-### 11. Dừng và xóa dữ liệu
+### 11. Dùng thử bảng quản trị và thông báo
+
+1. Cho tài khoản của bạn vai trò quản trị (reviewer, support, project_manager, finance, sysadmin):
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- admin-set <email> project_manager,finance,sysadmin
+   ```
+
+2. Bảng quản trị cần passkey hoặc khóa bảo mật: vào Cài đặt (http://127.0.0.1:8080/settings), bấm **Thêm passkey**, rồi đăng xuất và đăng nhập lại (mật khẩu, sau đó passkey). Mở http://127.0.0.1:8080/admin: mỗi vai trò chỉ thấy mục của mình (hàng chờ duyệt, đơn xây app có cảnh báo sắp trễ, hoàn tiền, hỗ trợ người dùng phải nhập lý do, thành viên quản trị).
+3. Trung tâm thông báo: http://127.0.0.1:8080/notifications (và tab **Thông báo** trong F-Launcher). Tắt hoặc bật thông báo cập nhật app, gợi ý app, bản tin; email bản tin có liên kết hủy đăng ký không cần đăng nhập.
+4. Thêm cổng VNPAY, MoMo và hóa đơn điện tử MISA bằng biến môi trường (khóa sandbox của chính bạn, không ghi vào repo): `FECO_VNPAY_TMN_CODE`, `FECO_VNPAY_HASH_SECRET`, `FECO_VNPAY_PAYMENT_URL`; `FECO_MOMO_PARTNER_CODE`, `FECO_MOMO_ACCESS_KEY`, `FECO_MOMO_SECRET_KEY`, `FECO_MOMO_ENDPOINT`; `FECO_MISA_CLIENT_ID`, `FECO_MISA_CLIENT_SECRET`, `FECO_MISA_TAX_CODE`, `FECO_MISA_USERNAME`, `FECO_MISA_PASSWORD`, `FECO_MISA_INV_SERIES`, `FECO_MISA_VAT_RATE`. Cổng gọi callback về `FECO_PAYMENT_CALLBACK_BASE` (địa chỉ công khai, ví dụ tunnel).
+5. Kiểm tên miền gửi email: `cargo run -p feco-server --bin feco-catalog -- mail-dns <tên miền> <selector DKIM>`. Production chỉ nhận `FECO_SMTP_URL` dạng `smtps://` hoặc `smtp://...?tls=starttls`.
+
+### 12. Dừng và xóa dữ liệu
 
 - Dừng `feco-server` và app mẫu bằng `Ctrl+C`.
 - Cách A: `docker compose -f infra/docker-compose.yml down`. Lệnh này dừng và xóa mọi dữ liệu dev, vì compose không dùng volume.

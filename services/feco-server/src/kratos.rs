@@ -371,6 +371,30 @@ impl KratosClient {
         Ok(r.body.as_array().cloned().unwrap_or_default())
     }
 
+    /// Gửi lại email xác minh cho một địa chỉ (luồng xác minh kiểu API, phương thức link).
+    pub async fn send_verification(&self, email: &str) -> Result<bool, KratosError> {
+        let res = self
+            .http
+            .get(self.public_url("self-service/verification/api"))
+            .header(header::ACCEPT.as_str(), "application/json")
+            .send()
+            .await?;
+        let flow = Self::into_response(res).await?;
+        let Some(id) = flow.body["id"].as_str() else {
+            return Ok(false);
+        };
+        let mut url = self.public_url("self-service/verification");
+        url.query_pairs_mut().append_pair("flow", id);
+        let res = self
+            .http
+            .post(url)
+            .header(header::ACCEPT.as_str(), "application/json")
+            .json(&serde_json::json!({"method": "link", "email": email}))
+            .send()
+            .await?;
+        Ok(res.status().is_success())
+    }
+
     /// Thu hồi mọi phiên của một danh tính (API quản trị).
     pub async fn revoke_identity_sessions(&self, id: &str) -> Result<(), KratosError> {
         self.http

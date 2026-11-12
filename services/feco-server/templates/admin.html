@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("admin.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("admin.title") }}</h1>
+<p class="muted" id="admin-me">{{ me }} · {{ roles }}</p>
+<div class="links" id="admin-nav">
+  <a href="/admin">{{ i18n.t("admin.nav.home") }}</a>
+  {% for n in nav %}<a href="{{ n.href }}"{% if n.current %} aria-current="page"{% endif %}>{{ n.label }}</a>{% endfor %}
+</div>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status" style="white-space:pre-line">{{ m.text }}</div>{% endfor %}
+
+{% if section == "home" %}
+<p>{{ i18n.t("admin.intro") }}</p>
+{% endif %}
+
+{% if section == "reviews" %}
+<h2>{{ i18n.t("admin.nav.reviews") }}</h2>
+{% if reviews.is_empty() %}<p class="muted">{{ i18n.t("admin.queue_empty") }}</p>{% endif %}
+{% for r in reviews %}
+<div class="review queue-item" data-app="{{ r.app }}" data-version="{{ r.version }}">
+  <strong>{{ r.app }} {{ r.version }}</strong> · <span class="muted">{{ i18n.t("admin.waited") }} {{ r.waited }} · {{ r.reason }}</span>
+  <h3>{{ i18n.t("admin.diff") }}</h3>
+  <ul class="diff">{% for d in r.diff %}<li>{{ d }}</li>{% endfor %}</ul>
+  {% if !r.checks.is_empty() %}<details><summary>{{ i18n.t("admin.checks") }}</summary><ul>{% for c in r.checks %}<li><code>{{ c }}</code></li>{% endfor %}</ul></details>{% endif %}
+  <p class="muted">{{ i18n.t("admin.vm_note") }}</p>
+  <form method="post" action="/admin/reviews/{{ r.version_id }}/approve" class="approve">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="text" name="note" placeholder="{{ i18n.t("admin.note") }}" required>
+    <button type="submit">{{ i18n.t("admin.approve") }}</button>
+  </form>
+  <form method="post" action="/admin/reviews/{{ r.version_id }}/reject" class="reject">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <select name="clause">{% for (code, label) in clauses %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select>
+    <input type="text" name="note" placeholder="{{ i18n.t("admin.note") }}" required>
+    <button type="submit" class="danger">{{ i18n.t("admin.reject") }}</button>
+  </form>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if section == "orders" %}
+{% match order %}{% when Some with (o) %}
+<p><a href="/admin/orders">← {{ i18n.t("admin.nav.orders") }}</a></p>
+<h2>{{ o.code }} · {{ o.title }}</h2>
+<p><strong id="admin-order-status">{{ o.status }}</strong></p>
+<p style="white-space:pre-line">{{ o.description }}</p>
+<table>{% for m in o.milestones %}<tr><td>{{ i18n.t("order.milestone") }} {{ m.position }}: {{ m.title }}</td><td>{{ m.amount }}</td><td>{{ m.status }}</td><td>{{ m.due }}</td></tr>{% endfor %}</table>
+{% if o.can_quote %}
+<form method="post" action="/admin/orders/{{ o.id }}/quote" id="quote-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label>{{ i18n.t("admin.quote_json") }}</label>
+  <textarea name="quote" style="min-height:220px;font-family:monospace">{{ o.quote_example }}</textarea>
+  <button type="submit">{{ i18n.t("admin.send_quote") }}</button>
+</form>
+{% endif %}
+<form method="post" action="/admin/orders/{{ o.id }}/deliver" id="deliver-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label>{{ i18n.t("admin.deliver") }}</label>
+  <input type="text" name="milestone" placeholder="{{ i18n.t("order.milestone") }}" inputmode="numeric">
+  <input type="text" name="app" placeholder="app">
+  <input type="text" name="version" placeholder="1.0.0">
+  <textarea name="checks" placeholder="{{ i18n.t("order.checks") }}"></textarea>
+  <textarea name="notes" placeholder="{{ i18n.t("admin.notes") }}"></textarea>
+  <button type="submit" class="secondary">{{ i18n.t("admin.deliver") }}</button>
+</form>
+{% if o.disputed %}
+<form method="post" action="/admin/orders/{{ o.id }}/resolve" id="resolve-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label>{{ i18n.t("admin.resolve") }}</label>
+  <select name="resolution"><option value="continue">continue</option><option value="partial">partial</option><option value="full">full</option></select>
+  <input type="text" name="amount" placeholder="VND">
+  <button type="submit" class="secondary">{{ i18n.t("admin.resolve") }}</button>
+</form>
+{% endif %}
+<h3>{{ i18n.t("order.messages") }}</h3>
+{% for m in o.thread %}<div class="review"><strong>{{ m.author }}</strong> · <span class="muted">{{ m.at }}</span><p style="white-space:pre-line">{{ m.body }}</p></div>{% endfor %}
+<form method="post" action="/admin/orders/{{ o.id }}/message" id="message-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <textarea name="body" required></textarea>
+  <button type="submit" class="secondary">{{ i18n.t("order.send") }}</button>
+</form>
+{% when None %}
+<h2>{{ i18n.t("admin.nav.orders") }}</h2>
+<table id="admin-orders">
+{% for o in orders %}<tr class="admin-order{% if o.warning %} warning{% endif %}" data-code="{{ o.code }}"{% if o.warning %} style="background:rgba(179,38,30,.12)"{% endif %}>
+  <td><a href="/admin/orders/{{ o.id }}">{{ o.code }}</a>{% if o.warning %} <span class="badge" style="color:var(--err)">{{ i18n.t("admin.due_soon") }}</span>{% endif %}</td>
+  <td>{{ o.title }}</td><td>{{ o.status }}</td><td>{{ o.due }}</td></tr>{% endfor %}
+</table>
+{% endmatch %}
+{% endif %}
+
+{% if section == "refunds" %}
+<h2>{{ i18n.t("admin.nav.refunds") }}</h2>
+<table id="open-refunds">
+{% for r in refunds %}<tr class="refund"><td>{{ r.amount }}</td><td>{{ r.status }}</td><td>{{ r.reason }}</td><td class="muted">{{ r.approvals }} / {{ r.needed }}</td>
+  <td class="row-actions"><form method="post" action="/admin/refunds/{{ r.id }}/approve"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit">{{ i18n.t("admin.approve") }}</button></form></td></tr>{% endfor %}
+</table>
+<h3>{{ i18n.t("admin.new_refund") }}</h3>
+<form method="post" action="/admin/refunds" id="refund-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <select name="transaction">{% for t in transactions %}<option value="{{ t.id }}">{{ t.order }} · {{ t.provider }} · {{ t.amount }} ({{ i18n.t("admin.refunded") }} {{ t.refunded }})</option>{% endfor %}</select>
+  <input type="text" name="amount" placeholder="VND" required>
+  <input type="text" name="reason" placeholder="{{ i18n.t("admin.reason") }}" required>
+  <button type="submit">{{ i18n.t("admin.new_refund") }}</button>
+</form>
+{% endif %}
+
+{% if section == "users" %}
+<h2>{{ i18n.t("admin.nav.users") }}</h2>
+<form method="get" action="/admin/users" class="filters">
+  <input type="search" name="q" value="{{ query }}" placeholder="{{ i18n.t("admin.user_search") }}">
+  <button type="submit">{{ i18n.t("admin.search") }}</button>
+</form>
+{% for u in users %}
+<div class="review user-result">
+  <code>{{ u.email }}</code>
+  <form method="post" action="/admin/users/{{ u.id }}/view" class="view-profile">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="text" name="reason" placeholder="{{ i18n.t("admin.reason_ticket") }}" required>
+    <button type="submit" class="secondary">{{ i18n.t("admin.view_profile") }}</button>
+  </form>
+</div>
+{% endfor %}
+{% match profile %}{% when Some with (p) %}
+<div class="review" id="profile">
+  <div class="facts">
+    <span class="muted">{{ i18n.t("admin.email") }}</span><code id="profile-email">{{ p.email }}</code>
+    <span class="muted">{{ i18n.t("admin.verified") }}</span><span>{% if p.verified %}✓{% else %}✗{% endif %}</span>
+    <span class="muted">{{ i18n.t("admin.created") }}</span><span>{{ p.created }}</span>
+    <span class="muted">{{ i18n.t("admin.sessions") }}</span><span id="profile-sessions">{{ p.sessions }}</span>
+    <span class="muted">{{ i18n.t("order.title") }}</span><span>{% for o in p.orders %}{{ o }} {% endfor %}</span>
+  </div>
+  <form method="post" action="/admin/users/{{ p.id }}/resend"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="hidden" name="reason" value="{{ p.reason }}"><button type="submit" class="secondary">{{ i18n.t("admin.resend") }}</button></form>
+  <form method="post" action="/admin/users/{{ p.id }}/logout"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="hidden" name="reason" value="{{ p.reason }}"><button type="submit" class="danger">{{ i18n.t("admin.logout_all") }}</button></form>
+</div>
+{% when None %}{% endmatch %}
+{% endif %}
+
+{% if section == "members" %}
+<h2>{{ i18n.t("admin.nav.members") }}</h2>
+<table id="members">{% for m in members %}<tr><td>{{ m.email }}</td><td>{{ m.roles }}</td></tr>{% endfor %}</table>
+<form method="post" action="/admin/members" id="member-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label>{{ i18n.t("admin.email") }}</label>
+  <input type="email" name="email" required>
+  {% for r in role_options %}<div><input type="checkbox" name="role" value="{{ r.code }}" id="role-{{ r.code }}"> <label for="role-{{ r.code }}" style="display:inline;font-weight:400">{{ r.label }}</label></div>{% endfor %}
+  <p class="muted">{{ i18n.t("admin.member_note") }}</p>
+  <button type="submit">{{ i18n.t("admin.save") }}</button>
+</form>
+{% endif %}
+{% endblock %}

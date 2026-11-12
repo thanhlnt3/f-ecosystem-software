@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("notify.unsubscribe_title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("notify.unsubscribe_title") }}</h1>
+{% if done %}
+<div class="msg success" id="unsubscribed">{{ i18n.t("notify.unsubscribed") }} {{ category }}</div>
+{% else %}
+<p>{{ i18n.t("notify.unsubscribe_confirm") }} <strong>{{ category }}</strong></p>
+<form method="post" action="/notifications/unsubscribe/{{ token }}" id="unsubscribe-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <button type="submit">{{ i18n.t("notify.unsubscribe_button") }}</button>
+</form>
+{% endif %}
+{% endblock %}

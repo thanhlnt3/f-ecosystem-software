@@ -227,3 +227,28 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 64. **4 số cuối thẻ**: callback của ZaloPay không có thông tin thẻ, nên `card_last4` để trống. Phí
     giao dịch, phí hoàn (`refund_fee_amount`) chưa xử lý: F-Eco hoàn đúng số tiền yêu cầu.
     `feco-catalog order-paid` (ghi nhận tay) chỉ còn dùng được ngoài production.
+65. **VNPAY và MoMo** (chủ dự án chọn thêm cả hai, 12/11/2026) đã có adapter theo tài liệu chính
+    thức, mới thử với cổng giả. Cần khóa sandbox: VNPAY đăng ký ở `pay.vnpaytest.vn/dev-registration`
+    (TmnCode và HashSecret gửi qua email), MoMo lấy ở cổng M4B. Điểm tài liệu chưa rõ, cần thử
+    thật: thuật toán chữ ký của querydr và refund VNPAY (đang dùng HMAC-SHA512 như URL thanh toán),
+    địa chỉ production của VNPAY, `orderId` trong truy vấn hoàn tiền MoMo, đơn vị `orderExpireTime`.
+    IPN của VNPAY khai trong cổng merchant (không gửi theo từng giao dịch):
+    `{FECO_PAYMENT_CALLBACK_BASE}v1/payments/vnpay/ipn`.
+66. **Thử thật ZaloPay qua tunnel**: tạo đơn và chuyển sang trang sandbox chạy được, nhưng trình
+    duyệt tích hợp chặn một tài nguyên của trang cổng nên tôi không trả được. Cần chủ dự án trả một
+    giao dịch nhỏ trên trình duyệt của mình (ứng dụng ZaloPay sandbox hoặc thẻ thử) để kiểm callback
+    thật và hoàn tiền. `FECO_PAYMENT_CALLBACK_BASE` cho phép callback qua tunnel hay staging.
+67. **MISA meInvoice**: cần tài khoản (ClientID, ClientSecret ở developer.misa.vn; mã số thuế, ký
+    hiệu hóa đơn đã đăng ký, chứng thư ký HSM). Chưa rõ trong tài liệu: cách đánh dấu điều chỉnh
+    giảm (đang gửi `ReferenceType` 2 kèm số tiền dương của phần giảm), địa chỉ sandbox riêng (có vẻ
+    theo tài khoản), định dạng `OrgInvDate`. Thuế suất đặt qua `FECO_MISA_VAT_RATE`.
+68. **Bảng quản trị**: thành viên đầu tiên được thêm bằng `feco-catalog admin-set`; công cụ dòng lệnh
+    vẫn làm được việc quản trị mà không qua passkey, nên chỉ người vận hành máy chủ được dùng (sẽ
+    rút gọn khi bảng quản trị đủ chức năng). Kiểm passkey dựa trên `authentication_methods` của
+    phiên Kratos (cần `webauthn`). Công cụ chạy thử app trong máy ảo chờ task 9.1.
+69. **Thông báo**: ngôn ngữ theo `traits.language`; mới có bản tiếng Anh cho báo giá, tin nhắn, cập
+    nhật app, các thông báo khác vẫn tiếng Việt (task 15.1). Email cảnh báo bảo mật (đăng nhập lạ)
+    vẫn gửi thẳng, chưa vào trung tâm thông báo. Liên kết hủy đăng ký không hết hạn.
+70. **SPF, DKIM, DMARC**: chưa có tên miền. Khi có: chọn máy chủ chuyển tiếp SMTP ký DKIM (nhà cung
+    cấp email giao dịch hoặc Postfix kèm OpenDKIM), đặt `FECO_SMTP_URL` dạng `smtps://`, thêm bản ghi
+    theo `feco-catalog mail-dns <tên miền> <selector>` cho tới khi báo "đạt".

@@ -123,6 +123,8 @@ impl Identity {
 }
 
 struct Shared {
+    /// Trung tâm thông báo (lấy từ máy chủ khi đồng bộ).
+    notifications: std::sync::Mutex<Vec<feco_launcher::auth::Notification>>,
     config: Config,
     launcher: tokio::sync::Mutex<Launcher>,
     identity: Arc<Identity>,
@@ -139,6 +141,7 @@ struct View {
     user: Option<String>,
     sign_in: Option<SignIn>,
     last_sync: Option<Timestamp>,
+    notifications: Vec<feco_launcher::auth::Notification>,
 }
 
 async fn snapshot(shared: &Shared) -> View {
@@ -151,6 +154,7 @@ async fn snapshot(shared: &Shared) -> View {
         user: l.state().user_name.clone(),
         sign_in: Some(*shared.identity.sign_in.lock().expect("khóa")),
         last_sync: l.state().last_sync,
+        notifications: shared.notifications.lock().expect("khóa").clone(),
     }
 }
 
@@ -164,6 +168,7 @@ struct Done {
 enum Tab {
     MyApps,
     Catalog,
+    Notifications,
 }
 
 enum Action {
@@ -178,6 +183,7 @@ enum Action {
     AskUninstall(MyApp),
     Uninstall(String, bool),
     Open(String),
+    OpenLink(String),
     SetAutoUpdate(bool),
     CloseDialog,
 }
@@ -243,6 +249,7 @@ impl LauncherApp {
             .block_on(broker.serve())
             .map_err(|e| format!("không mở được API cục bộ: {e}"))?;
         let shared = Arc::new(Shared {
+            notifications: std::sync::Mutex::new(Vec::new()),
             config,
             launcher: tokio::sync::Mutex::new(launcher),
             identity,
@@ -398,6 +405,11 @@ impl LauncherApp {
                     ))
                 })
             }
+            Action::OpenLink(url) => {
+                if let Err(e) = open::that(&url) {
+                    self.notice = Some((true, format!("Không mở được trình duyệt: {e}")));
+                }
+            }
             Action::Open(app) => self.run("Đang mở...", false, move |s| async move {
                 open_app(&s, &app).await
             }),
@@ -519,6 +531,38 @@ impl LauncherApp {
                             actions.push(Action::AskUninstall(app.clone()));
                         }
                     });
+                });
+            }
+        });
+    }
+
+    /// Trung tâm thông báo: bấm "Mở" để mở đúng màn hình trên web (ví dụ trang báo giá).
+    fn notifications(&self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        if self.view.notifications.is_empty() {
+            ui.label("Chưa có thông báo nào. Đăng nhập để nhận thông báo về đơn hàng, thanh toán, cập nhật app.");
+            return;
+        }
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for n in &self.view.notifications {
+                ui.group(|ui| {
+                    ui.horizontal(|ui| {
+                        if n.read {
+                            ui.label(&n.title);
+                        } else {
+                            ui.strong(&n.title);
+                        }
+                        ui.weak(
+                            n.created_at
+                                .chars()
+                                .take(16)
+                                .collect::<String>()
+                                .replace('T', " "),
+                        );
+                    });
+                    ui.label(&n.body);
+                    if !n.link.is_empty() && ui.button("Mở").clicked() {
+                        actions.push(Action::OpenLink(n.link.clone()));
+                    }
                 });
             }
         });
@@ -647,11 +691,19 @@ impl eframe::App for LauncherApp {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.tab, Tab::MyApps, "App của tôi");
                 ui.selectable_value(&mut self.tab, Tab::Catalog, "Danh mục");
+                let unread = self.view.notifications.iter().filter(|n| !n.read).count();
+                let label = if unread > 0 {
+                    format!("Thông báo ({unread})")
+                } else {
+                    "Thông báo".to_owned()
+                };
+                ui.selectable_value(&mut self.tab, Tab::Notifications, label);
             });
             ui.separator();
             match self.tab {
                 Tab::MyApps => self.my_apps(ui, &mut actions),
                 Tab::Catalog => self.catalog(ui, &mut actions),
+                Tab::Notifications => self.notifications(ui, &mut actions),
             }
         });
         let ctx = ui.ctx().clone();
@@ -718,15 +770,22 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
     // App riêng tư (bản build của đơn xây app): chỉ hiện những app máy chủ liệt kê cho người
     // dùng đang đăng nhập; chưa đăng nhập thì ẩn hết. Không hỏi được thì giữ danh sách cũ.
     match s.identity.access_token().await {
-        Ok(token) => match s.identity.auth.private_apps(&token).await {
-            Ok(apps) => {
-                let _ = l.set_private_apps(apps.into_iter().collect());
+        Ok(token) => {
+            match s.identity.auth.private_apps(&token).await {
+                Ok(apps) => {
+                    let _ = l.set_private_apps(apps.into_iter().collect());
+                }
+                Err(e) => eprintln!("không lấy được app riêng tư: {e}"),
             }
-            Err(e) => eprintln!("không lấy được app riêng tư: {e}"),
-        },
+            match s.identity.auth.notifications(&token).await {
+                Ok(n) => *s.notifications.lock().expect("khóa") = n,
+                Err(e) => eprintln!("không lấy được thông báo: {e}"),
+            }
+        }
         Err(AuthError::Offline(_)) => {}
         Err(_) => {
             let _ = l.set_private_apps(Default::default());
+            s.notifications.lock().expect("khóa").clear();
         }
     }
     // Phát hành dần: hỏi máy chủ thiết bị này được nhận bản nào của từng app đã cài.

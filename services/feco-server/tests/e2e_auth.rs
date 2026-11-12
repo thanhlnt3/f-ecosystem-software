@@ -5496,7 +5496,7 @@ async fn misa_einvoice_end_to_end() {
         ),
         (Some(9_000_000), Some(8_181_818), Some(818_182))
     );
-    let original_no = misa.published.lock().unwrap().len();
+    let original_no = misa.numbers.lock().unwrap().last().cloned().unwrap();
     let (mail, files) =
         wait_mail_with_files(&email, &format!("Hóa đơn thanh toán đơn {code}")).await;
     assert!(
@@ -5532,9 +5532,692 @@ async fn misa_einvoice_end_to_end() {
     .unwrap();
     let adj = misa.published.lock().unwrap().last().cloned().unwrap();
     assert_eq!(adj["ReferenceType"], 2);
-    assert_eq!(adj["OrgInvNo"], format!("{original_no:08}"));
+    assert_eq!(adj["OrgInvNo"], original_no.as_str());
     assert_eq!(adj["OrgInvSeries"], "C26TFE");
     assert_eq!(adj["TotalAmount"], 4_000_000);
     let (mail, _) = wait_mail_with_files(&email, &format!("Hóa đơn điều chỉnh đơn {code}")).await;
     assert!(mail.contains("điều chỉnh giảm"), "{mail}");
+}
+
+// ---------- Bảng quản trị và thông báo (tasks.md 14.1–14.3) ----------
+
+/// Khóa bảo mật phần mềm cho kiểm thử: tạo và ký phản hồi WebAuthn (ES256, attestation "none")
+/// như một khóa phần cứng, để đăng ký passkey và đăng nhập bước hai với Kratos thật.
+struct SoftKey {
+    key: aws_lc_rs::signature::EcdsaKeyPair,
+    id: Vec<u8>,
+    counter: u32,
+}
+
+mod cbor {
+    fn head(out: &mut Vec<u8>, major: u8, v: u64) {
+        let m = major << 5;
+        match v {
+            0..=23 => out.push(m | v as u8),
+            24..=0xff => out.extend_from_slice(&[m | 24, v as u8]),
+            0x100..=0xffff => {
+                out.push(m | 25);
+                out.extend_from_slice(&(v as u16).to_be_bytes());
+            }
+            _ => {
+                out.push(m | 26);
+                out.extend_from_slice(&(v as u32).to_be_bytes());
+            }
+        }
+    }
+    pub fn int(out: &mut Vec<u8>, v: i64) {
+        if v >= 0 {
+            head(out, 0, v as u64)
+        } else {
+            head(out, 1, (-1 - v) as u64)
+        }
+    }
+    pub fn bytes(out: &mut Vec<u8>, b: &[u8]) {
+        head(out, 2, b.len() as u64);
+        out.extend_from_slice(b);
+    }
+    pub fn text(out: &mut Vec<u8>, s: &str) {
+        head(out, 3, s.len() as u64);
+        out.extend_from_slice(s.as_bytes());
+    }
+    pub fn map(out: &mut Vec<u8>, n: usize) {
+        head(out, 5, n as u64);
+    }
+}
+
+fn b64url(b: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b)
+}
+
+fn sha256(b: &[u8]) -> Vec<u8> {
+    use sha2::Digest;
+    sha2::Sha256::digest(b).to_vec()
+}
+
+/// Tùy chọn WebAuthn Kratos đặt trong `onclick` của nút passkey.
+fn webauthn_options(page: &str, button: &str) -> Value {
+    let doc = Html::parse_document(page);
+    let onclick = doc
+        .select(&Selector::parse(&format!("button[name=\"{button}\"]")).unwrap())
+        .next()
+        .and_then(|b| b.value().attr("onclick").map(str::to_owned))
+        .unwrap_or_else(|| panic!("trang không có nút {button}:\n{page}"));
+    let start = onclick.find('(').unwrap() + 1;
+    let end = onclick.rfind(')').unwrap();
+    serde_json::from_str(&onclick[start..end])
+        .unwrap_or_else(|e| panic!("tùy chọn WebAuthn không đọc được ({e}): {onclick}"))
+}
+
+impl SoftKey {
+    fn new() -> Self {
+        let key = aws_lc_rs::signature::EcdsaKeyPair::generate(
+            &aws_lc_rs::signature::ECDSA_P256_SHA256_ASN1_SIGNING,
+        )
+        .unwrap();
+        let mut id = vec![0u8; 32];
+        getrandom_fill(&mut id);
+        SoftKey {
+            key,
+            id,
+            counter: 0,
+        }
+    }
+
+    fn client_data(kind: &str, challenge: &str) -> Vec<u8> {
+        serde_json::json!({"type": kind, "challenge": challenge, "origin": BASE, "crossOrigin": false}).to_string().into_bytes()
+    }
+
+    /// Phản hồi `navigator.credentials.create()`.
+    fn register(&self, options: &Value) -> String {
+        use aws_lc_rs::signature::KeyPair;
+        let pk = &options["publicKey"];
+        let rp_id = pk["rp"]["id"].as_str().unwrap();
+        let point = self.key.public_key().as_ref();
+        let mut cose = Vec::new();
+        cbor::map(&mut cose, 5);
+        cbor::int(&mut cose, 1);
+        cbor::int(&mut cose, 2);
+        cbor::int(&mut cose, 3);
+        cbor::int(&mut cose, -7);
+        cbor::int(&mut cose, -1);
+        cbor::int(&mut cose, 1);
+        cbor::int(&mut cose, -2);
+        cbor::bytes(&mut cose, &point[1..33]);
+        cbor::int(&mut cose, -3);
+        cbor::bytes(&mut cose, &point[33..65]);
+        let mut auth = sha256(rp_id.as_bytes());
+        auth.push(0x45); // UP, UV, AT
+        auth.extend_from_slice(&0u32.to_be_bytes());
+        auth.extend_from_slice(&[0u8; 16]);
+        auth.extend_from_slice(&(self.id.len() as u16).to_be_bytes());
+        auth.extend_from_slice(&self.id);
+        auth.extend_from_slice(&cose);
+        let mut att = Vec::new();
+        cbor::map(&mut att, 3);
+        cbor::text(&mut att, "fmt");
+        cbor::text(&mut att, "none");
+        cbor::text(&mut att, "attStmt");
+        cbor::map(&mut att, 0);
+        cbor::text(&mut att, "authData");
+        cbor::bytes(&mut att, &auth);
+        let client = Self::client_data("webauthn.create", pk["challenge"].as_str().unwrap());
+        serde_json::json!({
+            "id": b64url(&self.id), "rawId": b64url(&self.id), "type": "public-key",
+            "response": {"attestationObject": b64url(&att), "clientDataJSON": b64url(&client)},
+            "clientExtensionResults": {}
+        })
+        .to_string()
+    }
+
+    /// Phản hồi `navigator.credentials.get()`.
+    fn assert(&mut self, options: &Value) -> String {
+        let pk = &options["publicKey"];
+        let rp_id = pk["rpId"].as_str().unwrap();
+        self.counter += 1;
+        let mut auth = sha256(rp_id.as_bytes());
+        auth.push(0x05); // UP, UV
+        auth.extend_from_slice(&self.counter.to_be_bytes());
+        let client = Self::client_data("webauthn.get", pk["challenge"].as_str().unwrap());
+        let mut signed = auth.clone();
+        signed.extend_from_slice(&sha256(&client));
+        let sig = self
+            .key
+            .sign(&aws_lc_rs::rand::SystemRandom::new(), &signed)
+            .unwrap();
+        serde_json::json!({
+            "id": b64url(&self.id), "rawId": b64url(&self.id), "type": "public-key",
+            "response": {"authenticatorData": b64url(&auth), "clientDataJSON": b64url(&client), "signature": b64url(sig.as_ref())},
+            "clientExtensionResults": {}
+        })
+        .to_string()
+    }
+}
+
+fn getrandom_fill(b: &mut [u8]) {
+    use aws_lc_rs::rand::SecureRandom;
+    aws_lc_rs::rand::SystemRandom::new().fill(b).unwrap();
+}
+
+/// Gửi biểu mẫu của một nhóm Kratos, thay các trường ẩn trùng tên bằng giá trị mới.
+async fn submit_group(
+    c: &reqwest::Client,
+    page: &str,
+    group: &str,
+    extra: &[(&str, &str)],
+) -> String {
+    let mut form = parse_group_form(page, group);
+    form.fields
+        .retain(|(k, _)| !extra.iter().any(|(e, _)| e == k));
+    submit(c, &form, extra).await
+}
+
+/// Một quản trị viên có passkey, đã đăng nhập bằng mật khẩu và passkey.
+async fn admin_with_passkey(
+    state: &AppState,
+    prefix: &str,
+    roles: &[feco_server::admin::Role],
+) -> (reqwest::Client, String) {
+    let (email, password) = unique(prefix);
+    let c = app_browser();
+    register_in(&c, &email, &password, "Quản trị viên").await;
+    verify_email(&c, &email).await;
+    feco_server::admin::set_member(state, "khoi-tao", &email, roles)
+        .await
+        .unwrap();
+    // Chưa có passkey: không vào được bảng quản trị.
+    let res = c.get(format!("{BASE}/admin")).send().await.unwrap();
+    assert_eq!(res.status().as_u16(), 403);
+    assert!(
+        res.text().await.unwrap().contains("passkey"),
+        "phải yêu cầu passkey"
+    );
+    // Thêm passkey (khóa bảo mật) trong Cài đặt.
+    let key = SoftKey::new();
+    let settings = get(&c, "/settings").await;
+    let options = webauthn_options(&settings, "webauthn_register_trigger");
+    let page = submit_group(
+        &c,
+        &settings,
+        "webauthn",
+        &[
+            ("webauthn_register", &key.register(&options)),
+            ("webauthn_register_displayname", "Khóa thử"),
+        ],
+    )
+    .await;
+    assert!(page.contains("Đã lưu thay đổi."), "{page}");
+    // Mật khẩu vẫn chưa đủ: phiên phải có bước passkey.
+    let mut key = key;
+    let other = app_browser();
+    let page = login(&other, &email, &password).await;
+    let options = webauthn_options(&page, "webauthn_login_trigger");
+    let home = submit_group(
+        &other,
+        &page,
+        "webauthn",
+        &[("webauthn_login", &key.assert(&options))],
+    )
+    .await;
+    assert!(home.contains(&email), "{home}");
+    (other, email)
+}
+
+/// Spec admin-console và notifications.
+#[tokio::test]
+async fn admin_console_end_to_end() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::{
+        admin::Role,
+        notifications::{self, Category, Note},
+        orders, payments,
+    };
+    use time::{Duration as Span, OffsetDateTime};
+    let state = local_state();
+    let db = state.db.clone();
+
+    // Khách hàng có hai đơn đang thực hiện (đặt cọc đã thu).
+    let (cust_email, cust_password) = unique("khach-quan-tri");
+    let customer_browser = app_browser();
+    register_in(&customer_browser, &cust_email, &cust_password, "Chị Thu").await;
+    verify_email(&customer_browser, &cust_email).await;
+    let customer = subject_of(&cust_email).await;
+    let (late, late_deposit) =
+        accepted_order(&state, &customer_browser, customer, "App tồn kho sắp trễ").await;
+    let (calm, calm_deposit) =
+        accepted_order(&state, &customer_browser, customer, "App lịch hẹn").await;
+    for d in [late_deposit, calm_deposit] {
+        payments::record_manual(&state, d, OffsetDateTime::now_utc())
+            .await
+            .unwrap();
+    }
+    // Mốc 2 của đơn "sắp trễ" còn 1 ngày tới hạn, chưa bàn giao.
+    sqlx::query("UPDATE order_milestones SET due_at = now() + interval '1 day' WHERE order_id = $1 AND position = 2").bind(late).execute(&db).await.unwrap();
+    let late_code = orders::get(&db, late).await.unwrap().code;
+    let calm_code = orders::get(&db, calm).await.unwrap().code;
+
+    // Scenario "Hỗ trợ cố hoàn tiền": chức năng bị ẩn, gọi thẳng bị 403.
+    let (support, support_email) = admin_with_passkey(&state, "ho-tro", &[Role::Support]).await;
+    let home = get(&support, "/admin").await;
+    assert!(
+        home.contains("Hỗ trợ người dùng") && !home.contains("/admin/refunds"),
+        "{home}"
+    );
+    assert_eq!(
+        support
+            .get(format!("{BASE}/admin/refunds"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        403
+    );
+    let token = csrf_of(&get(&support, "/orders").await);
+    let (status, _) = post(
+        &support,
+        "/admin/refunds",
+        &token,
+        &[
+            ("transaction", &uuid::Uuid::new_v4().to_string()),
+            ("amount", "1000"),
+            ("reason", "thử"),
+        ],
+    )
+    .await;
+    assert_eq!(status, 403, "API hoàn tiền từ chối vai trò Hỗ trợ");
+
+    // Scenario "Xem hồ sơ": phải nhập lý do, lần xem vào nhật ký kiểm toán; email bị che.
+    let page = get(&support, &format!("/admin/users?q={cust_email}")).await;
+    let results: Vec<String> = Html::parse_document(&page)
+        .select(&Selector::parse(".user-result code").unwrap())
+        .map(|c| c.text().collect())
+        .collect();
+    assert_eq!(
+        results,
+        vec![feco_server::admin::mask_email(&cust_email)],
+        "{page}"
+    );
+    let by_order = get(&support, &format!("/admin/users?q={late_code}")).await;
+    assert!(
+        by_order.contains(&format!("/admin/users/{customer}/view")),
+        "tìm được theo mã đơn"
+    );
+    let (status, _) = post(
+        &support,
+        &format!("/admin/users/{customer}/view"),
+        &csrf_of(&page),
+        &[("reason", "")],
+    )
+    .await;
+    assert_eq!(status, 400);
+    let (status, profile) = post(
+        &support,
+        &format!("/admin/users/{customer}/view"),
+        &csrf_of(&page),
+        &[("reason", "Phiếu HT-1024")],
+    )
+    .await;
+    assert_eq!(status, 200, "{profile}");
+    assert!(
+        profile.contains(&late_code) && !profile.contains(&cust_email),
+        "{profile}"
+    );
+    let logged: Option<Value> = sqlx::query_scalar("SELECT details FROM audit_log WHERE action = 'admin.user_view' AND target = $1 AND actor_id = $2 ORDER BY at DESC LIMIT 1")
+        .bind(customer.to_string())
+        .bind(&support_email)
+        .fetch_optional(&db)
+        .await
+        .unwrap();
+    assert_eq!(logged.unwrap()["reason"], "Phiếu HT-1024");
+    // Đăng xuất mọi phiên của người dùng theo yêu cầu.
+    let (_, profile) = post(
+        &support,
+        &format!("/admin/users/{customer}/logout"),
+        &csrf_of(&profile),
+        &[("reason", "Phiếu HT-1024")],
+    )
+    .await;
+    assert!(profile.contains("Đã đăng xuất mọi phiên"), "{profile}");
+    assert!(state
+        .kratos
+        .identity_sessions(&customer.to_string())
+        .await
+        .unwrap()
+        .iter()
+        .all(|s| s["active"] != true));
+    login(&customer_browser, &cust_email, &cust_password).await;
+
+    // Quản lý dự án, tài chính, người duyệt, quản trị hệ thống.
+    let (pm, _) = admin_with_passkey(
+        &state,
+        "quan-ly",
+        &[
+            Role::ProjectManager,
+            Role::Finance,
+            Role::Reviewer,
+            Role::Sysadmin,
+        ],
+    )
+    .await;
+
+    // Scenario "Đơn sắp trễ": cảnh báo, đứng đầu danh sách.
+    let list = get(&pm, "/admin/orders").await;
+    let rows: Vec<(String, bool)> = Html::parse_document(&list)
+        .select(&Selector::parse("tr.admin-order").unwrap())
+        .map(|r| {
+            (
+                r.value().attr("data-code").unwrap().to_owned(),
+                r.value().attr("class").unwrap().contains("warning"),
+            )
+        })
+        .collect();
+    // (Đơn còn lại từ lần chạy trước có thể cũng đang cảnh báo.)
+    assert!(rows.contains(&(late_code.clone(), true)), "{rows:?}");
+    let first_calm = rows.iter().position(|r| !r.1).unwrap_or(rows.len());
+    assert!(
+        rows[first_calm..].iter().all(|r| !r.1),
+        "đơn cảnh báo đứng đầu: {rows:?}"
+    );
+    assert!(rows.contains(&(calm_code.clone(), false)), "{rows:?}");
+
+    // Scenario "Tin nhắn mới trong đơn": email chỉ báo có tin nhắn, không chép nội dung.
+    let detail = get(&pm, &format!("/admin/orders/{late}")).await;
+    let (status, _) = post(
+        &pm,
+        &format!("/admin/orders/{late}/message"),
+        &csrf_of(&detail),
+        &[("body", "Mật mã kho là KHO-7781, chị đổi giúp nhé")],
+    )
+    .await;
+    assert_eq!(status, 200);
+    let mail = wait_mail(&cust_email, &format!("Tin nhắn mới trong đơn {late_code}")).await;
+    assert!(
+        mail.contains(&format!("Bạn có tin nhắn mới trong đơn #{late_code}"))
+            && !mail.contains("KHO-7781"),
+        "{mail}"
+    );
+    assert!(mail.contains(&format!("/orders/{late}#thread")), "{mail}");
+
+    // Tài chính hoàn một phần qua bảng quản trị.
+    let tx: uuid::Uuid =
+        sqlx::query_scalar("SELECT t.id FROM payment_transactions t WHERE t.request_id = $1")
+            .bind(late_deposit)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    let refunds = get(&pm, "/admin/refunds").await;
+    let (status, page) = post(
+        &pm,
+        "/admin/refunds",
+        &csrf_of(&refunds),
+        &[
+            ("transaction", &tx.to_string()),
+            ("amount", "1.000.000"),
+            ("reason", "Hỗ trợ thiện chí"),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert_eq!(
+        payments::transaction(&state, tx)
+            .await
+            .unwrap()
+            .refunded_vnd,
+        1_000_000
+    );
+
+    // Scenario "Xem khác biệt quyền": SoundLab 1.3.0 thêm scope phone so với 1.2.0.
+    let account = uuid::Uuid::new_v4();
+    let app = format!("soundlab-{}", &account.simple().to_string()[..8]);
+    sqlx::query("INSERT INTO developer_accounts (id, kind, display_name, domain_token) VALUES ($1, 'individual', 'Nhóm SoundLab', 'x')").bind(account).execute(&db).await.unwrap();
+    sqlx::query("INSERT INTO developer_apps (app_id, account_id, client_id, name, kind) VALUES ($1, $2, $3, 'SoundLab', 'desktop')")
+        .bind(&app)
+        .bind(account)
+        .bind(uuid::Uuid::new_v4().to_string())
+        .execute(&db)
+        .await
+        .unwrap();
+    let manifest = |v: &str, extra: &str| {
+        let text = format!(
+            "id = \"{app}\"\nname = \"SoundLab\"\nversion = \"{v}\"\nlicense = \"MIT\"\nprivacy_policy = \"https://soundlab.example/privacy\"\nsummary = \"Thu âm\"\ncategory = \"Âm nhạc\"\n\n[[platforms]]\nos = \"windows\"\narch = \"x64\"\nentry = \"SoundLab.exe\"\n\n[scopes.profile]\npurpose = \"Hiển thị trên bản nhạc bạn chia sẻ\"\n{extra}"
+        );
+        (
+            serde_json::to_value(feco_manifest::parse(&text).unwrap()).unwrap(),
+            text,
+        )
+    };
+    for (v, extra, status, stage, at) in [
+        (
+            "1.2.0",
+            "",
+            "approved",
+            "done",
+            OffsetDateTime::now_utc() - Span::days(30),
+        ),
+        (
+            "1.3.0",
+            "\n[scopes.phone]\npurpose = \"gửi mã xác nhận\"\n",
+            "pending_review",
+            "manual",
+            OffsetDateTime::now_utc(),
+        ),
+    ] {
+        let (json, toml) = manifest(v, extra);
+        sqlx::query(
+            "INSERT INTO app_versions (id, app_id, version, manifest, manifest_toml, status, created_by, created_at, submitted_at, review_stage, manual_reason)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, 'Thêm scope')",
+        )
+        .bind(uuid::Uuid::new_v4())
+        .bind(&app)
+        .bind(v)
+        .bind(json)
+        .bind(toml)
+        .bind(status)
+        .bind(account)
+        .bind(at)
+        .bind(stage)
+        .execute(&db)
+        .await
+        .unwrap();
+    }
+    let queue = get(&pm, "/admin/reviews").await;
+    assert!(queue.contains(&format!("{app} 1.3.0")), "{queue}");
+    assert!(
+        queue.contains("Thêm scope: phone (mục đích: gửi mã xác nhận)"),
+        "{queue}"
+    );
+    let version_id: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM app_versions WHERE app_id = $1 AND version = '1.3.0'")
+            .bind(&app)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    let (status, page) = post(
+        &pm,
+        &format!("/admin/reviews/{version_id}/reject"),
+        &csrf_of(&queue),
+        &[("clause", "misleading"), ("note", "")],
+    )
+    .await;
+    assert_eq!(status, 400, "quyết định phải kèm lý do: {page}");
+
+    // Quản trị hệ thống thêm vai trò; người không phải quản trị bị 403.
+    let members = get(&pm, "/admin/members").await;
+    let (status, page) = post(
+        &pm,
+        "/admin/members",
+        &csrf_of(&members),
+        &[("email", &cust_email), ("role", "support")],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert_eq!(
+        feco_server::admin::admin_roles(&state, customer)
+            .await
+            .unwrap()
+            .unwrap()
+            .1,
+        vec![Role::Support]
+    );
+    feco_server::admin::set_member(&state, "khoi-tao", &cust_email, &[])
+        .await
+        .unwrap();
+    assert_eq!(
+        customer_browser
+            .get(format!("{BASE}/admin"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        403
+    );
+
+    // Scenario "Báo giá mới": email và thông báo trong launcher mở đúng trang báo giá.
+    let (_, _, url) = send_order_request(&customer_browser, "App đặt món", true, vec![]).await;
+    let fresh = order_id_of(&url);
+    orders::create_quote(
+        &state,
+        fresh,
+        "Lan",
+        &three_milestones(None),
+        OffsetDateTime::now_utc(),
+    )
+    .await
+    .unwrap();
+    let fresh_code = orders::get(&db, fresh).await.unwrap().code;
+    wait_mail(&cust_email, &format!("Báo giá cho đơn {fresh_code}")).await;
+    let launcher = LAUNCHER.get().unwrap().clone();
+    let a = authorize(
+        &customer_browser,
+        &launcher,
+        "openid offline_access profile",
+    )
+    .await;
+    let token = exchange(&launcher, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let center: Value = reqwest::Client::new()
+        .get(format!("{BASE}/v1/notifications"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let quote = center["notifications"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["title"] == format!("Báo giá cho đơn {fresh_code}"))
+        .expect("có thông báo báo giá")
+        .clone();
+    assert!(
+        quote["link"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!("/orders/{fresh}#quote")),
+        "{quote}"
+    );
+
+    // Scenario "Tắt thông báo cập nhật": không còn email cập nhật app, vẫn nhận email bảo mật.
+    let page = get(&customer_browser, "/notifications").await;
+    assert!(
+        page.contains("Báo giá cho đơn"),
+        "trung tâm thông báo trên web"
+    );
+    let (_, page) = post(
+        &customer_browser,
+        "/notifications/settings",
+        &csrf_of(&page),
+        &[],
+    )
+    .await;
+    assert!(page.contains("Đã lưu tùy chọn thông báo."), "{page}");
+    notifications::notify(
+        &state,
+        customer,
+        None,
+        Category::AppUpdates,
+        &Note::vi(
+            "SoundLab có bản cập nhật 1.3.0",
+            "Bản mới.",
+            "/store/soundlab",
+        ),
+    )
+    .await;
+    notifications::notify(
+        &state,
+        customer,
+        None,
+        Category::Security,
+        &Note::vi(
+            "Cảnh báo bảo mật thử nghiệm",
+            "Có đăng nhập mới.",
+            "/sessions",
+        ),
+    )
+    .await;
+    wait_mail(&cust_email, "Cảnh báo bảo mật thử nghiệm").await;
+    assert_eq!(
+        mail_count(&cust_email, "SoundLab có bản cập nhật").await,
+        0,
+        "đã tắt thông báo cập nhật"
+    );
+
+    // Scenario "Hủy đăng ký từ email": bản tin mặc định tắt; bật rồi hủy từ email, không cần đăng nhập.
+    assert!(
+        !notifications::enabled(&state, customer, Category::Newsletter).await,
+        "bản tin mặc định tắt"
+    );
+    let page = get(&customer_browser, "/notifications").await;
+    post(
+        &customer_browser,
+        "/notifications/settings",
+        &csrf_of(&page),
+        &[("on", "newsletter")],
+    )
+    .await;
+    notifications::notify(
+        &state,
+        customer,
+        None,
+        Category::Newsletter,
+        &Note::vi("Bản tin F-Eco tháng 11", "Tin mới.", "/store"),
+    )
+    .await;
+    let mail = wait_mail(&cust_email, "Bản tin F-Eco tháng 11").await;
+    let link = Regex::new(r"https?://\S+/notifications/unsubscribe/\S+")
+        .unwrap()
+        .find(&mail)
+        .expect("email có liên kết hủy đăng ký")
+        .as_str()
+        .to_owned();
+    let stranger = reqwest::Client::builder()
+        .cookie_store(true)
+        .build()
+        .unwrap();
+    let page = get(&stranger, &link).await;
+    let form = parse_form_where(&page, "form#unsubscribe-form");
+    let done = submit(&stranger, &form, &[]).await;
+    assert!(done.contains("Đã hủy đăng ký"), "{done}");
+    assert!(!notifications::enabled(&state, customer, Category::Newsletter).await);
+    let tampered = link.replace("newsletter", "security");
+    assert_eq!(
+        stranger
+            .get(&tampered)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        404,
+        "không hủy được thông báo bắt buộc"
+    );
 }

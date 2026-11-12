@@ -20,7 +20,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "cookies", "multipart", "rustls"] }
 askama = "0.16.1"
-lettre = { version = "0.11.23", default-features = false, features = ["builder", "smtp-transport", "tokio1", "hostname"] }
+lettre = { version = "0.11.23", default-features = false, features = ["builder", "smtp-transport", "tokio1", "hostname", "tokio1-rustls", "aws-lc-rs", "rustls-platform-verifier"] }
 url.workspace = true
 form_urlencoded = "1.2.2"
 getrandom = "0.4.3"
@@ -48,6 +48,8 @@ totp-rs = "5.7.2"
 tempfile = "3"
 f-dev = { path = "../../tools/f-dev" }
 fsdk = { path = "../../sdk/rust" }
+aws-lc-rs = "1"
+feco-manifest = { path = "../../crates/feco-manifest" }
 
 [lints]
 workspace = true

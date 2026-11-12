@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("notify.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("notify.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+{% if items.is_empty() %}<p class="muted" id="no-notifications">{{ i18n.t("notify.none") }}</p>{% endif %}
+{% for n in items %}
+<div class="review notification{% if !n.read %} unread{% endif %}">
+  <strong><a href="{{ n.link }}">{{ n.title }}</a></strong> · <span class="muted">{{ n.at }}</span>
+  <p style="white-space:pre-line">{{ n.body }}</p>
+</div>
+{% endfor %}
+<h2>{{ i18n.t("notify.settings") }}</h2>
+<p class="muted">{{ i18n.t("notify.mandatory_note") }}</p>
+<form method="post" action="/notifications/settings" id="notify-settings">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  {% for p in prefs %}<div><input type="checkbox" name="on" value="{{ p.code }}" id="n-{{ p.code }}"{% if p.on %} checked{% endif %}> <label for="n-{{ p.code }}" style="display:inline;font-weight:400">{{ p.label }}</label></div>{% endfor %}
+  <button type="submit" class="secondary">{{ i18n.t("notify.save") }}</button>
+</form>
+<div class="links"><a href="/">{{ i18n.t("home.title") }}</a></div>
+{% endblock %}

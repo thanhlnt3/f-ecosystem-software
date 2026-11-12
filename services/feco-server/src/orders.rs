@@ -594,7 +594,7 @@ pub async fn submit(
     .await;
     mail(
         state,
-        &o.customer_email,
+        &o,
         &format!("Đã nhận yêu cầu {}: {}", o.code, o.title),
         &format!(
             "F-Eco đã nhận yêu cầu xây app của bạn.\n\nMã đơn: {}\nTên dự án: {}\n\nĐội F-Eco sẽ gửi báo giá trong 3 ngày làm việc. Theo dõi đơn tại {}orders/{}\n",
@@ -629,10 +629,17 @@ pub(crate) fn vnd(n: i64) -> String {
     format!("{}{out} ₫", if n < 0 { "-" } else { "" })
 }
 
-async fn mail(state: &AppState, to: &str, subject: &str, body: &str) {
-    if let Err(e) = state.mailer.send(to, subject, body).await {
-        tracing::warn!(error = %e, "không gửi được email về đơn hàng");
-    }
+/// Thông báo về đơn hàng (loại bắt buộc): email và trung tâm thông báo, liên kết tới trang đơn.
+async fn mail(state: &AppState, o: &Order, subject: &str, body: &str) {
+    let note = crate::notifications::Note::vi(subject, body, format!("/orders/{}", o.id));
+    crate::notifications::notify(
+        state,
+        o.customer,
+        Some(&o.customer_email),
+        crate::notifications::Category::Order,
+        &note,
+    )
+    .await;
 }
 
 // ---------- Báo giá ----------
@@ -760,19 +767,33 @@ pub async fn create_quote(
         .await?;
     }
     tx.commit().await?;
-    mail(
-        state,
-        &o.customer_email,
-        &format!("Báo giá cho đơn {}", o.code),
-        &format!(
-            "Đội F-Eco đã gửi báo giá số {number} cho \"{}\": tổng {} gồm {} mốc, hiệu lực tới {}.\n\nXem và chấp nhận tại {}orders/{}\n",
+    let note = crate::notifications::Note::vi(
+        format!("Báo giá cho đơn {}", o.code),
+        format!(
+            "Đội F-Eco đã gửi báo giá số {number} cho \"{}\": tổng {} gồm {} mốc, hiệu lực tới {}.",
             o.title,
             vnd(total),
             q.milestones.len(),
             date(valid_until),
-            state.public_url,
-            o.id
         ),
+        format!("/orders/{}#quote", o.id),
+    )
+    .en(
+        format!("Quote for order {}", o.code),
+        format!(
+            "The F-Eco team sent quote no. {number} for \"{}\": {} in {} milestones, valid until {}.",
+            o.title,
+            vnd(total),
+            q.milestones.len(),
+            date(valid_until),
+        ),
+    );
+    crate::notifications::notify(
+        state,
+        o.customer,
+        Some(&o.customer_email),
+        crate::notifications::Category::Order,
+        &note,
     )
     .await;
     Ok(id)
@@ -1124,7 +1145,7 @@ pub async fn payment_settled(
             .unwrap_or_default();
         mail(
             state,
-            &o.customer_email,
+            &o,
             &format!("Đơn {} bắt đầu thực hiện", o.code),
             &format!("Đã nhận tiền đặt cọc. Đơn \"{}\" bắt đầu thực hiện hôm nay.\n\nLịch các mốc:\n{schedule}\n", o.title),
         )
@@ -1267,7 +1288,7 @@ pub async fn deliver(
     tx.commit().await?;
     mail(
         state,
-        &o.customer_email,
+        &o,
         &format!("Đơn {}: bàn giao mốc {position}", o.code),
         &format!(
             "Mốc {position} \"{}\" đã được bàn giao. Mở F-Launcher để chạy thử app \"{}\" {} (chỉ bạn thấy).\n\nGhi chú: {}\n\nHãy nghiệm thu hoặc yêu cầu sửa trong 7 ngày tại {}orders/{}\n",
@@ -1368,7 +1389,7 @@ pub async fn accept_milestone(
     };
     mail(
         state,
-        &o.customer_email,
+        &o,
         &format!("Đơn {}: nghiệm thu mốc {position}", o.code),
         &what,
     )
@@ -1477,9 +1498,11 @@ pub async fn process_due(state: &AppState, now: OffsetDateTime) -> OrderResult<u
                 .bind(now)
                 .execute(&state.db)
                 .await?;
+            let o = get(&state.db, order).await?;
+            debug_assert_eq!(o.customer_email, email);
             mail(
                 state,
-                &email,
+                &o,
                 &format!("Nhắc nghiệm thu mốc {position} của đơn {code}"),
                 &format!("Mốc {position} đã bàn giao được 7 ngày. Hãy nghiệm thu hoặc yêu cầu sửa; sau 14 ngày mốc sẽ tự được nghiệm thu.\n"),
             )
@@ -1547,14 +1570,21 @@ pub async fn post_message(
         .await?;
     match from_team {
         Some(_) => {
-            mail(
+            let note = crate::notifications::Note::vi(
+                format!("Tin nhắn mới trong đơn {}", o.code),
+                format!("Bạn có tin nhắn mới trong đơn #{}.", o.code),
+                format!("/orders/{}#thread", o.id),
+            )
+            .en(
+                format!("New message in order {}", o.code),
+                format!("You have a new message in order #{}.", o.code),
+            );
+            crate::notifications::notify(
                 state,
-                &o.customer_email,
-                &format!("Tin nhắn mới trong đơn {}", o.code),
-                &format!(
-                    "Đội F-Eco nhắn:\n\n{body}\n\nTrả lời tại {}orders/{}\n",
-                    state.public_url, o.id
-                ),
+                o.customer,
+                Some(&o.customer_email),
+                crate::notifications::Category::Order,
+                &note,
             )
             .await
         }
@@ -1630,7 +1660,7 @@ pub async fn cancel(
     };
     mail(
         state,
-        &o.customer_email,
+        &o,
         &format!("Đơn {} đã hủy", o.code),
         &format!("Đơn \"{}\" đã được hủy.{note}\n", o.title),
     )
@@ -1829,7 +1859,7 @@ pub async fn resolve_dispute(
     };
     mail(
         state,
-        &o.customer_email,
+        &o,
         &format!("Kết quả tranh chấp đơn {}", o.code),
         &format!("Tranh chấp mốc {position} đã được giải quyết. {what}\n"),
     )

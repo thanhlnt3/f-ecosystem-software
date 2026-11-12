@@ -1420,6 +1420,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "askama",
+ "aws-lc-rs",
  "axum",
  "base64 0.23.1",
  "f-dev",
@@ -2518,8 +2519,11 @@ dependencies = [
  "nom",
  "percent-encoding",
  "quoted_printable",
+ "rustls",
+ "rustls-platform-verifier",
  "socket2",
  "tokio",
+ "tokio-rustls",
  "url",
 ]
 
