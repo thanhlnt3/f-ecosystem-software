@@ -75,6 +75,23 @@ pub struct ZalopayConfig {
     pub endpoint: Url,
 }
 
+/// MISA meInvoice (hóa đơn điện tử, tasks.md 13.4). Môi trường thử hay thật do tài khoản quyết
+/// định (cùng một địa chỉ API), nên không kiểm theo host như cổng thanh toán.
+#[derive(Debug, Clone)]
+pub struct MisaConfig {
+    pub client_id: String,
+    pub client_secret: Secret,
+    /// Mã số thuế của F-Eco (người bán).
+    pub tax_code: String,
+    pub username: String,
+    pub password: Secret,
+    /// Ký hiệu hóa đơn đã đăng ký, ví dụ `1C26TFE`.
+    pub inv_series: String,
+    /// Thuế suất GTGT trên hóa đơn: KCT, KKKNT, 0%, 5%, 8%, 10% hoặc KHAC:x%.
+    pub vat_rate: String,
+    pub endpoint: Url,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct PaymentsConfig {
     pub vnpay: Option<VnpayConfig>,
@@ -83,6 +100,7 @@ pub struct PaymentsConfig {
     /// Gốc địa chỉ công khai mà cổng thanh toán gọi callback và IPN (mặc định là
     /// `FECO_PUBLIC_URL`). Dùng khi máy chủ chạy sau tunnel hoặc proxy khác địa chỉ đăng nhập.
     pub callback_base: Option<Url>,
+    pub misa: Option<MisaConfig>,
 }
 
 /// Nhà cung cấp thử thách chống bot (spec account-identity, "Chống dò mật khẩu").
@@ -322,6 +340,52 @@ impl Config {
             })
             .transpose()?;
 
+        let misa = group(
+            "MISA meInvoice",
+            [
+                ("FECO_MISA_CLIENT_ID", get("FECO_MISA_CLIENT_ID")),
+                ("FECO_MISA_CLIENT_SECRET", get("FECO_MISA_CLIENT_SECRET")),
+                ("FECO_MISA_TAX_CODE", get("FECO_MISA_TAX_CODE")),
+                ("FECO_MISA_USERNAME", get("FECO_MISA_USERNAME")),
+                ("FECO_MISA_PASSWORD", get("FECO_MISA_PASSWORD")),
+                ("FECO_MISA_INV_SERIES", get("FECO_MISA_INV_SERIES")),
+                ("FECO_MISA_VAT_RATE", get("FECO_MISA_VAT_RATE")),
+            ],
+        )?
+        .map(
+            |[client_id, secret, tax_code, username, password, series, vat]| -> Result<MisaConfig, ConfigError> {
+                let vat_ok = matches!(vat, "KCT" | "KKKNT" | "0%" | "5%" | "8%" | "10%")
+                    || vat.strip_prefix("KHAC:").is_some_and(|r| r.ends_with('%'));
+                if !vat_ok {
+                    return Err(ConfigError::Invalid {
+                        var: "FECO_MISA_VAT_RATE",
+                        reason: "phải là KCT, KKKNT, 0%, 5%, 8%, 10% hoặc KHAC:x%".into(),
+                    });
+                }
+                let mut endpoint = gateway_url(
+                    environment,
+                    "FECO_MISA_ENDPOINT",
+                    get("FECO_MISA_ENDPOINT")
+                        .unwrap_or("https://developer.misa.vn/apis/itg/meinvoice/"),
+                )?;
+                if !endpoint.path().ends_with('/') {
+                    let path = format!("{}/", endpoint.path());
+                    endpoint.set_path(&path);
+                }
+                Ok(MisaConfig {
+                    client_id: client_id.to_owned(),
+                    client_secret: Secret::new(secret),
+                    tax_code: tax_code.to_owned(),
+                    username: username.to_owned(),
+                    password: Secret::new(password),
+                    inv_series: series.to_owned(),
+                    vat_rate: vat.to_owned(),
+                    endpoint,
+                })
+            },
+        )
+        .transpose()?;
+
         let auth = auth_config(environment, &get)?;
         let security = security_config(environment, &get)?;
         let developer = developer_config(environment, &get)?;
@@ -338,6 +402,7 @@ impl Config {
                 momo,
                 zalopay,
                 callback_base,
+                misa,
             },
         };
         config.validate()?;

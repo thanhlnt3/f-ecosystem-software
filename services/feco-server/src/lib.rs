@@ -26,6 +26,7 @@ pub mod i18n;
 pub mod kratos;
 pub mod launch;
 pub mod mailer;
+pub mod misa;
 pub mod momo;
 pub mod oauth;
 pub mod orders;
@@ -110,6 +111,8 @@ pub struct AppState {
     /// Cổng VNPAY (QR, thẻ ATM, thẻ quốc tế) và MoMo (ví MoMo).
     pub vnpay: Option<vnpay::Vnpay>,
     pub momo: Option<momo::Momo>,
+    /// Nhà cung cấp hóa đơn điện tử; không cấu hình thì phát hành hóa đơn nháp nội bộ.
+    pub misa: Option<misa::Misa>,
     /// Gốc địa chỉ cổng thanh toán gọi callback (mặc định `public_url`).
     pub payment_callback_base: Url,
 }
@@ -181,6 +184,7 @@ impl AppState {
             zalopay: config.payments.zalopay.as_ref().map(zalopay::ZaloPay::new),
             vnpay: config.payments.vnpay.as_ref().map(vnpay::Vnpay::new),
             momo: config.payments.momo.as_ref().map(momo::Momo::new),
+            misa: config.payments.misa.as_ref().map(misa::Misa::new),
             payment_callback_base: config
                 .payments
                 .callback_base
@@ -383,6 +387,7 @@ mod tests {
             zalopay: None,
             vnpay: None,
             momo: None,
+            misa: None,
             payment_callback_base: Url::parse("http://127.0.0.1:8080/").unwrap(),
         }
     }

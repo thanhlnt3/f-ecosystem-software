@@ -1763,6 +1763,102 @@ async fn invoice_buyer(
         }))
 }
 
+/// Kết quả phát hành ở nhà cung cấp hóa đơn điện tử.
+struct Issued {
+    provider: &'static str,
+    provider_ref: Option<String>,
+    meta: Value,
+    attachment: Option<Attachment>,
+}
+
+impl Issued {
+    fn draft() -> Self {
+        Issued {
+            provider: "draft",
+            provider_ref: None,
+            meta: json!({}),
+            attachment: None,
+        }
+    }
+}
+
+fn misa_buyer(b: &BillingProfile) -> crate::misa::Buyer {
+    crate::misa::Buyer {
+        company: b.kind == "company",
+        name: b.name.clone(),
+        tax_code: b.tax_code.clone(),
+        address: b.address.clone(),
+        email: b.email.clone(),
+    }
+}
+
+fn misa_err(e: crate::misa::MisaError) -> OrderError {
+    tracing::warn!(error = %e, "lỗi khi gọi MISA meInvoice");
+    problem(
+        StatusCode::BAD_GATEWAY,
+        "invoice_provider_error",
+        "Nhà cung cấp hóa đơn điện tử đang gặp sự cố.",
+        "The e-invoice provider is having trouble.",
+    )
+}
+
+/// Phát hành hóa đơn điện tử thật qua MISA meInvoice; trả số hóa đơn, tài liệu tóm tắt và dữ liệu
+/// cần giữ (ký hiệu, số, ngày để lập hóa đơn điều chỉnh; mã tra cứu để tải PDF).
+#[allow(clippy::too_many_arguments)]
+async fn publish_misa(
+    m: &crate::misa::Misa,
+    ref_id: &str,
+    buyer: &BillingProfile,
+    line: &str,
+    amount: i64,
+    original: Option<&crate::misa::Original>,
+    note: &str,
+) -> OrderResult<(String, String, Issued)> {
+    let published = m
+        .publish(
+            ref_id,
+            &misa_buyer(buyer),
+            line,
+            amount,
+            OffsetDateTime::now_utc(),
+            original,
+            note,
+        )
+        .await
+        .map_err(misa_err)?;
+    let number = format!("{}-{}", published.series, published.number);
+    let doc = format!(
+        "<!doctype html><html lang=\"vi\"><meta charset=\"utf-8\"><title>{n}</title><body><h1>Hóa đơn điện tử {n}</h1><p>Mã tra cứu: <b>{r}</b></p><p>{line}: {amount}</p><p>Bản PDF có chữ ký số tải tại Lịch sử thanh toán của F-Eco.</p></body></html>",
+        n = esc(&number),
+        r = esc(&published.transaction_id),
+        line = esc(line),
+        amount = vnd(amount)
+    );
+    let attachment = match m.download_pdf(&published.transaction_id).await {
+        Ok(pdf) => Some(Attachment {
+            name: format!("{number}.pdf"),
+            content_type: "application/pdf".into(),
+            bytes: pdf,
+        }),
+        Err(e) => {
+            tracing::warn!(error = %e, "chưa tải được PDF hóa đơn, gửi bản tóm tắt");
+            None
+        }
+    };
+    let meta =
+        json!({"series": published.series, "number": published.number, "date": published.date});
+    Ok((
+        number,
+        doc,
+        Issued {
+            provider: "misa",
+            provider_ref: Some(published.transaction_id),
+            meta,
+            attachment,
+        },
+    ))
+}
+
 async fn try_issue_invoice(state: &AppState, tx_id: Uuid) -> OrderResult<()> {
     let exists: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM invoices WHERE transaction_id = $1 AND kind = 'original')",
@@ -1776,10 +1872,6 @@ async fn try_issue_invoice(state: &AppState, tx_id: Uuid) -> OrderResult<()> {
     let t = transaction(state, tx_id).await?;
     let c = charge(state, t.request_id).await?;
     let buyer = invoice_buyer(state, c.customer, &c.email).await?;
-    let seq: i64 = sqlx::query_scalar("SELECT nextval('invoice_seq')")
-        .fetch_one(&state.db)
-        .await?;
-    let number = format!("FECO-NHAP-{seq:07}");
     let line = match c.milestone {
         Some(p) => format!(
             "Dịch vụ xây app theo yêu cầu, đơn {}, mốc {p}: {}",
@@ -1787,6 +1879,30 @@ async fn try_issue_invoice(state: &AppState, tx_id: Uuid) -> OrderResult<()> {
         ),
         None => format!("Dịch vụ xây app theo yêu cầu, đơn {}", c.order_code),
     };
+    let mail_subject = format!("Hóa đơn thanh toán đơn {}", c.order_code);
+    if let Some(m) = &state.misa {
+        let (number, doc, issued) =
+            publish_misa(m, &tx_id.to_string(), &buyer, &line, t.amount_vnd, None, "").await?;
+        return store_and_send(
+            state,
+            c.customer,
+            tx_id,
+            None,
+            "original",
+            None,
+            &buyer,
+            &number,
+            t.amount_vnd,
+            &doc,
+            &mail_subject,
+            issued,
+        )
+        .await;
+    }
+    let seq: i64 = sqlx::query_scalar("SELECT nextval('invoice_seq')")
+        .fetch_one(&state.db)
+        .await?;
+    let number = format!("FECO-NHAP-{seq:07}");
     let now = OffsetDateTime::now_utc();
     let doc = render_invoice(&InvoiceDoc {
         number: &number,
@@ -1809,7 +1925,8 @@ async fn try_issue_invoice(state: &AppState, tx_id: Uuid) -> OrderResult<()> {
         &number,
         t.amount_vnd,
         &doc,
-        &format!("Hóa đơn thanh toán đơn {}", c.order_code),
+        &mail_subject,
+        Issued::draft(),
     )
     .await
 }
@@ -1827,10 +1944,11 @@ async fn store_and_send(
     amount: i64,
     doc: &str,
     mail_subject: &str,
+    issued: Issued,
 ) -> OrderResult<()> {
     let inserted = sqlx::query(
-        "INSERT INTO invoices (id, number, subject, transaction_id, refund_id, kind, adjusts, buyer_kind, buyer_name, buyer_tax_code, buyer_address, amount_vnd, provider, document)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'draft', $13) ON CONFLICT DO NOTHING",
+        "INSERT INTO invoices (id, number, subject, transaction_id, refund_id, kind, adjusts, buyer_kind, buyer_name, buyer_tax_code, buyer_address, amount_vnd, provider, document, provider_ref, provider_meta)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $13, $15, $16) ON CONFLICT DO NOTHING",
     )
     .bind(Uuid::new_v4())
     .bind(number)
@@ -1845,23 +1963,27 @@ async fn store_and_send(
     .bind(&buyer.address)
     .bind(amount)
     .bind(doc)
+    .bind(issued.provider)
+    .bind(&issued.provider_ref)
+    .bind(&issued.meta)
     .execute(&state.db)
     .await?
     .rows_affected();
     if inserted == 0 {
         return Ok(());
     }
-    let attachment = Attachment {
+    let attachment = issued.attachment.unwrap_or_else(|| Attachment {
         name: format!("{number}.html"),
         content_type: "text/html; charset=utf-8".into(),
         bytes: doc.as_bytes().to_vec(),
-    };
+    });
     let body = format!(
-        "Hóa đơn số {number} ({}) mang tên {}{}, số tiền {}.\nTải lại bất kỳ lúc nào ở Lịch sử thanh toán: {}payments\n",
+        "Hóa đơn số {number} ({}) mang tên {}{}, số tiền {}.{}\nTải lại bất kỳ lúc nào ở Lịch sử thanh toán: {}payments\n",
         if kind == "adjustment" { "điều chỉnh giảm" } else { "thanh toán" },
         buyer.name,
         buyer.tax_code.as_deref().map(|t| format!(", mã số thuế {t}")).unwrap_or_default(),
         vnd(amount),
+        issued.provider_ref.as_deref().map(|r| format!("\nMã tra cứu hóa đơn điện tử: {r}")).unwrap_or_default(),
         state.public_url
     );
     if let Err(e) = state
@@ -1878,8 +2000,8 @@ async fn store_and_send(
 async fn adjustment_invoice(state: &AppState, refund_id: Uuid) {
     let result: OrderResult<()> = async {
         let r = refund(state, refund_id).await?;
-        let original: Option<(Uuid, String)> = sqlx::query_as(
-            "SELECT id, number FROM invoices WHERE transaction_id = $1 AND kind = 'original'",
+        let original: Option<(Uuid, String, String, Value)> = sqlx::query_as(
+            "SELECT id, number, provider, provider_meta FROM invoices WHERE transaction_id = $1 AND kind = 'original'",
         )
         .bind(r.transaction_id)
         .fetch_optional(&state.db)
@@ -1887,14 +2009,40 @@ async fn adjustment_invoice(state: &AppState, refund_id: Uuid) {
         let t = transaction(state, r.transaction_id).await?;
         let c = charge(state, t.request_id).await?;
         let buyer = invoice_buyer(state, c.customer, &c.email).await?;
-        let seq: i64 = sqlx::query_scalar("SELECT nextval('invoice_seq')")
-            .fetch_one(&state.db)
-            .await?;
-        let number = format!("FECO-NHAP-{seq:07}");
         let line = format!(
             "Điều chỉnh giảm do hoàn tiền đơn {}: {}",
             c.order_code, r.reason
         );
+        let mail_subject = format!("Hóa đơn điều chỉnh đơn {}", c.order_code);
+        // Hóa đơn gốc đã phát hành qua MISA: điều chỉnh cũng qua MISA, tham chiếu hóa đơn gốc.
+        if let (Some(m), Some((orig_id, _, provider, meta))) = (&state.misa, &original) {
+            if provider == "misa" {
+                let org = crate::misa::Original {
+                    series: meta["series"].as_str().unwrap_or_default().to_owned(),
+                    number: meta["number"].as_str().unwrap_or_default().to_owned(),
+                    date: meta["date"].as_str().unwrap_or_default().to_owned(),
+                };
+                let (number, doc, issued) = publish_misa(
+                    m,
+                    &refund_id.to_string(),
+                    &buyer,
+                    &line,
+                    r.amount_vnd,
+                    Some(&org),
+                    &format!("Điều chỉnh giảm do hoàn tiền: {}", r.reason),
+                )
+                .await?;
+                return store_and_send(
+                    state, c.customer, t.id, Some(refund_id), "adjustment", Some(*orig_id), &buyer,
+                    &number, -r.amount_vnd, &doc, &mail_subject, issued,
+                )
+                .await;
+            }
+        }
+        let seq: i64 = sqlx::query_scalar("SELECT nextval('invoice_seq')")
+            .fetch_one(&state.db)
+            .await?;
+        let number = format!("FECO-NHAP-{seq:07}");
         let doc = render_invoice(&InvoiceDoc {
             number: &number,
             kind: "adjustment",
@@ -1916,7 +2064,8 @@ async fn adjustment_invoice(state: &AppState, refund_id: Uuid) {
             &number,
             -r.amount_vnd,
             &doc,
-            &format!("Hóa đơn điều chỉnh đơn {}", c.order_code),
+            &mail_subject,
+            Issued::draft(),
         )
         .await
     }
@@ -2020,20 +2169,34 @@ pub async fn invoice_document(
     state: &AppState,
     subject: Uuid,
     id: Uuid,
-) -> OrderResult<(String, String)> {
-    let row: Option<(String, String)> =
-        sqlx::query_as("SELECT number, document FROM invoices WHERE id = $1 AND subject = $2")
-            .bind(id)
-            .bind(subject)
-            .fetch_optional(&state.db)
-            .await?;
-    row.ok_or_else(|| {
+) -> OrderResult<Attachment> {
+    let row: Option<(String, String, String, Option<String>)> = sqlx::query_as(
+        "SELECT number, document, provider, provider_ref FROM invoices WHERE id = $1 AND subject = $2",
+    )
+    .bind(id)
+    .bind(subject)
+    .fetch_optional(&state.db)
+    .await?;
+    let (number, document, provider, provider_ref) = row.ok_or_else(|| {
         problem(
             StatusCode::NOT_FOUND,
             "not_found",
             "Không có hóa đơn này.",
             "No such invoice.",
         )
+    })?;
+    if let (Some(m), "misa", Some(r)) = (&state.misa, provider.as_str(), provider_ref) {
+        let pdf = m.download_pdf(&r).await.map_err(misa_err)?;
+        return Ok(Attachment {
+            name: format!("{number}.pdf"),
+            content_type: "application/pdf".into(),
+            bytes: pdf,
+        });
+    }
+    Ok(Attachment {
+        name: format!("{number}.html"),
+        content_type: "text/html; charset=utf-8".into(),
+        bytes: document.into_bytes(),
     })
 }
 

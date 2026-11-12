@@ -544,14 +544,13 @@ pub async fn invoice(
         Err(r) => return *r,
     };
     match payments::invoice_document(&state, subject, id).await {
-        Ok((number, doc)) => {
-            let mut res = doc.into_response();
+        Ok(file) => {
+            let mut res = file.bytes.into_response();
             let h = res.headers_mut();
-            h.insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("text/html; charset=utf-8"),
-            );
-            if let Ok(v) = HeaderValue::from_str(&format!("attachment; filename=\"{number}.html\""))
+            if let Ok(v) = HeaderValue::from_str(&file.content_type) {
+                h.insert(header::CONTENT_TYPE, v);
+            }
+            if let Ok(v) = HeaderValue::from_str(&format!("attachment; filename=\"{}\"", file.name))
             {
                 h.insert(header::CONTENT_DISPOSITION, v);
             }

@@ -5417,3 +5417,124 @@ async fn vnpay_and_momo_end_to_end() {
         Status::InProgress
     );
 }
+
+/// Task 13.4: hóa đơn điện tử qua MISA meInvoice (máy chủ giả cùng giao thức): phát hành sau khi
+/// thanh toán thành công cho khách doanh nghiệp, gửi email kèm PDF và mã tra cứu, hóa đơn điều
+/// chỉnh giảm khi hoàn tiền tham chiếu hóa đơn gốc, tải lại PDF.
+#[tokio::test]
+async fn misa_einvoice_end_to_end() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::payments::{self, BillingProfile, Requester};
+    let misa = feco_server::misa::testing::FakeMisa::serve("e2e-misa", "e2e-misa-secret")
+        .await
+        .unwrap();
+    let mut vars = SERVER_VARS.get().unwrap().clone();
+    for (k, v) in [
+        ("FECO_MISA_CLIENT_ID", "e2e-misa"),
+        ("FECO_MISA_CLIENT_SECRET", "e2e-misa-secret"),
+        ("FECO_MISA_TAX_CODE", "0109999999"),
+        ("FECO_MISA_USERNAME", "ketoan@f-eco.test"),
+        ("FECO_MISA_PASSWORD", "e2e-fake-misa-password"),
+        ("FECO_MISA_INV_SERIES", "1C26TFE"),
+        ("FECO_MISA_VAT_RATE", "10%"),
+    ] {
+        vars.insert(k.into(), v.into());
+    }
+    vars.insert("FECO_MISA_ENDPOINT".into(), misa.endpoint());
+    let state = AppState::from_config(&Config::from_vars(&vars).unwrap()).unwrap();
+    let now = time::OffsetDateTime::now_utc();
+
+    let (email, password) = unique("khach-hoa-don");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Anh Long").await;
+    verify_email(&user, &email).await;
+    let customer = subject_of(&email).await;
+    payments::save_billing_profile(
+        &state,
+        customer,
+        &BillingProfile {
+            kind: "company".into(),
+            name: "Công ty CP Phần mềm Sao Mai".into(),
+            tax_code: Some("0312345678".into()),
+            address: "12 Lê Lợi, Quận 1, TP Hồ Chí Minh".into(),
+            email: email.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    let (order, deposit) = accepted_order(&state, &user, customer, "App kế toán kho").await;
+    let code = feco_server::orders::get(&state.db, order)
+        .await
+        .unwrap()
+        .code;
+    let gateway_ref = start_payment(&user, deposit, "zalopay:vietqr").await;
+    let body = ZALOPAY.get().unwrap().pay(&gateway_ref, 38, None);
+    assert_eq!(
+        payments::handle_callback(&state, &body, now).await["return_code"],
+        1
+    );
+
+    // Hóa đơn gốc phát hành qua MISA với thông tin doanh nghiệp; giá đã gồm thuế 10%.
+    let inv = misa
+        .published
+        .lock()
+        .unwrap()
+        .last()
+        .cloned()
+        .expect("đã phát hành ở MISA");
+    assert_eq!(inv["BuyerLegalName"], "Công ty CP Phần mềm Sao Mai");
+    assert_eq!(inv["BuyerTaxCode"], "0312345678");
+    assert_eq!(inv["InvSeries"], "1C26TFE");
+    assert_eq!(
+        (
+            inv["TotalAmount"].as_i64(),
+            inv["TotalAmountWithoutVAT"].as_i64(),
+            inv["TotalVATAmount"].as_i64()
+        ),
+        (Some(9_000_000), Some(8_181_818), Some(818_182))
+    );
+    let original_no = misa.published.lock().unwrap().len();
+    let (mail, files) =
+        wait_mail_with_files(&email, &format!("Hóa đơn thanh toán đơn {code}")).await;
+    assert!(
+        mail.contains("Mã tra cứu hóa đơn điện tử: TRA") && mail.contains("0312345678"),
+        "{mail}"
+    );
+    assert!(
+        files
+            .iter()
+            .any(|f| f.starts_with("1C26TFE-") && f.ends_with(".pdf")),
+        "{files:?}"
+    );
+    let invoices = payments::invoices_of(&state, customer).await.unwrap();
+    let original = invoices.iter().find(|i| i.kind == "original").unwrap();
+    assert_eq!(original.provider, "misa");
+    let pdf = payments::invoice_document(&state, customer, original.id)
+        .await
+        .unwrap();
+    assert_eq!(pdf.content_type, "application/pdf");
+    assert!(pdf.bytes.starts_with(b"%PDF"));
+
+    // Hoàn 4 triệu → hóa đơn điều chỉnh giảm qua MISA, tham chiếu hóa đơn gốc.
+    let tx = payments::by_ref(&state, &gateway_ref).await.unwrap();
+    payments::request_refund(
+        &state,
+        tx.id,
+        4_000_000,
+        "Tranh chấp mốc 1",
+        Requester::Admin("lan".into()),
+        None,
+    )
+    .await
+    .unwrap();
+    let adj = misa.published.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(adj["ReferenceType"], 2);
+    assert_eq!(adj["OrgInvNo"], format!("{original_no:08}"));
+    assert_eq!(adj["OrgInvSeries"], "C26TFE");
+    assert_eq!(adj["TotalAmount"], 4_000_000);
+    let (mail, _) = wait_mail_with_files(&email, &format!("Hóa đơn điều chỉnh đơn {code}")).await;
+    assert!(mail.contains("điều chỉnh giảm"), "{mail}");
+}
