@@ -20,11 +20,13 @@ pub mod dns;
 pub mod entitlements;
 pub mod errors;
 pub mod export;
+pub mod gateways;
 pub mod hydra;
 pub mod i18n;
 pub mod kratos;
 pub mod launch;
 pub mod mailer;
+pub mod momo;
 pub mod oauth;
 pub mod orders;
 pub mod orders_web;
@@ -40,6 +42,7 @@ pub mod store;
 pub mod store_web;
 pub mod throttle;
 pub mod views;
+pub mod vnpay;
 pub mod webhooks;
 pub mod zalopay;
 
@@ -104,6 +107,11 @@ pub struct AppState {
     pub admin_emails: Vec<String>,
     /// Cổng thanh toán ZaloPay (không cấu hình thì trang thanh toán báo chưa sẵn sàng).
     pub zalopay: Option<zalopay::ZaloPay>,
+    /// Cổng VNPAY (QR, thẻ ATM, thẻ quốc tế) và MoMo (ví MoMo).
+    pub vnpay: Option<vnpay::Vnpay>,
+    pub momo: Option<momo::Momo>,
+    /// Gốc địa chỉ cổng thanh toán gọi callback (mặc định `public_url`).
+    pub payment_callback_base: Url,
 }
 
 /// Ngưỡng giới hạn tần suất (yêu cầu mỗi phút).
@@ -171,6 +179,13 @@ impl AppState {
             clamd: config.developer.clamd,
             admin_emails: config.developer.admin_emails.clone(),
             zalopay: config.payments.zalopay.as_ref().map(zalopay::ZaloPay::new),
+            vnpay: config.payments.vnpay.as_ref().map(vnpay::Vnpay::new),
+            momo: config.payments.momo.as_ref().map(momo::Momo::new),
+            payment_callback_base: config
+                .payments
+                .callback_base
+                .clone()
+                .unwrap_or_else(|| a.public_url.clone()),
         })
     }
 }
@@ -292,6 +307,8 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/v1/payments/zalopay/callback",
             post(payments_web::zalopay_callback),
         )
+        .route("/v1/payments/vnpay/ipn", get(payments_web::vnpay_ipn))
+        .route("/v1/payments/momo/ipn", post(payments_web::momo_ipn))
         .route("/v1/catalog/private", get(store_web::api_private))
         .route("/store", get(store_web::list))
         .route("/store/{id}", get(store_web::show))
@@ -364,6 +381,9 @@ mod tests {
             clamd: None,
             admin_emails: Vec::new(),
             zalopay: None,
+            vnpay: None,
+            momo: None,
+            payment_callback_base: Url::parse("http://127.0.0.1:8080/").unwrap(),
         }
     }
 

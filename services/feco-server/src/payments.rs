@@ -20,9 +20,9 @@ use uuid::Uuid;
 
 use crate::{
     audit,
+    gateways::{self, PayStatus, RefundStatus},
     mailer::Attachment,
     orders::{self, problem, vnd, OrderError, OrderResult},
-    zalopay::{self, OrderStatus, RefundStatus},
     AppState,
 };
 
@@ -73,6 +73,8 @@ impl TxStatus {
 
 pub fn method_label(method: &str, vi: bool) -> &'static str {
     match (method, vi) {
+        ("momo_wallet", true) => "Ví điện tử MoMo",
+        ("momo_wallet", false) => "MoMo e-wallet",
         ("vietqr", true) => "QR chuyển khoản (VietQR)",
         ("vietqr", false) => "Bank transfer QR (VietQR)",
         ("domestic_card", true) => "Thẻ ATM nội địa",
@@ -86,18 +88,20 @@ pub fn method_label(method: &str, vi: bool) -> &'static str {
     }
 }
 
-fn gateway(state: &AppState) -> OrderResult<&zalopay::ZaloPay> {
-    state.zalopay.as_ref().ok_or_else(|| {
-        problem(
+fn need_gateways(state: &AppState) -> OrderResult<()> {
+    if gateways::any(state) {
+        Ok(())
+    } else {
+        Err(problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "payments_unavailable",
             "Chưa cấu hình cổng thanh toán.",
             "No payment gateway is configured.",
-        )
-    })
+        ))
+    }
 }
 
-fn upstream(e: zalopay::ZaloPayError) -> OrderError {
+fn upstream(e: gateways::GatewayError) -> OrderError {
     tracing::warn!(error = %e, "lỗi khi gọi cổng thanh toán");
     problem(
         StatusCode::BAD_GATEWAY,
@@ -255,6 +259,8 @@ pub struct Transaction {
     pub created_at: OffsetDateTime,
     pub expires_at: OffsetDateTime,
     pub settled_at: Option<OffsetDateTime>,
+    /// Dữ liệu riêng của cổng cần cho truy vấn và hoàn tiền (ví dụ `vnp_CreateDate` của VNPAY).
+    pub gateway_meta: Value,
 }
 
 impl Transaction {
@@ -293,9 +299,10 @@ type TxRow = (
     OffsetDateTime,
     OffsetDateTime,
     Option<OffsetDateTime>,
+    Value,
 );
 
-const TX_COLUMNS: &str = "t.id, t.request_id, t.attempt, t.provider, t.method, t.gateway_ref, t.amount_vnd, t.status, t.order_url, t.gateway_trans_id, t.card_last4, t.refunded_vnd, t.created_at, t.expires_at, t.settled_at";
+const TX_COLUMNS: &str = "t.id, t.request_id, t.attempt, t.provider, t.method, t.gateway_ref, t.amount_vnd, t.status, t.order_url, t.gateway_trans_id, t.card_last4, t.refunded_vnd, t.created_at, t.expires_at, t.settled_at, t.gateway_meta";
 
 fn tx_from(r: TxRow) -> Transaction {
     Transaction {
@@ -314,6 +321,7 @@ fn tx_from(r: TxRow) -> Transaction {
         created_at: r.12,
         expires_at: r.13,
         settled_at: r.14,
+        gateway_meta: r.15,
     }
 }
 
@@ -384,18 +392,19 @@ pub async fn start(
     state: &AppState,
     customer: Uuid,
     request: Uuid,
-    method: &str,
+    choice: &str,
+    client_ip: &str,
     now: OffsetDateTime,
 ) -> OrderResult<PayLink> {
-    let zp = gateway(state)?;
-    if !zalopay::METHODS.contains(&method) {
+    need_gateways(state)?;
+    let Some((provider, method)) = gateways::parse_choice(state, choice) else {
         return Err(problem(
             StatusCode::BAD_REQUEST,
             "invalid_request",
             "Hãy chọn một phương thức thanh toán.",
             "Choose a payment method.",
         ));
-    }
+    };
     let c = charge_of(state, customer, request).await?;
     let mut db = state.db.begin().await?;
     let status: String =
@@ -425,11 +434,13 @@ pub async fn start(
     let reusable: Option<(Uuid, String, Option<String>)> = sqlx::query_as(
         "SELECT id, gateway_ref, order_url FROM payment_transactions
          WHERE request_id = $1 AND status = 'pending' AND method = $2 AND expires_at > $3 AND order_url IS NOT NULL
+           AND provider = $4
          ORDER BY attempt DESC LIMIT 1",
     )
     .bind(request)
     .bind(method)
     .bind(now)
+    .bind(provider)
     .fetch_optional(&mut *db)
     .await?;
     if let Some((id, gateway_ref, Some(order_url))) = reusable {
@@ -447,14 +458,10 @@ pub async fn start(
     .fetch_one(&mut *db)
     .await?;
     let id = Uuid::new_v4();
-    let gateway_ref = format!(
-        "{}_{}",
-        zalopay::yymmdd(now),
-        &id.simple().to_string()[..20]
-    );
+    let gateway_ref = gateways::new_ref(provider, now, id);
     sqlx::query(
         "INSERT INTO payment_transactions (id, request_id, attempt, provider, method, gateway_ref, amount_vnd, created_at, expires_at)
-         VALUES ($1, $2, $3, 'zalopay', $4, $5, $6, $7, $8)",
+         VALUES ($1, $2, $3, $9, $4, $5, $6, $7, $8)",
     )
     .bind(id)
     .bind(request)
@@ -464,6 +471,7 @@ pub async fn start(
     .bind(c.amount_vnd)
     .bind(now)
     .bind(now + Duration::minutes(LINK_MINUTES))
+    .bind(provider)
     .execute(&mut *db)
     .await?;
     db.commit().await?;
@@ -475,40 +483,44 @@ pub async fn start(
         None => format!("F-Eco - Đơn {} - {}", c.order_code, c.reason),
     };
     let description: String = description.chars().take(200).collect();
-    let redirect = format!("{}payments/return", state.public_url);
-    let callback = format!("{}v1/payments/zalopay/callback", state.public_url);
     // Không gửi email hay tên khách cho cổng: chỉ một mã băm cố định theo người dùng.
     let app_user = format!("feco-{}", audit::hash_identifier(&customer.to_string()));
-    let created = zp
-        .create(&zalopay::NewOrder {
-            app_trans_id: &gateway_ref,
-            app_user: &app_user,
+    let created = gateways::create(
+        state,
+        &gateways::Create {
+            provider,
+            method,
+            gateway_ref: &gateway_ref,
             amount: c.amount_vnd,
             description: &description,
-            method,
-            redirect_url: &redirect,
-            callback_url: &callback,
-            expire_seconds: LINK_MINUTES * 60,
+            app_user: &app_user,
+            client_ip,
+            expire_minutes: LINK_MINUTES,
             now,
-        })
-        .await;
+        },
+    )
+    .await;
     tracing::info!(
         gateway_ref,
+        provider,
         method,
         amount = c.amount_vnd,
         "tạo giao dịch với cổng thanh toán"
     );
     match created {
-        Ok(created) => {
-            sqlx::query("UPDATE payment_transactions SET order_url = $2 WHERE id = $1")
-                .bind(id)
-                .bind(&created.order_url)
-                .execute(&state.db)
-                .await?;
+        Ok((order_url, meta)) => {
+            sqlx::query(
+                "UPDATE payment_transactions SET order_url = $2, gateway_meta = $3 WHERE id = $1",
+            )
+            .bind(id)
+            .bind(&order_url)
+            .bind(&meta)
+            .execute(&state.db)
+            .await?;
             Ok(PayLink {
                 transaction: id,
                 gateway_ref,
-                order_url: created.order_url,
+                order_url,
             })
         }
         Err(e) => {
@@ -697,6 +709,145 @@ pub async fn handle_callback(state: &AppState, body: &Value, now: OffsetDateTime
     }
 }
 
+/// IPN của VNPAY (GET, tham số `vnp_*`). Trả JSON `RspCode` theo tài liệu VNPAY: 00 đã nhận,
+/// 01 không có đơn, 02 đã xác nhận trước đó, 04 sai số tiền, 97 sai chữ ký, 99 lỗi khác.
+pub async fn handle_vnpay_ipn(
+    state: &AppState,
+    params: &std::collections::BTreeMap<String, String>,
+    now: OffsetDateTime,
+) -> Value {
+    let rsp = |code: &str, message: &str| json!({"RspCode": code, "Message": message});
+    let Some(v) = state.vnpay.as_ref() else {
+        return rsp("99", "Unknow error");
+    };
+    let payload = json!(params
+        .iter()
+        .filter(|(k, _)| *k != "vnp_SecureHash")
+        .collect::<std::collections::BTreeMap<_, _>>());
+    let txn_ref = params.get("vnp_TxnRef").cloned().unwrap_or_default();
+    let Some(ipn) = v.verify_ipn(params) else {
+        event(
+            state,
+            &txn_ref,
+            "callback",
+            false,
+            "invalid_signature",
+            &payload,
+        )
+        .await;
+        return rsp("97", "Invalid signature");
+    };
+    let Ok(t) = by_ref(state, &ipn.txn_ref).await else {
+        event(
+            state,
+            &txn_ref,
+            "callback",
+            true,
+            "unknown_transaction",
+            &payload,
+        )
+        .await;
+        return rsp("01", "Order not found");
+    };
+    if !ipn.succeeded {
+        if t.status == TxStatus::Pending {
+            let _ = set_status(state, t.id, TxStatus::Failed, now).await;
+        }
+        event(state, &txn_ref, "callback", true, "failed", &payload).await;
+        return rsp("00", "Confirm Success");
+    }
+    let outcome = settle(
+        state,
+        &ipn.txn_ref,
+        &ipn.transaction_no,
+        ipn.amount,
+        None,
+        "callback",
+        now,
+    )
+    .await;
+    event(
+        state,
+        &txn_ref,
+        "callback",
+        true,
+        &format!("{outcome:?}"),
+        &payload,
+    )
+    .await;
+    match outcome {
+        Ok(Settled::Duplicate) => rsp("02", "Order already confirmed"),
+        Ok(Settled::AmountMismatch) => rsp("04", "invalid amount"),
+        Ok(_) => rsp("00", "Confirm Success"),
+        Err(e) => {
+            tracing::error!(error = %e, "không xử lý được IPN VNPAY");
+            rsp("99", "Unknow error")
+        }
+    }
+}
+
+/// IPN của MoMo (POST JSON có chữ ký). `true` khi đã xử lý (trả 204), `false` khi sai chữ ký.
+pub async fn handle_momo_ipn(state: &AppState, body: &Value, now: OffsetDateTime) -> bool {
+    let Some(m) = state.momo.as_ref() else {
+        return false;
+    };
+    let order_id = body["orderId"].as_str().unwrap_or_default().to_owned();
+    let Some(ipn) = m.verify_ipn(body) else {
+        event(
+            state,
+            &order_id,
+            "callback",
+            false,
+            "invalid_signature",
+            body,
+        )
+        .await;
+        return false;
+    };
+    let Ok(t) = by_ref(state, &ipn.order_id).await else {
+        event(
+            state,
+            &order_id,
+            "callback",
+            true,
+            "unknown_transaction",
+            body,
+        )
+        .await;
+        return true;
+    };
+    if !ipn.succeeded {
+        if t.status == TxStatus::Pending {
+            let _ = set_status(state, t.id, TxStatus::Failed, now).await;
+        }
+        event(state, &order_id, "callback", true, "failed", body).await;
+        return true;
+    }
+    let outcome = settle(
+        state,
+        &ipn.order_id,
+        &ipn.trans_id,
+        ipn.amount,
+        None,
+        "callback",
+        now,
+    )
+    .await;
+    event(
+        state,
+        &order_id,
+        "callback",
+        true,
+        &format!("{outcome:?}"),
+        body,
+    )
+    .await;
+    if let Err(e) = outcome {
+        tracing::error!(error = %e, "không xử lý được IPN MoMo");
+    }
+    true
+}
+
 /// Truy vấn chủ động một giao dịch rồi cập nhật theo kết quả của cổng. Giao dịch quá hạn mà cổng
 /// chưa thu được tiền thì chuyển "Hết hạn".
 pub async fn confirm(
@@ -706,10 +857,10 @@ pub async fn confirm(
     now: OffsetDateTime,
 ) -> OrderResult<TxStatus> {
     let t = by_ref(state, gateway_ref).await?;
-    if t.status == TxStatus::Succeeded || t.provider != "zalopay" {
+    if t.status == TxStatus::Succeeded || t.provider == "manual" {
         return Ok(t.status);
     }
-    let result = gateway(state)?.query(gateway_ref).await.map_err(upstream)?;
+    let result = gateways::query(state, &t, now).await.map_err(upstream)?;
     event(
         state,
         gateway_ref,
@@ -720,19 +871,19 @@ pub async fn confirm(
     )
     .await;
     match result {
-        OrderStatus::Paid {
-            zp_trans_id,
+        PayStatus::Paid {
+            gateway_trans_id: zp_trans_id,
             amount,
         } => {
             settle(state, gateway_ref, &zp_trans_id, amount, None, source, now).await?;
         }
-        OrderStatus::Failed if t.status == TxStatus::Pending && now > t.expires_at => {
+        PayStatus::Failed if t.status == TxStatus::Pending && now > t.expires_at => {
             set_status(state, t.id, TxStatus::Expired, now).await?
         }
-        OrderStatus::Failed if t.status == TxStatus::Pending => {
+        PayStatus::Failed if t.status == TxStatus::Pending => {
             set_status(state, t.id, TxStatus::Failed, now).await?
         }
-        OrderStatus::Pending { processing: false }
+        PayStatus::Pending { processing: false }
             if t.status == TxStatus::Pending && now > t.expires_at =>
         {
             set_status(state, t.id, TxStatus::Expired, now).await?
@@ -1106,40 +1257,46 @@ async fn execute_refund(state: &AppState, id: Uuid, now: OffsetDateTime) -> Orde
             .await?;
         return finish_refund(state, id, RefundStatus::Succeeded, now).await;
     }
-    let zp = gateway(state)?;
-    let m_refund_id = format!(
-        "{}_{}_{}",
-        zalopay::yymmdd(now),
-        zp.app_id(),
-        &id.simple().to_string()[..16]
-    );
-    sqlx::query("UPDATE refunds SET status = 'processing', gateway_ref = $2 WHERE id = $1")
-        .bind(id)
-        .bind(&m_refund_id)
-        .execute(&state.db)
-        .await?;
     let description: String = format!("F-Eco hoan tien: {}", r.reason)
         .chars()
         .take(100)
         .collect();
-    let zp_trans_id = t.gateway_trans_id.clone().unwrap_or_default();
-    match zp
-        .refund(&m_refund_id, &zp_trans_id, r.amount_vnd, &description, now)
-        .await
-    {
-        Ok(RefundStatus::Failed(why)) => {
-            finish_refund(state, id, RefundStatus::Failed(why), now).await
-        }
-        Ok(_) => {
-            // ZaloPay chỉ xác nhận đã nhận lệnh: hỏi ngay kết quả, chưa xong thì worker hỏi tiếp.
-            match zp.query_refund(&m_refund_id, now).await {
-                Ok(RefundStatus::Processing) | Err(_) => Ok(()),
-                Ok(status) => finish_refund(state, id, status, now).await,
+    let by = r
+        .approvals
+        .last()
+        .cloned()
+        .unwrap_or_else(|| "system".into());
+    sqlx::query("UPDATE refunds SET status = 'processing' WHERE id = $1")
+        .bind(id)
+        .execute(&state.db)
+        .await?;
+    match gateways::refund(state, &t, id, r.amount_vnd, &description, &by, now).await {
+        Ok((refund_ref, status)) => {
+            sqlx::query("UPDATE refunds SET gateway_ref = $2 WHERE id = $1")
+                .bind(id)
+                .bind(&refund_ref)
+                .execute(&state.db)
+                .await?;
+            match status {
+                // Cổng chỉ xác nhận đã nhận lệnh: hỏi ngay kết quả, chưa xong thì worker hỏi tiếp.
+                RefundStatus::Processing => {
+                    match gateways::query_refund(state, &t.provider, &refund_ref, now).await {
+                        Ok(RefundStatus::Processing) | Err(_) => Ok(()),
+                        Ok(status) => finish_refund(state, id, status, now).await,
+                    }
+                }
+                status => finish_refund(state, id, status, now).await,
             }
         }
         Err(e) => {
-            tracing::warn!(error = %e, "gửi lệnh hoàn thất bại, sẽ thử truy vấn lại");
-            Ok(())
+            tracing::warn!(error = %e, "gửi lệnh hoàn thất bại");
+            finish_refund(
+                state,
+                id,
+                RefundStatus::Failed(format!("không gửi được lệnh hoàn: {e}")),
+                now,
+            )
+            .await
         }
     }
 }
@@ -1248,10 +1405,10 @@ pub struct DueReport {
 /// hoàn đang xử lý. Chạy mỗi phút.
 pub async fn process_due(state: &AppState, now: OffsetDateTime) -> OrderResult<DueReport> {
     let mut report = DueReport::default();
-    if state.zalopay.is_none() {
+    if !gateways::any(state) {
         return Ok(report);
     }
-    let due: Vec<String> = sqlx::query_scalar("SELECT gateway_ref FROM payment_transactions WHERE status = 'pending' AND provider = 'zalopay' AND expires_at <= $1 ORDER BY expires_at LIMIT 200")
+    let due: Vec<String> = sqlx::query_scalar("SELECT gateway_ref FROM payment_transactions WHERE status = 'pending' AND provider <> 'manual' AND expires_at <= $1 ORDER BY expires_at LIMIT 200")
         .bind(now)
         .fetch_all(&state.db)
         .await?;
@@ -1261,11 +1418,14 @@ pub async fn process_due(state: &AppState, now: OffsetDateTime) -> OrderResult<D
         }
         report.checked += 1;
     }
-    let refunds: Vec<(Uuid, String)> =
-        sqlx::query_as("SELECT id, gateway_ref FROM refunds WHERE status = 'processing' AND gateway_ref IS NOT NULL").fetch_all(&state.db).await?;
-    let zp = gateway(state)?;
-    for (id, m_refund_id) in refunds {
-        match zp.query_refund(&m_refund_id, now).await {
+    let refunds: Vec<(Uuid, String, String)> = sqlx::query_as(
+        "SELECT r.id, r.gateway_ref, t.provider FROM refunds r JOIN payment_transactions t ON t.id = r.transaction_id
+         WHERE r.status = 'processing' AND r.gateway_ref IS NOT NULL",
+    )
+    .fetch_all(&state.db)
+    .await?;
+    for (id, refund_ref, provider) in refunds {
+        match gateways::query_refund(state, &provider, &refund_ref, now).await {
             Ok(status) => finish_refund(state, id, status, now).await?,
             Err(e) => tracing::warn!(error = %e, "không truy vấn được lệnh hoàn"),
         }
@@ -1299,10 +1459,10 @@ pub async fn reconcile(
     day: time::Date,
     now: OffsetDateTime,
 ) -> OrderResult<Vec<Mismatch>> {
-    let zp = gateway(state)?;
+    need_gateways(state)?;
     let (from, to) = day_bounds(day);
     let rows: Vec<(String, i64, String)> = sqlx::query_as(
-        "SELECT gateway_ref, amount_vnd, status FROM payment_transactions WHERE provider = 'zalopay' AND created_at >= $1 AND created_at < $2 ORDER BY created_at",
+        "SELECT gateway_ref, amount_vnd, status FROM payment_transactions WHERE provider <> 'manual' AND created_at >= $1 AND created_at < $2 ORDER BY created_at",
     )
     .bind(from)
     .bind(to)
@@ -1310,11 +1470,12 @@ pub async fn reconcile(
     .await?;
     let mut mismatches = Vec::new();
     for (gateway_ref, amount, status) in &rows {
-        let result = zp.query(gateway_ref).await.map_err(upstream)?;
+        let t = by_ref(state, gateway_ref).await?;
+        let result = gateways::query(state, &t, now).await.map_err(upstream)?;
         let local_paid = status == "succeeded";
         match result {
-            OrderStatus::Paid {
-                zp_trans_id,
+            PayStatus::Paid {
+                gateway_trans_id: zp_trans_id,
                 amount: paid,
             } => {
                 if paid != *amount {
@@ -1388,7 +1549,7 @@ pub async fn reconcile(
 
 /// Đối soát ngày hôm qua (giờ Việt Nam) nếu chưa chạy. Gọi từ worker mỗi giờ.
 pub async fn reconcile_if_due(state: &AppState, now: OffsetDateTime) -> OrderResult<Option<usize>> {
-    if state.zalopay.is_none() {
+    if !gateways::any(state) {
         return Ok(None);
     }
     let vn = now.to_offset(UtcOffset::from_hms(7, 0, 0).expect("GMT+7"));

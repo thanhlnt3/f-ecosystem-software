@@ -44,6 +44,14 @@ static ZALOPAY: OnceLock<feco_server::zalopay::testing::FakeZaloPay> = OnceLock:
 const ZP_APP_ID: i64 = 2553;
 const ZP_KEY1: &str = "e2e-fake-key1";
 const ZP_KEY2: &str = "e2e-fake-key2";
+/// Cổng VNPAY và MoMo giả (khóa chỉ dùng cho cổng giả).
+static VNPAY: OnceLock<feco_server::vnpay::testing::FakeVnpay> = OnceLock::new();
+static MOMO: OnceLock<feco_server::momo::testing::FakeMomo> = OnceLock::new();
+const VNP_TMN: &str = "FECOTEST";
+const VNP_SECRET: &str = "e2e-fake-vnpay-secret";
+const MOMO_PARTNER: &str = "MOMOFECOTEST";
+const MOMO_ACCESS: &str = "e2e-fake-access";
+const MOMO_SECRET: &str = "e2e-fake-momo-secret";
 /// Toàn bộ nhật ký của máy chủ kiểm thử.
 static LOGS: std::sync::Mutex<Vec<u8>> = std::sync::Mutex::new(Vec::new());
 
@@ -156,6 +164,20 @@ fn e2e_ready() -> bool {
                         .unwrap();
                 let zalopay_endpoint = zalopay.endpoint();
                 let _ = ZALOPAY.set(zalopay);
+                let vnpay = feco_server::vnpay::testing::FakeVnpay::serve(VNP_TMN, VNP_SECRET)
+                    .await
+                    .unwrap();
+                let (vnpay_url, vnpay_api) = (vnpay.payment_url(), vnpay.api_url());
+                let _ = VNPAY.set(vnpay);
+                let momo = feco_server::momo::testing::FakeMomo::serve(
+                    MOMO_PARTNER,
+                    MOMO_ACCESS,
+                    MOMO_SECRET,
+                )
+                .await
+                .unwrap();
+                let momo_endpoint = momo.endpoint();
+                let _ = MOMO.set(momo);
                 let vars: HashMap<String, String> = [
                     ("FECO_ENV", "dev".to_owned()),
                     ("FECO_LAUNCHER_CLIENT_ID", launcher.clone()),
@@ -172,6 +194,14 @@ fn e2e_ready() -> bool {
                     ("FECO_ZALOPAY_KEY1", ZP_KEY1.to_owned()),
                     ("FECO_ZALOPAY_KEY2", ZP_KEY2.to_owned()),
                     ("FECO_ZALOPAY_ENDPOINT", zalopay_endpoint),
+                    ("FECO_VNPAY_TMN_CODE", VNP_TMN.to_owned()),
+                    ("FECO_VNPAY_HASH_SECRET", VNP_SECRET.to_owned()),
+                    ("FECO_VNPAY_PAYMENT_URL", vnpay_url),
+                    ("FECO_VNPAY_API_URL", vnpay_api),
+                    ("FECO_MOMO_PARTNER_CODE", MOMO_PARTNER.to_owned()),
+                    ("FECO_MOMO_ACCESS_KEY", MOMO_ACCESS.to_owned()),
+                    ("FECO_MOMO_SECRET_KEY", MOMO_SECRET.to_owned()),
+                    ("FECO_MOMO_ENDPOINT", momo_endpoint),
                 ]
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v))
@@ -4647,6 +4677,15 @@ async fn wait_mail_with_files(to: &str, subject: &str) -> (String, Vec<String>) 
 /// Khách chọn phương thức trên trang thanh toán; trả mã giao dịch (`app_trans_id`) mà F-Eco tạo
 /// trên cổng (trình duyệt được chuyển tới trang của cổng giả).
 async fn start_payment(c: &reqwest::Client, request: uuid::Uuid, method: &str) -> String {
+    start_payment_url(c, request, method).await.0
+}
+
+/// Như `start_payment`, kèm địa chỉ cổng mà trình duyệt được chuyển tới.
+async fn start_payment_url(
+    c: &reqwest::Client,
+    request: uuid::Uuid,
+    method: &str,
+) -> (String, String) {
     let page = get(c, &format!("/payments/{request}/pay")).await;
     let body = form_urlencoded::Serializer::new(String::new())
         .append_pair("feco_csrf", &csrf_of(&page))
@@ -4660,12 +4699,18 @@ async fn start_payment(c: &reqwest::Client, request: uuid::Uuid, method: &str) -
         .await
         .unwrap();
     let url = res.url().clone();
+    if let Some((_, r)) = url.query_pairs().find(|(k, _)| k == "vnp_TxnRef") {
+        return (r.into_owned(), url.to_string());
+    }
     assert!(
         url.path().starts_with("/pay/"),
         "phải chuyển sang trang của cổng: {url} {}",
         res.text().await.unwrap()
     );
-    url.path().trim_start_matches("/pay/").to_owned()
+    (
+        url.path().trim_start_matches("/pay/").to_owned(),
+        url.to_string(),
+    )
 }
 
 async fn zp_callback(body: &Value) -> Value {
@@ -4802,9 +4847,9 @@ async fn payments_end_to_end() {
     );
 
     // Scenario "Liên kết hết hạn": quá 15 phút chưa trả → Hết hạn, tạo được liên kết mới.
-    let first = start_payment(&user, deposit, "domestic_card").await;
+    let first = start_payment(&user, deposit, "zalopay:domestic_card").await;
     assert_eq!(
-        start_payment(&user, deposit, "domestic_card").await,
+        start_payment(&user, deposit, "zalopay:domestic_card").await,
         first,
         "liên kết còn hạn được dùng lại (idempotent)"
     );
@@ -4827,7 +4872,7 @@ async fn payments_end_to_end() {
         payments::by_ref(&state, &first).await.unwrap().status,
         TxStatus::Expired
     );
-    let second = start_payment(&user, deposit, "domestic_card").await;
+    let second = start_payment(&user, deposit, "zalopay:domestic_card").await;
     assert_ne!(second, first, "liên kết mới cho cùng mốc");
     assert_eq!(payments::by_ref(&state, &second).await.unwrap().attempt, 2);
 
@@ -4851,8 +4896,8 @@ async fn payments_end_to_end() {
     );
 
     // Khách đổi sang VietQR (lần thử 3) và mở thêm thẻ quốc tế (lần thử 4) ở tab khác.
-    let qr = start_payment(&user, deposit, "vietqr").await;
-    let card = start_payment(&user, deposit, "international_card").await;
+    let qr = start_payment(&user, deposit, "zalopay:vietqr").await;
+    let card = start_payment(&user, deposit, "zalopay:international_card").await;
 
     // Scenario "Khách đóng trình duyệt sau khi trả tiền" + "Webhook đến hai lần": trả bằng thẻ
     // trên trang của cổng, không quay về; cổng gửi webhook đã ký ba lần.
@@ -5033,7 +5078,7 @@ async fn payments_end_to_end() {
         .await
         .unwrap();
     let (deposit2, _, _) = pending_charge(&db, order2).await;
-    let missing = start_payment(&user, deposit2, "zalopay_wallet").await;
+    let missing = start_payment(&user, deposit2, "zalopay:zalopay_wallet").await;
     let _ = fake.pay(&missing, 38, None); // cổng đã thu, webhook không tới
     let today = OffsetDateTime::now_utc()
         .to_offset(time::macros::offset!(+7))
@@ -5155,5 +5200,220 @@ async fn payments_end_to_end() {
     assert!(
         dump.contains(&card),
         "bản sao CSDL có dữ liệu giao dịch (phép quét có nghĩa)"
+    );
+}
+
+/// Tạo một đơn đã chấp nhận báo giá (9 + 12 + 9 triệu); trả (đơn, yêu cầu thanh toán đặt cọc).
+async fn accepted_order(
+    state: &AppState,
+    user: &reqwest::Client,
+    customer: uuid::Uuid,
+    title: &str,
+) -> (uuid::Uuid, uuid::Uuid) {
+    let (_, _, url) = send_order_request(user, title, true, vec![]).await;
+    let order = order_id_of(&url);
+    let now = time::OffsetDateTime::now_utc();
+    feco_server::orders::create_quote(state, order, "Lan", &three_milestones(None), now)
+        .await
+        .unwrap();
+    feco_server::orders::accept_quote(state, customer, order, now)
+        .await
+        .unwrap();
+    let (deposit, _, _) = pending_charge(&state.db, order).await;
+    (order, deposit)
+}
+
+/// Task 13.2: cổng VNPAY (QR, thẻ ATM, thẻ quốc tế) và MoMo (ví): ký URL thanh toán, IPN có chữ
+/// ký (lặp lại, giả mạo), truy vấn chủ động (hết hạn, thiếu IPN), hoàn tiền một phần.
+#[tokio::test]
+async fn vnpay_and_momo_end_to_end() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::{
+        orders::{self, Status},
+        payments::{self, Requester, TxStatus},
+    };
+    use time::{Duration as Span, OffsetDateTime};
+    let state = local_state();
+    let db = state.db.clone();
+    let vnpay = VNPAY.get().unwrap().clone();
+    let momo = MOMO.get().unwrap().clone();
+
+    let (email, password) = unique("khach-vnpay-momo");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Chị Mai").await;
+    verify_email(&user, &email).await;
+    let customer = subject_of(&email).await;
+
+    // Trang thanh toán hiện phương thức của cả ba cổng.
+    let (order, deposit) = accepted_order(&state, &user, customer, "App giữ chỗ nhà hàng").await;
+    let page = get(&user, &format!("/payments/{deposit}/pay")).await;
+    for m in [
+        "QR chuyển khoản (VietQR) (VNPAY)",
+        "Thẻ ATM nội địa (VNPAY)",
+        "Thẻ quốc tế (Visa, Mastercard, JCB) (VNPAY)",
+        "Ví điện tử MoMo (MoMo)",
+        "Ví điện tử ZaloPay (ZaloPay)",
+    ] {
+        assert!(page.contains(m), "thiếu {m}");
+    }
+
+    // VNPAY: URL thanh toán được ký đúng (cổng giả kiểm chữ ký như VNPAY).
+    let (txn, url) = start_payment_url(&user, deposit, "vnpay:vietqr").await;
+    assert!(
+        url.contains("vnp_BankCode=VNPAYQR") && url.contains("vnp_Amount=900000000"),
+        "{url}"
+    );
+    assert!(!txn.contains('_'), "mã giao dịch VNPAY chỉ có chữ và số");
+    assert_eq!(vnpay.open(&url).unwrap(), txn);
+    // IPN có chữ ký: ghi nhận một lần; lặp lại → 02; giả mạo → 97.
+    let ipn = vnpay.pay(&txn, "QRCODE");
+    let call = |params: std::collections::BTreeMap<String, String>| async move {
+        let q = form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(params.iter())
+            .finish();
+        reqwest::Client::new()
+            .get(format!("{BASE}/v1/payments/vnpay/ipn?{q}"))
+            .send()
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()
+    };
+    let mut forged = ipn.clone();
+    forged.insert("vnp_Amount".into(), "100".into());
+    assert_eq!(call(forged).await["RspCode"], "97");
+    assert_eq!(call(ipn.clone()).await["RspCode"], "00");
+    assert_eq!(call(ipn.clone()).await["RspCode"], "02", "IPN lặp lại");
+    let paid = payments::by_ref(&state, &txn).await.unwrap();
+    assert_eq!(
+        (paid.status, paid.provider.as_str()),
+        (TxStatus::Succeeded, "vnpay")
+    );
+    assert_eq!(
+        orders::get(&db, order).await.unwrap().status,
+        Status::InProgress
+    );
+    // Trang chuyển về của VNPAY (vnp_TxnRef) cũng tra đúng giao dịch.
+    let back = get(
+        &user,
+        &format!("/payments/return?vnp_TxnRef={txn}&vnp_ResponseCode=00"),
+    )
+    .await;
+    assert!(back.contains(r#"data-status="succeeded""#), "{back}");
+    // Hoàn một phần qua API hoàn tiền của VNPAY (chữ ký pipe, HMAC-SHA512).
+    let r = payments::request_refund(
+        &state,
+        paid.id,
+        4_000_000,
+        "Tranh chấp",
+        Requester::Admin("lan".into()),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        payments::refund(&state, r).await.unwrap().status,
+        "succeeded"
+    );
+    assert_eq!(vnpay.refunded(&txn), 4_000_000);
+
+    // VNPAY querydr: liên kết hết hạn → Hết hạn; trả mà thiếu IPN → truy vấn ghi nhận.
+    let (order2, deposit2) = accepted_order(&state, &user, customer, "App đặt lịch spa").await;
+    let (atm, url) = start_payment_url(&user, deposit2, "vnpay:domestic_card").await;
+    vnpay.open(&url).unwrap();
+    payments::process_due(&state, OffsetDateTime::now_utc() + Span::minutes(16))
+        .await
+        .unwrap();
+    assert_eq!(
+        payments::by_ref(&state, &atm).await.unwrap().status,
+        TxStatus::Expired
+    );
+    let (card, url) = start_payment_url(&user, deposit2, "vnpay:international_card").await;
+    assert_ne!(card, atm);
+    vnpay.open(&url).unwrap();
+    let _ = vnpay.pay(&card, "ATM"); // IPN không tới
+    assert_eq!(
+        payments::confirm(&state, &card, "query", OffsetDateTime::now_utc())
+            .await
+            .unwrap(),
+        TxStatus::Succeeded
+    );
+    assert_eq!(
+        orders::get(&db, order2).await.unwrap().status,
+        Status::InProgress
+    );
+
+    // MoMo: ví MoMo, IPN có chữ ký trả 204, giả mạo bị từ chối; hoàn một phần.
+    let (order3, deposit3) = accepted_order(&state, &user, customer, "App bán vé").await;
+    let wallet = start_payment(&user, deposit3, "momo:momo_wallet").await;
+    let created = momo.order(&wallet).unwrap();
+    assert_eq!(created.amount, 9_000_000);
+    assert!(
+        created.ipn_url.ends_with("/v1/payments/momo/ipn"),
+        "{}",
+        created.ipn_url
+    );
+    let ipn = momo.pay(&wallet, 777_001);
+    let post_ipn = |b: Value| async move {
+        reqwest::Client::new()
+            .post(format!("{BASE}/v1/payments/momo/ipn"))
+            .json(&b)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16()
+    };
+    let mut bad = ipn.clone();
+    bad["amount"] = Value::from(1000);
+    assert_eq!(post_ipn(bad).await, 400);
+    assert_eq!(post_ipn(ipn.clone()).await, 204);
+    assert_eq!(
+        post_ipn(ipn).await,
+        204,
+        "IPN lặp lại vẫn được nhận, không ghi hai lần"
+    );
+    let tx = payments::by_ref(&state, &wallet).await.unwrap();
+    assert_eq!(
+        (tx.status, tx.provider.as_str()),
+        (TxStatus::Succeeded, "momo")
+    );
+    assert_eq!(
+        orders::get(&db, order3).await.unwrap().status,
+        Status::InProgress
+    );
+    let r = payments::request_refund(
+        &state,
+        tx.id,
+        2_000_000,
+        "Hoàn một phần",
+        Requester::Admin("lan".into()),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        payments::refund(&state, r).await.unwrap().status,
+        "succeeded"
+    );
+    assert_eq!(momo.refunded(777_001), 2_000_000);
+
+    // MoMo thiếu IPN: truy vấn chủ động ghi nhận.
+    let (order4, deposit4) = accepted_order(&state, &user, customer, "App học từ vựng").await;
+    let wallet = start_payment(&user, deposit4, "momo:momo_wallet").await;
+    let _ = momo.pay(&wallet, 777_002);
+    assert_eq!(
+        payments::confirm(&state, &wallet, "query", OffsetDateTime::now_utc())
+            .await
+            .unwrap(),
+        TxStatus::Succeeded
+    );
+    assert_eq!(
+        orders::get(&db, order4).await.unwrap().status,
+        Status::InProgress
     );
 }

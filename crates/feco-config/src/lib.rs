@@ -52,6 +52,9 @@ pub struct VnpayConfig {
     pub tmn_code: String,
     pub hash_secret: Secret,
     pub payment_url: Url,
+    /// API truy vấn và hoàn tiền (`merchant_webapi/api/transaction`); mặc định cùng host với
+    /// trang thanh toán (`FECO_VNPAY_API_URL` để đổi).
+    pub api_url: Url,
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +80,9 @@ pub struct PaymentsConfig {
     pub vnpay: Option<VnpayConfig>,
     pub momo: Option<MomoConfig>,
     pub zalopay: Option<ZalopayConfig>,
+    /// Gốc địa chỉ công khai mà cổng thanh toán gọi callback và IPN (mặc định là
+    /// `FECO_PUBLIC_URL`). Dùng khi máy chủ chạy sau tunnel hoặc proxy khác địa chỉ đăng nhập.
+    pub callback_base: Option<Url>,
 }
 
 /// Nhà cung cấp thử thách chống bot (spec account-identity, "Chống dò mật khẩu").
@@ -241,7 +247,16 @@ impl Config {
             Ok(VnpayConfig {
                 tmn_code: tmn.to_owned(),
                 hash_secret: Secret::new(secret),
-                payment_url: parse_url("FECO_VNPAY_PAYMENT_URL", url)?,
+                payment_url: gateway_url(environment, "FECO_VNPAY_PAYMENT_URL", url)?,
+                api_url: match get("FECO_VNPAY_API_URL") {
+                    Some(api) => gateway_url(environment, "FECO_VNPAY_API_URL", api)?,
+                    None => {
+                        let mut u = gateway_url(environment, "FECO_VNPAY_PAYMENT_URL", url)?;
+                        u.set_path("/merchant_webapi/api/transaction");
+                        u.set_query(None);
+                        u
+                    }
+                },
             })
         })
         .transpose()?;
@@ -261,7 +276,7 @@ impl Config {
                     partner_code: partner.to_owned(),
                     access_key: Secret::new(access),
                     secret_key: Secret::new(secret),
-                    endpoint: parse_url("FECO_MOMO_ENDPOINT", endpoint)?,
+                    endpoint: gateway_url(environment, "FECO_MOMO_ENDPOINT", endpoint)?,
                 })
             },
         )
@@ -278,17 +293,7 @@ impl Config {
         )?
         .map(
             |[app_id, key1, key2, endpoint]| -> Result<ZalopayConfig, ConfigError> {
-                // Cổng giả trên loopback (kiểm thử) chỉ được dùng ở dev.
-                let local = environment == Environment::Dev
-                    && Url::parse(endpoint).is_ok_and(|u| {
-                        u.scheme() == "http"
-                            && matches!(u.host_str(), Some("127.0.0.1" | "localhost"))
-                    });
-                let mut endpoint = if local {
-                    Url::parse(endpoint).expect("đã kiểm ở trên")
-                } else {
-                    parse_url("FECO_ZALOPAY_ENDPOINT", endpoint)?
-                };
+                let mut endpoint = gateway_url(environment, "FECO_ZALOPAY_ENDPOINT", endpoint)?;
                 if !endpoint.path().ends_with('/') {
                     let path = format!("{}/", endpoint.path());
                     endpoint.set_path(&path);
@@ -306,6 +311,17 @@ impl Config {
         )
         .transpose()?;
 
+        let callback_base = get("FECO_PAYMENT_CALLBACK_BASE")
+            .map(|v| -> Result<Url, ConfigError> {
+                let mut u = parse_url("FECO_PAYMENT_CALLBACK_BASE", v)?;
+                if !u.path().ends_with('/') {
+                    let path = format!("{}/", u.path());
+                    u.set_path(&path);
+                }
+                Ok(u)
+            })
+            .transpose()?;
+
         let auth = auth_config(environment, &get)?;
         let security = security_config(environment, &get)?;
         let developer = developer_config(environment, &get)?;
@@ -321,6 +337,7 @@ impl Config {
                 vnpay,
                 momo,
                 zalopay,
+                callback_base,
             },
         };
         config.validate()?;
@@ -330,27 +347,29 @@ impl Config {
     /// Kiểm tra quy tắc giữa môi trường và cổng thanh toán.
     pub fn validate(&self) -> Result<(), ConfigError> {
         if let Some(v) = &self.payments.vnpay {
-            check_gateway(
-                self.environment,
-                "VNPAY",
-                "FECO_VNPAY_PAYMENT_URL",
-                &v.payment_url,
-                payment_hosts::VNPAY_SANDBOX,
-                payment_hosts::VNPAY_PRODUCTION,
-            )?;
-        }
-        if let Some(z) = &self.payments.zalopay {
-            let local = self.environment == Environment::Dev && z.endpoint.scheme() == "http";
-            if !local {
+            for (var, url) in [
+                ("FECO_VNPAY_PAYMENT_URL", &v.payment_url),
+                ("FECO_VNPAY_API_URL", &v.api_url),
+            ] {
                 check_gateway(
                     self.environment,
-                    "ZaloPay",
-                    "FECO_ZALOPAY_ENDPOINT",
-                    &z.endpoint,
-                    payment_hosts::ZALOPAY_SANDBOX,
-                    payment_hosts::ZALOPAY_PRODUCTION,
+                    "VNPAY",
+                    var,
+                    url,
+                    payment_hosts::VNPAY_SANDBOX,
+                    payment_hosts::VNPAY_PRODUCTION,
                 )?;
             }
+        }
+        if let Some(z) = &self.payments.zalopay {
+            check_gateway(
+                self.environment,
+                "ZaloPay",
+                "FECO_ZALOPAY_ENDPOINT",
+                &z.endpoint,
+                payment_hosts::ZALOPAY_SANDBOX,
+                payment_hosts::ZALOPAY_PRODUCTION,
+            )?;
         }
         if let Some(m) = &self.payments.momo {
             check_gateway(
@@ -604,6 +623,22 @@ fn parse_url(var: &'static str, raw: &str) -> Result<Url, ConfigError> {
     Ok(url)
 }
 
+fn loopback(url: &Url) -> bool {
+    matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
+}
+
+/// Địa chỉ của cổng thanh toán: HTTPS, trừ cổng giả `http://127.0.0.1` ở môi trường dev.
+fn gateway_url(environment: Environment, var: &'static str, raw: &str) -> Result<Url, ConfigError> {
+    if environment == Environment::Dev {
+        if let Ok(u) = Url::parse(raw) {
+            if u.scheme() == "http" && loopback(&u) {
+                return Ok(u);
+            }
+        }
+    }
+    parse_url(var, raw)
+}
+
 fn check_gateway(
     environment: Environment,
     gateway: &'static str,
@@ -613,6 +648,10 @@ fn check_gateway(
     production_hosts: &[&str],
 ) -> Result<(), ConfigError> {
     let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+    // Cổng giả trên loopback (kiểm thử) chỉ được dùng ở dev (gateway_url đã kiểm).
+    if environment == Environment::Dev && url.scheme() == "http" && loopback(url) {
+        return Ok(());
+    }
     if environment.is_production() {
         if !production_hosts.contains(&host.as_str()) {
             return Err(ConfigError::NonProductionGatewayInProduction { gateway, var, host });
@@ -764,6 +803,7 @@ mod tests {
             tmn_code: "LIVE0001".into(),
             hash_secret: Secret::new("live-secret"),
             payment_url: Url::parse(VNPAY_LIVE[2].1).unwrap(),
+            api_url: Url::parse("https://pay.vnpay.vn/merchant_webapi/api/transaction").unwrap(),
         });
         c.payments.momo = Some(MomoConfig {
             partner_code: "MOMOLIVE".into(),

@@ -24,12 +24,12 @@ use uuid::Uuid;
 
 use crate::{
     connected::current_subject,
-    csrf,
+    csrf, gateways,
     i18n::Lang,
     orders::{self, OrderError},
     payments::{self, BillingProfile},
     views::Msg,
-    zalopay, AppState,
+    AppState,
 };
 
 fn html(
@@ -84,8 +84,9 @@ fn when(t: OffsetDateTime) -> String {
 // ---------- Trang thanh toán một khoản ----------
 
 pub struct MethodView {
-    pub code: &'static str,
-    pub label: &'static str,
+    /// `cổng:phương thức`, ví dụ `vnpay:vietqr`.
+    pub code: String,
+    pub label: String,
 }
 
 #[derive(Template)]
@@ -145,12 +146,16 @@ async fn render_pay(
             amount: orders::vnd(c.amount_vnd),
             payable: c.status == "pending",
             paid: c.status == "succeeded",
-            gateway_ready: state.zalopay.is_some(),
-            methods: zalopay::METHODS
-                .iter()
-                .map(|m| MethodView {
-                    code: m,
-                    label: payments::method_label(m, vi),
+            gateway_ready: gateways::any(state),
+            methods: gateways::choices(state)
+                .into_iter()
+                .map(|(p, m)| MethodView {
+                    code: format!("{p}:{m}"),
+                    label: format!(
+                        "{} ({})",
+                        payments::method_label(m, vi),
+                        gateways::provider_label(p)
+                    ),
                 })
                 .collect(),
             minutes: payments::LINK_MINUTES,
@@ -190,6 +195,7 @@ pub async fn pay(
     State(state): State<Arc<AppState>>,
     lang: Lang,
     Path(request): Path<Uuid>,
+    client: crate::kratos::ClientInfo,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
@@ -213,6 +219,7 @@ pub async fn pay(
         subject,
         request,
         get("method"),
+        client.ip.as_deref().unwrap_or("127.0.0.1"),
         OffsetDateTime::now_utc(),
     )
     .await
@@ -229,7 +236,14 @@ pub async fn pay(
 
 #[derive(Debug, Deserialize)]
 pub struct ReturnQuery {
+    /// ZaloPay.
     pub apptransid: Option<String>,
+    /// VNPAY.
+    #[serde(rename = "vnp_TxnRef")]
+    pub vnp_txn_ref: Option<String>,
+    /// MoMo.
+    #[serde(rename = "orderId")]
+    pub order_id: Option<String>,
 }
 
 #[derive(Template)]
@@ -248,7 +262,12 @@ pub async fn return_page(
     Query(q): Query<ReturnQuery>,
 ) -> Response {
     let vi = lang == Lang::Vi;
-    let Some(gateway_ref) = q.apptransid.filter(|r| !r.is_empty() && r.len() <= 64) else {
+    let Some(gateway_ref) = q
+        .apptransid
+        .or(q.vnp_txn_ref)
+        .or(q.order_id)
+        .filter(|r| !r.is_empty() && r.len() <= 64)
+    else {
         return (StatusCode::BAD_REQUEST, lang.t("pay.unknown")).into_response();
     };
     let now = OffsetDateTime::now_utc();
@@ -278,6 +297,24 @@ pub async fn return_page(
         StatusCode::OK,
         None,
     )
+}
+
+/// GET /v1/payments/vnpay/ipn (VNPAY gọi, tham số `vnp_*` có chữ ký).
+pub async fn vnpay_ipn(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<std::collections::BTreeMap<String, String>>,
+) -> Response {
+    Json(payments::handle_vnpay_ipn(&state, &params, OffsetDateTime::now_utc()).await)
+        .into_response()
+}
+
+/// POST /v1/payments/momo/ipn: 204 khi đã nhận, 400 khi sai chữ ký.
+pub async fn momo_ipn(State(state): State<Arc<AppState>>, Json(body): Json<Value>) -> Response {
+    if payments::handle_momo_ipn(&state, &body, OffsetDateTime::now_utc()).await {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        StatusCode::BAD_REQUEST.into_response()
+    }
 }
 
 /// POST /v1/payments/zalopay/callback
