@@ -40,6 +40,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: License của dịch vụ và ảnh container (third_party/native.toml)
         run: cargo run -p feco-license-check
+      - name: Cargo.lock khớp Cargo.toml (workflow release dựng bằng --locked)
+        run: |
+          cargo metadata --locked --format-version 1 > /dev/null
+          cargo metadata --locked --format-version 1 --manifest-path clients/f-builder/Cargo.toml > /dev/null
 
   secrets:
     # tasks.md 1.3: chặn commit chứa bí mật.
@@ -60,7 +64,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
+      - run: npx -y @fission-ai/openspec@1.16.1 validate --changes --strict --no-interactive
 
   sdk:
     # tasks.md 10.2: binding C, Python, TypeScript của F-SDK.
