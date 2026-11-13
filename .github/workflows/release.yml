@@ -35,7 +35,7 @@ jobs:
         run: cargo build --release --locked -p feco-launcher -p feco-server -p f-dev -p feco-tuf -p fsdk-c
       - name: Đóng gói (chương trình, F-SDK, tài liệu, notices, SBOM)
         shell: bash
-        run: scripts/package-release.sh ${{ matrix.target }} target
+        run: bash scripts/package-release.sh ${{ matrix.target }} target
       - uses: actions/upload-artifact@v4
         with:
           name: feco-${{ matrix.target }}
