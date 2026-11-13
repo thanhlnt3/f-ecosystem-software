@@ -60,6 +60,9 @@ fn main() -> ExitCode {
                 && secrets::secrets(&root, false)
                 && run("cargo", &["fmt", "--all", "--check"])
                 && run("cargo", &["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])
+                // Tests that start a builder look for f-builder-cli next to the test binaries
+                // (target/debug), so it has to be built first, not left to a warm cache.
+                && run("cargo", &["build", "-p", "f-builder-cli"])
                 && run("cargo", &["test", "--workspace"])
                 // The off-by-default WASM plugin host, built and tested on its own.
                 && run("cargo", &["clippy", "-p", "f-builder-engine", "--features", "wasm-plugins", "--all-targets", "--", "-D", "warnings"])
