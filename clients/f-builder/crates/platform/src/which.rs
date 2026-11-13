@@ -307,6 +307,13 @@ fn find_cli() -> Option<PathBuf> {
             {
                 return Some(up);
             }
+            // newer Cargo puts test binaries in target/<profile>/build/<package>/<hash>/out; the
+            // CLI is next to that `build` folder
+            if let Some(up) = dir.ancestors().find(|a| a.file_name().is_some_and(|n| n == "build")).and_then(Path::parent).map(|d| d.join(&name))
+                && is_executable(&up)
+            {
+                return Some(up);
+            }
         }
     }
     which("f-builder-cli")
