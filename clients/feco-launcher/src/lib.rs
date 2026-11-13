@@ -18,12 +18,14 @@ pub mod broker;
 pub mod catalog;
 pub mod config;
 pub mod events;
+pub mod i18n;
 pub mod install;
 pub mod launch;
 pub mod library;
 pub mod paths;
 pub mod prefs;
 pub mod state;
+pub mod style;
 
 pub use catalog::{AppInfo, CatalogEntry};
 pub use config::Config;

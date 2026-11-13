@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Phiên bản 1.1.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+> **Phiên bản 1.2.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
 >
 > Đã chạy được (nhóm task 1–14; các mục còn mở ghi ở cuối nhật ký thay đổi):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
@@ -15,7 +15,9 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 >   - cài, cập nhật, quay lại, gỡ app con có xác minh TUF; chạy được khi ngoại tuyến; chặn phiên bản bị thu hồi;
 >   - mở app con bằng mã khởi chạy dùng một lần; mở app chạy trong terminal ở cửa sổ riêng;
 >   - Thư viện và Cửa hàng xem theo lưới hoặc danh sách, có tìm không dấu, lọc nhóm và sắp xếp;
->   - trang Cài đặt giao diện (chủ đề, màu nhấn, cỡ chữ, bố cục);
+>   - trang Cài đặt giao diện: ngôn ngữ (tiếng Việt, tiếng Anh, tiếng Pháp), phong cách (Chân
+>     phương, Trang nhã và tám phong cách lấy cảm hứng từ bảng màu của họa sĩ), chủ đề, màu
+>     nhấn, cỡ chữ, bố cục;
 >   - trang chi tiết app (giới thiệu, tính năng, có gì mới, thông tin phiên bản, nền tảng, nút
 >     cài, mở, gỡ), chuyển sang app trước hoặc sau bằng nút hay phím mũi tên.
 > - F-Store (`/store`): danh mục app đã duyệt, tìm không phân biệt dấu tiếng Việt, lọc theo danh mục, hệ điều hành, giá, nhà phát triển đã xác minh; trang chi tiết có scope dữ liệu kèm mục đích, license, chính sách quyền riêng tư, lịch sử thay đổi; đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi phạm.
@@ -130,7 +132,7 @@ Lần đầu biên dịch mất vài phút. Khi thấy dòng `feco-server đang 
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.1.0"}
+# {"status":"ok","environment":"dev","version":"1.2.0"}
 ```
 
 Ở môi trường `dev`, mọi địa chỉ đã có giá trị mặc định trỏ tới hạ tầng ở bước 2, và lược đồ cơ sở dữ liệu được tạo tự động khi khởi động. Xem thêm phần [Cấu hình](#cấu-hình).
@@ -256,6 +258,10 @@ bộ mà script dưới đây dựng sẵn, với Demo App ở bước 5 làm ap
 11. Bấm vào một app để mở trang chi tiết: giới thiệu, tính năng, có gì mới, bảng thông tin, nút
     Cài, Mở, Gỡ, Mã nguồn, Website. Nút **‹ Trước** / **Sau ›** (hoặc phím mũi tên trái, phải)
     chuyển sang app kề bên theo đúng thứ tự đang hiển thị; **Esc** quay lại danh sách.
+12. **Ngôn ngữ và phong cách**: Cài đặt → Giao diện. Chọn "English" hoặc "Français" để đổi ngôn
+    ngữ ngay. Bấm một ô xem trước để đổi phong cách: Chân phương, Trang nhã, Leonardo da Vinci,
+    Michelangelo, Vincent van Gogh, Claude Monet, Pablo Picasso, Tô Ngọc Vân, Bùi Xuân Phái,
+    Nguyễn Gia Trí. Phong cách họa sĩ dùng bảng màu riêng, nên ô chủ đề và màu nhấn bị tắt.
 
 Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`

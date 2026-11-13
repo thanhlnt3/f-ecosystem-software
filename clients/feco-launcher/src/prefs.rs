@@ -5,7 +5,9 @@
 //! trường riêng: trường hỏng hoặc lạ dùng giá trị mặc định, các trường khác vẫn giữ. Cỡ chữ bị
 //! kẹp trong [`FONT_SCALE_MIN`]–[`FONT_SCALE_MAX`].
 
+use crate::i18n::{t, Language};
 use crate::library::SortKey;
+use crate::style::UiStyle;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -25,11 +27,11 @@ pub enum Theme {
 
 impl Theme {
     pub const ALL: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
-            Theme::System => "Theo hệ thống",
-            Theme::Light => "Sáng",
-            Theme::Dark => "Tối",
+            Theme::System => t("Theo hệ thống"),
+            Theme::Light => t("Sáng"),
+            Theme::Dark => t("Tối"),
         }
     }
 }
@@ -55,14 +57,14 @@ impl Accent {
         Accent::Pink,
         Accent::Orange,
     ];
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
-            Accent::Blue => "Xanh dương",
-            Accent::Teal => "Xanh ngọc",
-            Accent::Green => "Xanh lá",
-            Accent::Purple => "Tím",
-            Accent::Pink => "Hồng",
-            Accent::Orange => "Cam",
+            Accent::Blue => t("Xanh dương"),
+            Accent::Teal => t("Xanh ngọc"),
+            Accent::Green => t("Xanh lá"),
+            Accent::Purple => t("Tím"),
+            Accent::Pink => t("Hồng"),
+            Accent::Orange => t("Cam"),
         }
     }
     /// Màu nhấn (RGB).
@@ -87,10 +89,10 @@ pub enum Layout {
 }
 
 impl Layout {
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
-            Layout::Grid => "Lưới",
-            Layout::List => "Danh sách",
+            Layout::Grid => t("Lưới"),
+            Layout::List => t("Danh sách"),
         }
     }
 }
@@ -106,11 +108,11 @@ pub enum TileSize {
 
 impl TileSize {
     pub const ALL: [TileSize; 3] = [TileSize::Small, TileSize::Medium, TileSize::Large];
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
-            TileSize::Small => "Nhỏ",
-            TileSize::Medium => "Vừa",
-            TileSize::Large => "Lớn",
+            TileSize::Small => t("Nhỏ"),
+            TileSize::Medium => t("Vừa"),
+            TileSize::Large => t("Lớn"),
         }
     }
     /// Chiều rộng của một ô lưới (điểm ảnh logic, trước khi nhân cỡ chữ).
@@ -132,10 +134,10 @@ pub enum StartPage {
 }
 
 impl StartPage {
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
-            StartPage::Library => "Thư viện",
-            StartPage::Store => "Cửa hàng",
+            StartPage::Library => t("Thư viện"),
+            StartPage::Store => t("Cửa hàng"),
         }
     }
 }
@@ -156,6 +158,10 @@ pub struct Prefs {
     pub compact: bool,
     pub library_sort: SortKey,
     pub store_sort: SortKey,
+    /// Ngôn ngữ giao diện (launcher-personalization).
+    pub language: Language,
+    /// Phong cách giao diện (launcher-personalization).
+    pub style: UiStyle,
 }
 
 impl Default for Prefs {
@@ -171,6 +177,8 @@ impl Default for Prefs {
             compact: false,
             library_sort: SortKey::Name,
             store_sort: SortKey::Name,
+            language: Language::Vi,
+            style: UiStyle::Plain,
         }
     }
 }
@@ -207,6 +215,8 @@ impl Prefs {
             compact: field(map, "compact", d.compact),
             library_sort: field(map, "library_sort", d.library_sort),
             store_sort: field(map, "store_sort", d.store_sort),
+            language: field(map, "language", d.language),
+            style: field(map, "style", d.style),
         };
         prefs.sanitized()
     }
@@ -340,5 +350,42 @@ mod tests {
         assert_eq!(prefs.font_scale, 1.0);
         assert_eq!(prefs.accent, Accent::Blue);
         assert!(!prefs.compact && prefs.show_summary);
+    }
+
+    /// launcher-personalization: settings.json của 1.1 (không có language, style) giữ giao diện
+    /// cũ; giá trị lạ về mặc định; lưu rồi đọc lại giữ nguyên.
+    #[test]
+    fn language_and_style_are_saved() {
+        let old = serde_json::json!({"theme": "dark", "layout": "list"});
+        let prefs = Prefs::from_value(&old);
+        assert_eq!(prefs.language, Language::Vi);
+        assert_eq!(prefs.style, UiStyle::Plain);
+        assert_eq!(prefs.layout, Layout::List);
+
+        let odd = serde_json::json!({"language": "de", "style": "rembrandt"});
+        let prefs = Prefs::from_value(&odd);
+        assert_eq!(
+            (prefs.language, prefs.style),
+            (Language::Vi, UiStyle::Plain)
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let chosen = Prefs {
+            language: Language::Fr,
+            style: UiStyle::BuiXuanPhai,
+            ..Prefs::default()
+        };
+        chosen.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("\"fr\"") && text.contains("\"bui_xuan_phai\""),
+            "{text}"
+        );
+        assert_eq!(Prefs::load(&path).0, chosen);
+        // Scenario "Khôi phục mặc định".
+        Prefs::default().save(&path).unwrap();
+        let back = Prefs::load(&path).0;
+        assert_eq!((back.language, back.style), (Language::Vi, UiStyle::Plain));
     }
 }

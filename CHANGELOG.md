@@ -1,5 +1,28 @@
 # Nhật ký thay đổi
 
+## 1.2.0 (13/11/2026)
+
+Thay đổi OpenSpec `launcher-personalization`: tùy biến giao diện F-Launcher.
+
+- **Ngôn ngữ**: tiếng Việt (mặc định), tiếng Anh, tiếng Pháp, chọn ở Cài đặt → Giao diện → Ngôn
+  ngữ.
+  - Đổi ngay, và được nhớ cho lần mở sau.
+  - Mọi chữ trên giao diện launcher đều được dịch, kể cả tên nhóm, kiểu sắp xếp và tên phong cách.
+  - Nội dung do nhà phát triển viết giữ nguyên ngôn ngữ gốc.
+  - Một test tự động báo lỗi khi có chuỗi giao diện chưa dịch.
+- **Phong cách**, chọn ở Cài đặt → Giao diện → Phong cách, có ô xem trước:
+  - **Chân phương** (mặc định);
+  - **Trang nhã**: nút và thẻ bo tròn;
+  - tám phong cách lấy cảm hứng từ bảng màu của họa sĩ: Leonardo da Vinci, Michelangelo, Vincent
+    van Gogh, Claude Monet, Pablo Picasso, Tô Ngọc Vân, Bùi Xuân Phái, Nguyễn Gia Trí.
+
+  Phong cách họa sĩ có bảng màu, bo góc và dải họa tiết riêng. Chúng chỉ dùng màu và hình khối do
+  F-Eco tự vẽ, không dùng hình ảnh tác phẩm. Mọi phong cách đạt độ tương phản WCAG 2.1 và được kiểm
+  bằng test tự động.
+- Màu cảnh báo và màu lỗi đổi theo nền sáng hoặc tối, nên dễ đọc hơn.
+- CI kiểm `Cargo.lock` của cả hai workspace khớp `Cargo.toml` (workflow release dựng bằng
+  `--locked`).
+
 ## 1.1.0 (13/11/2026)
 
 Thay đổi OpenSpec `improve-launcher-experience`. Gồm cả các bản sửa của 1.0.1.

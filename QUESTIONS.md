@@ -269,3 +269,11 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 74. **App terminal trên macOS** mở qua `open -a Terminal` nên không nhận được mã khởi chạy (biến môi
     trường không đi qua). Hiện `f-dev` chỉ cảnh báo. Có muốn launcher ghi mã ra một file tạm chỉ
     app đọc được không? Cách này cần thêm thiết kế bảo mật.
+75. **Tên họa sĩ trong phong cách giao diện** (launcher-personalization). Phong cách chỉ dùng
+    bảng màu do F-Eco tự chọn, ghi "cảm hứng từ bảng màu", không dùng hình ảnh tác phẩm. Với họa
+    sĩ Việt Nam (Tô Ngọc Vân, Bùi Xuân Phái, Nguyễn Gia Trí), quyền nhân thân về tên và quyền của
+    người thừa kế cần luật sư xác nhận trước khi phát hành thương mại. Mã cài đặt (`to_ngoc_van`,
+    …) không đổi nếu cần đổi tên hiển thị.
+76. **Thông báo lỗi kỹ thuật chưa dịch.** Giao diện launcher có đủ tiếng Anh và tiếng Pháp, nhưng
+    lỗi từ thư viện bên dưới (TUF, mạng, cài đặt gói) vẫn tiếng Việt. Có cần dịch luôn ở bản sau
+    không?

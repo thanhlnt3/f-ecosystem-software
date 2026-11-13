@@ -3,6 +3,7 @@
 //! improve-launcher-experience). Hàm thuần, giao diện chỉ gọi vào đây.
 
 use crate::catalog::{AppInfo, CatalogEntry};
+use crate::i18n::t;
 use crate::install::MyApp;
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -22,13 +23,13 @@ pub enum SortKey {
 }
 
 impl SortKey {
-    pub const fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
-            SortKey::Name => "Tên (A–Z)",
-            SortKey::RecentlyOpened => "Mở gần đây",
-            SortKey::RecentlyInstalled => "Cài gần đây",
-            SortKey::Category => "Nhóm",
-            SortKey::Size => "Dung lượng",
+            SortKey::Name => t("Tên (A–Z)"),
+            SortKey::RecentlyOpened => t("Mở gần đây"),
+            SortKey::RecentlyInstalled => t("Cài gần đây"),
+            SortKey::Category => t("Nhóm"),
+            SortKey::Size => t("Dung lượng"),
         }
     }
 
@@ -123,22 +124,22 @@ pub fn category_of(info: &AppInfo) -> String {
 /// Tên hiển thị của nhóm. Nhóm lạ (manifest cho ghi tự do) hiện đúng như khai báo.
 pub fn category_label(code: &str) -> String {
     match code {
-        "productivity" => "Năng suất",
-        "tools" | "utilities" => "Công cụ",
-        "system" => "Hệ thống",
-        "development" | "developer-tools" => "Lập trình",
-        "education" => "Giáo dục",
-        "games" => "Trò chơi",
-        "graphics" | "design" => "Đồ họa",
-        "music" | "audio" => "Âm nhạc",
-        "video" => "Video",
-        "business" => "Kinh doanh",
-        "other" => "Khác",
+        "productivity" => t("Năng suất"),
+        "tools" | "utilities" => t("Công cụ"),
+        "system" => t("Hệ thống"),
+        "development" | "developer-tools" => t("Lập trình"),
+        "education" => t("Giáo dục"),
+        "games" => t("Trò chơi"),
+        "graphics" | "design" => t("Đồ họa"),
+        "music" | "audio" => t("Âm nhạc"),
+        "video" => t("Video"),
+        "business" => t("Kinh doanh"),
+        "other" => t("Khác"),
         other => {
             let mut chars = other.chars();
             return match chars.next() {
                 Some(first) => first.to_uppercase().chain(chars).collect(),
-                None => "Khác".into(),
+                None => t("Khác").into(),
             };
         }
     }
