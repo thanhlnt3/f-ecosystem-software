@@ -1,0 +1,62 @@
+name: release
+
+# Đẩy tag v* (ví dụ v1.0.0): dựng bản phát hành cho Windows, Linux, macOS, đóng gói kèm F-SDK,
+# tài liệu, THIRD_PARTY_NOTICES và SBOM, rồi tạo bản phát hành NHÁP trên GitHub để chủ dự án xem
+# lại trước khi công bố.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Dựng bản release
+        run: cargo build --release --locked -p feco-launcher -p feco-server -p f-dev -p feco-tuf -p fsdk-c
+      - name: Đóng gói (chương trình, F-SDK, tài liệu, notices, SBOM)
+        shell: bash
+        run: scripts/package-release.sh ${{ matrix.target }} target
+      - uses: actions/upload-artifact@v4
+        with:
+          name: feco-${{ matrix.target }}
+          path: dist/*.zip
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Tạo bản phát hành nháp
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '$0 ~ "^## "v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          (cd dist && sha256sum *.zip > SHA256SUMS.txt)
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt \
+            --draft --title "F-Eco $version" --notes-file notes.md

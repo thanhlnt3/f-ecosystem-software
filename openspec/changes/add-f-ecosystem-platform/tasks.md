@@ -188,7 +188,8 @@
 - [ ] 15.2 Kiểm thử tải (1.000 yêu cầu/giây vào `/v1/me`, p95 dưới 300 ms), đo thời gian khởi động launcher dưới 3 giây; xác minh bằng báo cáo kiểm thử tải
 - [ ] 15.3 Trang trạng thái công khai, diễn tập khôi phục sao lưu (RPO 5 phút, RTO 4 giờ); xác minh bằng biên bản diễn tập
 - [ ] 15.4 Hồ sơ lưu trữ dữ liệu và chuyển dữ liệu ra nước ngoài theo pháp luật Việt Nam; xác minh bằng biên bản rà soát pháp lý
-- [ ] 15.5 `THIRD_PARTY_NOTICES` và SBOM cho launcher, F-Builder, F-SDK; xác minh danh sách khớp cây phụ thuộc
+- [x] 15.5 `THIRD_PARTY_NOTICES` và SBOM cho launcher, F-Builder, F-SDK; xác minh danh sách khớp cây phụ thuộc
+  - Đã xác minh: `feco-sbom` (tools/feco-license-check) sinh SBOM CycloneDX 1.5 và `THIRD_PARTY_NOTICES` (bảng thư viện, giấy phép, toàn văn LICENSE/NOTICE của từng crate) cho từng sản phẩm theo đúng cây phụ thuộc thường mà Cargo phân giải cho nền tảng đích (`cargo tree -p`, không gộp tính năng của gói khác, không có dev-dependency); unit test `closure_matches_dependency_tree`. `scripts/package-release.sh` đưa SBOM và notices của F-Launcher, feco-server, f-dev, F-SDK (Rust, C) và F-Builder vào gói phát hành; workflow `release.yml` chạy khi đẩy tag.
 - [ ] 15.6 Kiểm thử xâm nhập độc lập và sửa mọi lỗi mức nghiêm trọng hoặc cao; xác minh bằng báo cáo kiểm thử lại
 
 ## Workflow follow-up

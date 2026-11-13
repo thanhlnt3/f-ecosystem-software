@@ -2,7 +2,9 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Trạng thái: đang xây dựng.** Đã chạy được (nhóm task 1–11; 11.6 còn E2E sandbox và gửi đơn):
+> **Phiên bản 1.0.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+>
+> Đã chạy được (nhóm task 1–14; các mục còn mở ghi ở cuối nhật ký thay đổi):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện tiếng Việt và tiếng Anh.
@@ -121,7 +123,7 @@ Lần đầu biên dịch mất vài phút. Khi thấy dòng `feco-server đang 
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"0.1.0"}
+# {"status":"ok","environment":"dev","version":"1.0.0"}
 ```
 
 Ở môi trường `dev`, mọi địa chỉ đã có giá trị mặc định trỏ tới hạ tầng ở bước 2, và lược đồ cơ sở dữ liệu được tạo tự động khi khởi động. Xem thêm phần [Cấu hình](#cấu-hình).
