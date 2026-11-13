@@ -18,7 +18,8 @@ feco-tuf: quản lý kho TUF của F-Eco
   feco-tuf publish --repo DIR --file F --name N --app A --version V --platform P --sign T,S,TS
                    [--title TÊN] [--entry FILE-CHẠY] [--client-id ID] [--private true]
                    [--summary MÔ-TẢ] [--category NHÓM] [--developer TÊN] [--source URL]
-                   [--terminal true]
+                   [--terminal true] [--description TEXT] [--features A|B|C] [--website URL]
+                   [--release-notes TEXT] [--license SPDX] [--released-at RFC3339]
   feco-tuf revoke --repo DIR --name N --reason TEXT --sign T,S,TS
   feco-tuf refresh --repo DIR --sign S,TS    ký lại snapshot và timestamp (chạy định kỳ)
   feco-tuf resign --repo DIR --sign T,S,TS   gia hạn targets khi không có phát hành mới
@@ -163,6 +164,27 @@ async fn run(raw: &[String]) -> Result<(), String> {
                 developer: args.flags.get("developer").cloned(),
                 source: args.flags.get("source").cloned(),
                 terminal: args.flags.get("terminal").is_some_and(|v| v == "true"),
+                description: args.flags.get("description").cloned(),
+                features: args
+                    .flags
+                    .get("features")
+                    .map(|f| {
+                        f.split('|')
+                            .map(str::trim)
+                            .filter(|x| !x.is_empty())
+                            .map(str::to_owned)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                website: args.flags.get("website").cloned(),
+                release_notes: args.flags.get("release-notes").cloned(),
+                license: args.flags.get("license").cloned(),
+                released_at: Some(
+                    args.flags
+                        .get("released-at")
+                        .cloned()
+                        .unwrap_or_else(|| now.to_string()),
+                ),
             };
             let name = args.get("name")?;
             args.repo()?

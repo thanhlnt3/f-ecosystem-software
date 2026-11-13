@@ -16,8 +16,9 @@ Danh mục 1.0 chỉ có Demo App, nên chưa thấy được giá trị của l
   - nút khôi phục mặc định.
 
   Cài đặt lưu trên máy, không gửi lên máy chủ.
+- **Trang chi tiết app**: bấm vào một app để xem biểu tượng, tên, giới thiệu, tính năng, liên kết GitHub và website, phiên bản hiện tại và đã cài, ngày phát hành, dung lượng, nền tảng, các thay đổi trong bản mới nhất, nút Cài, Cập nhật, Mở, Gỡ, và nút chuyển sang app trước hoặc sau trong danh sách.
 - **Thông tin hiển thị của app** trong metadata TUF đã ký: mô tả ngắn, nhóm, nhà phát triển, địa chỉ mã nguồn, cờ "chạy trong terminal". Máy chủ điền các trường này khi phát hành, từ manifest và danh mục.
-- **Manifest `f-app.toml`** có thêm hai trường không bắt buộc: `source` (địa chỉ mã nguồn, HTTPS) và `terminal` (app chạy trong cửa sổ terminal).
+- **Manifest `f-app.toml`** có thêm các trường không bắt buộc: `source` (địa chỉ mã nguồn, HTTPS), `terminal` (app chạy trong cửa sổ terminal), `website`, `features`, `release_notes`.
 - **Mở app chạy trong terminal**: launcher mở cửa sổ terminal riêng cho app.
 - **App mới trong danh mục dev**:
   - hai app mẫu do F-Eco viết, dùng F-SDK: Ghi chú và Bấm giờ;
@@ -32,8 +33,8 @@ Không có.
 
 ### Modified Capabilities
 
-- `launcher`: bố cục lưới và danh sách, tìm kiếm, lọc, sắp xếp; trang cài đặt giao diện; hiện thông tin app từ metadata đã ký; mở app chạy trong terminal.
-- `developer-portal`: manifest có `source` và `terminal`; phát hành ghi thông tin hiển thị vào metadata TUF; gói của app mã nguồn mở phải kèm giấy phép gốc.
+- `launcher`: bố cục lưới và danh sách, tìm kiếm, lọc, sắp xếp; trang cài đặt giao diện; hiện thông tin app từ metadata đã ký; trang chi tiết app có chuyển app trước và sau; mở app chạy trong terminal.
+- `developer-portal`: manifest có `source`, `terminal`, `website`, `features`, `release_notes`; phát hành ghi thông tin hiển thị (kể cả giới thiệu, ghi chú phát hành, giấy phép, thời điểm phát hành) vào metadata TUF; gói của app mã nguồn mở phải kèm giấy phép gốc.
 
 ## Impact
 

@@ -6255,6 +6255,9 @@ privacy_policy = "https://kho.example/privacy"
 summary = "Quản lý nhập xuất tồn"
 category = "Năng suất"
 source = "https://github.com/nhom-kho/quan-ly-kho"
+website = "https://kho.example"
+features = ["Nhập kho bằng mã vạch", "Báo cáo tồn kho"]
+release_notes = "Bản đầu tiên"
 
 [[platforms]]
 os = "windows"
@@ -6330,6 +6333,30 @@ purpose = "Kiểm tra bản quyền"
         Some("https://github.com/nhom-kho/quan-ly-kho")
     );
     assert!(!entry.info.terminal);
+    // Nội dung trang chi tiết (scenario "Phát hành có ghi chú").
+    assert_eq!(entry.info.website.as_deref(), Some("https://kho.example"));
+    assert_eq!(
+        entry.info.features,
+        ["Nhập kho bằng mã vạch", "Báo cáo tồn kho"]
+    );
+    assert_eq!(entry.info.release_notes.as_deref(), Some("Bản đầu tiên"));
+    assert_eq!(entry.info.license.as_deref(), Some("MIT"));
+    assert!(entry
+        .info
+        .released_at
+        .as_deref()
+        .is_some_and(|t| t.parse::<jiff::Timestamp>().is_ok()));
+    assert_eq!(entry.platforms, ["windows-x64"]);
+    // Ghi chú phát hành cũng là lịch sử thay đổi trên F-Store.
+    let store_page = reqwest::Client::new()
+        .get(format!("{BASE}/store/{app_id}"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(store_page.contains("Bản đầu tiên"), "{store_page}");
     launcher
         .install(&entry, jiff::Timestamp::now())
         .await

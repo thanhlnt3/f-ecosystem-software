@@ -81,6 +81,24 @@ pub struct TargetMeta {
     /// App chạy trong cửa sổ terminal (launcher mở terminal riêng cho app).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub terminal: bool,
+    /// Giới thiệu chung (trang chi tiết trong launcher).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Các tính năng chính, mỗi dòng một tính năng.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub features: Vec<String>,
+    /// Website của app (HTTPS).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub website: Option<String>,
+    /// Các thay đổi trong phiên bản này.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_notes: Option<String>,
+    /// Giấy phép (SPDX), ví dụ `MIT OR Apache-2.0`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    /// Thời điểm phát hành (RFC 3339, UTC).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub released_at: Option<String>,
 }
 
 /// Một bản ghi thu hồi trong [`REVOCATIONS_TARGET`].
@@ -677,7 +695,7 @@ mod tests {
         assert!(!old.terminal);
         let json = serde_json::to_string(&old).unwrap();
         assert!(
-            !json.contains("summary") && !json.contains("terminal"),
+            !json.contains("summary") && !json.contains("terminal") && !json.contains("features"),
             "{json}"
         );
 
@@ -687,6 +705,12 @@ mod tests {
             developer: Some("Ilaï Deutel".into()),
             source: Some("https://github.com/ilai-deutel/kibi".into()),
             terminal: true,
+            description: Some("Trình soạn thảo".into()),
+            features: vec!["Tô màu cú pháp".into(), "Tìm kiếm".into()],
+            website: Some("https://example.org/kibi".into()),
+            release_notes: Some("Sửa lỗi".into()),
+            license: Some("MIT OR Apache-2.0".into()),
+            released_at: Some("2026-11-13T10:00:00Z".into()),
             ..old
         };
         let back: TargetMeta = serde_json::from_str(&serde_json::to_string(&new).unwrap()).unwrap();

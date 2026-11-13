@@ -43,3 +43,20 @@ App không dùng F-SDK MUST không khai báo scope, và launcher mở app mà kh
 - **GIVEN** app "bottom" dựng từ mã nguồn GitHub, manifest không có scope
 - **WHEN** người dùng cài và bấm Mở trong launcher
 - **THEN** app chạy, không có màn hình đồng ý, và launcher không xin mã khởi chạy cho app
+
+### Requirement: Nội dung trang chi tiết trong metadata phát hành
+Manifest `f-app.toml` SHALL nhận thêm các trường không bắt buộc:
+- `website`: MUST là HTTPS;
+- `features`: danh sách tối đa 12 dòng, mỗi dòng tối đa 120 ký tự;
+- `release_notes`: các thay đổi của phiên bản, tối đa 2.000 ký tự.
+
+Khi ký target, nền tảng SHALL ghi thêm vào metadata TUF: giới thiệu (`description`), tính năng, website, ghi chú phát hành, giấy phép và thời điểm phát hành. Ghi chú phát hành SHALL đồng thời là lịch sử thay đổi của phiên bản trên F-Store.
+
+#### Scenario: Phát hành có ghi chú
+- **GIVEN** manifest của "Ghi chú" 1.1.0 có `release_notes = "Thêm tìm kiếm"` và hai dòng `features`
+- **WHEN** phiên bản được duyệt và phát hành
+- **THEN** target TUF có `release_notes`, hai `features`, `license` và `released_at`, và trang F-Store của phiên bản hiện "Thêm tìm kiếm" trong lịch sử thay đổi
+
+#### Scenario: Tính năng quá dài
+- **WHEN** manifest có 13 dòng `features`
+- **THEN** manifest bị từ chối với lỗi "features không hợp lệ: tối đa 12 dòng"

@@ -1352,7 +1352,8 @@ pub async fn release(
                 platform: platform.clone(),
                 size_bytes: (*size).max(0) as u64,
                 tuf_target: target,
-                changelog: String::new(),
+                // Ghi chú phát hành trong manifest là lịch sử thay đổi trên F-Store.
+                changelog: manifest.release_notes.clone().unwrap_or_default(),
             },
         )
         .await?;
@@ -1435,6 +1436,12 @@ async fn sign_target(
         developer: some(&developer),
         source: manifest.source.clone(),
         terminal: manifest.terminal,
+        description: some(&manifest.description),
+        features: manifest.features.clone(),
+        website: manifest.website.clone(),
+        release_notes: manifest.release_notes.clone(),
+        license: some(&manifest.license),
+        released_at: Some(jiff::Timestamp::now().to_string()),
     };
     let signers: Vec<_> = tuf.sign_keys.iter().map(feco_tuf::keys::source).collect();
     let repo = feco_tuf::Repo::open(&tuf.repo);

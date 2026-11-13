@@ -62,3 +62,27 @@
     - `docs/github-apps.md` có 11 mục, theo đúng các bước đã làm với ba app;
     - `integration-guide.md` có thêm `source`, `terminal`, `f-dev pack`, mục 13 "App hiển thị thế nào trong F-Launcher";
     - README bước 6 có thêm mục 9 và 10; CHANGELOG có mục "Chưa phát hành".
+
+## 4. Trang chi tiết app (`launcher`, `developer-portal`)
+
+- [x] 4.1 `TargetMeta` và manifest thêm `description`, `features`, `website`, `release_notes`, `license`, `released_at`; máy chủ ký các trường này và ghi `release_notes` vào lịch sử thay đổi F-Store; xác minh bằng unit test manifest và E2E phát hành
+  - Đã xác minh:
+    - unit test `website_features_release_notes`: 13 dòng `features` bị từ chối đúng thông báo của spec; `website` không phải https bị từ chối; dòng rỗng, quá 120 ký tự, sai kiểu đều báo lỗi;
+    - unit test `display_fields_are_optional` của `feco-tuf`;
+    - E2E `child_app_integration_end_to_end`: target đã ký có `website`, hai `features`, `release_notes`, `license`, `released_at` và danh sách nền tảng; trang F-Store của app hiện "Bản đầu tiên" trong lịch sử thay đổi.
+- [x] 4.2 `library::neighbors`, `platform_label`, danh sách nền tảng của cùng phiên bản; xác minh bằng unit test
+  - Đã xác minh: unit test `previous_and_next_follow_the_shown_order` (scenario "Duyệt lần lượt": app đầu không có "Trước", app cuối không có "Sau") và `platform_labels_and_dates`. Danh sách nền tảng được kiểm trong E2E 4.1.
+- [x] 4.3 Trang chi tiết trong launcher: bấm vào ô hoặc hàng để mở; phần đầu, giới thiệu, tính năng, có gì mới, bảng thông tin; nút hành động theo trạng thái; nút và phím chuyển app trước, sau; Esc quay lại; xác minh bằng chạy thử trên Windows
+  - Đã xác minh trên Windows 10, có chụp màn hình:
+    - bấm ô "bottom" trong Cửa hàng mở trang có giới thiệu, sáu tính năng, "Có gì mới trong bản 0.15.0" kèm ngày, bảng thông tin, nút Cài, "Mã nguồn (GitHub)", Website, và "‹ Trước: Bấm giờ", "Sau: Demo App ›", vị trí 2/6;
+    - trang của kibi (đã cài) có bảng thông tin đầy đủ;
+    - trang của Demo App (metadata 1.0) ẩn mục Tính năng và Có gì mới, có nút Mở, Quay lại, Gỡ.
+  - Chữ và biểu tượng trong ô không nhận chuột, để bấm vào đâu trên ô cũng mở trang.
+  - Phím mũi tên và Esc chưa thử bằng tay, vì đang có người dùng thao tác trên launcher.
+- [x] 4.4 Danh mục dev và hướng dẫn: `dev-apps.sh` ghi giới thiệu, tính năng, website, ghi chú phát hành cho các app; `integration-guide.md` và `github-apps.md` mô tả trường mới
+  - Đã xác minh:
+    - `scripts/dev-apps.sh all` ký lại năm app vào kho dev mới, có giới thiệu, tính năng, website và ghi chú phát hành;
+    - ghi chú của kibi 0.3.3 và bottom 0.15.0 tóm tắt từ CHANGELOG của dự án gốc;
+    - chạy lại script khi PostgreSQL chưa chạy thì vẫn ghi danh mục được (không ký lại);
+    - hai tài liệu có ví dụ `website`, `features`, `release_notes` và mô tả trang chi tiết.
+

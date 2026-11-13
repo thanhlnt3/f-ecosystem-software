@@ -119,6 +119,12 @@ description = "Dựng từ mã nguồn của Ilaï Deutel (github.com/ilai-deute
 category = "tools"
 source = "https://github.com/ilai-deutel/kibi"   # bắt buộc phải là https://
 terminal = true                                  # launcher mở app trong cửa sổ terminal
+features = [                                     # hiện ở trang chi tiết trong launcher
+  "Tô màu cú pháp",
+  "Tìm kiếm tăng dần",
+  "Chạy lệnh ngoài và dán kết quả",
+]
+release_notes = "Bản 0.3.3 của dự án gốc: thêm Ctrl+/ để chú thích dòng."
 
 [[platforms]]
 os = "windows"
@@ -188,10 +194,17 @@ Sau khi phát hành, máy chủ ký vào metadata TUF của phiên bản các th
 - mô tả ngắn, nhóm, `source`, `terminal`: lấy từ manifest;
 - tên nhà phát triển: lấy từ danh mục.
 
-F-Launcher chỉ hiện thông tin từ metadata đã ký này:
+F-Launcher chỉ hiện thông tin từ metadata đã ký này. Ngoài ra, máy chủ còn ký giới thiệu,
+`features`, `website`, `release_notes`, giấy phép và thời điểm phát hành, để launcher dựng trang
+chi tiết của app:
 - **Thư viện và Cửa hàng**, ở bố cục lưới hoặc danh sách: biểu tượng chữ cái đầu, tên, nhà phát triển, nhóm, mô tả ngắn;
 - **nút Mở**: ghi "Mở (terminal)" cho app có `terminal`;
 - **menu "..."**: có mục "Xem mã nguồn".
+- **trang chi tiết** (bấm vào app): giới thiệu, tính năng, có gì mới, bảng thông tin, nút
+  "Mã nguồn (GitHub)" và "Website".
+
+Ghi chú phát hành nên tóm tắt đúng CHANGELOG của dự án gốc cho phiên bản đó, và ghi rõ là bản gốc
+hay đã sửa đổi.
 
 ## 8. Cập nhật khi dự án gốc ra bản mới
 
@@ -220,7 +233,10 @@ scripts/dev-apps.sh all
 # một app bất kỳ từ GitHub
 scripts/dev-apps.sh github ilai-deutel/kibi v0.3.3 --id kibi --name kibi --bin kibi \
   --license "MIT OR Apache-2.0" --category tools --developer "Ilaï Deutel" --terminal \
-  --summary "Trình soạn thảo văn bản trong terminal"
+  --summary "Trình soạn thảo văn bản trong terminal" \
+  --description "Giới thiệu dài cho trang chi tiết" \
+  --features "Tô màu cú pháp|Tìm kiếm tăng dần" --website https://example.org \
+  --notes "Các thay đổi của bản 0.3.3"
 ```
 
 Script làm lần lượt các việc sau:

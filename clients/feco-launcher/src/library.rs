@@ -249,6 +249,45 @@ pub fn categories<T: Listed>(items: &[T]) -> Vec<(String, String)> {
     out
 }
 
+/// App liền trước và liền sau `app` trong thứ tự đang hiển thị (spec launcher, "Chuyển sang
+/// app trước và sau"). `None` ở hai đầu danh sách, hoặc khi `app` không còn trong danh sách.
+pub fn neighbors<'a>(order: &'a [String], app: &str) -> (Option<&'a str>, Option<&'a str>) {
+    let Some(i) = order.iter().position(|a| a == app) else {
+        return (None, None);
+    };
+    (
+        i.checked_sub(1).map(|j| order[j].as_str()),
+        order.get(i + 1).map(String::as_str),
+    )
+}
+
+/// Tên dễ đọc của một nền tảng: `windows-x64` → "Windows (x64)".
+pub fn platform_label(platform: &str) -> String {
+    let (os, arch) = platform.split_once('-').unwrap_or((platform, ""));
+    let os = match os {
+        "windows" => "Windows",
+        "macos" => "macOS",
+        "linux" => "Linux",
+        other => other,
+    };
+    match (os, arch) {
+        ("macOS", "arm64") => "macOS (Apple Silicon)".into(),
+        ("macOS", "x64") => "macOS (Intel)".into(),
+        (os, "") => os.to_owned(),
+        (os, arch) => format!("{os} ({arch})"),
+    }
+}
+
+/// Ngày từ thời điểm RFC 3339 ("2026-11-13T05:00:00Z" → "13/11/2026"), theo múi giờ của máy.
+pub fn release_date(rfc3339: &str) -> Option<String> {
+    let t: Timestamp = rfc3339.parse().ok()?;
+    Some(
+        t.to_zoned(jiff::tz::TimeZone::system())
+            .strftime("%d/%m/%Y")
+            .to_string(),
+    )
+}
+
 /// 1–2 chữ cái đầu của tên app, viết hoa ("Ghi chú" → "GC", "kibi" → "K", "eframe template" →
 /// "ET").
 pub fn monogram(title: &str) -> String {
@@ -429,6 +468,7 @@ mod tests {
             client_id: None,
             private: false,
             info,
+            platforms: vec!["windows-x64".into()],
         };
         let items = vec![
             entry("small", 10, AppInfo::default()),
@@ -468,6 +508,35 @@ mod tests {
         .map(|a| tile_color(a))
         .collect();
         assert!(colors.len() >= 4, "{colors:?}");
+    }
+
+    /// Scenario "Duyệt lần lượt".
+    #[test]
+    fn previous_and_next_follow_the_shown_order() {
+        let order: Vec<String> = ["f-timer", "f-notes"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(neighbors(&order, "f-timer"), (None, Some("f-notes")));
+        assert_eq!(neighbors(&order, "f-notes"), (Some("f-timer"), None));
+        assert_eq!(neighbors(&order, "kibi"), (None, None));
+        let three: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(neighbors(&three, "b"), (Some("a"), Some("c")));
+    }
+
+    #[test]
+    fn platform_labels_and_dates() {
+        assert_eq!(platform_label("windows-x64"), "Windows (x64)");
+        assert_eq!(platform_label("macos-arm64"), "macOS (Apple Silicon)");
+        assert_eq!(platform_label("macos-x64"), "macOS (Intel)");
+        assert_eq!(platform_label("linux-x64"), "Linux (x64)");
+        assert_eq!(platform_label("freebsd"), "freebsd");
+        // Giữa trưa UTC: cùng ngày ở mọi múi giờ từ -11 tới +11.
+        assert_eq!(
+            release_date("2026-11-13T12:00:00Z").as_deref(),
+            Some("13/11/2026")
+        );
+        assert_eq!(release_date("không phải ngày"), None);
     }
 
     #[test]

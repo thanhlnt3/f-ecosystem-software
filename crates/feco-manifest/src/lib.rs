@@ -14,6 +14,9 @@
 //! summary = "Thu âm và phối nhạc"                      # không bắt buộc
 //! source = "https://github.com/soundlab/soundlab"     # mã nguồn, không bắt buộc
 //! terminal = false      # true: app chạy trong cửa sổ terminal, không bắt buộc
+//! website = "https://soundlab.example"                # không bắt buộc
+//! features = ["Thu nhiều kênh", "Phối nhạc"]           # tối đa 12 dòng, không bắt buộc
+//! release_notes = "Thêm hiệu ứng vang"                 # thay đổi của phiên bản, không bắt buộc
 //!
 //! [[platforms]]
 //! os = "windows"        # windows | macos
@@ -45,7 +48,7 @@ pub const USER_FOLDERS: [&str; 6] = [
     "videos",
     "desktop",
 ];
-const TOP_LEVEL: [&str; 14] = [
+const TOP_LEVEL: [&str; 17] = [
     "id",
     "name",
     "version",
@@ -60,7 +63,11 @@ const TOP_LEVEL: [&str; 14] = [
     "permissions",
     "source",
     "terminal",
+    "website",
+    "features",
+    "release_notes",
 ];
+pub const MAX_FEATURES: usize = 12;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Platform {
@@ -115,6 +122,15 @@ pub struct Manifest {
     /// App chạy trong cửa sổ terminal.
     #[serde(default)]
     pub terminal: bool,
+    /// Website của app (HTTPS).
+    #[serde(default)]
+    pub website: Option<String>,
+    /// Các tính năng chính (tối đa [`MAX_FEATURES`] dòng, mỗi dòng tối đa 120 ký tự).
+    #[serde(default)]
+    pub features: Vec<String>,
+    /// Các thay đổi của phiên bản (tối đa 2.000 ký tự).
+    #[serde(default)]
+    pub release_notes: Option<String>,
 }
 
 impl Manifest {
@@ -255,6 +271,18 @@ pub fn parse(text: &str) -> Result<Manifest, Vec<String>> {
         c.invalid("source", "phải là địa chỉ https://");
     }
     let terminal = c.boolean(&table, "terminal", "terminal");
+    let website = c.optional_string(&table, "website", "website");
+    if website.as_ref().is_some_and(|u| !https(u)) {
+        c.invalid("website", "phải là địa chỉ https://");
+    }
+    let features = features(&mut c, &table);
+    let release_notes = c.optional_string(&table, "release_notes", "release_notes");
+    if release_notes
+        .as_ref()
+        .is_some_and(|s| s.chars().count() > 2000)
+    {
+        c.invalid("release_notes", "tối đa 2.000 ký tự");
+    }
 
     let platforms = platforms(&mut c, &table);
     let scopes = scopes(&mut c, &table);
@@ -279,7 +307,40 @@ pub fn parse(text: &str) -> Result<Manifest, Vec<String>> {
         permissions,
         source,
         terminal,
+        website,
+        features,
+        release_notes,
     })
+}
+
+/// `features`: danh sách chuỗi không rỗng, tối đa [`MAX_FEATURES`] dòng, mỗi dòng ≤ 120 ký tự.
+fn features(c: &mut Checker, table: &Table) -> Vec<String> {
+    let items = match table.get("features") {
+        None => return Vec::new(),
+        Some(Value::Array(items)) => items,
+        Some(_) => {
+            c.invalid("features", "phải là danh sách chuỗi");
+            return Vec::new();
+        }
+    };
+    if items.len() > MAX_FEATURES {
+        c.invalid("features", &format!("tối đa {MAX_FEATURES} dòng"));
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        match item {
+            Value::String(s) if !s.trim().is_empty() && s.trim().chars().count() <= 120 => {
+                out.push(s.trim().to_owned())
+            }
+            Value::String(s) if s.trim().is_empty() => {
+                c.invalid(&format!("features[{i}]"), "không được để trống")
+            }
+            Value::String(_) => c.invalid(&format!("features[{i}]"), "tối đa 120 ký tự"),
+            _ => c.invalid(&format!("features[{i}]"), "phải là chuỗi"),
+        }
+    }
+    out
 }
 
 fn platforms(c: &mut Checker, table: &Table) -> Vec<Platform> {
@@ -623,5 +684,37 @@ terminal = \"yes\"
                 .any(|e| e.starts_with("terminal không hợp lệ")),
             "{errors:?}"
         );
+    }
+
+    /// Scenario "Phát hành có ghi chú" (phần manifest) và "Tính năng quá dài".
+    #[test]
+    fn website_features_release_notes() {
+        let text = format!(
+            "website = \"https://soundlab.example\"\nfeatures = [\"Thu nhiều kênh\", \" Phối nhạc \"]\nrelease_notes = \"Thêm tìm kiếm\"\n{FULL}"
+        );
+        let m = parse(&text).unwrap();
+        assert_eq!(m.website.as_deref(), Some("https://soundlab.example"));
+        assert_eq!(m.features, ["Thu nhiều kênh", "Phối nhạc"]);
+        assert_eq!(m.release_notes.as_deref(), Some("Thêm tìm kiếm"));
+
+        let many: Vec<String> = (0..13).map(|i| format!("\"Tính năng {i}\"")).collect();
+        let text = format!(
+            "features = [{}]\nwebsite = \"ftp://x\"\n{FULL}",
+            many.join(", ")
+        );
+        let errors = parse(&text).unwrap_err();
+        assert!(
+            errors.contains(&"features không hợp lệ: tối đa 12 dòng".to_string()),
+            "{errors:?}"
+        );
+        assert!(
+            errors.iter().any(|e| e.starts_with("website không hợp lệ")),
+            "{errors:?}"
+        );
+
+        let long = "x".repeat(121);
+        let text = format!("features = [\"\", \"{long}\", 3]\n{FULL}");
+        let errors = parse(&text).unwrap_err();
+        assert_eq!(errors.len(), 3, "{errors:?}");
     }
 }

@@ -1,8 +1,8 @@
 # Nhật ký thay đổi
 
-## Chưa phát hành
+## 1.1.0 (13/11/2026)
 
-Thay đổi OpenSpec `improve-launcher-experience`.
+Thay đổi OpenSpec `improve-launcher-experience`. Gồm cả các bản sửa của 1.0.1.
 
 ### F-Launcher
 
@@ -22,16 +22,37 @@ Thay đổi OpenSpec `improve-launcher-experience`.
   chữ cái đầu, màu cố định theo app.
 - App có cờ `terminal` mở trong cửa sổ terminal riêng: Windows dùng console mới, macOS dùng
   Terminal.
+- Trang chi tiết app: bấm vào app trong Thư viện hoặc Cửa hàng để xem biểu tượng, tên, giới thiệu,
+  tính năng, liên kết GitHub và website, phiên bản mới nhất và đã cài, ngày phát hành, dung lượng,
+  các nền tảng chạy được, có gì mới trong bản mới nhất; nút Cài, Cập nhật, Mở, Gỡ, Quay lại bản
+  trước. Nút **‹ Trước** / **Sau ›** và phím mũi tên chuyển sang app kề bên theo thứ tự đang
+  hiển thị; Esc quay lại.
+- Renderer wgpu và giờ địa phương (như 1.0.1).
 
 ### Nhà phát triển
 
-- `f-app.toml` có thêm `source` (địa chỉ mã nguồn, HTTPS) và `terminal`.
-- Máy chủ ký vào target TUF các trường mô tả ngắn, nhóm, nhà phát triển, mã nguồn, terminal. App
-  không khai scope thì target không có `client_id`.
+- `f-app.toml` có thêm `source` (địa chỉ mã nguồn, HTTPS), `terminal`, `website`, `features`
+  (tối đa 12 dòng) và `release_notes`.
+- Máy chủ ký vào target TUF các trường mô tả ngắn, giới thiệu, tính năng, nhóm, nhà phát triển,
+  mã nguồn, website, ghi chú phát hành, giấy phép, thời điểm phát hành, terminal. `release_notes`
+  cũng là lịch sử thay đổi của phiên bản trên F-Store. App không khai scope thì target không có
+  `client_id`.
 - `f-dev pack` đóng gói và kiểm tra trước khi nộp. Gói của app có `source` phải kèm giấy phép gốc.
 - App mẫu dùng F-SDK: Ghi chú (`examples/apps/f-notes`) và Bấm giờ (`examples/apps/f-timer`).
 - `scripts/dev-apps.sh` đưa vào môi trường dev hai app mẫu và các app mã nguồn mở dựng từ GitHub
   (kibi, bottom, eframe template). Cách làm có trong `docs/github-apps.md`.
+
+## 1.0.1 (13/11/2026)
+
+Bản vá cho F-Launcher.
+
+- **F-Launcher hiện cửa sổ trắng trên một số máy Windows.** Trên Windows 10 với card NVIDIA,
+  renderer glow (OpenGL) của eframe 0.37 không vẽ được gì. Launcher chuyển sang renderer wgpu
+  (DirectX 12 trên Windows, Metal trên macOS, Vulkan trên Linux). Tệp chạy lớn hơn một chút; các
+  thư viện mới đều MIT hoặc Apache-2.0 và có trong `THIRD_PARTY_NOTICES` và SBOM của gói.
+- Thời điểm đồng bộ và thời điểm của thông báo trong launcher hiện theo giờ của máy, không còn
+  hiện giờ UTC.
+- F-SDK cho Python và TypeScript có số phiên bản 1.0.1, mã không đổi.
 
 ## 1.0.0 (13/11/2026)
 

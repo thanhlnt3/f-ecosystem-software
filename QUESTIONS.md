@@ -258,8 +258,8 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 71. **Renderer của launcher đổi từ glow (OpenGL) sang wgpu.** Trên máy thử (Windows 10, NVIDIA RTX
     3060), eframe 0.37 với glow vẽ cửa sổ trắng hoàn toàn, kể cả bản F-Launcher 1.0.0 đã phát hành
     và một app eframe tối giản. wgpu (DirectX 12, Vulkan hoặc Metal) vẽ đúng. Cái giá là tệp chạy
-    lớn hơn và nhiều thư viện phụ thuộc hơn (đều MIT hoặc Apache-2.0). Bản 1.0.0 nên được thay bằng
-    bản vá. Có cần phát hành 1.0.1 ngay không?
+    lớn hơn và nhiều thư viện phụ thuộc hơn (đều MIT hoặc Apache-2.0). Chủ dự án đồng ý phát hành
+    bản vá: 1.0.1 (nhánh `release/1.0`) chỉ gồm bản sửa renderer và giờ địa phương.
 72. **Biểu tượng app.** Launcher dùng ô chữ cái đầu có màu theo mã app. Icon do nhà phát triển tải
     lên cần thêm một target TUF đã ký cho mỗi icon, và quy định kích thước, định dạng, kiểm duyệt.
     Có làm ở thay đổi sau không?

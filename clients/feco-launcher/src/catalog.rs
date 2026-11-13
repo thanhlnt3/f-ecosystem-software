@@ -22,6 +22,9 @@ pub struct CatalogEntry {
     /// Thông tin hiển thị (mô tả, nhóm, nhà phát triển...), từ metadata TUF đã ký.
     #[serde(default)]
     pub info: AppInfo,
+    /// Mọi nền tảng có gói đã ký của cùng app và cùng phiên bản (trang chi tiết: "Chạy trên").
+    #[serde(default)]
+    pub platforms: Vec<String>,
 }
 
 /// Thông tin hiển thị của một app (spec launcher, "Thông tin hiển thị của app"). Chỉ lấy từ
@@ -40,6 +43,22 @@ pub struct AppInfo {
     /// App chạy trong cửa sổ terminal.
     #[serde(default)]
     pub terminal: bool,
+    /// Giới thiệu chung (trang chi tiết).
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub features: Vec<String>,
+    /// Website (chỉ nhận HTTPS).
+    #[serde(default)]
+    pub website: Option<String>,
+    /// Các thay đổi trong phiên bản này.
+    #[serde(default)]
+    pub release_notes: Option<String>,
+    #[serde(default)]
+    pub license: Option<String>,
+    /// Thời điểm phát hành (RFC 3339).
+    #[serde(default)]
+    pub released_at: Option<String>,
 }
 
 impl AppInfo {
@@ -55,6 +74,17 @@ impl AppInfo {
             developer: clean(&meta.developer),
             source: clean(&meta.source).filter(|s| s.starts_with("https://")),
             terminal: meta.terminal,
+            description: clean(&meta.description),
+            features: meta
+                .features
+                .iter()
+                .map(|f| f.trim().to_owned())
+                .filter(|f| !f.is_empty())
+                .collect(),
+            website: clean(&meta.website).filter(|s| s.starts_with("https://")),
+            release_notes: clean(&meta.release_notes),
+            license: clean(&meta.license),
+            released_at: clean(&meta.released_at),
         }
     }
 }
@@ -81,9 +111,23 @@ pub fn build(state: &SyncState, platform: &str) -> Vec<CatalogEntry> {
                 client_id: meta.client_id.clone(),
                 private: meta.private,
                 info: AppInfo::from_meta(meta),
+                platforms: Vec::new(),
             })
         })
         .collect();
+    // Nền tảng của cùng app và phiên bản, kể cả nền tảng khác máy này.
+    for entry in &mut out {
+        let mut platforms: Vec<String> = state
+            .targets
+            .values()
+            .filter_map(|t| t.meta.as_ref())
+            .filter(|m| m.app == entry.app && m.version == entry.version)
+            .map(|m| m.platform.clone())
+            .collect();
+        platforms.sort();
+        platforms.dedup();
+        entry.platforms = platforms;
+    }
     out.sort_by(|a, b| {
         a.app
             .cmp(&b.app)

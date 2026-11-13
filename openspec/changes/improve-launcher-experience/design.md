@@ -90,6 +90,15 @@ Mã nguồn tải về không được commit. Ba app trong danh mục dev đư�
 
 Hai app là thành viên workspace, nên được kiểm tra fmt, clippy, test và giấy phép như mã còn lại. Chúng là mẫu để nhà phát triển sao chép.
 
+### E8. Trang chi tiết app
+
+- **Dữ liệu**: `TargetMeta` thêm `description`, `features`, `website`, `release_notes`, `license`, `released_at`. Máy chủ điền các trường này khi ký (từ manifest; `released_at` là thời điểm ký). `release_notes` cũng ghi vào `catalog_versions.changelog`, để F-Store và launcher hiện cùng một nội dung.
+- **Nền tảng**: launcher chỉ cài gói của nền tảng mình, nhưng danh sách "chạy được trên" lấy từ mọi target đã ký của cùng app và cùng phiên bản. Không cần thêm trường nào.
+- **Mở trang**: cả ô (lưới) hoặc cả hàng (danh sách) là vùng bấm, được đăng ký trước các nút bên trong, nên bấm nút vẫn chạy đúng nút đó.
+- **Trước và sau**: khi mở trang, launcher giữ lại thứ tự app đang hiển thị (sau tìm, lọc, sắp xếp). Hàm thuần `library::neighbors(order, app)` trả app liền trước và liền sau, có unit test.
+- **Phím tắt**: mũi tên trái và phải chuyển app, Esc quay lại danh sách. Bỏ qua khi một ô nhập liệu đang được chọn.
+- **Ẩn mục trống**: metadata cũ (bản 1.0) không có giới thiệu hay ghi chú. Trang chỉ hiện những phần có dữ liệu.
+
 ## Risks / Trade-offs
 
 - [Mã nguồn bên thứ ba khi dựng chạy build script] → Chỉ dựng tag hoặc commit cố định, đã xem build script (kibi và bottom chỉ gọi `git describe`), và dựng trong thư mục riêng ngoài repo. Hướng dẫn nhắc nhà phát triển làm như vậy.

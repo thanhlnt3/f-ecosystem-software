@@ -4,7 +4,8 @@
 #
 #   scripts/dev-apps.sh samples     # app mẫu dùng F-SDK: Ghi chú (f-notes), Bấm giờ (f-timer)
 #   scripts/dev-apps.sh github <owner/repo> <tag-hoặc-commit> --id ID --name TÊN --bin FILE \
-#       --license SPDX [--summary MÔ-TẢ] [--category NHÓM] [--developer TÊN] [--terminal]
+#       --license SPDX [--summary MÔ-TẢ] [--category NHÓM] [--developer TÊN] [--terminal] \
+#       [--description GIỚI-THIỆU] [--features "A|B|C"] [--website URL] [--notes GHI-CHÚ]
 #                                   # tải mã nguồn đúng tag/commit, dựng, đóng gói kèm giấy phép
 #                                   # gốc, ký TUF, ghi danh mục (xem docs/github-apps.md)
 #   scripts/dev-apps.sh opensource  # ba app mã nguồn mở của danh mục dev: kibi, bottom,
@@ -47,6 +48,9 @@ EOF
 # JSON an toàn cho một chuỗi.
 json_str() { "$PY" -I -c 'import json,sys; print(json.dumps(sys.argv[1], ensure_ascii=False))' "$1"; }
 
+# Nội dung trang chi tiết của app sắp phát hành (đặt trước khi gọi publish_app).
+DESCRIPTION="" FEATURES="" WEBSITE="" NOTES=""
+
 # publish_app ID TÊN VERSION THƯ-MỤC-GÓI FILE-CHẠY CLIENT-ID-TUF SUMMARY CATEGORY DEVELOPER LICENSE \
 #             SOURCE TERMINAL CATALOG-CLIENT-ID
 publish_app() {
@@ -57,9 +61,11 @@ publish_app() {
   plat="$(platform)"
   zipname="$id-$version-$plat.zip"
   zipfile="$DEV/uploads/$zipname"
-  # Mỗi phiên bản chỉ ký một lần: chạy lại script thì bỏ qua phiên bản đã có trong kho TUF.
-  if grep -qs "\"$zipname\"" "$REPO"/metadata/*targets.json; then
-    echo "$id $version đã có trong kho TUF, bỏ qua" >&2
+  # Mỗi phiên bản chỉ ký một lần: chạy lại script thì không ký lại phiên bản đã có trong kho
+  # TUF, nhưng vẫn ghi danh mục (để chạy lại được khi lần trước PostgreSQL chưa chạy).
+  if grep -qs "\"$zipname\"" "$REPO"/metadata/*targets.json && [[ -f "$zipfile" ]]; then
+    echo "$id $version đã có trong kho TUF, chỉ ghi danh mục" >&2
+    catalog_entry
     return 0
   fi
   mkdir -p "$DEV/uploads"
@@ -67,22 +73,31 @@ publish_app() {
   zip_dir "$pkg" "$zipfile"
   local args=(publish --repo "$REPO" --file "$zipfile" --name "$zipname" --app "$id" --version "$version"
     --platform "$plat" --title "$name" --entry "$entry" --summary "$summary" --category "$category"
-    --developer "$developer" --sign "$(RELEASE_KEYS)")
+    --developer "$developer" --license "$license" --sign "$(RELEASE_KEYS)")
+  [[ -n "$DESCRIPTION" ]] && args+=(--description "$DESCRIPTION")
+  [[ -n "$FEATURES" ]] && args+=(--features "$FEATURES")
+  [[ -n "$WEBSITE" ]] && args+=(--website "$WEBSITE")
+  [[ -n "$NOTES" ]] && args+=(--release-notes "$NOTES")
   [[ -n "$tuf_client" ]] && args+=(--client-id "$tuf_client")
   [[ -n "$source_url" ]] && args+=(--source "$source_url")
   [[ "$terminal" == "true" ]] && args+=(--terminal true)
   "$TUF" "${args[@]}"
+  catalog_entry
+}
+
+# Ghi app và phiên bản vào danh mục F-Store (dùng biến cục bộ của publish_app).
+catalog_entry() {
   local json="$DEV/catalog-$id.json"
   cat > "$json" <<EOF
 {"id":"$id","client_id":"$catalog_client","name":$(json_str "$name"),
  "developer":$(json_str "$developer"),"developer_verified":false,"first_party":false,
  "summary":$(json_str "$summary"),
- "description":$(json_str "$summary${source_url:+ Mã nguồn: $source_url}"),
+ "description":$(json_str "${DESCRIPTION:-$summary}${source_url:+ Mã nguồn: $source_url}"),
  "category":"$category","price_vnd":0,"license":$(json_str "$license"),"screenshots":[]}
 EOF
   catalog add-app "$json"
   catalog release "$id" "$version" "$plat" "$(wc -c < "$zipfile" | tr -d ' ')" "$zipname" \
-    "Bản dựng dev lúc $(date '+%H:%M %d/%m/%Y')"
+    "${NOTES:-Bản dựng dev lúc $(date '+%H:%M %d/%m/%Y')}"
 }
 
 # App mẫu dùng F-SDK: có client OAuth riêng (scope profile), launcher cấp mã khởi chạy.
@@ -110,6 +125,16 @@ samples() {
     exe="$(exe "$TARGET_DIR/release/$id")"
     cp "$exe" "$pkg/bin/"
     cp "$ROOT/LICENSE-MIT" "$ROOT/LICENSE-APACHE" "$pkg/"
+    WEBSITE="https://github.com/thanhlnt3/f-ecosystem-software/tree/main/examples/apps/$id"
+    NOTES="Bản dựng dev lúc $(date '+%H:%M %d/%m/%Y') từ mã nguồn hiện tại của examples/apps/$id."
+    case "$id" in
+      f-notes)
+        DESCRIPTION="Ghi chú là app mẫu của F-Eco, viết bằng Rust và egui. Khi được F-Launcher mở, app tự đăng nhập bằng tài khoản F-Eco qua F-SDK (không cần nhập mật khẩu) và chào bạn bằng tên. Ghi chú lưu trong thư mục dữ liệu riêng mà launcher cấp cho app."
+        FEATURES="Tạo, sửa, xóa ghi chú|Tự lưu sau khi ngừng gõ|Tìm trong tiêu đề và nội dung|Đăng nhập một lần qua F-Launcher (F-SDK)|Chạy chế độ khách khi mở trực tiếp" ;;
+      f-timer)
+        DESCRIPTION="Bấm giờ là app mẫu của F-Eco gồm đồng hồ bấm giờ có ghi vòng và hẹn giờ tập trung (làm việc rồi nghỉ). Khi được F-Launcher mở, app tự đăng nhập bằng tài khoản F-Eco qua F-SDK."
+        FEATURES="Đồng hồ bấm giờ có tạm dừng và ghi vòng|Hẹn giờ tập trung, tự chuyển sang giờ nghỉ|Chỉnh thời lượng tập trung và nghỉ|Đếm số phiên tập trung đã hoàn thành|Đăng nhập một lần qua F-Launcher (F-SDK)" ;;
+    esac
     publish_app "$id" "$name" "$version" "$pkg" "bin/$(basename "$exe")" "$client" "$summary" \
       "$category" "F-Eco" "MIT OR Apache-2.0" "" "false" "$client"
   done
@@ -121,6 +146,7 @@ github() {
   local repo="${1:?cần owner/repo}" ref="${2:?cần tag hoặc commit}"
   shift 2
   local id="" name="" bin="" license="" summary="" category="other" developer="" terminal="false"
+  DESCRIPTION="" FEATURES="" WEBSITE="" NOTES=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --id) id="$2"; shift 2 ;;
@@ -131,6 +157,10 @@ github() {
       --category) category="$2"; shift 2 ;;
       --developer) developer="$2"; shift 2 ;;
       --terminal) terminal="true"; shift ;;
+      --description) DESCRIPTION="$2"; shift 2 ;;
+      --features) FEATURES="$2"; shift 2 ;;
+      --website) WEBSITE="$2"; shift 2 ;;
+      --notes) NOTES="$2"; shift 2 ;;
       *) echo "tham số lạ: $1" >&2; exit 2 ;;
     esac
   done
@@ -179,14 +209,23 @@ github() {
 opensource() {
   github ilai-deutel/kibi v0.3.3 --id kibi --name "kibi" --bin kibi --license "MIT OR Apache-2.0" \
     --summary "Trình soạn thảo văn bản siêu nhỏ chạy trong terminal (dưới 1.024 dòng mã)." \
-    --category tools --developer "Ilaï Deutel" --terminal
+    --category tools --developer "Ilaï Deutel" --terminal \
+    --description "kibi là trình soạn thảo văn bản trong terminal, viết bằng Rust với chưa tới 1.024 dòng mã, lấy cảm hứng từ kilo. Bản trong F-Eco dựng từ mã nguồn gốc tại tag v0.3.3, không sửa đổi." \
+    --features "Tô màu cú pháp cho hơn 30 ngôn ngữ|Tìm kiếm tăng dần|Sao chép, cắt, dán, nhân đôi dòng|Chạy lệnh ngoài và dán kết quả vào văn bản|Cấu hình qua tệp config.ini|Chạy trên Windows, macOS, Linux" \
+    --notes "Bản 0.3.3 của dự án gốc: thêm Ctrl+/ để chú thích hoặc bỏ chú thích dòng; bật bảo vệ ngăn xếp cho bản phát hành. Chi tiết trong CHANGELOG.md của kho ilai-deutel/kibi."
   github ClementTsang/bottom 0.15.0 --id bottom --name "bottom" --bin btm --license "MIT" \
     --summary "Theo dõi CPU, bộ nhớ, mạng, ổ đĩa và tiến trình ngay trong terminal." \
-    --category system --developer "Clement Tsang" --terminal
+    --category system --developer "Clement Tsang" --terminal --website "https://bottom.pages.dev/stable" \
+    --description "bottom (lệnh btm) là công cụ theo dõi hệ thống đa nền tảng trong terminal, lấy cảm hứng từ gtop, gotop và htop. Bản trong F-Eco dựng từ mã nguồn gốc tại tag 0.15.0, không sửa đổi." \
+    --features "Biểu đồ CPU, bộ nhớ, mạng theo thời gian|Danh sách tiến trình: lọc, sắp xếp, dừng tiến trình|Dung lượng và tốc độ đọc ghi ổ đĩa|Nhiệt độ cảm biến và pin|Giao diện tùy chỉnh bằng tệp cấu hình|Điều khiển bằng bàn phím và chuột" \
+    --notes "Bản 0.15.0 của dự án gốc: hỗ trợ GPU Intel trên Linux, thanh dạng khối, đơn vị dung lượng nhị phân cho ổ đĩa, cột swap của tiến trình trên Linux; bật thanh cuộn mặc định; sửa lỗi khởi động trên Windows 7 và 8. Chi tiết trong CHANGELOG.md của kho ClementTsang/bottom."
   github emilk/eframe_template f108546a2b9f2fc6a82543ceae1625a3893305cb --id eframe-template \
     --name "eframe template" --bin eframe_template --license "MIT OR Apache-2.0" \
     --summary "App cửa sổ mẫu viết bằng egui/eframe, điểm khởi đầu cho app đồ họa bằng Rust." \
-    --category development --developer "Emil Ernerfeldt"
+    --category development --developer "Emil Ernerfeldt" --website "https://www.egui.rs" \
+    --description "eframe template là app mẫu của tác giả egui, dùng làm điểm khởi đầu cho app đồ họa viết bằng Rust chạy trên máy tính và trên web. Bản trong F-Eco dựng từ commit f108546, không sửa đổi." \
+    --features "Cửa sổ đồ họa egui với chủ đề sáng và tối|Dựng cho máy tính và cho web (WebAssembly)|Mã ngắn, dễ sao chép làm app mới" \
+    --notes "Bản tại commit f108546 của dự án gốc, dùng egui và eframe 0.36."
 }
 
 case "${1:-}" in

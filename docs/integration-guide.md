@@ -4,10 +4,10 @@ Tài liệu này dành cho nhóm phát triển muốn đưa một ứng dụng d
 thái F-Eco: người dùng tìm thấy app trên F-Store, cài và mở bằng F-Launcher, đăng nhập một lần
 bằng tài khoản F-Eco, và app nhận đúng những dữ liệu người dùng đã đồng ý chia sẻ.
 
-Áp dụng cho F-Eco 1.0 và các thay đổi ghi trong mục "Chưa phát hành" của `CHANGELOG.md`:
-- manifest có thêm `source` và `terminal`;
+Áp dụng cho F-Eco 1.1. So với 1.0:
+- manifest có thêm `source`, `terminal`, `website`, `features`, `release_notes`;
 - có lệnh `f-dev pack`;
-- F-Launcher hiện thông tin app theo lưới hoặc danh sách.
+- F-Launcher hiện app theo lưới hoặc danh sách, và có trang chi tiết cho từng app.
 
 Mã lỗi đầy đủ và địa chỉ máy chủ có ở trang `/developer/docs` của máy chủ F-Eco bạn dùng.
 
@@ -100,6 +100,12 @@ description = "Mô tả dài hiện trên trang chi tiết F-Store"
 category = "productivity"               # mã nhóm, xem mục 13
 source = "https://github.com/kho/quanlykho"    # không bắt buộc; có thì gói phải kèm LICENSE
 terminal = false                        # true: launcher mở app trong cửa sổ terminal
+website = "https://kho.example"         # không bắt buộc, phải là https://
+features = [                            # không bắt buộc, tối đa 12 dòng, mỗi dòng ≤ 120 ký tự
+  "Nhập, xuất kho bằng mã vạch",
+  "Báo cáo tồn kho theo ngày",
+]
+release_notes = "Thêm báo cáo tồn kho"  # thay đổi của phiên bản này, ≤ 2.000 ký tự
 
 [[platforms]]
 os = "windows"          # windows | macos
@@ -389,6 +395,17 @@ F-Launcher hiện app ở Thư viện (app đã cài) và Cửa hàng, theo **l�
 dùng tìm (không phân biệt dấu), lọc theo nhóm, và sắp xếp theo tên, lần mở gần nhất, ngày cài,
 nhóm hoặc dung lượng.
 
+Bấm vào một app (ô hoặc hàng) để mở **trang chi tiết**. Trang có:
+- biểu tượng, tên, nhà phát triển, nhóm, mô tả ngắn;
+- giới thiệu (`description`) và tính năng (`features`);
+- "Có gì mới trong bản …" (`release_notes`) kèm ngày phát hành;
+- bảng thông tin: phiên bản mới nhất, phiên bản đã cài, dung lượng, các nền tảng có gói, giấy phép, mã nguồn, website;
+- nút Cài, Cập nhật, Mở, Gỡ, Quay lại bản trước;
+- nút và phím mũi tên để chuyển sang app trước hoặc sau.
+
+Mục nào không có dữ liệu thì không hiện. `release_notes` cũng là lịch sử thay đổi của phiên bản
+trên F-Store.
+
 Mọi thông tin hiển thị đều lấy từ metadata TUF mà máy chủ ký khi phát hành:
 
 | Hiển thị | Lấy từ |
@@ -399,6 +416,11 @@ Mọi thông tin hiển thị đều lấy từ metadata TUF mà máy chủ ký 
 | Nhà phát triển | tên trong danh mục F-Store |
 | Nút "Mã nguồn" | `source` |
 | "Mở (terminal)" | `terminal = true` |
+| Giới thiệu, tính năng | `description`, `features` |
+| Website | `website` |
+| Có gì mới, ngày phát hành | `release_notes`, thời điểm máy chủ ký phiên bản |
+| Giấy phép | `license` |
+| Chạy trên | các nền tảng `[[platforms]]` có gói đã ký |
 
 Biểu tượng là ô chữ cái đầu của tên, màu cố định theo mã app. Hiện chưa có icon do nhà phát
 triển tải lên.

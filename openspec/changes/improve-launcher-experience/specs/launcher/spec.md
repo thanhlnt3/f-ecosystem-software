@@ -108,3 +108,32 @@ Launcher MUST không mở terminal cho app không có cờ này.
 - **GIVEN** app "kibi" có cờ `terminal`
 - **WHEN** người dùng bấm Mở trên Windows
 - **THEN** kibi chạy trong một cửa sổ console mới, và launcher vẫn dùng được
+
+### Requirement: Trang chi tiết app trong launcher
+Khi người dùng bấm vào một app trong Thư viện hoặc Cửa hàng, F-Launcher SHALL mở trang chi tiết của app. Trang gồm phần đầu (biểu tượng, tên, nhà phát triển, nhóm, mô tả ngắn, nút hành động), giới thiệu chung, tính năng, các thay đổi trong bản phát hành mới nhất, và bảng thông tin. Mọi thông tin MUST lấy từ metadata TUF đã ký. Phần không có thì ẩn.
+
+#### Scenario: Mở trang chi tiết từ Cửa hàng
+- **GIVEN** app "bottom" có giới thiệu, ba tính năng, liên kết GitHub và ghi chú phát hành
+- **WHEN** người dùng bấm vào ô của "bottom" trong Cửa hàng
+- **THEN** launcher hiện trang chi tiết với giới thiệu, ba tính năng, nút "Mã nguồn", phiên bản 0.15.0, ngày phát hành, dung lượng, nền tảng "Windows (x64)" và ghi chú của bản 0.15.0, cùng nút Cài
+
+### Requirement: Bảng thông tin và nút hành động của trang chi tiết
+Bảng thông tin SHALL có phiên bản mới nhất, phiên bản đã cài, ngày phát hành, dung lượng, giấy phép, các nền tảng chạy được, liên kết mã nguồn và website. Nút hành động SHALL theo trạng thái của app: Cài, Cập nhật, Mở, Gỡ, Quay lại bản trước.
+
+#### Scenario: App đã cài có bản mới
+- **GIVEN** đã cài "Ghi chú" 1.0.0 và Cửa hàng có 1.1.0
+- **WHEN** người dùng mở trang chi tiết của "Ghi chú"
+- **THEN** bảng thông tin hiện "Phiên bản mới nhất 1.1.0" và "Đã cài 1.0.0", và trang có nút "Cập nhật lên 1.1.0", "Mở" và "Gỡ"
+
+#### Scenario: App thiếu thông tin
+- **GIVEN** app "Demo App" chỉ có tên và phiên bản trong metadata
+- **WHEN** người dùng mở trang chi tiết
+- **THEN** trang hiện tên, phiên bản, dung lượng, nền tảng và nút hành động, không có mục Tính năng hay Có gì mới
+
+### Requirement: Chuyển sang app trước và sau
+Trang chi tiết SHALL có nút chuyển sang app liền trước và liền sau, theo đúng thứ tự đang hiển thị ở danh sách người dùng vừa mở (sau khi tìm, lọc, sắp xếp). Phím mũi tên trái và phải SHALL làm việc tương tự, và phím Esc quay lại danh sách. Ở app đầu danh sách thì nút "Trước" bị tắt; ở app cuối thì nút "Sau" bị tắt.
+
+#### Scenario: Duyệt lần lượt
+- **GIVEN** Cửa hàng đang lọc nhóm "Năng suất", hiện "Bấm giờ" rồi "Ghi chú"
+- **WHEN** người dùng mở "Bấm giờ" rồi bấm "Sau"
+- **THEN** trang chi tiết chuyển sang "Ghi chú", và nút "Sau" bị tắt
