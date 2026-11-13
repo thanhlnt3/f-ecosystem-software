@@ -6221,3 +6221,217 @@ async fn admin_console_end_to_end() {
         "không hủy được thông báo bắt buộc"
     );
 }
+
+/// Bản 1.0, luồng tích hợp app con từ đầu tới cuối: nhà phát triển nộp app bằng `f-dev` → kiểm
+/// duyệt → phát hành (ký target TUF) → F-Launcher thật đồng bộ, cài, chuẩn bị lệnh mở app với mã
+/// khởi chạy → app dùng F-SDK đổi mã lấy phiên, đọc `/v1/me`, quyền sử dụng, báo lỗi khi chạy.
+#[tokio::test]
+async fn child_app_integration_end_to_end() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let st = local_state();
+    let stamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        % 1_000_000_000_000;
+    let app_id = format!("quanlykho-{stamp}");
+    let work = tempfile::tempdir().unwrap();
+
+    // 1. Nhà phát triển: app desktop, manifest, gói có tệp chạy đã ký, nộp bằng f-dev.
+    let (dev_c, _, token) = developer_with_app("tich-hop", "Nhóm Kho", &app_id).await;
+    let client_id = text_of(
+        &get(&dev_c, &format!("/developer/apps/{app_id}")).await,
+        "#client-id",
+    );
+    let manifest = format!(
+        r#"id = "{app_id}"
+name = "Quản Lý Kho"
+version = "1.0.0"
+license = "MIT"
+privacy_policy = "https://kho.example/privacy"
+summary = "Quản lý nhập xuất tồn"
+category = "Năng suất"
+
+[[platforms]]
+os = "windows"
+arch = "x64"
+entry = "QuanLyKho.exe"
+
+[scopes.profile]
+required = true
+purpose = "Hiển thị tên người nhập kho"
+
+[scopes.purchases]
+purpose = "Kiểm tra bản quyền"
+"#
+    );
+    let dist = dist_with(
+        work.path(),
+        "dist",
+        vec![
+            ("QuanLyKho.exe", feco_server::codesign::fixtures::pe(true)),
+            ("data/mau.csv", b"ma,ten".to_vec()),
+        ],
+    );
+    let version = submit_version(work.path(), &token, &manifest, &dist).await;
+
+    // 2. Kiểm duyệt rồi phát hành 100% kênh stable.
+    feco_server::review::process_due(&st).await.unwrap();
+    feco_server::review::approve(&st, version, "e2e", "Đạt")
+        .await
+        .unwrap();
+    let page = get(&dev_c, &format!("/developer/apps/{app_id}")).await;
+    let (_, page) = post(
+        &dev_c,
+        &format!("/developer/versions/{version}/release"),
+        &csrf_of(&page),
+        &[("channel", "stable"), ("percent", "100")],
+    )
+    .await;
+    assert!(page.contains("Đang phát hành"), "{page}");
+    let detail = reqwest::Client::new()
+        .get(format!("{BASE}/v1/catalog/{app_id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(detail.status().as_u16(), 200, "app hiện trong F-Store");
+
+    // 3. F-Launcher: đồng bộ metadata TUF máy chủ đã ký, cài, kiểm tra tệp.
+    let repo = feco_tuf::Repo::open(TUF_REPO.get().unwrap());
+    let paths = feco_launcher::paths::Paths::new(work.path().join("launcher"));
+    let tuf = feco_tuf::Client::for_local_repo(&repo, &repo.root_path(1), paths.tuf_datastore())
+        .await
+        .unwrap();
+    let mut launcher = feco_launcher::install::Launcher::open(paths, tuf, "windows-x64").unwrap();
+    launcher.sync(jiff::Timestamp::now()).await.unwrap();
+    let entry = launcher
+        .catalog_latest()
+        .into_iter()
+        .find(|e| e.app == app_id)
+        .cloned()
+        .expect("app có trong danh mục của launcher");
+    assert_eq!(
+        (entry.version.as_str(), entry.entry.as_str()),
+        ("1.0.0", "QuanLyKho.exe")
+    );
+    assert_eq!(entry.client_id.as_deref(), Some(client_id.as_str()));
+    launcher
+        .install(&entry, jiff::Timestamp::now())
+        .await
+        .unwrap();
+    let plan = launcher.prepare_launch(&app_id).unwrap();
+    assert!(
+        plan.program.ends_with("QuanLyKho.exe"),
+        "{:?}",
+        plan.program
+    );
+    assert!(
+        plan.working_dir.join("data/mau.csv").exists(),
+        "gói được giải nén đủ tệp"
+    );
+
+    // 4. Người dùng đăng nhập launcher; launcher xin mã khởi chạy cho đúng app và truyền qua môi trường.
+    let (email, password) = unique("nguoi-dung-kho");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Anh Hải").await;
+    let launcher_client = LAUNCHER.get().unwrap().clone();
+    let a = authorize(&user, &launcher_client, "openid offline_access profile").await;
+    let launcher_token = exchange(&launcher_client, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (status, issued) = issue_launch_code(&launcher_token, &client_id).await;
+    assert_eq!(status, 200, "{issued}");
+    let cmd = feco_launcher::launch::command(
+        &plan,
+        &feco_launcher::launch::LaunchEnv {
+            launch_code: issued["code"].as_str().map(str::to_owned),
+            server_url: format!("{BASE}/"),
+            issuer_url: format!("{HYDRA_PUBLIC}/"),
+            broker_url: None,
+            broker_secret: None,
+        },
+    );
+    let env: HashMap<String, String> = cmd
+        .get_envs()
+        .filter_map(|(k, v)| {
+            Some((
+                k.to_string_lossy().into_owned(),
+                v?.to_string_lossy().into_owned(),
+            ))
+        })
+        .collect();
+    assert_eq!(env["FECO_CLIENT_ID"], client_id);
+
+    // 5. App con (F-SDK) đọc đúng các biến launcher truyền, đổi mã lấy phiên.
+    let config = fsdk::Config::new(
+        &env["FECO_CLIENT_ID"],
+        &env["FECO_ISSUER_URL"],
+        &env["FECO_SERVER_URL"],
+    )
+    .unwrap()
+    .redirect_uri(APP_CALLBACK)
+    .scopes("openid offline_access profile purchases");
+    // Lần đầu: người dùng chưa đồng ý chia sẻ dữ liệu với app, mã khởi chạy không đủ.
+    let first = fsdk::session_from_launch(
+        &config,
+        &fsdk::Launch {
+            code: env["FECO_LAUNCH_CODE"].clone(),
+        },
+    )
+    .await;
+    assert!(
+        matches!(first, Err(fsdk::Error::ConsentRequired)),
+        "{first:?}"
+    );
+    // F-SDK mở trình duyệt để người dùng đồng ý một lần (màn hình đồng ý theo scope).
+    let consenting = user.clone();
+    fsdk::login_with(&config, move |url: &url::Url| {
+        let url = url.clone();
+        tokio::spawn(async move {
+            let res = consenting.get(url).send().await.unwrap();
+            let a = finish(res, String::new()).await;
+            // Đồng ý cả scope tùy chọn "purchases" để app kiểm tra bản quyền.
+            let a = answer_consent(&consenting, a, "accept", &["purchases"]).await;
+            reqwest::get(a.callback.expect("về callback của app"))
+                .await
+                .unwrap();
+        });
+        Ok(())
+    })
+    .await
+    .expect("đồng ý qua trình duyệt");
+    // Từ lần mở sau, launcher truyền mã khởi chạy và app vào thẳng.
+    let (_, issued) = issue_launch_code(&launcher_token, &client_id).await;
+    let code = issued["code"].as_str().unwrap().to_owned();
+    let session = fsdk::session_from_launch(&config, &fsdk::Launch { code: code.clone() })
+        .await
+        .expect("app nhận phiên từ launcher");
+    let me = session.me().await.unwrap();
+    assert_eq!(me.name.as_deref(), Some("Anh Hải"));
+    assert_ne!(
+        me.sub,
+        subject_of(&email).await.to_string(),
+        "app nhận mã định danh riêng (pairwise)"
+    );
+    assert!(session.entitlements().await.unwrap().is_empty());
+    feco_server::entitlements::grant(
+        &st,
+        &client_id,
+        subject_of(&email).await,
+        "license",
+        "e2e",
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(session.entitlements().await.unwrap()[0].kind, "license");
+    session.report_crash("1.0.0").await.unwrap();
+    // Mã khởi chạy chỉ dùng một lần.
+    assert!(fsdk::session_from_launch(&config, &fsdk::Launch { code })
+        .await
+        .is_err());
+}

@@ -421,7 +421,7 @@ async fn authorize_headless(
     let requested = oauth::requested_scopes(&request);
     let previous = oauth::previously_granted(state, &subject.to_string(), &app.client_id).await;
     // Không hiện được màn hình đồng ý ở đây: chỉ cấp lại đúng những gì người dùng đã đồng ý.
-    if !apps::scopes_to_ask(&app, &requested, &previous).is_empty() {
+    if !apps::scopes_blocking_launch(&app, &requested, &previous).is_empty() {
         let _ = state.hydra.reject_consent(&consent_challenge).await;
         return Err(Headless::ConsentRequired);
     }

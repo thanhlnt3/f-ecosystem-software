@@ -1426,6 +1426,7 @@ dependencies = [
  "f-dev",
  "feco-config",
  "feco-core",
+ "feco-launcher",
  "feco-manifest",
  "feco-tuf",
  "form_urlencoded",

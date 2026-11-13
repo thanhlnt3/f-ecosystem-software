@@ -71,6 +71,7 @@ Bảng quản trị:
 Thanh toán (quản trị viên ghi tên bằng FECO_REVIEWER):
   feco-catalog payments <mã đơn>                   giao dịch, lệnh hoàn của một đơn
   feco-catalog payment-check <mã giao dịch>        truy vấn chủ động cổng thanh toán
+  feco-catalog payment-link <payment-request-id> <cổng:phương thức>   tạo liên kết trả thay khách (chỉ dev/staging)
   feco-catalog refund <transaction-id> <số tiền> <lý do>   hoàn toàn bộ hoặc một phần
   feco-catalog refunds                             lệnh hoàn chờ phê duyệt hoặc đang xử lý
   feco-catalog refund-approve <refund-id>          phê duyệt (từ 10.000.000 ₫ cần hai người khác nhau)
@@ -498,6 +499,30 @@ Bản ghi gợi ý:"
             };
             feco_server::admin::set_member(&state, &reviewer, email, &roles).await?;
             println!("đã cập nhật vai trò quản trị của {email}");
+        }
+        "payment-link" => {
+            if state.environment.is_production() {
+                return Err("chỉ dùng ngoài production".into());
+            }
+            let request = arg(&args, 1)?
+                .parse()
+                .map_err(|_| "payment-request-id không hợp lệ")?;
+            let charge = payments::charge(&state, request).await.map_err(o_err)?;
+            let link = payments::start(
+                &state,
+                charge.customer,
+                request,
+                arg(&args, 2)?,
+                "127.0.0.1",
+                time::OffsetDateTime::now_utc(),
+            )
+            .await
+            .map_err(o_err)?;
+            println!(
+                "giao dịch {} ({})
+{}",
+                link.gateway_ref, link.transaction, link.order_url
+            );
         }
         "payment-check" => {
             let status = payments::confirm(

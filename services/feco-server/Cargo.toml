@@ -49,6 +49,9 @@ tempfile = "3"
 f-dev = { path = "../../tools/f-dev" }
 fsdk = { path = "../../sdk/rust" }
 aws-lc-rs = "1"
+feco-launcher = { path = "../../clients/feco-launcher" }
+feco-tuf = { path = "../../crates/feco-tuf" }
+jiff = "0.2"
 feco-manifest = { path = "../../crates/feco-manifest" }
 
 [lints]

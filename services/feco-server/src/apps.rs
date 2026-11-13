@@ -168,6 +168,22 @@ pub fn scopes_to_ask(
         .collect()
 }
 
+/// Scope buộc phải hỏi lại người dùng trước khi app mở được bằng mã khởi chạy (không có màn
+/// hình đồng ý). Người dùng đã từng đồng ý với app thì scope tùy chọn họ bỏ qua coi như đã từ
+/// chối, không chặn mỗi lần mở; chỉ scope bắt buộc chưa được cấp (ví dụ app thêm ở phiên bản sau)
+/// mới phải hỏi lại. Chưa từng đồng ý thì mọi scope dữ liệu đều phải hỏi.
+pub fn scopes_blocking_launch(
+    app: &AppInfo,
+    requested: &[String],
+    previously_granted: &BTreeSet<String>,
+) -> Vec<Scope> {
+    let consented_before = !previously_granted.is_empty();
+    scopes_to_ask(app, requested, previously_granted)
+        .into_iter()
+        .filter(|s| !consented_before || app.declared(*s).is_some_and(|d| d.required))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -204,6 +220,37 @@ mod tests {
         let app = soundlab();
         let names: Vec<Scope> = app.scopes.iter().map(|s| s.scope).collect();
         assert_eq!(names, [Scope::Profile, Scope::Email, Scope::Phone]);
+    }
+
+    /// Mở app từ launcher sau khi đã bỏ qua một scope tùy chọn: không bị đòi đồng ý lại.
+    #[test]
+    fn declined_optional_scope_does_not_block_launch() {
+        let app = soundlab();
+        let requested = req(&["openid", "profile", "email"]);
+        assert_eq!(
+            scopes_blocking_launch(&app, &requested, &set(&[])),
+            [Scope::Profile, Scope::Email],
+            "chưa từng đồng ý"
+        );
+        assert!(
+            scopes_blocking_launch(&app, &requested, &set(&["openid", "profile"])).is_empty(),
+            "email đã bị bỏ qua"
+        );
+        // Scope bắt buộc mới (phone chuyển thành bắt buộc ở bản sau) vẫn phải hỏi lại.
+        let mut v2 = app.clone();
+        for s in v2.scopes.iter_mut() {
+            if s.scope == Scope::Phone {
+                s.required = true;
+            }
+        }
+        assert_eq!(
+            scopes_blocking_launch(
+                &v2,
+                &req(&["openid", "profile", "phone"]),
+                &set(&["openid", "profile"])
+            ),
+            [Scope::Phone]
+        );
     }
 
     /// Scenario "Đồng ý một phần".
