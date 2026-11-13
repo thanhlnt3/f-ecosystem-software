@@ -116,6 +116,15 @@ impl Role {
         }
     }
 
+    pub const fn label_en(self) -> &'static str {
+        match self {
+            Role::Owner => "Owner",
+            Role::Admin => "Admin",
+            Role::Developer => "Developer",
+            Role::Viewer => "Viewer",
+        }
+    }
+
     /// Tạo app, nộp manifest và gói.
     pub const fn can_edit(self) -> bool {
         !matches!(self, Role::Viewer)

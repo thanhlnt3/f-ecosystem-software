@@ -97,9 +97,9 @@ impl Momo {
             .send()
             .await
             .map_err(|e| GatewayError::Http(e.without_url().to_string()))?;
-        res.json()
+        crate::gateways::json_body(res)
             .await
-            .map_err(|e| GatewayError::Http(e.to_string()))
+            .map_err(GatewayError::Http)
     }
 
     /// Tạo thanh toán ví MoMo; trả `payUrl` để chuyển khách tới.
@@ -191,6 +191,36 @@ impl Momo {
             }
             Some(_) => PayStatus::Failed,
         })
+    }
+
+    /// Kiểm cấu hình bằng truy vấn một mã đơn ngẫu nhiên (`feco-catalog payments-check`). MoMo trả
+    /// 42 ("đơn không tồn tại") khi chữ ký và mã đối tác đúng; mã khác được báo nguyên văn.
+    pub async fn check(&self) -> Result<String, String> {
+        let order_id = format!("fecocheck{}", uuid::Uuid::new_v4().simple());
+        let request_id = uuid::Uuid::new_v4().simple().to_string();
+        let raw = format!(
+            "accessKey={}&orderId={order_id}&partnerCode={}&requestId={request_id}",
+            self.access_key.expose(),
+            self.partner_code
+        );
+        let v = self
+            .post(
+                "v2/gateway/api/query",
+                &json!({"partnerCode": self.partner_code, "requestId": request_id, "orderId": order_id, "lang": "vi", "signature": hmac(self.secret_key.expose(), &raw)}),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        let code = v["resultCode"].as_i64();
+        let line = format!(
+            "resultCode {}: {}",
+            code.map_or("?".to_owned(), |c| c.to_string()),
+            s(&v, "message")
+        );
+        if code == Some(42) {
+            Ok(line)
+        } else {
+            Err(line)
+        }
     }
 
     /// Hoàn tiền (toàn phần hoặc một phần). `refund_id` là mã đơn mới cho lệnh hoàn.
@@ -472,5 +502,24 @@ mod tests {
         b["amount"] = json!(50);
         assert!(m.verify_ipn(&b).is_none());
         assert_eq!(m.base.as_str(), "https://test-payment.momo.vn/");
+    }
+
+    /// `feco-catalog payments-check`: khóa đúng thì cổng báo đơn không tồn tại (42); khóa sai
+    /// thì báo lỗi kèm mã của cổng.
+    #[tokio::test]
+    async fn check_tells_good_keys_from_bad() {
+        let fake = testing::FakeMomo::serve("MOMOTEST", "ak", "sk")
+            .await
+            .unwrap();
+        let cfg = |sk: &str| MomoConfig {
+            partner_code: "MOMOTEST".into(),
+            access_key: Secret::new("ak"),
+            secret_key: Secret::new(sk),
+            endpoint: Url::parse(&fake.endpoint()).unwrap(),
+        };
+        let ok = Momo::new(&cfg("sk")).check().await.unwrap();
+        assert!(ok.starts_with("resultCode 42"), "{ok}");
+        let err = Momo::new(&cfg("khoa-sai")).check().await.unwrap_err();
+        assert!(err.starts_with("resultCode 11"), "{err}");
     }
 }

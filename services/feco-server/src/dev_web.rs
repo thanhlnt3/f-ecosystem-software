@@ -679,9 +679,10 @@ pub async fn account_action(
                     "Lời mời vào nhóm nhà phát triển F-Eco / F-Eco developer team invitation",
                     format!(
                         "{name} mời bạn tham gia nhóm nhà phát triển trên F-Eco với vai trò {role}.\nMở {url}developer để chấp nhận.\n\n\
-                         {name} invited you to their F-Eco developer team.\nOpen {url}developer to accept.\n",
+                         {name} invited you to their F-Eco developer team as {role_en}.\nOpen {url}developer to accept.\n",
                         name = m.account.display_name,
                         role = role.label_vi(),
+                        role_en = role.label_en(),
                         url = state.public_url
                     ),
                 );

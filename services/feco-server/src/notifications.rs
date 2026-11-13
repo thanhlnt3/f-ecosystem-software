@@ -18,7 +18,7 @@ use axum::{
     Json,
 };
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -189,18 +189,29 @@ fn check_token(state: &AppState, token: &str) -> Option<(Uuid, Category)> {
     (ok && !category.mandatory() && !sig.is_empty()).then_some((subject, category))
 }
 
+/// Ngôn ngữ người dùng chọn khi đăng ký hoặc trong Cài đặt: trait `locale` của lược đồ danh tính
+/// (`infra/kratos/identity.schema.json`). Mặc định tiếng Việt.
+pub fn identity_language(identity: &Value) -> Lang {
+    identity["traits"]["locale"]
+        .as_str()
+        .and_then(Lang::parse)
+        .unwrap_or_default()
+}
+
 /// Ngôn ngữ và email của người dùng (từ Kratos).
 async fn recipient(state: &AppState, subject: Uuid) -> (Lang, Option<String>) {
     match state.kratos.get_identity(&subject.to_string()).await {
         Ok(Some(i)) => (
-            i["traits"]["language"]
-                .as_str()
-                .and_then(Lang::parse)
-                .unwrap_or_default(),
+            identity_language(&i),
             i["traits"]["email"].as_str().map(str::to_owned),
         ),
         _ => (Lang::Vi, None),
     }
+}
+
+/// Ngôn ngữ người dùng đã chọn (trait `locale`), mặc định tiếng Việt.
+pub async fn language_of(state: &AppState, subject: Uuid) -> Lang {
+    recipient(state, subject).await.0
 }
 
 /// Gửi một thông báo: luôn vào trung tâm thông báo; email nếu loại bắt buộc hoặc người dùng bật.
@@ -556,6 +567,18 @@ pub async fn api_list(State(state): State<Arc<AppState>>, headers: HeaderMap) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Ngôn ngữ thông báo lấy từ trait `locale` (trước đây đọc nhầm `language`, nên mọi người dùng
+    /// đều nhận tiếng Việt).
+    #[test]
+    fn language_comes_from_the_locale_trait() {
+        let en = serde_json::json!({"traits": {"email": "a@b.c", "locale": "en"}});
+        assert_eq!(identity_language(&en), Lang::En);
+        let vi = serde_json::json!({"traits": {"locale": "vi"}});
+        assert_eq!(identity_language(&vi), Lang::Vi);
+        let none = serde_json::json!({"traits": {"language": "en"}});
+        assert_eq!(identity_language(&none), Lang::Vi);
+    }
 
     #[test]
     fn categories() {

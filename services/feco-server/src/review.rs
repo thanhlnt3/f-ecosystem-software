@@ -405,7 +405,8 @@ fn rejection_email(
         format!(
             "{app_id} {version} bị từ chối.\n\nĐiều {num} chính sách nội dung: {title}\n{rule}\n\nChi tiết: {note}\n\n\
              Cách khắc phục: {fix}\n\nKháng nghị (một lần cho mỗi lần từ chối): {url}\nChính sách nội dung: {policy}\n\n\
-             ---\n{app_id} {version} was rejected.\nClause {num}: {title_en}\n{rule_en}\nHow to fix: {fix_en}\nAppeal: {url}\n",
+             ---\n{app_id} {version} was rejected.\nClause {num}: {title_en}\n{rule_en}\nDetails: {note}\nHow to fix: {fix_en}\n\
+             Appeal (once per rejection): {url}\nContent policy: {policy}\n",
             num = c.number,
             title = c.title_vi,
             rule = c.rule_vi,
@@ -476,7 +477,10 @@ async fn run_submit(state: &AppState, version_id: Uuid) -> Result<JobResult, Str
             state,
             &v.app_id,
             &subject,
-            &format!("{body}\nTài khoản nhà phát triển của bạn đang bị tạm khóa chờ điều tra.\n"),
+            &format!(
+                "{body}\nTài khoản nhà phát triển của bạn đang bị tạm khóa chờ điều tra.\n\
+                 Your developer account is suspended pending investigation.\n"
+            ),
         )
         .await;
         return Ok(JobResult {
@@ -694,7 +698,11 @@ pub async fn approve(
         state,
         &app_id,
         &format!("{app_id} {version} đã được duyệt / was approved"),
-        &format!("{app_id} {version} đã qua kiểm duyệt. Bạn có thể phát hành ở {}developer/apps/{app_id}\n", state.public_url),
+        &format!(
+            "{app_id} {version} đã qua kiểm duyệt. Bạn có thể phát hành ở {url}\n\n---\n\
+             {app_id} {version} passed review. You can release it at {url}\n",
+            url = format!("{}developer/apps/{app_id}", state.public_url)
+        ),
     )
     .await;
     Ok(())
@@ -883,16 +891,25 @@ pub async fn resolve_appeal(
         json!({ "version": version, "overturned": overturn }),
     )
     .await;
-    let outcome = if overturn {
-        "được chấp nhận; phiên bản đã được duyệt"
+    let (outcome, outcome_en) = if overturn {
+        (
+            "được chấp nhận; phiên bản đã được duyệt",
+            "was accepted; the version is now approved",
+        )
     } else {
-        "không được chấp nhận; quyết định từ chối giữ nguyên"
+        (
+            "không được chấp nhận; quyết định từ chối giữ nguyên",
+            "was not accepted; the rejection stands",
+        )
     };
     notify_developer(
         state,
         &app_id,
         &format!("Kết quả kháng nghị {app_id} {version} / Appeal result"),
-        &format!("Kháng nghị cho {app_id} {version} {outcome}.\nGhi chú: {note}\n"),
+        &format!(
+            "Kháng nghị cho {app_id} {version} {outcome}.\nGhi chú: {note}\n\n---\n\
+             The appeal for {app_id} {version} {outcome_en}.\nNote: {note}\n"
+        ),
     )
     .await;
     Ok(())
@@ -1020,9 +1037,9 @@ pub async fn revoke(
         json!({ "versions": revoked_versions, "reason": reason.trim() }),
     )
     .await;
-    let scope = match version {
-        Some(v) => format!("phiên bản {v}"),
-        None => "toàn bộ app".to_owned(),
+    let (scope, scope_en) = match version {
+        Some(v) => (format!("phiên bản {v}"), format!("version {v}")),
+        None => ("toàn bộ app".to_owned(), "every version".to_owned()),
     };
     notify_developer(
         state,
@@ -1030,7 +1047,9 @@ pub async fn revoke(
         &format!("{app_id}: thu hồi khẩn cấp / emergency revocation"),
         &format!(
             "F-Eco đã thu hồi {scope} của {app_id}.\nLý do: {}\n\nApp biến khỏi F-Store và F-Launcher chặn mở các phiên bản bị thu hồi.\n\
-             Bạn có thể phản hồi qua {}developer/apps/{app_id}\n",
+             Bạn có thể phản hồi qua {}developer/apps/{app_id}\n\n---\n\
+             F-Eco revoked {scope_en} of {app_id}.\nReason: {0}\n\nThe app is removed from F-Store and F-Launcher blocks revoked versions.\n\
+             You can respond at {1}developer/apps/{app_id}\n",
             reason.trim(),
             state.public_url
         ),

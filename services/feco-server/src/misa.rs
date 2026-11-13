@@ -69,6 +69,12 @@ impl Misa {
         }
     }
 
+    /// Kiểm cấu hình: lấy token mới bằng ClientID, ClientSecret và tài khoản
+    /// (`feco-catalog payments-check`). Không phát hành hóa đơn nào.
+    pub async fn check(&self) -> Result<(), MisaError> {
+        self.token(true).await.map(|_| ())
+    }
+
     async fn token(&self, force: bool) -> Result<String, MisaError> {
         if !force {
             if let Some((t, until)) = self.token.lock().expect("khóa token").clone() {
@@ -82,7 +88,7 @@ impl Misa {
             .endpoint
             .join("invoice/token")
             .map_err(|e| MisaError::Http(e.to_string()))?;
-        let v: Value = self
+        let v = self
             .http
             .post(url)
             .header("ClientID", &self.cfg.client_id)
@@ -90,10 +96,10 @@ impl Misa {
             .json(&json!({"taxcode": self.cfg.tax_code, "username": self.cfg.username, "password": self.cfg.password.expose()}))
             .send()
             .await
-            .map_err(|e| MisaError::Http(e.without_url().to_string()))?
-            .json()
+            .map_err(|e| MisaError::Http(e.without_url().to_string()))?;
+        let v = crate::gateways::json_body(v)
             .await
-            .map_err(|e| MisaError::Http(e.to_string()))?;
+            .map_err(MisaError::Http)?;
         let ok = v["Success"]
             .as_bool()
             .or(v["success"].as_bool())
@@ -128,7 +134,7 @@ impl Misa {
             .map_err(|e| MisaError::Http(e.to_string()))?;
         for attempt in 0..2 {
             let token = self.token(attempt > 0).await?;
-            let v: Value = self
+            let v = self
                 .http
                 .post(url.clone())
                 .header("ClientID", &self.cfg.client_id)
@@ -136,10 +142,10 @@ impl Misa {
                 .json(body)
                 .send()
                 .await
-                .map_err(|e| MisaError::Http(e.without_url().to_string()))?
-                .json()
+                .map_err(|e| MisaError::Http(e.without_url().to_string()))?;
+            let v = crate::gateways::json_body(v)
                 .await
-                .map_err(|e| MisaError::Http(e.to_string()))?;
+                .map_err(MisaError::Http)?;
             let code = v["errorCode"]
                 .as_str()
                 .or(v["ErrorCode"].as_str())
@@ -460,8 +466,8 @@ mod tests {
     use super::*;
     use feco_config::Secret;
 
-    fn misa(endpoint: &str) -> Misa {
-        Misa::new(&MisaConfig {
+    fn config_for(endpoint: &str) -> MisaConfig {
+        MisaConfig {
             client_id: "cid".into(),
             client_secret: Secret::new("csecret"),
             tax_code: "0101234567".into(),
@@ -470,7 +476,11 @@ mod tests {
             inv_series: "1C26TFE".into(),
             vat_rate: "10%".into(),
             endpoint: url::Url::parse(endpoint).unwrap(),
-        })
+        }
+    }
+
+    fn misa(endpoint: &str) -> Misa {
+        Misa::new(&config_for(endpoint))
     }
 
     #[tokio::test]
@@ -574,5 +584,17 @@ mod tests {
             .publish("tx-3", &person, "x", 1000, now, None, "")
             .await
             .is_err());
+    }
+
+    /// `feco-catalog payments-check`: lấy được token thì đạt; ClientSecret sai thì lỗi.
+    #[tokio::test]
+    async fn check_fetches_a_token() {
+        let fake = testing::FakeMisa::serve("cid", "csecret").await.unwrap();
+        misa(&fake.endpoint()).check().await.unwrap();
+        let wrong = Misa::new(&MisaConfig {
+            client_secret: Secret::new("sai"),
+            ..config_for(&fake.endpoint())
+        });
+        assert!(wrong.check().await.is_err());
     }
 }

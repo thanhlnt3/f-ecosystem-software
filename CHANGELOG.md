@@ -1,5 +1,17 @@
 # Nhật ký thay đổi
 
+## Chưa phát hành
+
+- Thông báo và email theo ngôn ngữ người dùng:
+  - sửa lỗi đọc nhầm trait `language` thay vì `locale`, khiến mọi người dùng chỉ nhận tiếng Việt;
+  - thông báo đơn hàng, thanh toán, hoàn tiền và email hóa đơn có bản tiếng Anh;
+  - email kiểm duyệt gửi nhà phát triển có đủ phần tiếng Anh.
+- Thông báo thanh toán và hoàn tiền giờ cũng hiện trong trung tâm thông báo (web và F-Launcher).
+- `feco-catalog payments-check` kiểm khóa ZaloPay, VNPAY, MoMo và tài khoản MISA bằng truy vấn vô hại.
+- Lỗi khi cổng thanh toán trả trang HTML (ví dụ 403 do chặn IP) được báo rõ mã HTTP.
+- Hướng dẫn đăng ký và cấu hình cổng thanh toán, hóa đơn điện tử, tên miền email:
+  `docs/payments-setup.md`.
+
 ## 1.2.0 (13/11/2026)
 
 Thay đổi OpenSpec `launcher-personalization`: tùy biến giao diện F-Launcher.

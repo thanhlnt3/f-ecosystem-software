@@ -3990,6 +3990,59 @@ fn delivery(app: &str, version: &str) -> feco_server::orders::Delivery {
 /// thái và lịch sử, báo giá theo mốc (đặt cọc, hết hạn, thương lượng), đặt cọc, bàn giao dạng app
 /// riêng tư, lượt sửa, nhắc sau 7 ngày và tự nghiệm thu sau 14 ngày (thời gian mô phỏng), tin nhắn,
 /// tranh chấp, bàn giao cuối chỉ khi trả đủ, hủy đơn.
+/// Task 14.3: người dùng chọn tiếng Anh khi đăng ký (trait `locale`) nhận thông báo đơn hàng
+/// bằng tiếng Anh, trong email lẫn trung tâm thông báo.
+#[tokio::test]
+async fn notifications_follow_the_user_language() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let (email, password) = unique("english-customer");
+    let user = browser_with(UA_WINDOWS_CHROME, "en-US,en;q=0.9");
+    // Ô "Language" của trang đăng ký (mặc định theo ngôn ngữ giao diện): chọn English.
+    let page = get(&user, "/registration").await;
+    assert!(page.contains(r#"name="traits.locale""#), "{page}");
+    submit(
+        &user,
+        &parse_form(&page),
+        &[
+            ("traits.email", email.as_str()),
+            ("traits.name", "Alex"),
+            ("traits.locale", "en"),
+            ("password", password.as_str()),
+            ("method", "password"),
+        ],
+    )
+    .await;
+    assert!(login(&user, &email, &password).await.contains(&email));
+    let identity = local_state()
+        .kratos
+        .get_identity(&subject_of(&email).await.to_string())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(identity["traits"]["locale"], "en", "{identity}");
+    // Liên kết xác minh mở được ở trình duyệt bất kỳ (helper kiểm chữ tiếng Việt).
+    verify_email(&app_browser(), &email).await;
+    let (status, page, url) =
+        send_order_request(&user, "Inventory app for my shop", true, vec![]).await;
+    assert_eq!(status, 200, "{page}");
+    let order = feco_server::orders::get(&local_state().db, order_id_of(&url))
+        .await
+        .unwrap();
+    let mail = wait_mail(&email, &format!("Request {} received", order.code)).await;
+    assert!(
+        mail.contains("within 3 business days") && !mail.contains("ngày làm việc"),
+        "{mail}"
+    );
+    let center = get(&user, "/notifications").await;
+    assert!(
+        center.contains(&format!("Request {} received", order.code)),
+        "{center}"
+    );
+}
+
 #[tokio::test]
 async fn custom_build_order_end_to_end() {
     if !e2e_ready() {

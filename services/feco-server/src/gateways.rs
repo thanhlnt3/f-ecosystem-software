@@ -326,3 +326,79 @@ pub fn callback_path(provider: &str) -> &'static str {
 pub fn callback_url(base: &Url, provider: &str) -> String {
     format!("{base}{}", callback_path(provider))
 }
+
+/// Đọc thân JSON của phản hồi từ cổng thanh toán hoặc nhà cung cấp hóa đơn. Phản hồi không phải
+/// JSON (ví dụ trang lỗi HTML "403 Forbidden" của nginx khi cổng chặn địa chỉ IP) trả lỗi ghi rõ
+/// mã HTTP và đầu nội dung, thay vì "error decoding response body".
+pub async fn json_body(res: reqwest::Response) -> Result<Value, String> {
+    let status = res.status();
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|e| format!("HTTP {status}: {}", e.without_url()))?;
+    serde_json::from_slice(&bytes).map_err(|_| {
+        let text = String::from_utf8_lossy(&bytes);
+        let snippet: String = text
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(80)
+            .collect();
+        format!("HTTP {status}: phản hồi không phải JSON ({snippet})")
+    })
+}
+
+#[cfg(test)]
+mod json_body_tests {
+    use super::json_body;
+
+    async fn serve(status: u16, content_type: &'static str, body: &'static str) -> String {
+        let app = axum::Router::new().route(
+            "/",
+            axum::routing::any(move || async move {
+                (
+                    axum::http::StatusCode::from_u16(status).unwrap(),
+                    [(axum::http::header::CONTENT_TYPE, content_type)],
+                    body,
+                )
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{addr}/")
+    }
+
+    /// Cổng chặn yêu cầu bằng trang HTML: lỗi phải nói rõ mã HTTP.
+    #[tokio::test]
+    async fn html_error_page_reports_the_status() {
+        let url = serve(
+            403,
+            "text/html",
+            "<html><title>403 Forbidden</title><body>nginx</body></html>",
+        )
+        .await;
+        let res = reqwest::Client::new().post(url).send().await.unwrap();
+        let err = json_body(res).await.unwrap_err();
+        assert!(
+            err.starts_with("HTTP 403 Forbidden: phản hồi không phải JSON"),
+            "{err}"
+        );
+        assert!(err.contains("nginx"), "{err}");
+    }
+
+    /// Lỗi nghiệp vụ trả JSON kèm mã HTTP 400 (MoMo làm vậy): vẫn đọc được để lấy resultCode.
+    #[tokio::test]
+    async fn json_error_body_is_still_read() {
+        let url = serve(
+            400,
+            "application/json",
+            r#"{"resultCode":11,"message":"sai"}"#,
+        )
+        .await;
+        let res = reqwest::Client::new().post(url).send().await.unwrap();
+        let v = json_body(res).await.unwrap();
+        assert_eq!(v["resultCode"], 11);
+    }
+}

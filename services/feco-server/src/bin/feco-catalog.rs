@@ -77,6 +77,9 @@ Thanh toán (quản trị viên ghi tên bằng FECO_REVIEWER):
   feco-catalog refund-approve <refund-id>          phê duyệt (từ 10.000.000 ₫ cần hai người khác nhau)
   feco-catalog payments-due                        chạy ngay truy vấn giao dịch quá 15 phút, lệnh hoàn
   feco-catalog reconcile [yyyy-mm-dd]              đối soát một ngày (mặc định hôm qua)
+  feco-catalog payments-check                      kiểm khóa ZaloPay, VNPAY, MoMo và tài khoản MISA
+                                                   bằng truy vấn vô hại (không tạo đơn, không phát
+                                                   hành hóa đơn); xem docs/payments-setup.md
 ";
 
 #[tokio::main]
@@ -444,6 +447,62 @@ async fn run(args: Vec<String>) -> Result<(), String> {
                         t.gateway_trans_id.as_deref().unwrap_or("")
                     );
                 }
+            }
+        }
+        "payments-check" => {
+            // Mỗi dòng: tên, trạng thái (chưa cấu hình / đạt / lỗi), chi tiết từ cổng.
+            let mut failed = 0;
+            let mut line = |name: &str, r: Option<Result<String, String>>| match r {
+                None => println!("{name:<8} chưa cấu hình"),
+                Some(Ok(detail)) => println!("{name:<8} đạt    {detail}"),
+                Some(Err(detail)) => {
+                    failed += 1;
+                    println!("{name:<8} LỖI    {detail}");
+                }
+            };
+            let zalopay = match &state.zalopay {
+                Some(z) => Some(z.check().await),
+                None => None,
+            };
+            line("ZaloPay", zalopay);
+            let vnpay = match &state.vnpay {
+                Some(v) => {
+                    let txn = format!("fecocheck{}", uuid::Uuid::new_v4().simple());
+                    let now = time::OffsetDateTime::now_utc();
+                    let created = now
+                        .to_offset(time::macros::offset!(+7))
+                        .format(time::macros::format_description!(
+                            "[year][month][day][hour][minute][second]"
+                        ))
+                        .unwrap_or_default();
+                    // Mã giao dịch không tồn tại: VNPAY trả 91 khi TmnCode và chữ ký đúng.
+                    Some(
+                        v.query(&txn, &created, now, "127.0.0.1")
+                            .await
+                            .map(|_| "vnp_ResponseCode 91: không tìm thấy giao dịch thử".to_owned())
+                            .map_err(|e| e.to_string()),
+                    )
+                }
+                None => None,
+            };
+            line("VNPAY", vnpay);
+            let momo = match &state.momo {
+                Some(m) => Some(m.check().await),
+                None => None,
+            };
+            line("MoMo", momo);
+            let misa = match &state.misa {
+                Some(m) => Some(
+                    m.check()
+                        .await
+                        .map(|()| "lấy được token".to_owned())
+                        .map_err(|e| e.to_string()),
+                ),
+                None => None,
+            };
+            line("MISA", misa);
+            if failed > 0 {
+                return Err(format!("{failed} dịch vụ báo lỗi"));
             }
         }
         "mail-dns" => {

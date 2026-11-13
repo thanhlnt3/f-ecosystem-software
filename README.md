@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Phiên bản 1.2.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+> **Phiên bản 1.2.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
 >
 > Đã chạy được (nhóm task 1–14; các mục còn mở ghi ở cuối nhật ký thay đổi):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.

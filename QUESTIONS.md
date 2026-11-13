@@ -246,7 +246,8 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     vẫn làm được việc quản trị mà không qua passkey, nên chỉ người vận hành máy chủ được dùng (sẽ
     rút gọn khi bảng quản trị đủ chức năng). Kiểm passkey dựa trên `authentication_methods` của
     phiên Kratos (cần `webauthn`). Công cụ chạy thử app trong máy ảo chờ task 9.1.
-69. **Thông báo**: ngôn ngữ theo `traits.language`; mới có bản tiếng Anh cho báo giá, tin nhắn, cập
+69. **Thông báo** (đã xử lý phần tiếng Anh 13/11/2026: ngôn ngữ lấy từ trait `locale`, mọi thông
+    báo người dùng có bản tiếng Anh; xem tasks.md 14.3): ngôn ngữ theo `traits.language`; mới có bản tiếng Anh cho báo giá, tin nhắn, cập
     nhật app, các thông báo khác vẫn tiếng Việt (task 15.1). Email cảnh báo bảo mật (đăng nhập lạ)
     vẫn gửi thẳng, chưa vào trung tâm thông báo. Liên kết hủy đăng ký không hết hạn.
 70. **SPF, DKIM, DMARC**: chưa có tên miền. Khi có: chọn máy chủ chuyển tiếp SMTP ký DKIM (nhà cung
@@ -277,3 +278,9 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 76. **Thông báo lỗi kỹ thuật chưa dịch.** Giao diện launcher có đủ tiếng Anh và tiếng Pháp, nhưng
     lỗi từ thư viện bên dưới (TUF, mạng, cài đặt gói) vẫn tiếng Việt. Có cần dịch luôn ở bản sau
     không?
+77. **Sandbox MoMo trả 403 Forbidden** (13/11/2026). `test-payment.momo.vn` trả trang lỗi 403 của
+    nginx cho mọi yêu cầu từ máy phát triển, kể cả trang gốc và khi dùng khóa thử công khai trong
+    tài liệu MoMo. Có thể cổng chỉ mở cho địa chỉ IP đã đăng ký với tài khoản MoMo Business (M4B).
+    Cần chủ dự án đăng ký M4B, khai địa chỉ IP máy chủ thử, rồi chạy
+    `feco-catalog payments-check` và `cargo test -p feco-server --test momo_sandbox`
+    (docs/payments-setup.md mục 4).

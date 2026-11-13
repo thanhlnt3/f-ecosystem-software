@@ -600,6 +600,10 @@ pub async fn submit(
             "F-Eco đã nhận yêu cầu xây app của bạn.\n\nMã đơn: {}\nTên dự án: {}\n\nĐội F-Eco sẽ gửi báo giá trong 3 ngày làm việc. Theo dõi đơn tại {}orders/{}\n",
             o.code, o.title, state.public_url, o.id
         ),
+        (
+            &format!("Request {} received: {}", o.code, o.title),
+            &format!("F-Eco received your app build request.\n\nOrder: {}\nProject: {}\n\nThe F-Eco team will send a quote within 3 business days. Follow the order at {}orders/{}\n", o.code, o.title, state.public_url, o.id),
+        ),
     )
     .await;
     crate::review::admin_alert(
@@ -630,8 +634,10 @@ pub(crate) fn vnd(n: i64) -> String {
 }
 
 /// Thông báo về đơn hàng (loại bắt buộc): email và trung tâm thông báo, liên kết tới trang đơn.
-async fn mail(state: &AppState, o: &Order, subject: &str, body: &str) {
-    let note = crate::notifications::Note::vi(subject, body, format!("/orders/{}", o.id));
+/// `en` là bản tiếng Anh (tiêu đề, nội dung) cho người dùng chọn tiếng Anh (task 14.3).
+async fn mail(state: &AppState, o: &Order, subject: &str, body: &str, en: (&str, &str)) {
+    let note =
+        crate::notifications::Note::vi(subject, body, format!("/orders/{}", o.id)).en(en.0, en.1);
     crate::notifications::notify(
         state,
         o.customer,
@@ -1148,6 +1154,10 @@ pub async fn payment_settled(
             &o,
             &format!("Đơn {} bắt đầu thực hiện", o.code),
             &format!("Đã nhận tiền đặt cọc. Đơn \"{}\" bắt đầu thực hiện hôm nay.\n\nLịch các mốc:\n{schedule}\n", o.title),
+            (
+                &format!("Work on order {} has started", o.code),
+                &format!("We received your deposit. Work on \"{}\" starts today.\n\nMilestone schedule:\n{schedule}\n", o.title),
+            ),
         )
         .await;
     }
@@ -1299,6 +1309,10 @@ pub async fn deliver(
             state.public_url,
             o.id
         ),
+        (
+            &format!("Order {}: milestone {position} delivered", o.code),
+            &format!("Milestone {position} \"{}\" has been delivered. Open F-Launcher to try the app \"{}\" {} (visible only to you).\n\nNotes: {}\n\nAccept it or request changes within 7 days at {}orders/{}\n", m.title, d.app_id.trim(), d.app_version.trim(), d.notes.trim(), state.public_url, o.id),
+        ),
     )
     .await;
     Ok(())
@@ -1376,15 +1390,28 @@ pub async fn accept_milestone(
         }
     };
     tx.commit().await?;
-    let what = match &next {
-        None => format!(
-            "Bạn đã nghiệm thu mốc cuối. Đơn \"{}\" đã hoàn tất; tải bàn giao cuối tại {}orders/{}",
-            o.title, state.public_url, o.id
+    let (what, what_en) = match &next {
+        None => (
+            format!(
+                "Bạn đã nghiệm thu mốc cuối. Đơn \"{}\" đã hoàn tất; tải bàn giao cuối tại {}orders/{}",
+                o.title, state.public_url, o.id
+            ),
+            format!(
+                "You accepted the final milestone. Order \"{}\" is complete; download the final handover at {}orders/{}",
+                o.title, state.public_url, o.id
+            ),
         ),
-        Some(n) => format!(
-            "Mốc {position} đã được nghiệm thu. Yêu cầu thanh toán mốc {} ({}) đã được tạo.",
-            n.position,
-            vnd(n.amount_vnd)
+        Some(n) => (
+            format!(
+                "Mốc {position} đã được nghiệm thu. Yêu cầu thanh toán mốc {} ({}) đã được tạo.",
+                n.position,
+                vnd(n.amount_vnd)
+            ),
+            format!(
+                "Milestone {position} was accepted. A payment request for milestone {} ({}) has been created.",
+                n.position,
+                vnd(n.amount_vnd)
+            ),
         ),
     };
     mail(
@@ -1392,6 +1419,10 @@ pub async fn accept_milestone(
         &o,
         &format!("Đơn {}: nghiệm thu mốc {position}", o.code),
         &what,
+        (
+            &format!("Order {}: milestone {position} accepted", o.code),
+            &what_en,
+        ),
     )
     .await;
     Ok(request)
@@ -1505,6 +1536,10 @@ pub async fn process_due(state: &AppState, now: OffsetDateTime) -> OrderResult<u
                 &o,
                 &format!("Nhắc nghiệm thu mốc {position} của đơn {code}"),
                 &format!("Mốc {position} đã bàn giao được 7 ngày. Hãy nghiệm thu hoặc yêu cầu sửa; sau 14 ngày mốc sẽ tự được nghiệm thu.\n"),
+                (
+                    &format!("Reminder: review milestone {position} of order {code}"),
+                    &format!("Milestone {position} was delivered 7 days ago. Accept it or request changes; after 14 days it is accepted automatically.\n"),
+                ),
             )
             .await;
         }
@@ -1653,16 +1688,23 @@ pub async fn cancel(
             tracing::error!(error = %e, "không tạo được lệnh hoàn khi hủy đơn");
         }
     }
-    let note = if refunds.is_empty() {
-        String::new()
+    let (note, note_en) = if refunds.is_empty() {
+        (String::new(), String::new())
     } else {
-        format!(" Đã tạo {} yêu cầu hoàn tiền.", refunds.len())
+        (
+            format!(" Đã tạo {} yêu cầu hoàn tiền.", refunds.len()),
+            format!(" {} refund request(s) created.", refunds.len()),
+        )
     };
     mail(
         state,
         &o,
         &format!("Đơn {} đã hủy", o.code),
         &format!("Đơn \"{}\" đã được hủy.{note}\n", o.title),
+        (
+            &format!("Order {} cancelled", o.code),
+            &format!("Order \"{}\" has been cancelled.{note_en}\n", o.title),
+        ),
     )
     .await;
     Ok(refunds)
@@ -1852,16 +1894,32 @@ pub async fn resolve_dispute(
             tracing::error!(error = %e, "không tạo được lệnh hoàn khi giải quyết tranh chấp");
         }
     }
-    let what = match resolution {
-        Resolution::Continue => "Đội F-Eco sẽ tiếp tục sửa mốc này.".to_string(),
-        Resolution::PartialRefund(n) => format!("Bạn được hoàn {} cho mốc này.", vnd(n)),
-        Resolution::FullRefund => format!("Bạn được hoàn toàn bộ {} của mốc này.", vnd(amount)),
+    let (what, what_en) = match resolution {
+        Resolution::Continue => (
+            "Đội F-Eco sẽ tiếp tục sửa mốc này.".to_string(),
+            "The F-Eco team will keep working on this milestone.".to_string(),
+        ),
+        Resolution::PartialRefund(n) => (
+            format!("Bạn được hoàn {} cho mốc này.", vnd(n)),
+            format!("You will be refunded {} for this milestone.", vnd(n)),
+        ),
+        Resolution::FullRefund => (
+            format!("Bạn được hoàn toàn bộ {} của mốc này.", vnd(amount)),
+            format!(
+                "You will be refunded the full {} of this milestone.",
+                vnd(amount)
+            ),
+        ),
     };
     mail(
         state,
         &o,
         &format!("Kết quả tranh chấp đơn {}", o.code),
         &format!("Tranh chấp mốc {position} đã được giải quyết. {what}\n"),
+        (
+            &format!("Dispute result for order {}", o.code),
+            &format!("The dispute over milestone {position} has been resolved. {what_en}\n"),
+        ),
     )
     .await;
     Ok(refund)

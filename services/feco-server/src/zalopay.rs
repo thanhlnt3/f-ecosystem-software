@@ -264,6 +264,40 @@ impl ZaloPay {
         })
     }
 
+    /// Kiểm cấu hình bằng một truy vấn vô hại (mã đơn ngẫu nhiên, `feco-catalog payments-check`).
+    /// Cổng trả "không tìm thấy" hay "đang xử lý" là khóa đúng; lỗi MAC hoặc app_id là khóa sai.
+    pub async fn check(&self) -> Result<String, String> {
+        let app_id = self.app_id.to_string();
+        let app_trans_id = format!("000101_feco{}", uuid::Uuid::new_v4().simple());
+        let mac = hmac_hex(
+            self.key1.expose(),
+            &format!("{app_id}|{app_trans_id}|{}", self.key1.expose()),
+        );
+        let v = self
+            .post(
+                "v2/query",
+                &[
+                    ("app_id", app_id),
+                    ("app_trans_id", app_trans_id),
+                    ("mac", mac),
+                ],
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        let rc = v["return_code"].as_i64().unwrap_or(0);
+        let sub = v["sub_return_code"].as_i64().unwrap_or(0);
+        let msg = v["sub_return_message"]
+            .as_str()
+            .or(v["return_message"].as_str())
+            .unwrap_or_default();
+        let line = format!("return_code {rc}, sub_return_code {sub}: {msg}");
+        if (1..=3).contains(&rc) && !matches!(sub, -401 | -402) {
+            Ok(line)
+        } else {
+            Err(line)
+        }
+    }
+
     /// Kiểm chữ ký callback (`mac` = HMAC-SHA256(key2, data)) rồi đọc dữ liệu.
     pub fn verify_callback(&self, data: &str, mac: &str) -> Option<CallbackData> {
         if !same(
@@ -678,5 +712,27 @@ mod tests {
                 .is_none(),
             "app khác"
         );
+    }
+
+    /// `feco-catalog payments-check`: khóa đúng thì truy vấn đơn ngẫu nhiên được trả lời bình
+    /// thường; MAC sai (-402) là lỗi.
+    #[tokio::test]
+    async fn check_tells_good_keys_from_bad() {
+        let fake = testing::FakeZaloPay::serve(2554, "k1", "k2").await.unwrap();
+        let zp = |key1: &str| {
+            ZaloPay::new(&feco_config::ZalopayConfig {
+                app_id: 2554,
+                key1: feco_config::Secret::new(key1),
+                key2: feco_config::Secret::new("k2"),
+                endpoint: url::Url::parse(&fake.endpoint()).unwrap(),
+            })
+        };
+        let ok = zp("k1").check().await.unwrap();
+        assert!(
+            ok.contains("Không tìm thấy giao dịch") && !ok.contains("-402"),
+            "{ok}"
+        );
+        let err = zp("sai").check().await.unwrap_err();
+        assert!(err.contains("-402"), "{err}");
     }
 }

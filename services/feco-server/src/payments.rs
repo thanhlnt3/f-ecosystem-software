@@ -158,10 +158,18 @@ async fn event(
     }
 }
 
-async fn mail(state: &AppState, to: &str, subject: &str, body: &str) {
-    if let Err(e) = state.mailer.send(to, subject, body).await {
-        tracing::warn!(error = %e, "không gửi được email thanh toán");
-    }
+/// Thông báo về thanh toán (loại bắt buộc): email theo ngôn ngữ người dùng và mục trong trung tâm
+/// thông báo, liên kết tới Lịch sử thanh toán (task 14.3).
+async fn mail(state: &AppState, customer: Uuid, to: &str, vi: (&str, &str), en: (&str, &str)) {
+    let note = crate::notifications::Note::vi(vi.0, vi.1, "/payments").en(en.0, en.1);
+    crate::notifications::notify(
+        state,
+        customer,
+        Some(to),
+        crate::notifications::Category::Payment,
+        &note,
+    )
+    .await;
 }
 
 // ---------- Yêu cầu thanh toán và giao dịch ----------
@@ -627,12 +635,19 @@ pub async fn settle(
     if request_status == "pending" {
         orders::payment_settled(state, t.request_id, true, now).await?;
     }
-    let (_, email, code) = owner(state, t.id).await?;
+    let (customer, email, code) = owner(state, t.id).await?;
     mail(
         state,
+        customer,
         &email,
-        &format!("Đã nhận thanh toán đơn {code}"),
-        &format!("F-Eco đã nhận {} cho đơn {code} (mã giao dịch {gateway_ref}). Hóa đơn được gửi trong email riêng.\n", vnd(t.amount_vnd)),
+        (
+            &format!("Đã nhận thanh toán đơn {code}"),
+            &format!("F-Eco đã nhận {} cho đơn {code} (mã giao dịch {gateway_ref}). Hóa đơn được gửi trong email riêng.\n", vnd(t.amount_vnd)),
+        ),
+        (
+            &format!("Payment received for order {code}"),
+            &format!("F-Eco received {} for order {code} (transaction {gateway_ref}). Your invoice is sent in a separate email.\n", vnd(t.amount_vnd)),
+        ),
     )
     .await;
     Ok(Settled::Recorded)
@@ -1312,7 +1327,7 @@ async fn finish_refund(
     if r.status != "processing" {
         return Ok(());
     }
-    let (_, email, code) = owner(state, r.transaction_id).await?;
+    let (customer, email, code) = owner(state, r.transaction_id).await?;
     match status {
         RefundStatus::Processing => Ok(()),
         RefundStatus::Failed(why) => {
@@ -1355,9 +1370,16 @@ async fn finish_refund(
             db.commit().await?;
             mail(
                 state,
+                customer,
                 &email,
-                &format!("Hoàn tiền đơn {code}"),
-                &format!("F-Eco đã hoàn {} cho đơn {code} về phương thức thanh toán ban đầu. Lý do: {}.\nHóa đơn điều chỉnh được gửi trong email riêng.\n", vnd(r.amount_vnd), r.reason),
+                (
+                    &format!("Hoàn tiền đơn {code}"),
+                    &format!("F-Eco đã hoàn {} cho đơn {code} về phương thức thanh toán ban đầu. Lý do: {}.\nHóa đơn điều chỉnh được gửi trong email riêng.\n", vnd(r.amount_vnd), r.reason),
+                ),
+                (
+                    &format!("Refund for order {code}"),
+                    &format!("F-Eco refunded {} for order {code} to the original payment method. Reason: {}.\nThe adjustment invoice is sent in a separate email.\n", vnd(r.amount_vnd), r.reason),
+                ),
             )
             .await;
             adjustment_invoice(state, id).await;
@@ -1879,7 +1901,10 @@ async fn try_issue_invoice(state: &AppState, tx_id: Uuid) -> OrderResult<()> {
         ),
         None => format!("Dịch vụ xây app theo yêu cầu, đơn {}", c.order_code),
     };
-    let mail_subject = format!("Hóa đơn thanh toán đơn {}", c.order_code);
+    let mail_subject = (
+        format!("Hóa đơn thanh toán đơn {}", c.order_code),
+        format!("Invoice for order {}", c.order_code),
+    );
     if let Some(m) = &state.misa {
         let (number, doc, issued) =
             publish_misa(m, &tx_id.to_string(), &buyer, &line, t.amount_vnd, None, "").await?;
@@ -1943,7 +1968,7 @@ async fn store_and_send(
     number: &str,
     amount: i64,
     doc: &str,
-    mail_subject: &str,
+    mail_subject: &(String, String),
     issued: Issued,
 ) -> OrderResult<()> {
     let inserted = sqlx::query(
@@ -1996,15 +2021,33 @@ async fn store_and_send(
         content_type: "text/html; charset=utf-8".into(),
         bytes: doc.as_bytes().to_vec(),
     });
-    let body = format!(
-        "Hóa đơn số {number} ({}) mang tên {}{}, số tiền {}.{}\nTải lại bất kỳ lúc nào ở Lịch sử thanh toán: {}payments\n",
-        if kind == "adjustment" { "điều chỉnh giảm" } else { "thanh toán" },
-        buyer.name,
-        buyer.tax_code.as_deref().map(|t| format!(", mã số thuế {t}")).unwrap_or_default(),
-        vnd(amount),
-        issued.provider_ref.as_deref().map(|r| format!("\nMã tra cứu hóa đơn điện tử: {r}")).unwrap_or_default(),
-        state.public_url
-    );
+    let english = crate::notifications::language_of(state, subject).await == crate::i18n::Lang::En;
+    let body = if english {
+        format!(
+            "Invoice no. {number} ({}) issued to {}{}, amount {}.{}\nDownload it again any time from Payment history: {}payments\n",
+            if kind == "adjustment" { "adjustment (decrease)" } else { "payment" },
+            buyer.name,
+            buyer.tax_code.as_deref().map(|t| format!(", tax code {t}")).unwrap_or_default(),
+            vnd(amount),
+            issued.provider_ref.as_deref().map(|r| format!("\nE-invoice lookup code: {r}")).unwrap_or_default(),
+            state.public_url
+        )
+    } else {
+        format!(
+            "Hóa đơn số {number} ({}) mang tên {}{}, số tiền {}.{}\nTải lại bất kỳ lúc nào ở Lịch sử thanh toán: {}payments\n",
+            if kind == "adjustment" { "điều chỉnh giảm" } else { "thanh toán" },
+            buyer.name,
+            buyer.tax_code.as_deref().map(|t| format!(", mã số thuế {t}")).unwrap_or_default(),
+            vnd(amount),
+            issued.provider_ref.as_deref().map(|r| format!("\nMã tra cứu hóa đơn điện tử: {r}")).unwrap_or_default(),
+            state.public_url
+        )
+    };
+    let mail_subject = if english {
+        &mail_subject.1
+    } else {
+        &mail_subject.0
+    };
     if let Err(e) = state
         .mailer
         .send_with_attachment(&buyer.email, mail_subject, &body, &attachment)
@@ -2032,7 +2075,10 @@ async fn adjustment_invoice(state: &AppState, refund_id: Uuid) {
             "Điều chỉnh giảm do hoàn tiền đơn {}: {}",
             c.order_code, r.reason
         );
-        let mail_subject = format!("Hóa đơn điều chỉnh đơn {}", c.order_code);
+        let mail_subject = (
+            format!("Hóa đơn điều chỉnh đơn {}", c.order_code),
+            format!("Adjustment invoice for order {}", c.order_code),
+        );
         // Hóa đơn gốc đã phát hành qua MISA: điều chỉnh cũng qua MISA, tham chiếu hóa đơn gốc.
         if let (Some(m), Some((orig_id, _, provider, meta))) = (&state.misa, &original) {
             if provider == "misa" {
