@@ -6254,6 +6254,7 @@ license = "MIT"
 privacy_policy = "https://kho.example/privacy"
 summary = "Quản lý nhập xuất tồn"
 category = "Năng suất"
+source = "https://github.com/nhom-kho/quan-ly-kho"
 
 [[platforms]]
 os = "windows"
@@ -6274,6 +6275,8 @@ purpose = "Kiểm tra bản quyền"
         vec![
             ("QuanLyKho.exe", feco_server::codesign::fixtures::pe(true)),
             ("data/mau.csv", b"ma,ten".to_vec()),
+            // Manifest có `source`: gói phải kèm giấy phép gốc (improve-launcher-experience).
+            ("LICENSE", b"MIT License".to_vec()),
         ],
     );
     let version = submit_version(work.path(), &token, &manifest, &dist).await;
@@ -6318,6 +6321,15 @@ purpose = "Kiểm tra bản quyền"
         ("1.0.0", "QuanLyKho.exe")
     );
     assert_eq!(entry.client_id.as_deref(), Some(client_id.as_str()));
+    // Thông tin hiển thị được máy chủ ký cùng target (scenario "Phát hành ghi thông tin hiển thị").
+    assert_eq!(entry.info.summary.as_deref(), Some("Quản lý nhập xuất tồn"));
+    assert_eq!(entry.info.category.as_deref(), Some("Năng suất"));
+    assert_eq!(entry.info.developer.as_deref(), Some("Nhóm Kho"));
+    assert_eq!(
+        entry.info.source.as_deref(),
+        Some("https://github.com/nhom-kho/quan-ly-kho")
+    );
+    assert!(!entry.info.terminal);
     launcher
         .install(&entry, jiff::Timestamp::now())
         .await
@@ -6365,6 +6377,14 @@ purpose = "Kiểm tra bản quyền"
         })
         .collect();
     assert_eq!(env["FECO_CLIENT_ID"], client_id);
+    // Mở app thì ghi lần mở gần nhất (sắp xếp "Mở gần đây" trong Thư viện).
+    launcher
+        .mark_opened(&app_id, jiff::Timestamp::now())
+        .unwrap();
+    let mine = launcher.my_apps();
+    let mine = mine.iter().find(|a| a.app == app_id).unwrap();
+    assert!(mine.last_opened.is_some());
+    assert_eq!(mine.info.category.as_deref(), Some("Năng suất"));
 
     // 5. App con (F-SDK) đọc đúng các biến launcher truyền, đổi mã lấy phiên.
     let config = fsdk::Config::new(

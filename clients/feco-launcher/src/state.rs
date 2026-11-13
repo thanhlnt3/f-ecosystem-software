@@ -1,7 +1,7 @@
 //! Trạng thái cục bộ của launcher (`state.json`): app đã cài, bản trước để quay lại, danh mục và
 //! danh sách thu hồi của lần đồng bộ gần nhất. Ghi kiểu nguyên tử (file tạm rồi đổi tên).
 
-use crate::catalog::CatalogEntry;
+use crate::catalog::{AppInfo, CatalogEntry};
 use feco_tuf::Revocation;
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,9 @@ pub struct InstalledVersion {
     pub entry: String,
     pub client_id: Option<String>,
     pub installed_at: Timestamp,
+    /// Thông tin hiển thị lúc cài (state.json của bản 1.0 không có: để trống).
+    #[serde(default)]
+    pub info: AppInfo,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -27,6 +30,9 @@ pub struct InstalledApp {
     pub current: InstalledVersion,
     /// Bản ngay trước đó, vẫn nằm trên đĩa để quay lại không cần tải.
     pub previous: Option<InstalledVersion>,
+    /// Lần cuối người dùng mở app từ launcher (sắp xếp "Mở gần đây").
+    #[serde(default)]
+    pub last_opened: Option<Timestamp>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

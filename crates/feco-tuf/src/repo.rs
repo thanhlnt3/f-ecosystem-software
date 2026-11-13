@@ -66,6 +66,21 @@ pub struct TargetMeta {
     /// máy chủ liệt kê ở `GET /v1/catalog/private`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub private: bool,
+    /// Mô tả ngắn hiển thị trong launcher (từ `summary` của manifest).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Nhóm của app trong danh mục, ví dụ `productivity` (từ `category` của manifest).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// Tên nhà phát triển (từ danh mục F-Store).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub developer: Option<String>,
+    /// Địa chỉ mã nguồn (HTTPS), ví dụ kho GitHub của app mã nguồn mở.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// App chạy trong cửa sổ terminal (launcher mở terminal riêng cho app).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub terminal: bool,
 }
 
 /// Một bản ghi thu hồi trong [`REVOCATIONS_TARGET`].
@@ -644,4 +659,37 @@ fn dir_url(path: &Path) -> Result<Url> {
     let absolute = std::path::absolute(path).map_err(io_err(path))?;
     Url::from_directory_path(&absolute)
         .map_err(|()| Error::Invalid(format!("không đổi được {} thành URL", absolute.display())))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TargetMeta;
+
+    /// Metadata của bản 1.0 (chưa có thông tin hiển thị) vẫn đọc được; trường mới đi và về
+    /// nguyên vẹn, trường rỗng không được ghi ra.
+    #[test]
+    fn display_fields_are_optional() {
+        let old: TargetMeta = serde_json::from_str(
+            r#"{"app":"a","version":"1.0.0","platform":"windows-x64","title":"A","entry":"a.exe"}"#,
+        )
+        .unwrap();
+        assert_eq!(old.summary, None);
+        assert!(!old.terminal);
+        let json = serde_json::to_string(&old).unwrap();
+        assert!(
+            !json.contains("summary") && !json.contains("terminal"),
+            "{json}"
+        );
+
+        let new = TargetMeta {
+            summary: Some("Soạn thảo văn bản".into()),
+            category: Some("tools".into()),
+            developer: Some("Ilaï Deutel".into()),
+            source: Some("https://github.com/ilai-deutel/kibi".into()),
+            terminal: true,
+            ..old
+        };
+        let back: TargetMeta = serde_json::from_str(&serde_json::to_string(&new).unwrap()).unwrap();
+        assert_eq!(back, new);
+    }
 }

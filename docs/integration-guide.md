@@ -4,8 +4,15 @@ Tài liệu này dành cho nhóm phát triển muốn đưa một ứng dụng d
 thái F-Eco: người dùng tìm thấy app trên F-Store, cài và mở bằng F-Launcher, đăng nhập một lần
 bằng tài khoản F-Eco, và app nhận đúng những dữ liệu người dùng đã đồng ý chia sẻ.
 
-Áp dụng cho F-Eco 1.0. Mã lỗi đầy đủ và địa chỉ máy chủ có ở trang `/developer/docs` của máy chủ
-F-Eco bạn dùng.
+Áp dụng cho F-Eco 1.0 và các thay đổi ghi trong mục "Chưa phát hành" của `CHANGELOG.md`:
+- manifest có thêm `source` và `terminal`;
+- có lệnh `f-dev pack`;
+- F-Launcher hiện thông tin app theo lưới hoặc danh sách.
+
+Mã lỗi đầy đủ và địa chỉ máy chủ có ở trang `/developer/docs` của máy chủ F-Eco bạn dùng.
+
+Muốn đưa một app mã nguồn mở có sẵn (ví dụ trên GitHub) vào F-Eco, xem thêm
+[`github-apps.md`](github-apps.md).
 
 ## Mục lục
 
@@ -21,6 +28,7 @@ F-Eco bạn dùng.
 10. [Tích hợp không dùng F-SDK (OIDC chuẩn)](#10-tích-hợp-không-dùng-f-sdk-oidc-chuẩn)
 11. [Thử trên máy của bạn](#11-thử-trên-máy-của-bạn)
 12. [Danh sách kiểm tra trước khi nộp](#12-danh-sách-kiểm-tra-trước-khi-nộp)
+13. [App hiển thị thế nào trong F-Launcher](#13-app-hiển-thị-thế-nào-trong-f-launcher)
 
 ## 1. App con chạy trong F-Eco như thế nào
 
@@ -89,7 +97,9 @@ privacy_policy = "https://kho.example/privacy"
 webhook = "https://kho.example/feco/webhook"   # không bắt buộc
 summary = "Quản lý nhập, xuất, tồn kho"         # không bắt buộc
 description = "Mô tả dài hiện trên trang chi tiết F-Store"
-category = "Năng suất"
+category = "productivity"               # mã nhóm, xem mục 13
+source = "https://github.com/kho/quanlykho"    # không bắt buộc; có thì gói phải kèm LICENSE
+terminal = false                        # true: launcher mở app trong cửa sổ terminal
 
 [[platforms]]
 os = "windows"          # windows | macos
@@ -297,6 +307,11 @@ f-dev publish --manifest f-app.toml --package dist/
 ```
 
 `f-dev` kiểm manifest, nén từng nền tảng, tải lên kèm SHA-256 và gửi duyệt. Dùng được trong CI.
+
+Muốn xem trước gói sẽ nộp mà chưa tải lên, dùng `f-dev pack --manifest f-app.toml --package build/
+--out dist/`. Lệnh này tạo `dist/<os>-<arch>.zip` và chạy đúng các bước kiểm tra như `publish`.
+Manifest có `source` thì mỗi gói phải chứa file giấy phép gốc (`LICENSE*`, `COPYING*` hoặc
+`NOTICE*`), không thì bị từ chối.
 Bạn cũng có thể tải gói và gửi duyệt trên trang app ở Cổng nhà phát triển.
 
 ## 9. Kiểm duyệt và phát hành
@@ -344,7 +359,13 @@ README phần "Hướng dẫn chạy hệ thống":
 4. Mở app từ F-Launcher dev: app nhận các biến ở mục 5. Hoặc chạy thẳng app với
    `FECO_CLIENT_ID`, `FECO_ISSUER_URL=http://127.0.0.1:4444/`,
    `FECO_SERVER_URL=http://127.0.0.1:8080/` để thử đăng nhập qua trình duyệt.
-5. App mẫu: `tools/feco-demo-app` (Rust), `sdk/*/examples`.
+5. App mẫu:
+   - `examples/apps/f-notes` (Ghi chú) và `examples/apps/f-timer` (Bấm giờ): app cửa sổ egui
+     dùng F-SDK, tự đăng nhập khi được launcher mở, chạy chế độ khách khi mở trực tiếp;
+   - `tools/feco-demo-app` (Rust) và `sdk/*/examples`.
+
+   `scripts/dev-apps.sh samples` ký hai app mẫu vào kho dev. `scripts/dev-apps.sh github ...`
+   dựng và ký một app mã nguồn mở từ GitHub (xem [`github-apps.md`](github-apps.md)).
 
 ## 12. Danh sách kiểm tra trước khi nộp
 
@@ -358,5 +379,42 @@ README phần "Hướng dẫn chạy hệ thống":
 - [ ] Lưu refresh token trong kho bảo mật của hệ điều hành, không ghi ra tệp thường.
 - [ ] Dữ liệu riêng của app nằm trong `FECO_APP_DATA_DIR`.
 - [ ] Webhook kiểm chữ ký, xử lý idempotent; xóa dữ liệu khi nhận `user.deleted`.
+- [ ] Có `summary` ngắn gọn và `category` là một mã ở mục 13, để app hiện đúng nhóm trong launcher.
+- [ ] App chạy trong terminal có `terminal = true`. App dựng từ mã nguồn bên ngoài có `source`, và
+      gói kèm giấy phép gốc.
+
+## 13. App hiển thị thế nào trong F-Launcher
+
+F-Launcher hiện app ở Thư viện (app đã cài) và Cửa hàng, theo **lưới** hoặc **danh sách**. Người
+dùng tìm (không phân biệt dấu), lọc theo nhóm, và sắp xếp theo tên, lần mở gần nhất, ngày cài,
+nhóm hoặc dung lượng.
+
+Mọi thông tin hiển thị đều lấy từ metadata TUF mà máy chủ ký khi phát hành:
+
+| Hiển thị | Lấy từ |
+|---|---|
+| Tên | `name` |
+| Mô tả ngắn | `summary` |
+| Nhóm | `category` |
+| Nhà phát triển | tên trong danh mục F-Store |
+| Nút "Mã nguồn" | `source` |
+| "Mở (terminal)" | `terminal = true` |
+
+Biểu tượng là ô chữ cái đầu của tên, màu cố định theo mã app. Hiện chưa có icon do nhà phát
+triển tải lên.
+
+Mã nhóm nên dùng (giá trị khác được hiện nguyên văn):
+
+| Mã | Tên hiển thị | Mã | Tên hiển thị |
+|---|---|---|---|
+| `productivity` | Năng suất | `games` | Trò chơi |
+| `tools` | Công cụ | `graphics` | Đồ họa |
+| `system` | Hệ thống | `music` | Âm nhạc |
+| `development` | Lập trình | `video` | Video |
+| `education` | Giáo dục | `business` | Kinh doanh |
+
+App không khai `[scopes]` được coi là không đăng nhập bằng F-Eco: target không có `client_id`,
+launcher mở app mà không xin mã khởi chạy. Người dùng chỉnh giao diện launcher (chủ đề, màu nhấn,
+cỡ chữ, bố cục, cỡ ô lưới) ở trang Cài đặt. Các cài đặt này chỉ lưu trên máy họ.
 - [ ] Xử lý `rate_limited` theo `Retry-After`, `invalid_token` bằng làm mới token.
 - [ ] `f-dev validate` không báo lỗi.

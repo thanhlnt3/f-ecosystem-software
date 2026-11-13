@@ -1,5 +1,38 @@
 # Nhật ký thay đổi
 
+## Chưa phát hành
+
+Thay đổi OpenSpec `improve-launcher-experience`.
+
+### F-Launcher
+
+- Bố cục mới:
+  - thanh bên với Thư viện, Cửa hàng, Thông báo, Cài đặt và tài khoản;
+  - Thư viện và Cửa hàng xem theo lưới hoặc danh sách, nhớ lựa chọn;
+  - tìm không dấu, lọc theo nhóm;
+  - sắp xếp theo tên, lần mở gần nhất, ngày cài, nhóm hoặc dung lượng.
+- Trang Cài đặt:
+  - chủ đề sáng, tối hoặc theo hệ thống; màu nhấn; cỡ chữ 80–150%;
+  - bố cục mặc định, cỡ ô lưới, trang mở đầu, mô tả ngắn, chế độ gọn;
+  - tự động cập nhật, tài khoản, thông tin phiên bản;
+  - khôi phục mặc định.
+
+  Cài đặt lưu trong `settings.json` trên máy. File hỏng thì dùng giá trị mặc định.
+- Hiện mô tả ngắn, nhóm, nhà phát triển và liên kết mã nguồn từ metadata TUF đã ký. Biểu tượng là
+  chữ cái đầu, màu cố định theo app.
+- App có cờ `terminal` mở trong cửa sổ terminal riêng: Windows dùng console mới, macOS dùng
+  Terminal.
+
+### Nhà phát triển
+
+- `f-app.toml` có thêm `source` (địa chỉ mã nguồn, HTTPS) và `terminal`.
+- Máy chủ ký vào target TUF các trường mô tả ngắn, nhóm, nhà phát triển, mã nguồn, terminal. App
+  không khai scope thì target không có `client_id`.
+- `f-dev pack` đóng gói và kiểm tra trước khi nộp. Gói của app có `source` phải kèm giấy phép gốc.
+- App mẫu dùng F-SDK: Ghi chú (`examples/apps/f-notes`) và Bấm giờ (`examples/apps/f-timer`).
+- `scripts/dev-apps.sh` đưa vào môi trường dev hai app mẫu và các app mã nguồn mở dựng từ GitHub
+  (kibi, bottom, eframe template). Cách làm có trong `docs/github-apps.md`.
+
 ## 1.0.0 (13/11/2026)
 
 Bản 1.0 đầu tiên của F-Eco: nền tảng tài khoản, đăng nhập một lần, F-Store và F-Launcher để

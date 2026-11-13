@@ -252,3 +252,20 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 70. **SPF, DKIM, DMARC**: chưa có tên miền. Khi có: chọn máy chủ chuyển tiếp SMTP ký DKIM (nhà cung
     cấp email giao dịch hoặc Postfix kèm OpenDKIM), đặt `FECO_SMTP_URL` dạng `smtps://`, thêm bản ghi
     theo `feco-catalog mail-dns <tên miền> <selector>` cho tới khi báo "đạt".
+
+## Thay đổi improve-launcher-experience (giao diện launcher, app từ GitHub)
+
+71. **Renderer của launcher đổi từ glow (OpenGL) sang wgpu.** Trên máy thử (Windows 10, NVIDIA RTX
+    3060), eframe 0.37 với glow vẽ cửa sổ trắng hoàn toàn, kể cả bản F-Launcher 1.0.0 đã phát hành
+    và một app eframe tối giản. wgpu (DirectX 12, Vulkan hoặc Metal) vẽ đúng. Cái giá là tệp chạy
+    lớn hơn và nhiều thư viện phụ thuộc hơn (đều MIT hoặc Apache-2.0). Bản 1.0.0 nên được thay bằng
+    bản vá. Có cần phát hành 1.0.1 ngay không?
+72. **Biểu tượng app.** Launcher dùng ô chữ cái đầu có màu theo mã app. Icon do nhà phát triển tải
+    lên cần thêm một target TUF đã ký cho mỗi icon, và quy định kích thước, định dạng, kiểm duyệt.
+    Có làm ở thay đổi sau không?
+73. **App mã nguồn mở do người khác đóng gói.** Spec yêu cầu kèm giấy phép gốc. Chưa có quy định về
+    tên và nhãn hiệu (ví dụ một nhóm đóng gói lại app nổi tiếng dưới tên gốc), hay việc có cần dự
+    án gốc đồng ý không. Có cần chính sách nội dung riêng cho trường hợp này không?
+74. **App terminal trên macOS** mở qua `open -a Terminal` nên không nhận được mã khởi chạy (biến môi
+    trường không đi qua). Hiện `f-dev` chỉ cảnh báo. Có muốn launcher ghi mã ra một file tạm chỉ
+    app đọc được không? Cách này cần thêm thiết kế bảo mật.

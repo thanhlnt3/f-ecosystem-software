@@ -9,7 +9,9 @@
 //!   tử, quay lại bản trước, gỡ app, chặn mở phiên bản bị thu hồi; "App của tôi" vẫn dùng được
 //!   khi ngoại tuyến.
 //! - [`launch`] và [`broker`]: mở app con với mã khởi chạy dùng một lần; API cục bộ chỉ cấp mã
-//!   cho đúng app mà launcher đã khởi chạy.
+//!   cho đúng app mà launcher đã khởi chạy. App có cờ `terminal` mở trong cửa sổ terminal riêng.
+//! - [`library`]: tìm, lọc, sắp xếp app; biểu tượng chữ cái đầu. [`prefs`]: cài đặt giao diện
+//!   (`settings.json`).
 
 pub mod auth;
 pub mod broker;
@@ -18,10 +20,12 @@ pub mod config;
 pub mod events;
 pub mod install;
 pub mod launch;
+pub mod library;
 pub mod paths;
+pub mod prefs;
 pub mod state;
 
-pub use catalog::CatalogEntry;
+pub use catalog::{AppInfo, CatalogEntry};
 pub use config::Config;
 pub use install::{AppStatus, LaunchPlan, Launcher, LauncherError, MyApp};
 pub use paths::Paths;

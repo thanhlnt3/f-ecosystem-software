@@ -109,6 +109,7 @@ impl Fixture {
             client_id: Some(format!("client-{app}")),
             // Quy ước của bộ kiểm thử: app có tên kết thúc bằng "-rieng" là app riêng tư.
             private: app.ends_with("-rieng"),
+            ..Default::default()
         };
         self.repo
             .publish(

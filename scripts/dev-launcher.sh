@@ -181,6 +181,9 @@ export FSDK_SCOPES="openid offline_access profile purchases"
 EOF
 }
 
+# `source scripts/dev-launcher.sh` (ví dụ từ scripts/dev-apps.sh) chỉ nạp các hàm trên.
+[[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
+
 case "${1:-}" in
   setup) setup ;;
   publish) publish ;;

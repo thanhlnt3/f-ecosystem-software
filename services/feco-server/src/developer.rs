@@ -1411,20 +1411,30 @@ async fn sign_target(
         .map(|p| p.entry.clone());
     // App riêng tư (spec custom-build-orders): đánh dấu trong target để launcher chỉ hiện cho
     // khách hàng của đơn.
-    let private: bool =
-        sqlx::query_scalar("SELECT private_to IS NOT NULL FROM catalog_apps WHERE id = $1")
+    // Tên nhà phát triển hiển thị trong launcher lấy từ danh mục (spec developer-portal,
+    // "Thông tin hiển thị trong metadata phát hành"); mô tả, nhóm, mã nguồn từ manifest.
+    let (private, developer): (bool, String) =
+        sqlx::query_as("SELECT private_to IS NOT NULL, developer FROM catalog_apps WHERE id = $1")
             .bind(&app.app_id)
             .fetch_optional(&state.db)
             .await?
-            .unwrap_or(false);
+            .unwrap_or_default();
+    let some = |s: &str| Some(s.trim().to_owned()).filter(|s| !s.is_empty());
     let meta = feco_tuf::TargetMeta {
         app: app.app_id.clone(),
         version: manifest.version.clone(),
         platform: platform.to_owned(),
         title: Some(manifest.name.clone()),
         entry,
-        client_id: Some(app.client_id.clone()),
+        // App không khai báo scope (ví dụ app mã nguồn mở không dùng F-SDK) không đăng nhập
+        // bằng F-Eco: launcher mở app mà không xin mã khởi chạy.
+        client_id: (!manifest.scopes.is_empty()).then(|| app.client_id.clone()),
         private,
+        summary: some(&manifest.summary),
+        category: some(&manifest.category),
+        developer: some(&developer),
+        source: manifest.source.clone(),
+        terminal: manifest.terminal,
     };
     let signers: Vec<_> = tuf.sign_keys.iter().map(feco_tuf::keys::source).collect();
     let repo = feco_tuf::Repo::open(&tuf.repo);

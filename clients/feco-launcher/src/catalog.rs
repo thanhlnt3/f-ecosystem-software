@@ -19,6 +19,44 @@ pub struct CatalogEntry {
     /// App riêng tư: chỉ hiện khi máy chủ liệt kê cho người dùng đang đăng nhập.
     #[serde(default)]
     pub private: bool,
+    /// Thông tin hiển thị (mô tả, nhóm, nhà phát triển...), từ metadata TUF đã ký.
+    #[serde(default)]
+    pub info: AppInfo,
+}
+
+/// Thông tin hiển thị của một app (spec launcher, "Thông tin hiển thị của app"). Chỉ lấy từ
+/// metadata TUF đã được nền tảng ký; metadata cũ không có thì để trống.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AppInfo {
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub developer: Option<String>,
+    /// Địa chỉ mã nguồn (chỉ nhận HTTPS khi hiển thị liên kết).
+    #[serde(default)]
+    pub source: Option<String>,
+    /// App chạy trong cửa sổ terminal.
+    #[serde(default)]
+    pub terminal: bool,
+}
+
+impl AppInfo {
+    fn from_meta(meta: &feco_tuf::TargetMeta) -> Self {
+        let clean = |v: &Option<String>| {
+            v.as_ref()
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+        };
+        Self {
+            summary: clean(&meta.summary),
+            category: clean(&meta.category),
+            developer: clean(&meta.developer),
+            source: clean(&meta.source).filter(|s| s.starts_with("https://")),
+            terminal: meta.terminal,
+        }
+    }
 }
 
 /// Mọi phiên bản đang phát hành cho nền tảng này, xếp theo app rồi phiên bản mới nhất trước.
@@ -42,6 +80,7 @@ pub fn build(state: &SyncState, platform: &str) -> Vec<CatalogEntry> {
                 entry: meta.entry.clone()?,
                 client_id: meta.client_id.clone(),
                 private: meta.private,
+                info: AppInfo::from_meta(meta),
             })
         })
         .collect();

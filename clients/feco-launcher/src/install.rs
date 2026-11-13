@@ -114,6 +114,10 @@ pub struct MyApp {
     pub status: AppStatus,
     /// Bản mới hơn trong danh mục (nếu có).
     pub update: Option<CatalogEntry>,
+    /// Thông tin hiển thị: của bản mới nhất trong danh mục nếu có, không thì của bản đã cài.
+    pub info: crate::catalog::AppInfo,
+    pub installed_at: Timestamp,
+    pub last_opened: Option<Timestamp>,
 }
 
 /// Những gì cần để mở một app con.
@@ -126,6 +130,8 @@ pub struct LaunchPlan {
     pub working_dir: PathBuf,
     pub data_dir: PathBuf,
     pub client_id: Option<String>,
+    /// Mở trong cửa sổ terminal riêng (xem [`crate::launch::command`]).
+    pub terminal: bool,
 }
 
 pub struct Launcher {
@@ -291,8 +297,28 @@ impl Launcher {
                     None => AppStatus::Ready,
                 },
                 update: self.update_for(&a.current.app).cloned(),
+                info: self
+                    .state
+                    .catalog
+                    .iter()
+                    .filter(|e| e.app == a.current.app)
+                    .max_by(|x, y| compare(&x.version, &y.version))
+                    .map(|e| e.info.clone())
+                    .filter(|i| *i != crate::catalog::AppInfo::default())
+                    .unwrap_or_else(|| a.current.info.clone()),
+                installed_at: a.current.installed_at,
+                last_opened: a.last_opened,
             })
             .collect()
+    }
+
+    /// Ghi lần mở gần nhất của app (sắp xếp "Mở gần đây").
+    pub fn mark_opened(&mut self, app: &str, now: Timestamp) -> Result<(), LauncherError> {
+        let Some(installed) = self.state.apps.get_mut(app) else {
+            return Err(LauncherError::NotInstalled(app.to_owned()));
+        };
+        installed.last_opened = Some(now);
+        self.save()
     }
 
     fn revoked_error(&self, title: &str, version: &str, target: &str) -> Option<LauncherError> {
@@ -374,6 +400,7 @@ impl Launcher {
             entry: entry.entry.clone(),
             client_id: entry.client_id.clone(),
             installed_at: now,
+            info: entry.info.clone(),
         };
         let before = self.state.apps.get(&entry.app).cloned();
         self.state.apps.insert(
@@ -381,6 +408,7 @@ impl Launcher {
             InstalledApp {
                 current: new,
                 previous: before.as_ref().map(|a| a.current.clone()),
+                last_opened: before.as_ref().and_then(|a| a.last_opened),
             },
         );
         if let Err(e) = self.save() {
@@ -515,6 +543,7 @@ impl Launcher {
             InstalledApp {
                 current: previous,
                 previous: Some(installed.current.clone()),
+                last_opened: installed.last_opened,
             },
         );
         if let Err(e) = self.save() {
@@ -567,6 +596,7 @@ impl Launcher {
             working_dir,
             data_dir,
             client_id: current.client_id.clone(),
+            terminal: current.info.terminal,
         })
     }
 }

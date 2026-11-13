@@ -12,6 +12,8 @@
 //! privacy_policy = "https://soundlab.example/privacy"
 //! webhook = "https://soundlab.example/feco/webhook"   # không bắt buộc
 //! summary = "Thu âm và phối nhạc"                      # không bắt buộc
+//! source = "https://github.com/soundlab/soundlab"     # mã nguồn, không bắt buộc
+//! terminal = false      # true: app chạy trong cửa sổ terminal, không bắt buộc
 //!
 //! [[platforms]]
 //! os = "windows"        # windows | macos
@@ -43,7 +45,7 @@ pub const USER_FOLDERS: [&str; 6] = [
     "videos",
     "desktop",
 ];
-const TOP_LEVEL: [&str; 12] = [
+const TOP_LEVEL: [&str; 14] = [
     "id",
     "name",
     "version",
@@ -56,6 +58,8 @@ const TOP_LEVEL: [&str; 12] = [
     "platforms",
     "scopes",
     "permissions",
+    "source",
+    "terminal",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,6 +109,12 @@ pub struct Manifest {
     pub platforms: Vec<Platform>,
     pub scopes: Vec<ScopeDecl>,
     pub permissions: Permissions,
+    /// Địa chỉ mã nguồn (HTTPS). Có trường này thì gói phải kèm giấy phép gốc.
+    #[serde(default)]
+    pub source: Option<String>,
+    /// App chạy trong cửa sổ terminal.
+    #[serde(default)]
+    pub terminal: bool,
 }
 
 impl Manifest {
@@ -240,6 +250,11 @@ pub fn parse(text: &str) -> Result<Manifest, Vec<String>> {
     }
     let description = c.optional_string(&table, "description", "description");
     let category = c.optional_string(&table, "category", "category");
+    let source = c.optional_string(&table, "source", "source");
+    if source.as_ref().is_some_and(|u| !https(u)) {
+        c.invalid("source", "phải là địa chỉ https://");
+    }
+    let terminal = c.boolean(&table, "terminal", "terminal");
 
     let platforms = platforms(&mut c, &table);
     let scopes = scopes(&mut c, &table);
@@ -262,6 +277,8 @@ pub fn parse(text: &str) -> Result<Manifest, Vec<String>> {
         platforms,
         scopes,
         permissions,
+        source,
+        terminal,
     })
 }
 
@@ -568,5 +585,43 @@ user_folders = ["music"]
         for bad in ["", "SoundLab", "-x", "a b", "a/b", &"a".repeat(64)] {
             assert!(!valid_app_id(bad), "{bad}");
         }
+    }
+
+    /// Spec developer-portal (improve-launcher-experience), "Thông tin hiển thị trong metadata
+    /// phát hành": `source` phải là HTTPS, `terminal` là true/false.
+    #[test]
+    fn source_and_terminal() {
+        let m = parse(FULL).unwrap();
+        assert_eq!(m.source, None);
+        assert!(!m.terminal);
+
+        let text = format!(
+            "source = \"https://github.com/ilai-deutel/kibi\"
+terminal = true
+{FULL}"
+        );
+        let m = parse(&text).unwrap();
+        assert_eq!(
+            m.source.as_deref(),
+            Some("https://github.com/ilai-deutel/kibi")
+        );
+        assert!(m.terminal);
+
+        let text = format!(
+            "source = \"http://github.com/a/b\"
+terminal = \"yes\"
+{FULL}"
+        );
+        let errors = parse(&text).unwrap_err();
+        assert!(
+            errors.contains(&"source không hợp lệ: phải là địa chỉ https://".to_string()),
+            "{errors:?}"
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("terminal không hợp lệ")),
+            "{errors:?}"
+        );
     }
 }

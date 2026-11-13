@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Phiên bản 1.0.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+> **Phiên bản 1.0.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
 >
 > Đã chạy được (nhóm task 1–14; các mục còn mở ghi ở cuối nhật ký thay đổi):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
@@ -10,7 +10,12 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 > - Giao diện tiếng Việt và tiếng Anh.
 > - Bảo mật: HSTS và header bảo vệ, mã hóa dữ liệu nhạy cảm khi lưu (AES-256-GCM), giới hạn tần suất, nhật ký kiểm toán chỉ ghi thêm, cảnh báo đăng nhập từ thiết bị mới. Quy trình xử lý sự cố: [`docs/security/incident-response.md`](docs/security/incident-response.md).
 > - Chuỗi tin cậy cho gói cài đặt theo TUF (dùng `tough`): ký phiên bản đã duyệt, thu hồi tới launcher trong 1 giờ, chặn gói hoặc metadata bị sửa, rollback, đóng băng; xoay khóa targets và root (ngưỡng 2/3). Công cụ `feco-tuf`, quy trình giữ khóa: [`docs/security/tuf-keys.md`](docs/security/tuf-keys.md).
-> - F-Launcher (Rust + egui): đăng nhập qua trình duyệt, nhớ đăng nhập qua khởi động lại máy, cài/cập nhật/quay lại/gỡ app con có xác minh TUF, chạy được khi ngoại tuyến, chặn phiên bản bị thu hồi, mở app con bằng mã khởi chạy dùng một lần.
+> - F-Launcher (Rust + egui):
+>   - đăng nhập qua trình duyệt, nhớ đăng nhập qua khởi động lại máy;
+>   - cài, cập nhật, quay lại, gỡ app con có xác minh TUF; chạy được khi ngoại tuyến; chặn phiên bản bị thu hồi;
+>   - mở app con bằng mã khởi chạy dùng một lần; mở app chạy trong terminal ở cửa sổ riêng;
+>   - Thư viện và Cửa hàng xem theo lưới hoặc danh sách, có tìm không dấu, lọc nhóm và sắp xếp;
+>   - trang Cài đặt giao diện (chủ đề, màu nhấn, cỡ chữ, bố cục).
 > - F-Store (`/store`): danh mục app đã duyệt, tìm không phân biệt dấu tiếng Việt, lọc theo danh mục, hệ điều hành, giá, nhà phát triển đã xác minh; trang chi tiết có scope dữ liệu kèm mục đích, license, chính sách quyền riêng tư, lịch sử thay đổi; đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi phạm.
 >
 > - Cổng nhà phát triển (`/developer`): đăng ký cá nhân hoặc tổ chức (cần email đã xác minh và TOTP), Thỏa thuận nhà phát triển, xác minh tên miền bằng DNS TXT, nhóm và vai trò, client ID cùng địa chỉ chuyển hướng, manifest `f-app.toml`, nộp gói qua web hoặc CLI `f-dev`, kiểm tra chữ ký mã, kênh stable/beta và phát hành dần theo phần trăm, số liệu tổng hợp.
@@ -205,11 +210,11 @@ bộ mà script dưới đây dựng sẵn, với Demo App ở bước 5 làm ap
 4. Bấm **Đăng nhập**: trình duyệt mặc định mở trang đăng nhập F-Eco, sau đó launcher hiện tên bạn.
    Refresh token được lưu trong Windows Credential Manager (macOS: Keychain), nên tắt mở lại launcher
    hay khởi động lại máy vẫn còn đăng nhập.
-5. Tab **Danh mục** → **Cài** Demo App. Hộp thoại xác nhận có dòng "App này chạy với quyền như mọi
+5. Trang **Cửa hàng** (thanh bên trái) → **Cài** Demo App. Hộp thoại xác nhận có dòng "App này chạy với quyền như mọi
    ứng dụng khác trên máy bạn". Gói được kiểm tra chữ ký và SHA-256 qua TUF rồi cài vào
    `%LOCALAPPDATA%\F-Eco\Launcher\apps` (macOS: `~/Library/Application Support/F-Eco/Launcher`).
 6. Lần đầu, cho Demo App quyền qua trình duyệt một lần: `cargo run -p feco-demo-app -- --client-id
-   $(cat .dev/demo-client-id)`. Sau đó tab **App của tôi** → **Mở**: launcher xin mã khởi chạy dùng
+   $(cat .dev/demo-client-id)`. Sau đó trang **Thư viện** → **Mở**: launcher xin mã khởi chạy dùng
    một lần (sống 60 giây) và chạy Demo App; Demo App dùng F-SDK (`fsdk::session_from_launch`) đổi
    mã lấy token, không mở trình duyệt, rồi in scope được cấp và kết quả `/v1/me`.
 7. Thử cập nhật, quay lại, thu hồi:
@@ -223,8 +228,29 @@ bộ mà script dưới đây dựng sẵn, với Demo App ở bước 5 làm ap
    Bấm **Đồng bộ** để launcher đồng bộ ngay (bình thường mỗi giờ). **Quay lại** khôi phục bản trước
    mà không tải lại. **Gỡ** hỏi có xóa dữ liệu cục bộ không (mặc định giữ) và nhắc rằng quyền dữ liệu
    chỉ thu hồi ở trang Ứng dụng đã kết nối.
-8. Ngắt mạng (hoặc dừng thư mục kho) rồi mở lại launcher: "App của tôi" vẫn mở được app đã cài,
-   thanh trên cùng báo "Đang ngoại tuyến".
+8. Ngắt mạng (hoặc dừng thư mục kho) rồi mở lại launcher: Thư viện vẫn mở được app đã cài, thanh
+   bên báo "Đang ngoại tuyến".
+9. Thêm app để thấy rõ lưới, danh sách và bộ lọc:
+
+   ```bash
+   scripts/dev-apps.sh all
+   ```
+
+   Lệnh này ký vào kho dev năm app, rồi bấm **Đồng bộ** để thấy chúng trong Cửa hàng:
+   - hai app mẫu dùng F-SDK: **Ghi chú** và **Bấm giờ** (`examples/apps`);
+   - ba app mã nguồn mở dựng từ GitHub: **kibi** (soạn thảo trong terminal), **bottom** (theo dõi hệ
+     thống trong terminal), **eframe template** (app cửa sổ).
+
+   Cách làm từng bước có trong [docs/github-apps.md](docs/github-apps.md). App terminal mở trong
+   cửa sổ console riêng.
+10. Giao diện launcher:
+    - nút **Lưới** / **Danh sách** ở góc phải thanh công cụ;
+    - ô tìm (không phân biệt dấu, ví dụ "ghi chu"), bộ lọc nhóm và kiểu sắp xếp (tên, mở gần
+      đây, cài gần đây, nhóm, dung lượng);
+    - trang **Cài đặt**: chủ đề sáng, tối hoặc theo hệ thống; màu nhấn; cỡ chữ 80–150%; bố cục
+      mặc định; cỡ ô lưới; trang mở đầu; mô tả ngắn; chế độ gọn; khôi phục mặc định.
+
+    Mọi lựa chọn lưu trong `%LOCALAPPDATA%\F-Eco\Launcher\settings.json` và có hiệu lực ngay.
 
 Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
@@ -560,10 +586,11 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me`; khi được launcher mở thì đăng nhập bằng mã khởi chạy |
 | `sdk/` | F-SDK: `rust` (crate `fsdk`), `c` (C ABI `fsdk_c` và header), `python` (binding `ctypes`), `typescript` (gói `@f-eco/sdk`) |
 | `examples/standard-oidc` | App tích hợp bằng thư viện OIDC chuẩn (Authlib), không dùng F-SDK |
-| `tools/f-dev` | CLI cho nhà phát triển: `f-dev validate`, `f-dev publish` |
+| `examples/apps` | App mẫu dùng F-SDK: `f-notes` (Ghi chú), `f-timer` (Bấm giờ), phần dùng chung `sample-common` |
+| `tools/f-dev` | CLI cho nhà phát triển: `f-dev validate`, `f-dev pack`, `f-dev publish` |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |
 | `infra/` | Hạ tầng dev: `docker-compose.yml`, cấu hình Kratos (schema, mẫu email) và Hydra |
-| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher |
+| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher; `dev-apps.sh`: đưa app mẫu và app mã nguồn mở từ GitHub vào kho dev |
 | `docs/security/` | Quy trình xử lý sự cố, quản lý khóa TUF, biên bản diễn tập |
 | `third_party/` | Khai báo license và ngoại lệ đã duyệt |
 | `openspec/` | Yêu cầu, thiết kế, kế hoạch |

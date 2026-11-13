@@ -3,12 +3,17 @@
 //!
 //! ```text
 //! f-dev validate --manifest f-app.toml
+//! f-dev pack     --manifest f-app.toml --package build/ [--out dist/]
 //! f-dev publish  --manifest f-app.toml --package dist/ [--server URL] [--token TOKEN]
 //! ```
 //!
 //! `--package` là một file `.zip` (khi manifest chỉ có một nền tảng), hoặc một thư mục chứa
 //! `<os>-<arch>.zip` hay thư mục con `<os>-<arch>/` cho từng nền tảng. Nếu manifest chỉ có một
 //! nền tảng và thư mục không có các mục trên, cả thư mục được nén thành gói.
+//!
+//! Manifest có `source` (app dựng từ mã nguồn bên ngoài, ví dụ trên GitHub) thì mỗi gói phải có
+//! file giấy phép gốc (`LICENSE*`, `COPYING*` hoặc `NOTICE*`); `pack` và `publish` từ chối gói
+//! thiếu file này.
 //!
 //! Token lấy từ `--token` hoặc biến môi trường `FDEV_TOKEN`; máy chủ từ `--server` hoặc
 //! `FDEV_SERVER` (mặc định `http://127.0.0.1:8080/`).
@@ -27,6 +32,8 @@ const USAGE: &str = "\
 f-dev: công cụ cho nhà phát triển F-Eco
 
   f-dev validate --manifest f-app.toml
+  f-dev pack     --manifest f-app.toml --package build/ [--out dist/]
+                 đóng gói <os>-<arch>.zip và kiểm tra trước khi nộp
   f-dev publish  --manifest f-app.toml --package dist/ [--server URL] [--token TOKEN]
 
 Biến môi trường: FDEV_TOKEN (token tạo ở Cổng nhà phát triển), FDEV_SERVER.
@@ -70,13 +77,13 @@ pub async fn run(args: &[String]) -> Result<String, String> {
         "validate" => {
             let (_, m) = read_manifest(&flags(&args[1..])?)?;
             let platforms: Vec<String> = m.platforms.iter().map(|p| p.key()).collect();
-            Ok(format!(
-                "{} {} hợp lệ ({})",
-                m.id,
-                m.version,
-                platforms.join(", ")
-            ))
+            let mut out = format!("{} {} hợp lệ ({})", m.id, m.version, platforms.join(", "));
+            for warning in warnings(&m) {
+                out.push_str(&format!("\ncảnh báo: {warning}"));
+            }
+            Ok(out)
         }
+        "pack" => pack(&flags(&args[1..])?),
         "publish" => publish(&flags(&args[1..])?).await,
         "help" | "--help" | "-h" => Ok(USAGE.to_owned()),
         other => Err(format!("lệnh không hợp lệ: {other}\n\n{USAGE}")),
@@ -125,6 +132,78 @@ fn zip_dir(dir: &Path, out: &Path) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Điều nên sửa nhưng không chặn việc nộp.
+pub fn warnings(m: &Manifest) -> Vec<String> {
+    let mut out = Vec::new();
+    // design E5: trên macOS app terminal được mở qua `open -a Terminal`, không truyền được biến
+    // môi trường nên app không nhận được mã khởi chạy của launcher.
+    if m.terminal && !m.scopes.is_empty() && m.platforms.iter().any(|p| p.os == "macos") {
+        out.push(
+            "app terminal trên macOS không nhận được mã khởi chạy từ launcher: app phải tự đăng nhập bằng trình duyệt (F-SDK `session`)"
+                .to_owned(),
+        );
+    }
+    out
+}
+
+/// Tên file giấy phép gốc: `LICENSE*`, `LICENCE*`, `COPYING*`, `NOTICE*` (không phân biệt hoa
+/// thường), ở bất kỳ thư mục nào trong gói.
+fn is_license_file(path: &str) -> bool {
+    let name = path.rsplit('/').next().unwrap_or(path).to_ascii_uppercase();
+    ["LICENSE", "LICENCE", "COPYING", "NOTICE"]
+        .iter()
+        .any(|p| name.starts_with(p))
+}
+
+/// Spec developer-portal, "App mã nguồn mở dựng từ mã nguồn bên ngoài": gói của app có `source`
+/// phải kèm giấy phép gốc.
+fn check_license(manifest: &Manifest, key: &str, zip_path: &Path) -> Result<(), String> {
+    let Some(source) = &manifest.source else {
+        return Ok(());
+    };
+    let file = std::fs::File::open(zip_path).map_err(|e| format!("{}: {e}", zip_path.display()))?;
+    let archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("{} không phải file zip: {e}", zip_path.display()))?;
+    if archive
+        .file_names()
+        .flatten()
+        .any(|name| is_license_file(&name))
+    {
+        return Ok(());
+    }
+    Err(format!(
+        "gói {key} thiếu file giấy phép gốc (LICENSE*, COPYING* hoặc NOTICE*) của {source}: \
+         chép file giấy phép của dự án vào gói rồi thử lại"
+    ))
+}
+
+/// `f-dev pack`: tạo `<os>-<arch>.zip` cho từng nền tảng trong `--out` (mặc định `dist/`).
+fn pack(flags: &HashMap<String, String>) -> Result<String, String> {
+    let (_, manifest) = read_manifest(flags)?;
+    let package = PathBuf::from(
+        flags
+            .get("package")
+            .ok_or_else(|| format!("thiếu --package\n\n{USAGE}"))?,
+    );
+    let out = PathBuf::from(flags.get("out").map_or("dist", String::as_str));
+    std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let work = std::env::temp_dir().join(format!("f-dev-pack-{}", std::process::id()));
+    std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
+    let result = packages(&manifest, &package, &work).and_then(|found| {
+        let mut lines = Vec::new();
+        for (key, path) in found {
+            let dest = out.join(format!("{key}.zip"));
+            if path != dest {
+                std::fs::copy(&path, &dest).map_err(|e| format!("{}: {e}", dest.display()))?;
+            }
+            lines.push(format!("đã đóng gói {}", dest.display()));
+        }
+        Ok(lines.join("\n"))
+    });
+    let _ = std::fs::remove_dir_all(&work);
+    result
+}
+
 /// Tìm (hoặc tạo) file zip cho từng nền tảng trong manifest.
 fn packages(
     manifest: &Manifest,
@@ -158,6 +237,7 @@ fn packages(
                 package.display()
             ));
         };
+        check_license(manifest, &key, &path)?;
         out.push((key, path));
     }
     Ok(out)
@@ -293,4 +373,93 @@ mã phiên bản: {id}",
         manifest.id, manifest.version
     ));
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MANIFEST: &str = "id = \"kibi\"\nname = \"kibi\"\nversion = \"0.3.3\"\nlicense = \"MIT OR Apache-2.0\"\n\
+        privacy_policy = \"https://github.com/ilai-deutel/kibi\"\nsource = \"https://github.com/ilai-deutel/kibi\"\n\
+        terminal = true\n[[platforms]]\nos = \"windows\"\narch = \"x64\"\nentry = \"bin/kibi.exe\"\n";
+
+    fn pack_dir(files: &[&str]) -> (tempfile::TempDir, Result<String, String>) {
+        let dir = tempfile::tempdir().unwrap();
+        let build = dir.path().join("build");
+        for f in files {
+            let p = build.join(f);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, b"x").unwrap();
+        }
+        let manifest = dir.path().join("f-app.toml");
+        std::fs::write(&manifest, MANIFEST).unwrap();
+        let args: Vec<String> = [
+            "--manifest",
+            manifest.to_str().unwrap(),
+            "--package",
+            build.to_str().unwrap(),
+            "--out",
+            dir.path().join("dist").to_str().unwrap(),
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let result = pack(&flags(&args).unwrap());
+        (dir, result)
+    }
+
+    /// Scenario "Gói thiếu giấy phép gốc".
+    #[test]
+    fn source_package_needs_upstream_license() {
+        let (dir, result) = pack_dir(&["bin/kibi.exe"]);
+        let err = result.unwrap_err();
+        assert!(err.contains("thiếu file giấy phép gốc"), "{err}");
+        assert!(!dir.path().join("dist/windows-x64.zip").exists());
+
+        let (dir, result) = pack_dir(&[
+            "bin/kibi.exe",
+            "licenses/LICENSE-MIT",
+            "licenses/LICENSE-APACHE",
+        ]);
+        assert!(result.unwrap().contains("windows-x64.zip"));
+        let file = std::fs::File::open(dir.path().join("dist/windows-x64.zip")).unwrap();
+        let zip = zip::ZipArchive::new(file).unwrap();
+        let mut names: Vec<String> = zip.file_names().flatten().map(|n| n.into_owned()).collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                "bin/kibi.exe",
+                "licenses/LICENSE-APACHE",
+                "licenses/LICENSE-MIT"
+            ]
+        );
+    }
+
+    #[test]
+    fn license_file_names() {
+        for ok in [
+            "LICENSE",
+            "a/b/license-mit.txt",
+            "COPYING",
+            "NOTICE.md",
+            "Licence",
+        ] {
+            assert!(is_license_file(ok), "{ok}");
+        }
+        for bad in ["README.md", "bin/kibi.exe", "licenses/", "my-license.txt"] {
+            assert!(!is_license_file(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn terminal_app_with_scopes_on_macos_warns() {
+        let base = MANIFEST
+            .replace("os = \"windows\"", "os = \"macos\"")
+            .replace("arch = \"x64\"", "arch = \"arm64\"");
+        assert!(warnings(&feco_manifest::parse(&base).unwrap()).is_empty());
+        let with_scope = format!("{base}[scopes.profile]\npurpose = \"Tên\"\n");
+        let w = warnings(&feco_manifest::parse(&with_scope).unwrap());
+        assert_eq!(w.len(), 1, "{w:?}");
+    }
 }

@@ -12,6 +12,10 @@ members = [
     "tools/f-dev",
     "sdk/rust",
     "sdk/c",
+    # App mẫu dùng F-SDK (thay đổi improve-launcher-experience).
+    "examples/apps/sample-common",
+    "examples/apps/f-notes",
+    "examples/apps/f-timer",
 
 ]
 # F-Builder là Cargo workspace riêng (edition 2024, [patch] wgpu-hal, xtask riêng).

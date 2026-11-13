@@ -1,0 +1,17 @@
+[package]
+name = "feco-sample-common"
+description = "Phần dùng chung của các app mẫu F-Eco: phông chữ, thư mục dữ liệu, đăng nhập qua F-SDK"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fsdk = { path = "../../../sdk/rust" }
+tokio = { workspace = true, features = ["rt"] }
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11"] }
+
+[lints]
+workspace = true

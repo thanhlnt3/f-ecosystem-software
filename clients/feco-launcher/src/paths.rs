@@ -54,6 +54,11 @@ impl Paths {
         self.root.join("state.json")
     }
 
+    /// Cài đặt giao diện (tách khỏi `state.json`, design E1 của improve-launcher-experience).
+    pub fn settings_file(&self) -> PathBuf {
+        self.root.join("settings.json")
+    }
+
     pub fn events_file(&self) -> PathBuf {
         self.root.join("security-events.jsonl")
     }

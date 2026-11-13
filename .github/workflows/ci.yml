@@ -60,7 +60,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
+      - run: npx -y @fission-ai/openspec@1.16.1 validate --changes --strict --no-interactive
 
   sdk:
     # tasks.md 10.2: binding C, Python, TypeScript của F-SDK.
