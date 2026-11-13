@@ -28,7 +28,9 @@ semver = "1.0.28"
 dirs = "7.0.0"
 open = "5.4.5"
 keyring-core = "1.0.1"
-eframe = { version = "0.37.0", default-features = false, features = ["glow", "wayland", "x11"] }
+# Renderer wgpu (DirectX 12, Vulkan, Metal): glow (OpenGL) của eframe 0.37 vẽ cửa sổ trắng trên
+# một số máy Windows (bản 1.0.0).
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "wayland", "x11"] }
 
 # Kho bảo mật của hệ điều hành (chỉ Windows và macOS, nền tảng launcher hỗ trợ).
 [target.'cfg(windows)'.dependencies]

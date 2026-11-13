@@ -1,5 +1,17 @@
 # Nhật ký thay đổi
 
+## 1.0.1 (13/11/2026)
+
+Bản vá cho F-Launcher.
+
+- **F-Launcher hiện cửa sổ trắng trên một số máy Windows.** Trên Windows 10 với card NVIDIA,
+  renderer glow (OpenGL) của eframe 0.37 không vẽ được gì. Launcher chuyển sang renderer wgpu
+  (DirectX 12 trên Windows, Metal trên macOS, Vulkan trên Linux). Tệp chạy lớn hơn một chút; các
+  thư viện mới đều MIT hoặc Apache-2.0 và có trong `THIRD_PARTY_NOTICES` và SBOM của gói.
+- Thời điểm đồng bộ và thời điểm của thông báo trong launcher hiện theo giờ của máy, không còn
+  hiện giờ UTC.
+- F-SDK cho Python và TypeScript có số phiên bản 1.0.1, mã không đổi.
+
 ## 1.0.0 (13/11/2026)
 
 Bản 1.0 đầu tiên của F-Eco: nền tảng tài khoản, đăng nhập một lần, F-Store và F-Launcher để

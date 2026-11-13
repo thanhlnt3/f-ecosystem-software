@@ -438,7 +438,12 @@ impl LauncherApp {
                 ui.colored_label(egui::Color32::from_rgb(200, 120, 0), "Đang ngoại tuyến");
             }
             if let Some(t) = self.view.last_sync {
-                ui.weak(format!("đồng bộ lần cuối {}", t.strftime("%H:%M %d/%m")));
+                // Giờ địa phương của máy (Timestamp là UTC).
+                let local = t.to_zoned(jiff::tz::TimeZone::system());
+                ui.weak(format!(
+                    "đồng bộ lần cuối {}",
+                    local.strftime("%H:%M %d/%m")
+                ));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let idle = self.busy.is_none();
@@ -551,13 +556,17 @@ impl LauncherApp {
                         } else {
                             ui.strong(&n.title);
                         }
-                        ui.weak(
-                            n.created_at
-                                .chars()
-                                .take(16)
-                                .collect::<String>()
-                                .replace('T', " "),
-                        );
+                        // Máy chủ trả thời điểm UTC (RFC 3339): hiện theo giờ của máy.
+                        let when = n
+                            .created_at
+                            .parse::<Timestamp>()
+                            .map(|t| {
+                                t.to_zoned(jiff::tz::TimeZone::system())
+                                    .strftime("%H:%M %d/%m/%Y")
+                                    .to_string()
+                            })
+                            .unwrap_or_else(|_| n.created_at.chars().take(16).collect());
+                        ui.weak(when);
                     });
                     ui.label(&n.body);
                     if !n.link.is_empty() && ui.button("Mở").clicked() {
