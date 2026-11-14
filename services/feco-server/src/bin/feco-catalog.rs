@@ -77,6 +77,11 @@ Thanh toán (quản trị viên ghi tên bằng FECO_REVIEWER):
   feco-catalog refund-approve <refund-id>          phê duyệt (từ 10.000.000 ₫ cần hai người khác nhau)
   feco-catalog payments-due                        chạy ngay truy vấn giao dịch quá 15 phút, lệnh hoàn
   feco-catalog reconcile [yyyy-mm-dd]              đối soát một ngày (mặc định hôm qua)
+  feco-catalog role-set <email> user|developer|admin:<vai trò con,...> <lý do>
+                                                   đổi vai trò nền tảng (Người sử dụng ứng dụng,
+                                                   Lập trình viên, Quản trị viên)
+  feco-catalog role-requests                       yêu cầu quyền Lập trình viên đang chờ
+  feco-catalog role-decide <id> approve|reject [ghi chú]   duyệt hoặc từ chối một yêu cầu
   feco-catalog payments-check                      kiểm khóa ZaloPay, VNPAY, MoMo và tài khoản MISA
                                                    bằng truy vấn vô hại (không tạo đơn, không phát
                                                    hành hóa đơn); xem docs/payments-setup.md
@@ -558,6 +563,65 @@ Bản ghi gợi ý:"
             };
             feco_server::admin::set_member(&state, &reviewer, email, &roles).await?;
             println!("đã cập nhật vai trò quản trị của {email}");
+        }
+        "role-set" => {
+            let email = arg(&args, 1)?;
+            let spec = arg(&args, 2)?;
+            let reason = args.get(3..).map(|r| r.join(" ")).unwrap_or_default();
+            let (role, subroles) = match spec.split_once(':') {
+                Some(("admin", list)) => (
+                    feco_server::roles::PlatformRole::Admin,
+                    list.split(',')
+                        .map(|r| {
+                            feco_server::admin::Role::parse(r.trim())
+                                .ok_or(format!("vai trò con không hợp lệ: {r}"))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                ),
+                _ => (
+                    feco_server::roles::PlatformRole::parse(spec)
+                        .ok_or(format!("vai trò không hợp lệ: {spec}"))?,
+                    Vec::new(),
+                ),
+            };
+            let target = subject_by_email(&state, email).await?;
+            let by = feco_server::roles::ChangedBy {
+                subject: None,
+                name: reviewer.clone(),
+            };
+            let before = feco_server::roles::set_role(
+                &state.db, target, email, role, &subroles, &by, &reason,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            println!("{email}: {} → {}", before.as_str(), role.as_str());
+        }
+        "role-requests" => {
+            for r in feco_server::roles::pending_requests(&state.db)
+                .await
+                .map_err(|e| e.to_string())?
+            {
+                println!("{}	{}	{}	{}", r.id, r.email, r.created_at, r.note);
+            }
+        }
+        "role-decide" => {
+            let id: uuid::Uuid = arg(&args, 1)?
+                .parse()
+                .map_err(|_| "mã yêu cầu không hợp lệ")?;
+            let approve = match arg(&args, 2)? {
+                "approve" => true,
+                "reject" => false,
+                other => return Err(format!("phải là approve hoặc reject: {other}")),
+            };
+            let note = args.get(3..).map(|r| r.join(" ")).unwrap_or_default();
+            let by = feco_server::roles::ChangedBy {
+                subject: None,
+                name: reviewer.clone(),
+            };
+            feco_server::roles::decide(&state, id, approve, &by, &note)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!("đã xử lý yêu cầu {id}");
         }
         "payment-link" => {
             if state.environment.is_production() {

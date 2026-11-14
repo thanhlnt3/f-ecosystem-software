@@ -373,13 +373,13 @@ mod tests {
         let path = dir.path().join("settings.json");
         let chosen = Prefs {
             language: Language::Fr,
-            style: UiStyle::BuiXuanPhai,
+            style: UiStyle::OldQuarter,
             ..Prefs::default()
         };
         chosen.save(&path).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(
-            text.contains("\"fr\"") && text.contains("\"bui_xuan_phai\""),
+            text.contains("\"fr\"") && text.contains("\"old_quarter\""),
             "{text}"
         );
         assert_eq!(Prefs::load(&path).0, chosen);

@@ -150,6 +150,8 @@ struct View {
     catalog: Vec<CatalogEntry>,
     auto_update: bool,
     user: Option<String>,
+    /// Vai trò nền tảng (platform-roles).
+    role: Option<feco_launcher::auth::AccountRole>,
     sign_in: Option<SignIn>,
     last_sync: Option<Timestamp>,
     notifications: Vec<feco_launcher::auth::Notification>,
@@ -163,6 +165,7 @@ async fn snapshot(shared: &Shared) -> View {
         catalog: l.catalog_latest().into_iter().cloned().collect(),
         auto_update: l.state().auto_update,
         user: l.state().user_name.clone(),
+        role: l.state().account_role.clone(),
         sign_in: Some(*shared.identity.sign_in.lock().expect("khóa")),
         last_sync: l.state().last_sync,
         notifications: shared.notifications.lock().expect("khóa").clone(),
@@ -638,6 +641,15 @@ struct Filter {
     category: Option<String>,
 }
 
+/// Tên vai trò nền tảng (đã dịch).
+fn role_label(role: &str) -> &'static str {
+    match role {
+        "admin" => t("Quản trị viên"),
+        "developer" => t("Lập trình viên"),
+        _ => t("Người sử dụng ứng dụng"),
+    }
+}
+
 fn rgb([r, g, b]: ui_style::Rgb) -> egui::Color32 {
     egui::Color32::from_rgb(r, g, b)
 }
@@ -1021,6 +1033,27 @@ impl LauncherApp {
                         .clicked()
                     {
                         actions.push(Action::Logout);
+                    }
+                    if let Some(role) = &self.view.role {
+                        if role.is_admin() {
+                            if let Some(url) = &role.admin_console {
+                                if ui.button(t("Bảng quản trị")).clicked() {
+                                    actions.push(Action::OpenLink(url.clone()));
+                                }
+                            }
+                        }
+                        if role.can_develop() {
+                            if let Some(url) = &role.developer_portal {
+                                if ui.button(t("Cổng nhà phát triển")).clicked() {
+                                    actions.push(Action::OpenLink(url.clone()));
+                                }
+                            }
+                        }
+                        ui.label(
+                            egui::RichText::new(role_label(&role.role))
+                                .small()
+                                .color(accent(&self.prefs)),
+                        );
                     }
                     ui.strong(
                         self.view
@@ -1677,6 +1710,9 @@ impl LauncherApp {
                                 "Đã đăng nhập: {}",
                                 &[&self.view.user.clone().unwrap_or_default()],
                             ));
+                            if let Some(role) = &self.view.role {
+                                ui.label(tf("Vai trò: {}", &[&role_label(&role.role)]));
+                            }
                             ui.horizontal(|ui| {
                                 if ui.button(t("Ứng dụng đã kết nối")).clicked() {
                                     if let Ok(url) = self.shared.config.server.join("apps") {
@@ -2136,6 +2172,13 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
             match s.identity.auth.notifications(&token).await {
                 Ok(n) => *s.notifications.lock().expect("khóa") = n,
                 Err(e) => eprintln!("không lấy được thông báo: {e}"),
+            }
+            // Vai trò nền tảng; không hỏi được thì giữ lần trước.
+            match s.identity.auth.account_role(&token).await {
+                Ok(role) => {
+                    let _ = l.set_account_role(Some(role));
+                }
+                Err(e) => eprintln!("không lấy được vai trò: {e}"),
             }
         }
         Err(AuthError::Offline(_)) => {}

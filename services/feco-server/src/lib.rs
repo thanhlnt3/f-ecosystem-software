@@ -40,6 +40,7 @@ pub mod payments_web;
 pub mod ratelimit;
 
 pub mod review;
+pub mod roles;
 pub mod scan;
 pub mod security;
 pub mod store;
@@ -280,6 +281,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/developer/docs", get(dev_web::docs))
         .route("/policy/content", get(dev_web::content_policy))
         .route("/developer/register", post(dev_web::register))
+        .route("/developer/role-request", post(dev_web::request_role))
         .route("/developer/apps/{id}", get(dev_web::app_page))
         .route("/developer/apps/{id}/{action}", post(dev_web::app_action))
         .route(
@@ -328,6 +330,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/admin/members",
             get(admin::members).post(admin::save_member),
         )
+        .route(
+            "/admin/members/requests/{id}/{action}",
+            post(admin::decide_role_request),
+        )
         .route("/notifications", get(notifications::center))
         .route(
             "/notifications/settings",
@@ -362,6 +368,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         )
         .route("/store/{id}/report", post(store_web::submit_report))
         .route("/v1/launch-codes", post(launch::issue))
+        .route("/v1/account/role", get(launch::account_role))
         .route("/v1/launch-codes/exchange", post(launch::exchange))
         .route(
             "/security/not-me/{token}",

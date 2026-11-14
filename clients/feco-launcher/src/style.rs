@@ -2,8 +2,9 @@
 //! "Phong cách giao diện", "Phong cách đọc được và không sao chép tác phẩm"; design P2, P3).
 //!
 //! Dữ liệu thuần: bảng màu, bo góc, dải họa tiết. `main.rs` chuyển thành `egui::Style`.
-//! Phong cách họa sĩ chỉ là bảng màu do F-Eco tự chọn, gợi lại cách dùng màu thường gặp trong
-//! tranh của họa sĩ; không dùng hình ảnh hay bản sao tác phẩm nào.
+//! Phong cách có bảng màu riêng (Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ,
+//! Sơn mài) chỉ là bảng màu do F-Eco tự chọn; không dùng hình ảnh hay bản sao tác phẩm nào. Tên
+//! là tên phổ thông (thay đổi platform-roles); mã cũ của bản 1.2 vẫn đọc được (serde alias).
 
 use crate::i18n::t;
 use serde::{Deserialize, Serialize};
@@ -48,14 +49,22 @@ pub enum UiStyle {
     #[default]
     Plain,
     Elegant,
-    Davinci,
-    Michelangelo,
-    Vangogh,
-    Monet,
-    Picasso,
-    ToNgocVan,
-    BuiXuanPhai,
-    NguyenGiaTri,
+    #[serde(alias = "davinci")]
+    Parchment,
+    #[serde(alias = "michelangelo")]
+    Fresco,
+    #[serde(alias = "vangogh")]
+    StarryNight,
+    #[serde(alias = "monet")]
+    LotusPond,
+    #[serde(alias = "picasso")]
+    Cubist,
+    #[serde(alias = "to_ngoc_van")]
+    Lily,
+    #[serde(alias = "bui_xuan_phai")]
+    OldQuarter,
+    #[serde(alias = "nguyen_gia_tri")]
+    Lacquer,
 }
 
 /// Màu trạng thái của Chân phương và Trang nhã khi theo chủ đề sáng hoặc tối.
@@ -91,29 +100,29 @@ impl UiStyle {
     pub const ALL: [UiStyle; 10] = [
         UiStyle::Plain,
         UiStyle::Elegant,
-        UiStyle::Davinci,
-        UiStyle::Michelangelo,
-        UiStyle::Vangogh,
-        UiStyle::Monet,
-        UiStyle::Picasso,
-        UiStyle::ToNgocVan,
-        UiStyle::BuiXuanPhai,
-        UiStyle::NguyenGiaTri,
+        UiStyle::Parchment,
+        UiStyle::Fresco,
+        UiStyle::StarryNight,
+        UiStyle::LotusPond,
+        UiStyle::Cubist,
+        UiStyle::Lily,
+        UiStyle::OldQuarter,
+        UiStyle::Lacquer,
     ];
 
-    /// Tên hiển thị (đã dịch). Tên họa sĩ giữ nguyên.
+    /// Tên hiển thị (đã dịch): tên phổ thông, không dùng tên người (thay đổi platform-roles, R6).
     pub fn label(self) -> &'static str {
         match self {
             UiStyle::Plain => t("Chân phương"),
             UiStyle::Elegant => t("Trang nhã"),
-            UiStyle::Davinci => "Leonardo da Vinci",
-            UiStyle::Michelangelo => "Michelangelo",
-            UiStyle::Vangogh => "Vincent van Gogh",
-            UiStyle::Monet => "Claude Monet",
-            UiStyle::Picasso => "Pablo Picasso",
-            UiStyle::ToNgocVan => "Tô Ngọc Vân",
-            UiStyle::BuiXuanPhai => "Bùi Xuân Phái",
-            UiStyle::NguyenGiaTri => "Nguyễn Gia Trí",
+            UiStyle::Parchment => t("Giấy da"),
+            UiStyle::Fresco => t("Bích họa"),
+            UiStyle::StarryNight => t("Trời sao"),
+            UiStyle::LotusPond => t("Hồ sen"),
+            UiStyle::Cubist => t("Lập thể"),
+            UiStyle::Lily => t("Hoa huệ"),
+            UiStyle::OldQuarter => t("Phố cổ"),
+            UiStyle::Lacquer => t("Sơn mài"),
         }
     }
 
@@ -124,26 +133,20 @@ impl UiStyle {
             UiStyle::Elegant => {
                 t("Nút và thẻ bo tròn, thoáng hơn; theo chủ đề và màu nhấn bạn chọn")
             }
-            UiStyle::Davinci => {
+            UiStyle::Parchment => {
                 t("Cảm hứng từ bảng màu bản phác thảo: giấy da, nâu sepia, đất nung")
             }
-            UiStyle::Michelangelo => {
-                t("Cảm hứng từ bảng màu bích họa: vữa sáng, xanh lam đá, đỏ đất")
-            }
-            UiStyle::Vangogh => {
+            UiStyle::Fresco => t("Cảm hứng từ bảng màu bích họa: vữa sáng, xanh lam đá, đỏ đất"),
+            UiStyle::StarryNight => {
                 t("Cảm hứng từ bảng màu trời đêm: xanh thẫm, vàng crôm, xanh coban")
             }
-            UiStyle::Monet => {
+            UiStyle::LotusPond => {
                 t("Cảm hứng từ bảng màu mặt nước: lục nhạt, tím oải hương, hồng phấn")
             }
-            UiStyle::Picasso => {
-                t("Cảm hứng từ thời kỳ Xanh và tranh lập thể: xanh lam, góc vuông, viền đậm")
-            }
-            UiStyle::ToNgocVan => {
-                t("Cảm hứng từ bảng màu sơn dầu: trắng ngà, lục nhạt, vàng hoa huệ")
-            }
-            UiStyle::BuiXuanPhai => t("Cảm hứng từ bảng màu phố cũ: vàng đất, xám ngói, nâu son"),
-            UiStyle::NguyenGiaTri => t("Cảm hứng từ bảng màu sơn mài: đen then, son đỏ, vàng thếp"),
+            UiStyle::Cubist => t("Cảm hứng từ tranh lập thể: xanh lam, góc vuông, viền đậm"),
+            UiStyle::Lily => t("Cảm hứng từ bảng màu sơn dầu: trắng ngà, lục nhạt, vàng hoa huệ"),
+            UiStyle::OldQuarter => t("Cảm hứng từ bảng màu phố cũ: vàng đất, xám ngói, nâu son"),
+            UiStyle::Lacquer => t("Cảm hứng từ bảng màu sơn mài: đen then, son đỏ, vàng thếp"),
         }
     }
 
@@ -156,7 +159,7 @@ impl UiStyle {
     pub fn palette(self) -> Option<Palette> {
         let p = match self {
             UiStyle::Plain | UiStyle::Elegant => return None,
-            UiStyle::Davinci => Palette {
+            UiStyle::Parchment => Palette {
                 dark: false,
                 window: [0xED, 0xE0, 0xC4],
                 panel: [0xE3, 0xD2, 0xAE],
@@ -169,7 +172,7 @@ impl UiStyle {
                 warn: [0x7A, 0x4E, 0x00],
                 danger: [0x9E, 0x2A, 0x1C],
             },
-            UiStyle::Michelangelo => Palette {
+            UiStyle::Fresco => Palette {
                 dark: false,
                 window: [0xF1, 0xE7, 0xD8],
                 panel: [0xE6, 0xD6, 0xBF],
@@ -182,7 +185,7 @@ impl UiStyle {
                 warn: [0x7A, 0x4E, 0x00],
                 danger: [0xA1, 0x2C, 0x1E],
             },
-            UiStyle::Vangogh => Palette {
+            UiStyle::StarryNight => Palette {
                 dark: true,
                 window: [0x0F, 0x1E, 0x3D],
                 panel: [0x0B, 0x17, 0x30],
@@ -195,7 +198,7 @@ impl UiStyle {
                 warn: [0xFF, 0xC0, 0x70],
                 danger: [0xFF, 0x9C, 0x90],
             },
-            UiStyle::Monet => Palette {
+            UiStyle::LotusPond => Palette {
                 dark: false,
                 window: [0xE7, 0xEF, 0xE8],
                 panel: [0xD7, 0xE5, 0xDB],
@@ -208,7 +211,7 @@ impl UiStyle {
                 warn: [0x6E, 0x4A, 0x00],
                 danger: [0xA3, 0x26, 0x3B],
             },
-            UiStyle::Picasso => Palette {
+            UiStyle::Cubist => Palette {
                 dark: false,
                 window: [0xE4, 0xEC, 0xF4],
                 panel: [0xCA, 0xD8, 0xE8],
@@ -221,7 +224,7 @@ impl UiStyle {
                 warn: [0x6E, 0x4A, 0x00],
                 danger: [0xB0, 0x18, 0x2E],
             },
-            UiStyle::ToNgocVan => Palette {
+            UiStyle::Lily => Palette {
                 dark: false,
                 window: [0xF5, 0xF2, 0xE8],
                 panel: [0xEA, 0xE6, 0xD8],
@@ -234,7 +237,7 @@ impl UiStyle {
                 warn: [0x6E, 0x4A, 0x00],
                 danger: [0xA3, 0x3A, 0x2A],
             },
-            UiStyle::BuiXuanPhai => Palette {
+            UiStyle::OldQuarter => Palette {
                 dark: false,
                 window: [0xE8, 0xDF, 0xCF],
                 panel: [0xD9, 0xCC, 0xB6],
@@ -247,7 +250,7 @@ impl UiStyle {
                 warn: [0x6E, 0x46, 0x00],
                 danger: [0x9E, 0x2A, 0x1C],
             },
-            UiStyle::NguyenGiaTri => Palette {
+            UiStyle::Lacquer => Palette {
                 dark: true,
                 window: [0x12, 0x0C, 0x09],
                 panel: [0x0B, 0x07, 0x05],
@@ -274,14 +277,14 @@ impl UiStyle {
         match self {
             UiStyle::Plain => s(3, 6, 1.0, 1.0),
             UiStyle::Elegant => s(14, 16, 1.0, 1.25),
-            UiStyle::Davinci => s(4, 8, 1.0, 1.1),
-            UiStyle::Michelangelo => s(6, 10, 1.0, 1.1),
-            UiStyle::Vangogh => s(12, 14, 1.0, 1.15),
-            UiStyle::Monet => s(16, 18, 1.0, 1.25),
-            UiStyle::Picasso => s(0, 0, 1.5, 1.0),
-            UiStyle::ToNgocVan => s(12, 16, 1.0, 1.2),
-            UiStyle::BuiXuanPhai => s(3, 4, 1.2, 1.05),
-            UiStyle::NguyenGiaTri => s(2, 4, 1.0, 1.1),
+            UiStyle::Parchment => s(4, 8, 1.0, 1.1),
+            UiStyle::Fresco => s(6, 10, 1.0, 1.1),
+            UiStyle::StarryNight => s(12, 14, 1.0, 1.15),
+            UiStyle::LotusPond => s(16, 18, 1.0, 1.25),
+            UiStyle::Cubist => s(0, 0, 1.5, 1.0),
+            UiStyle::Lily => s(12, 16, 1.0, 1.2),
+            UiStyle::OldQuarter => s(3, 4, 1.2, 1.05),
+            UiStyle::Lacquer => s(2, 4, 1.0, 1.1),
         }
     }
 
@@ -289,56 +292,56 @@ impl UiStyle {
     pub fn motif(self) -> Option<[Rgb; 5]> {
         Some(match self {
             UiStyle::Plain | UiStyle::Elegant => return None,
-            UiStyle::Davinci => [
+            UiStyle::Parchment => [
                 [0xF6, 0xED, 0xD9],
                 [0xD9, 0xC2, 0x9A],
                 [0xA9, 0x81, 0x4F],
                 [0x7A, 0x4A, 0x1E],
                 [0x3A, 0x28, 0x17],
             ],
-            UiStyle::Michelangelo => [
+            UiStyle::Fresco => [
                 [0xE8, 0xC9, 0xA6],
                 [0xC2, 0x78, 0x5B],
                 [0x8A, 0x9A, 0x5B],
                 [0x2F, 0x5E, 0x8E],
                 [0x5B, 0x7F, 0xB0],
             ],
-            UiStyle::Vangogh => [
+            UiStyle::StarryNight => [
                 [0x0B, 0x17, 0x30],
                 [0x2E, 0x4F, 0x8A],
                 [0x5D, 0x8A, 0xC9],
                 [0xF2, 0xC2, 0x30],
                 [0xF7, 0xE2, 0x7A],
             ],
-            UiStyle::Monet => [
+            UiStyle::LotusPond => [
                 [0xF3, 0xC6, 0xD3],
                 [0xC9, 0xB8, 0xE8],
                 [0x9C, 0xC9, 0xB6],
                 [0x6F, 0xA3, 0xA8],
                 [0x5B, 0x4B, 0x9A],
             ],
-            UiStyle::Picasso => [
+            UiStyle::Cubist => [
                 [0x1F, 0x3B, 0x63],
                 [0x3D, 0x6A, 0xA8],
                 [0xE3, 0xB2, 0x3C],
                 [0xC2, 0x45, 0x2D],
                 [0x14, 0x23, 0x3A],
             ],
-            UiStyle::ToNgocVan => [
+            UiStyle::Lily => [
                 [0xFF, 0xFD, 0xF7],
                 [0xF3, 0xE6, 0xB3],
                 [0xCF, 0xE0, 0xC0],
                 [0x8F, 0xB3, 0x7A],
                 [0x4F, 0x7A, 0x3E],
             ],
-            UiStyle::BuiXuanPhai => [
+            UiStyle::OldQuarter => [
                 [0xD8, 0xB6, 0x7A],
                 [0xB9, 0xA5, 0x8A],
                 [0x7D, 0x74, 0x68],
                 [0x8E, 0x4A, 0x24],
                 [0x3E, 0x3A, 0x36],
             ],
-            UiStyle::NguyenGiaTri => [
+            UiStyle::Lacquer => [
                 [0x0B, 0x07, 0x05],
                 [0x5A, 0x1D, 0x14],
                 [0xB3, 0x30, 0x2A],
@@ -442,17 +445,28 @@ mod tests {
             assert_eq!(s.motif().is_some(), s.palette().is_some());
         }
         assert!(UiStyle::Elegant.shape().radius > UiStyle::Plain.shape().radius);
-        assert_eq!(UiStyle::Picasso.shape().radius, 0);
+        assert_eq!(UiStyle::Cubist.shape().radius, 0);
         assert_eq!(UiStyle::default(), UiStyle::Plain);
         // Tên lưu trong settings.json.
+        assert_eq!(serde_json::to_string(&UiStyle::Lily).unwrap(), "\"lily\"");
         assert_eq!(
-            serde_json::to_string(&UiStyle::ToNgocVan).unwrap(),
-            "\"to_ngoc_van\""
+            serde_json::to_string(&UiStyle::StarryNight).unwrap(),
+            "\"starry_night\""
         );
-        assert_eq!(
-            serde_json::to_string(&UiStyle::Vangogh).unwrap(),
-            "\"vangogh\""
-        );
+        // Scenario "Cài đặt cũ": mã phong cách của bản 1.2 vẫn đọc đúng.
+        for (old, new) in [
+            ("davinci", UiStyle::Parchment),
+            ("michelangelo", UiStyle::Fresco),
+            ("vangogh", UiStyle::StarryNight),
+            ("monet", UiStyle::LotusPond),
+            ("picasso", UiStyle::Cubist),
+            ("to_ngoc_van", UiStyle::Lily),
+            ("bui_xuan_phai", UiStyle::OldQuarter),
+            ("nguyen_gia_tri", UiStyle::Lacquer),
+        ] {
+            let parsed: UiStyle = serde_json::from_str(&format!("\"{old}\"")).unwrap();
+            assert_eq!(parsed, new, "{old}");
+        }
     }
 
     #[test]

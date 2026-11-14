@@ -29,7 +29,7 @@ Mọi chuỗi giao diện của launcher SHALL có bản tiếng Anh và tiếng
 F-Launcher SHALL cho người dùng chọn phong cách giao diện trong Cài đặt, mỗi phong cách có ô xem trước. Danh sách gồm:
 - **Chân phương** (mặc định): góc gần vuông, phẳng;
 - **Trang nhã**: nút và thẻ bo tròn;
-- các phong cách lấy cảm hứng từ bảng màu của họa sĩ: Leonardo da Vinci, Michelangelo, Vincent van Gogh, Claude Monet, Pablo Picasso, Tô Ngọc Vân, Bùi Xuân Phái, Nguyễn Gia Trí.
+- các phong cách có bảng màu riêng: Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài. Tên phổ thông theo thay đổi `platform-roles`; bản 1.2 dùng tên họa sĩ.
 
 Đổi phong cách MUST có hiệu lực ngay và MUST được nhớ cho lần mở sau.
 
@@ -37,12 +37,12 @@ F-Launcher SHALL cho người dùng chọn phong cách giao diện trong Cài đ
 - **WHEN** người dùng chọn "Trang nhã"
 - **THEN** các nút và thẻ app hiện bo tròn ngay, chủ đề sáng hoặc tối và màu nhấn đang chọn vẫn giữ nguyên
 
-#### Scenario: Chọn phong cách Van Gogh
-- **WHEN** người dùng chọn "Vincent van Gogh"
+#### Scenario: Chọn phong cách Trời sao
+- **WHEN** người dùng chọn "Trời sao"
 - **THEN** launcher dùng nền xanh đêm thẫm với màu nhấn vàng, và dải họa tiết màu ở thanh bên. Ô chọn chủ đề và màu nhấn bị tắt, kèm lời giải thích rằng phong cách này dùng bảng màu riêng
 
 #### Scenario: Khôi phục mặc định
-- **GIVEN** người dùng đang dùng tiếng Pháp và phong cách "Bùi Xuân Phái"
+- **GIVEN** người dùng đang dùng tiếng Pháp và phong cách "Phố cổ"
 - **WHEN** người dùng bấm "Khôi phục mặc định"
 - **THEN** launcher về tiếng Việt và phong cách Chân phương
 

@@ -21,6 +21,8 @@ feco-tuf: quản lý kho TUF của F-Eco
                    [--terminal true] [--description TEXT] [--features A|B|C] [--website URL]
                    [--release-notes TEXT] [--license SPDX] [--released-at RFC3339]
   feco-tuf revoke --repo DIR --name N --reason TEXT --sign T,S,TS
+  feco-tuf remove --repo DIR --app A --sign T,S,TS   gỡ mọi phiên bản của app khỏi danh mục
+                                             (không thu hồi: máy đã cài vẫn mở được)
   feco-tuf refresh --repo DIR --sign S,TS    ký lại snapshot và timestamp (chạy định kỳ)
   feco-tuf resign --repo DIR --sign T,S,TS   gia hạn targets khi không có phát hành mới
   feco-tuf rotate --repo DIR --role root|targets|snapshot|timestamp --keys K,... [--threshold N]
@@ -216,6 +218,15 @@ async fn run(raw: &[String]) -> Result<(), String> {
                 "đã thu hồi {} lúc {}: {}",
                 revocation.target, revocation.revoked_at, revocation.reason
             );
+        }
+        "remove" => {
+            let app = args.get("app")?;
+            let removed = args
+                .repo()?
+                .remove_app(app, &args.signers()?, expiry, now)
+                .await
+                .map_err(e)?;
+            println!("đã gỡ {app} khỏi danh mục: {}", removed.join(", "));
         }
         "refresh" => {
             args.repo()?

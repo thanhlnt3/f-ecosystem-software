@@ -42,6 +42,9 @@ pub struct LocalState {
     /// Tên người dùng của lần đăng nhập gần nhất (hiện khi ngoại tuyến).
     #[serde(default)]
     pub user_name: Option<String>,
+    /// Vai trò nền tảng của lần đồng bộ gần nhất (giữ khi ngoại tuyến).
+    #[serde(default)]
+    pub account_role: Option<crate::auth::AccountRole>,
     #[serde(default)]
     pub last_sync: Option<Timestamp>,
     #[serde(default)]

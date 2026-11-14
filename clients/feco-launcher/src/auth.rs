@@ -398,6 +398,31 @@ impl Auth {
         Ok(parse_notifications(&body))
     }
 
+    /// Vai trò nền tảng của người dùng (`GET /v1/account/role`, chỉ token của launcher).
+    pub async fn account_role(&self, access: &str) -> Result<AccountRole, AuthError> {
+        let url = self
+            .server
+            .join("v1/account/role")
+            .expect("URL máy chủ hợp lệ");
+        let res = self
+            .http
+            .get(url)
+            .bearer_auth(access)
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        match res.status() {
+            s if s.is_success() => {}
+            reqwest::StatusCode::UNAUTHORIZED => return Err(AuthError::Expired),
+            s => return Err(AuthError::Failed(format!("/v1/account/role trả {s}"))),
+        }
+        let body: Value = res
+            .json()
+            .await
+            .map_err(|e| AuthError::Failed(e.to_string()))?;
+        Ok(AccountRole::from_json(&body))
+    }
+
     /// App riêng tư của người dùng (ví dụ bản build bàn giao của đơn xây app).
     pub async fn private_apps(&self, access: &str) -> Result<Vec<String>, AuthError> {
         let url = self
@@ -545,6 +570,45 @@ pub struct Notification {
     pub read: bool,
 }
 
+/// Vai trò nền tảng (thay đổi platform-roles): người sử dụng ứng dụng, lập trình viên, quản trị
+/// viên. Chỉ để hiển thị và gợi lối tắt; mọi kiểm soát quyền nằm ở máy chủ.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AccountRole {
+    /// `user`, `developer` hoặc `admin`.
+    pub role: String,
+    #[serde(default)]
+    pub developer_portal: Option<String>,
+    #[serde(default)]
+    pub admin_console: Option<String>,
+}
+
+impl AccountRole {
+    pub fn from_json(body: &Value) -> Self {
+        let role = match body["role"].as_str() {
+            Some(r @ ("developer" | "admin")) => r.to_owned(),
+            _ => "user".to_owned(),
+        };
+        let https_or_local = |v: &Value| {
+            v.as_str()
+                .filter(|u| u.starts_with("https://") || u.starts_with("http://127.0.0.1"))
+                .map(str::to_owned)
+        };
+        AccountRole {
+            role,
+            developer_portal: https_or_local(&body["developer_portal"]),
+            admin_console: https_or_local(&body["admin_console"]),
+        }
+    }
+
+    pub fn can_develop(&self) -> bool {
+        matches!(self.role.as_str(), "developer" | "admin")
+    }
+
+    pub fn is_admin(&self) -> bool {
+        self.role == "admin"
+    }
+}
+
 pub fn parse_notifications(body: &Value) -> Vec<Notification> {
     body["notifications"]
         .as_array()
@@ -569,6 +633,26 @@ pub fn parse_notifications(body: &Value) -> Vec<Notification> {
 #[cfg(test)]
 mod notification_tests {
     use super::*;
+
+    /// platform-roles: vai trò lạ coi như người sử dụng; chỉ nhận liên kết https (hoặc máy dev).
+    #[test]
+    fn account_role_is_parsed_safely() {
+        let dev = AccountRole::from_json(&serde_json::json!({
+            "role": "developer",
+            "developer_portal": "https://f-eco.example/developer",
+            "admin_console": "javascript:alert(1)",
+        }));
+        assert!(dev.can_develop() && !dev.is_admin());
+        assert_eq!(
+            dev.developer_portal.as_deref(),
+            Some("https://f-eco.example/developer")
+        );
+        assert_eq!(dev.admin_console, None);
+        let odd = AccountRole::from_json(&serde_json::json!({"role": "root"}));
+        assert_eq!(odd.role, "user");
+        assert!(!odd.can_develop());
+        assert!(AccountRole::from_json(&serde_json::json!({"role": "admin"})).is_admin());
+    }
 
     #[test]
     fn notifications_keep_only_web_links() {

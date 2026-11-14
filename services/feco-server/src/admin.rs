@@ -359,7 +359,18 @@ pub struct UserProfile {
 pub struct MemberRow {
     pub subject: String,
     pub email: String,
+    /// Vai trò nền tảng (Lập trình viên, Quản trị viên).
+    pub platform: String,
+    /// Vai trò con của quản trị viên.
     pub roles: String,
+}
+
+/// Yêu cầu quyền Lập trình viên đang chờ (trang Phân quyền).
+pub struct RoleRequestRow {
+    pub id: String,
+    pub email: String,
+    pub note: String,
+    pub created: String,
 }
 
 pub struct RoleOption {
@@ -388,6 +399,9 @@ struct AdminPage {
     profile: Option<UserProfile>,
     members: Vec<MemberRow>,
     role_options: Vec<RoleOption>,
+    /// Vai trò nền tảng để chọn trên trang Phân quyền.
+    platform_options: Vec<RoleOption>,
+    role_requests: Vec<RoleRequestRow>,
 }
 
 impl AdminPage {
@@ -434,6 +448,14 @@ impl AdminPage {
                     label: r.label(lang),
                 })
                 .collect(),
+            platform_options: crate::roles::PlatformRole::ALL
+                .into_iter()
+                .map(|r| RoleOption {
+                    code: r.as_str(),
+                    label: r.label(lang),
+                })
+                .collect(),
+            role_requests: Vec::new(),
         }
     }
 }
@@ -1457,17 +1479,16 @@ async fn render_members(
 ) -> Response {
     let mut page = AdminPage::new(lang, admin, "members");
     page.messages = messages;
-    let rows: Vec<(Uuid, String, Vec<String>)> =
-        sqlx::query_as("SELECT subject, email, roles FROM admin_members ORDER BY email")
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default();
-    page.members = rows
+    page.members = crate::roles::holders(&state.db)
+        .await
+        .unwrap_or_default()
         .into_iter()
-        .map(|(s, e, r)| MemberRow {
-            subject: s.to_string(),
-            email: e,
-            roles: r
+        .map(|h| MemberRow {
+            subject: h.subject.to_string(),
+            email: h.email,
+            platform: h.role.label(lang).to_owned(),
+            roles: h
+                .admin_roles
                 .iter()
                 .filter_map(|x| Role::parse(x))
                 .map(|x| x.label(lang))
@@ -1475,7 +1496,40 @@ async fn render_members(
                 .join(", "),
         })
         .collect();
+    page.role_requests = crate::roles::pending_requests(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|r| RoleRequestRow {
+            id: r.id.to_string(),
+            email: r.email,
+            note: r.note,
+            created: r
+                .created_at
+                .format(time::macros::format_description!(
+                    "[day]/[month]/[year] [hour]:[minute]"
+                ))
+                .unwrap_or_default(),
+        })
+        .collect();
     render(state, headers, page, status)
+}
+
+/// Tài khoản Kratos có email này.
+async fn subject_by_email(state: &AppState, email: &str) -> Result<Uuid, String> {
+    state
+        .kratos
+        .list_identities()
+        .await
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|i| {
+            i["traits"]["email"]
+                .as_str()
+                .is_some_and(|e| e.eq_ignore_ascii_case(email.trim()))
+        })
+        .and_then(|i| i["id"].as_str().and_then(|s| s.parse().ok()))
+        .ok_or_else(|| "không có người dùng với email này".to_owned())
 }
 
 /// GET /admin/members
@@ -1506,19 +1560,7 @@ pub async fn set_member(
     email: &str,
     roles: &[Role],
 ) -> Result<Uuid, String> {
-    let subject: Uuid = state
-        .kratos
-        .list_identities()
-        .await
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .find(|i| {
-            i["traits"]["email"]
-                .as_str()
-                .is_some_and(|e| e.eq_ignore_ascii_case(email))
-        })
-        .and_then(|i| i["id"].as_str().and_then(|s| s.parse().ok()))
-        .ok_or("không có người dùng với email này")?;
+    let subject = subject_by_email(state, email).await?;
     if roles.is_empty() {
         sqlx::query("DELETE FROM admin_members WHERE subject = $1")
             .bind(subject)
@@ -1551,7 +1593,9 @@ pub async fn set_member(
     Ok(subject)
 }
 
-/// POST /admin/members (email, roles[]): thêm, đổi vai trò, hoặc bỏ hết vai trò để gỡ.
+/// POST /admin/members (email, platform_role, role[], reason): đổi vai trò nền tảng của một người
+/// dùng (thay đổi platform-roles, scenario "Cấp quyền Lập trình viên", "Thiếu lý do",
+/// "Tự hạ quyền").
 pub async fn save_member(
     State(state): State<Arc<AppState>>,
     lang: Lang,
@@ -1574,47 +1618,104 @@ pub async fn save_member(
         Ok(a) => a,
         Err(r) => return *r,
     };
-    let roles: Vec<Role> = f
+    let subroles: Vec<Role> = f
         .iter()
         .filter(|(k, _)| k == "role")
         .filter_map(|(_, v)| Role::parse(v))
         .collect();
-    let email = field(&f, "email").trim();
-    if email.eq_ignore_ascii_case(&admin.email) && !roles.contains(&Role::Sysadmin) {
-        return render_members(
+    let platform = crate::roles::PlatformRole::parse(field(&f, "platform_role")).unwrap_or(
+        if subroles.is_empty() {
+            crate::roles::PlatformRole::User
+        } else {
+            crate::roles::PlatformRole::Admin
+        },
+    );
+    let email = field(&f, "email").trim().to_owned();
+    let fail = |msg: String| async {
+        render_members(
             &state,
             lang,
             &headers,
             &admin,
-            vec![Msg::error(lang.t("admin.keep_own_sysadmin"))],
+            vec![Msg::error(msg)],
             StatusCode::BAD_REQUEST,
         )
-        .await;
-    }
-    match set_member(&state, &admin.email, email, &roles).await {
+        .await
+    };
+    let target = match subject_by_email(&state, &email).await {
+        Ok(t) => t,
+        Err(_) => return fail(lang.t("role.err.no_user").to_owned()).await,
+    };
+    let by = crate::roles::ChangedBy {
+        subject: Some(admin.subject),
+        name: admin.email.clone(),
+    };
+    match crate::roles::set_role(
+        &state.db,
+        target,
+        &email,
+        platform,
+        &subroles,
+        &by,
+        field(&f, "reason"),
+    )
+    .await
+    {
         Ok(_) => {
             render_members(
                 &state,
                 lang,
                 &headers,
                 &admin,
-                vec![Msg::success(lang.t("admin.saved"))],
+                vec![Msg::success(lang.t("role.saved"))],
                 StatusCode::OK,
             )
             .await
         }
-        Err(e) => {
-            render_members(
-                &state,
-                lang,
-                &headers,
-                &admin,
-                vec![Msg::error(e)],
-                StatusCode::BAD_REQUEST,
-            )
-            .await
-        }
+        Err(e) => fail(lang.t(e.key()).to_owned()).await,
     }
+}
+
+/// POST /admin/members/requests/{id}/{approve|reject} (note): duyệt hoặc từ chối yêu cầu quyền
+/// Lập trình viên (scenario "Gửi và được duyệt").
+pub async fn decide_role_request(
+    State(state): State<Arc<AppState>>,
+    lang: Lang,
+    headers: HeaderMap,
+    Path((id, action)): Path<(Uuid, String)>,
+    body: Bytes,
+) -> Response {
+    let f = form(&body);
+    if !csrf::verify(&headers, Some(field(&f, csrf::FIELD))) {
+        return page_status(lang, StatusCode::FORBIDDEN, "error.csrf");
+    }
+    let admin = match gate(
+        &state,
+        lang,
+        &headers,
+        "/admin/members",
+        Some(Role::Sysadmin),
+    )
+    .await
+    {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    let approve = match action.as_str() {
+        "approve" => true,
+        "reject" => false,
+        _ => return page_status(lang, StatusCode::NOT_FOUND, "error.generic"),
+    };
+    let by = crate::roles::ChangedBy {
+        subject: Some(admin.subject),
+        name: admin.email.clone(),
+    };
+    let (message, status) =
+        match crate::roles::decide(&state, id, approve, &by, field(&f, "note")).await {
+            Ok(()) => (Msg::success(lang.t("role.decided")), StatusCode::OK),
+            Err(e) => (Msg::error(lang.t(e.key())), StatusCode::BAD_REQUEST),
+        };
+    render_members(&state, lang, &headers, &admin, vec![message], status).await
 }
 
 #[cfg(test)]

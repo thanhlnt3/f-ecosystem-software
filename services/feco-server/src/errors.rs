@@ -24,6 +24,7 @@ pub const CODES: &[(&str, u16, &str, &str)] = &[
     ("not_ready", 409, "Chưa gửi duyệt được: thiếu gói cho một số nền tảng.", "Cannot submit: some platforms have no package."),
     ("not_approved", 409, "Chỉ phát hành được phiên bản đã qua kiểm duyệt.", "Only reviewed versions can be released."),
     ("not_released", 409, "Phiên bản chưa được phát hành.", "The version has not been released."),
+    ("developer_role_required", 403, "Tài khoản chủ token không còn vai trò Lập trình viên. Gửi yêu cầu ở Cổng nhà phát triển hoặc liên hệ quản trị viên.", "The token owner no longer has the Developer role. Request it in the developer portal or contact an administrator."),
     ("insufficient_role", 403, "Vai trò của bạn trong nhóm không đủ cho thao tác này.", "Your team role does not allow this."),
     ("agreement_required", 403, "Tài khoản chưa chấp nhận Thỏa thuận nhà phát triển hiện hành.", "The account has not accepted the current Developer Agreement."),
     ("account_suspended", 403, "Tài khoản nhà phát triển đang bị tạm khóa chờ điều tra.", "The developer account is suspended pending investigation."),

@@ -8,7 +8,25 @@
 <div class="msg success" id="secret">{{ i18n.t("dev.secret_once") }}<br><code>{{ value }}</code></div>
 {% when None %}{% endmatch %}
 
-{% if blocked %}
+{% if needs_role %}
+<section id="need-role">
+  <h2>{{ i18n.t("dev.need_role") }}</h2>
+  <p>{{ i18n.t("dev.your_role") }}: <strong class="platform-role">{{ platform_role }}</strong></p>
+  <p>{{ i18n.t("dev.need_role_text") }}</p>
+  {% if request_status == "pending" %}
+  <div class="msg" id="request-pending">{{ i18n.t("dev.request_pending") }}</div>
+  {% else %}
+  {% if request_status == "rejected" %}<div class="msg error" id="request-rejected">{{ i18n.t("dev.request_rejected") }} {{ request_note }}</div>{% endif %}
+  <form method="post" action="/developer/role-request" id="role-request-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label for="note">{{ i18n.t("dev.request_note") }}</label>
+    <textarea name="note" id="note" maxlength="1000" rows="3"></textarea>
+    <button type="submit">{{ i18n.t("dev.request_send") }}</button>
+  </form>
+  {% endif %}
+  <div class="links"><a href="/">{{ i18n.t("link.back_home") }}</a></div>
+</section>
+{% else if blocked %}
 <div class="links"><a href="/settings">{{ i18n.t("home.settings") }}</a><a href="/">{{ i18n.t("link.back_home") }}</a></div>
 {% else if !registered %}
 {% for inv in invitations %}

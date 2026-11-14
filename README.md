@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Phiên bản 1.2.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+> **Phiên bản 1.3.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
 >
 > Đã chạy được (nhóm task 1–14; các mục còn mở ghi ở cuối nhật ký thay đổi):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
@@ -16,8 +16,9 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 >   - mở app con bằng mã khởi chạy dùng một lần; mở app chạy trong terminal ở cửa sổ riêng;
 >   - Thư viện và Cửa hàng xem theo lưới hoặc danh sách, có tìm không dấu, lọc nhóm và sắp xếp;
 >   - trang Cài đặt giao diện: ngôn ngữ (tiếng Việt, tiếng Anh, tiếng Pháp), phong cách (Chân
->     phương, Trang nhã và tám phong cách lấy cảm hứng từ bảng màu của họa sĩ), chủ đề, màu
->     nhấn, cỡ chữ, bố cục;
+>     phương, Trang nhã, Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài),
+>     chủ đề, màu nhấn, cỡ chữ, bố cục;
+>   - hiện vai trò nền tảng, lối tắt tới Cổng nhà phát triển và Bảng quản trị theo vai trò;
 >   - trang chi tiết app (giới thiệu, tính năng, có gì mới, thông tin phiên bản, nền tảng, nút
 >     cài, mở, gỡ), chuyển sang app trước hoặc sau bằng nút hay phím mũi tên.
 > - F-Store (`/store`): danh mục app đã duyệt, tìm không phân biệt dấu tiếng Việt, lọc theo danh mục, hệ điều hành, giá, nhà phát triển đã xác minh; trang chi tiết có scope dữ liệu kèm mục đích, license, chính sách quyền riêng tư, lịch sử thay đổi; đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi phạm.
@@ -132,7 +133,7 @@ Lần đầu biên dịch mất vài phút. Khi thấy dòng `feco-server đang 
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.2.0"}
+# {"status":"ok","environment":"dev","version":"1.3.0"}
 ```
 
 Ở môi trường `dev`, mọi địa chỉ đã có giá trị mặc định trỏ tới hạ tầng ở bước 2, và lược đồ cơ sở dữ liệu được tạo tự động khi khởi động. Xem thêm phần [Cấu hình](#cấu-hình).
@@ -191,11 +192,14 @@ cargo run -p feco-demo-app -- --client-id <client_id> --scope "openid profile ph
 ### 6. Dùng thử F-Launcher
 
 F-Launcher (`clients/feco-launcher`) là ứng dụng desktop. Bản dev đọc danh mục từ một kho TUF cục
-bộ mà script dưới đây dựng sẵn, với Demo App ở bước 5 làm app con.
+bộ mà script dưới đây dựng sẵn. App trong kho được thêm bằng `scripts/dev-apps.sh` (bước 9): app
+mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHub. Demo App không còn nằm trong kho
+ứng dụng; nó chỉ dùng để thử đăng nhập một lần ở bước 5.
 
 1. Chuẩn bị (cần Hydra đang chạy). Script tạo khóa và kho TUF trong `.dev/` (không commit), đăng ký
-   client OAuth của launcher và của Demo App trong Hydra, ký một phiên bản Demo App, rồi in các
-   biến môi trường cần dùng:
+   client OAuth của launcher, của Demo App và của các app mẫu trong Hydra, rồi in các biến môi
+   trường cần dùng. Môi trường dev từ bản 1.x còn Demo App trong kho thì gỡ bằng
+   `scripts/dev-launcher.sh remove-demo`.
 
    ```bash
    scripts/dev-launcher.sh setup
@@ -214,18 +218,18 @@ bộ mà script dưới đây dựng sẵn, với Demo App ở bước 5 làm ap
 4. Bấm **Đăng nhập**: trình duyệt mặc định mở trang đăng nhập F-Eco, sau đó launcher hiện tên bạn.
    Refresh token được lưu trong Windows Credential Manager (macOS: Keychain), nên tắt mở lại launcher
    hay khởi động lại máy vẫn còn đăng nhập.
-5. Trang **Cửa hàng** (thanh bên trái) → **Cài** Demo App. Hộp thoại xác nhận có dòng "App này chạy với quyền như mọi
+5. Thêm app vào kho (`scripts/dev-apps.sh all`, bước 9), bấm **Đồng bộ**, rồi trang **Cửa hàng**
+   (thanh bên trái) → **Cài** Ghi chú. Hộp thoại xác nhận có dòng "App này chạy với quyền như mọi
    ứng dụng khác trên máy bạn". Gói được kiểm tra chữ ký và SHA-256 qua TUF rồi cài vào
    `%LOCALAPPDATA%\F-Eco\Launcher\apps` (macOS: `~/Library/Application Support/F-Eco/Launcher`).
-6. Lần đầu, cho Demo App quyền qua trình duyệt một lần: `cargo run -p feco-demo-app -- --client-id
-   $(cat .dev/demo-client-id)`. Sau đó trang **Thư viện** → **Mở**: launcher xin mã khởi chạy dùng
-   một lần (sống 60 giây) và chạy Demo App; Demo App dùng F-SDK (`fsdk::session_from_launch`) đổi
-   mã lấy token, không mở trình duyệt, rồi in scope được cấp và kết quả `/v1/me`.
+6. Trang **Thư viện** → **Mở** Ghi chú: launcher xin mã khởi chạy dùng một lần (sống 60 giây) rồi
+   chạy app. App dùng F-SDK đổi mã lấy token, không cần mật khẩu, và chào bạn bằng tên. Lần đầu,
+   nếu bạn chưa đồng ý cho app đọc hồ sơ, F-SDK mở trình duyệt để hỏi.
 7. Thử cập nhật, quay lại, thu hồi:
 
    ```bash
-   scripts/dev-launcher.sh publish   # ký phiên bản mới → launcher hiện "Cập nhật lên ..."
-   scripts/dev-launcher.sh revoke    # thu hồi bản mới nhất → sau lần đồng bộ kế tiếp không mở được, hiện lý do
+   scripts/dev-launcher.sh publish   # ký phiên bản Ghi chú mới → launcher hiện "Cập nhật lên ..."
+   scripts/dev-launcher.sh revoke    # thu hồi bản Ghi chú mới nhất → sau lần đồng bộ kế tiếp không mở được, hiện lý do
    scripts/dev-launcher.sh refresh   # timestamp TUF hết hạn sau 1 giờ: chạy lại khi launcher báo metadata hết hạn
    ```
 
@@ -259,17 +263,21 @@ bộ mà script dưới đây dựng sẵn, với Demo App ở bước 5 làm ap
     Cài, Mở, Gỡ, Mã nguồn, Website. Nút **‹ Trước** / **Sau ›** (hoặc phím mũi tên trái, phải)
     chuyển sang app kề bên theo đúng thứ tự đang hiển thị; **Esc** quay lại danh sách.
 12. **Ngôn ngữ và phong cách**: Cài đặt → Giao diện. Chọn "English" hoặc "Français" để đổi ngôn
-    ngữ ngay. Bấm một ô xem trước để đổi phong cách: Chân phương, Trang nhã, Leonardo da Vinci,
-    Michelangelo, Vincent van Gogh, Claude Monet, Pablo Picasso, Tô Ngọc Vân, Bùi Xuân Phái,
-    Nguyễn Gia Trí. Phong cách họa sĩ dùng bảng màu riêng, nên ô chủ đề và màu nhấn bị tắt.
+    ngữ ngay. Bấm một ô xem trước để đổi phong cách: Chân phương, Trang nhã, Giấy da, Bích họa,
+    Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài. Tám phong cách sau dùng bảng màu riêng, nên
+    ô chủ đề và màu nhấn bị tắt.
+13. **Vai trò**: dưới tên người dùng ở thanh bên là vai trò nền tảng (Người sử dụng ứng dụng, Lập
+    trình viên hoặc Quản trị viên). Lập trình viên có nút **Cổng nhà phát triển**; Quản trị viên có
+    thêm **Bảng quản trị**. Đổi vai trò ở `/admin/members` (Quản trị hệ thống) hoặc bằng
+    `feco-catalog role-set <email> developer "<lý do>"`.
 
 Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
 (root.json tin cậy; mặc định `metadata/1.root.json` của kho cục bộ), `FECO_LAUNCHER_FONT` (phông chữ
 `.ttf` nếu máy không có Segoe UI/Arial). Ngoài dev, các địa chỉ phải là HTTPS.
 
-F-Store: `scripts/dev-launcher.sh setup` cũng đưa Demo App vào danh mục, xem ở
-http://127.0.0.1:8080/store. Sau khi cài Demo App bằng launcher (đã đăng nhập), bạn viết được nhận
+F-Store: `scripts/dev-apps.sh` cũng đưa các app vào danh mục, xem ở
+http://127.0.0.1:8080/store. Sau khi cài một app bằng launcher (đã đăng nhập), bạn viết được nhận
 xét ở trang chi tiết. Cho tới khi có cổng nhà phát triển và bảng quản trị (nhóm 8, 14), quản trị
 danh mục bằng công cụ dòng lệnh (đọc cấu hình giống `feco-server`):
 

@@ -1,6 +1,34 @@
 # Nhật ký thay đổi
 
-## Chưa phát hành
+## 1.3.0 (14/11/2026)
+
+Thay đổi OpenSpec `platform-roles`, cùng các thay đổi về thanh toán và thông báo.
+
+### Phân quyền người dùng
+
+- Ba vai trò nền tảng:
+  - **Người sử dụng ứng dụng** (mặc định);
+  - **Lập trình viên**: vào được Cổng nhà phát triển và dùng `f-dev`;
+  - **Quản trị viên**: bảng quản trị với 5 vai trò con như trước, và mọi quyền của Lập trình viên.
+- Trang **Phân quyền người dùng** (`/admin/members`, Quản trị hệ thống):
+  - đổi vai trò theo email, bắt buộc lý do, ghi nhật ký kiểm toán;
+  - không tự đổi vai trò của mình, luôn còn ít nhất một Quản trị hệ thống;
+  - duyệt hoặc từ chối yêu cầu quyền Lập trình viên.
+- Cổng nhà phát triển:
+  - người chưa có quyền thấy trang "Cần quyền Lập trình viên" và gửi được yêu cầu;
+  - token `f-dev` của người bị thu hồi quyền bị từ chối ngay (`developer_role_required`);
+  - thành viên nhà phát triển có từ trước được cấp sẵn quyền.
+- F-Launcher hiện vai trò ở thanh bên, có lối tắt "Cổng nhà phát triển" và "Bảng quản trị".
+- `feco-catalog role-set`, `role-requests`, `role-decide`.
+
+### F-Launcher
+
+- Tên phong cách đổi sang tên phổ thông: Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ,
+  Phố cổ, Sơn mài. Cài đặt của bản 1.2 vẫn đọc đúng.
+- Demo App không còn trong kho ứng dụng: `feco-tuf remove` gỡ app khỏi danh mục mà không thu hồi,
+  `scripts/dev-launcher.sh remove-demo` dọn môi trường dev cũ.
+
+### Thanh toán và thông báo
 
 - Thông báo và email theo ngôn ngữ người dùng:
   - sửa lỗi đọc nhầm trait `language` thay vì `locale`, khiến mọi người dùng chỉ nhận tiếng Việt;

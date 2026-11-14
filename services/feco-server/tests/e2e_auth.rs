@@ -2314,9 +2314,29 @@ async fn developer_user(prefix: &str, name: &str) -> (reqwest::Client, String) {
     let (email, password) = unique(prefix);
     let c = app_browser();
     register_in(&c, &email, &password, name).await;
+    grant_developer(&email).await;
     verify_email(&c, &email).await;
     enable_totp(&c).await;
     (c, email)
+}
+
+/// Cấp vai trò Lập trình viên (thay đổi platform-roles) như người vận hành làm bằng
+/// `feco-catalog role-set`.
+async fn grant_developer(email: &str) {
+    feco_server::roles::set_role(
+        &local_state().db,
+        subject_of(email).await,
+        email,
+        feco_server::roles::PlatformRole::Developer,
+        &[],
+        &feco_server::roles::ChangedBy {
+            subject: None,
+            name: "e2e".into(),
+        },
+        "Kiểm thử E2E",
+    )
+    .await
+    .unwrap();
 }
 
 fn app_manifest(app_id: &str, version: &str) -> String {
@@ -2426,6 +2446,7 @@ async fn developer_portal_end_to_end() {
     let (email, password) = unique("owner");
     let owner = app_browser();
     register_in(&owner, &email, &password, "Chủ Acme").await;
+    grant_developer(&email).await;
     let page = get(&owner, "/developer").await;
     assert!(
         page.contains("Bạn cần xác minh email trước khi đăng ký nhà phát triển"),
@@ -5945,7 +5966,7 @@ async fn admin_console_end_to_end() {
     login(&customer_browser, &cust_email, &cust_password).await;
 
     // Quản lý dự án, tài chính, người duyệt, quản trị hệ thống.
-    let (pm, _) = admin_with_passkey(
+    let (pm, pm_email) = admin_with_passkey(
         &state,
         "quan-ly",
         &[
@@ -6104,10 +6125,16 @@ async fn admin_console_end_to_end() {
         &pm,
         "/admin/members",
         &csrf_of(&members),
-        &[("email", &cust_email), ("role", "support")],
+        &[
+            ("email", &cust_email),
+            ("platform_role", "admin"),
+            ("role", "support"),
+            ("reason", "Hỗ trợ khách hàng ca tối"),
+        ],
     )
     .await;
     assert_eq!(status, 200, "{page}");
+    assert!(page.contains("Đã đổi vai trò."), "{page}");
     assert_eq!(
         feco_server::admin::admin_roles(&state, customer)
             .await
@@ -6119,6 +6146,112 @@ async fn admin_console_end_to_end() {
     feco_server::admin::set_member(&state, "khoi-tao", &cust_email, &[])
         .await
         .unwrap();
+
+    // ---- platform-roles: phân quyền người dùng ----
+    use feco_server::roles::{self, PlatformRole};
+    // Scenario "Thiếu lý do": bị từ chối, vai trò không đổi.
+    let members = get(&pm, "/admin/members").await;
+    let (status, page) = post(
+        &pm,
+        "/admin/members",
+        &csrf_of(&members),
+        &[
+            ("email", &cust_email),
+            ("platform_role", "developer"),
+            ("reason", " "),
+        ],
+    )
+    .await;
+    assert_eq!(status, 400, "{page}");
+    assert!(page.contains("Cần nhập lý do."), "{page}");
+    assert_eq!(
+        roles::role_of(&db, customer).await.unwrap(),
+        PlatformRole::User
+    );
+    // Scenario "Tự hạ quyền".
+    let (status, page) = post(
+        &pm,
+        "/admin/members",
+        &csrf_of(&members),
+        &[
+            ("email", &pm_email),
+            ("platform_role", "user"),
+            ("reason", "Thử tự hạ quyền"),
+        ],
+    )
+    .await;
+    assert_eq!(status, 400, "{page}");
+    assert!(
+        page.contains("Không được tự đổi vai trò của chính mình."),
+        "{page}"
+    );
+    // Scenario "Người dùng mở Cổng nhà phát triển".
+    let page = get(&customer_browser, "/developer").await;
+    assert!(page.contains("Cần quyền Lập trình viên"), "{page}");
+    assert!(!page.contains("register-form"), "{page}");
+    // Scenario "Gửi và được duyệt" / "Gửi trùng".
+    let dev_csrf = csrf_of(&page);
+    let (status, page) = post(
+        &customer_browser,
+        "/developer/role-request",
+        &dev_csrf,
+        &[("note", "Tôi muốn phát hành app ghi chú")],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert!(page.contains("request-pending"), "{page}");
+    // Đang chờ duyệt: trang không còn biểu mẫu; gửi trực tiếp lần nữa vẫn bị chặn.
+    assert!(!page.contains("role-request-form"), "{page}");
+    let (status, page) = post(
+        &customer_browser,
+        "/developer/role-request",
+        &dev_csrf,
+        &[("note", "Gửi lại")],
+    )
+    .await;
+    assert_eq!(status, 409, "{page}");
+    assert!(page.contains("đang chờ duyệt"), "{page}");
+    wait_mail(
+        ADMIN_EMAIL,
+        &format!("{cust_email} yêu cầu quyền Lập trình viên"),
+    )
+    .await;
+    let members = get(&pm, "/admin/members").await;
+    assert!(
+        members.contains("Tôi muốn phát hành app ghi chú"),
+        "{members}"
+    );
+    let request = roles::pending_requests(&db)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.subject == customer)
+        .unwrap();
+    let (status, page) = post(
+        &pm,
+        &format!("/admin/members/requests/{}/approve", request.id),
+        &csrf_of(&members),
+        &[("note", "")],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert_eq!(
+        roles::role_of(&db, customer).await.unwrap(),
+        PlatformRole::Developer
+    );
+    assert!(page.contains("platform-role"), "{page}");
+    wait_mail(&cust_email, "Đã được cấp quyền Lập trình viên").await;
+    let page = get(&customer_browser, "/developer").await;
+    assert!(!page.contains("need-role"), "{page}");
+    let logged: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'role.set' AND target = $1 AND details->>'to' = 'developer'",
+    )
+    .bind(customer.to_string())
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(logged, 1, "đổi vai trò được ghi nhật ký kiểm toán");
+
     assert_eq!(
         customer_browser
             .get(format!("{BASE}/admin"))
@@ -6155,6 +6288,24 @@ async fn admin_console_end_to_end() {
         .as_str()
         .unwrap()
         .to_owned();
+    // Scenario "Lập trình viên mở launcher": launcher đọc vai trò bằng token của chính nó.
+    let role: Value = reqwest::Client::new()
+        .get(format!("{BASE}/v1/account/role"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(role["role"], "developer", "{role}");
+    assert!(
+        role["developer_portal"]
+            .as_str()
+            .unwrap()
+            .ends_with("/developer"),
+        "{role}"
+    );
     let center: Value = reqwest::Client::new()
         .get(format!("{BASE}/v1/notifications"))
         .bearer_auth(&token)
@@ -6294,7 +6445,36 @@ async fn child_app_integration_end_to_end() {
     let work = tempfile::tempdir().unwrap();
 
     // 1. Nhà phát triển: app desktop, manifest, gói có tệp chạy đã ký, nộp bằng f-dev.
-    let (dev_c, _, token) = developer_with_app("tich-hop", "Nhóm Kho", &app_id).await;
+    let (dev_c, dev_email, token) = developer_with_app("tich-hop", "Nhóm Kho", &app_id).await;
+    // platform-roles, scenario "Thu hồi quyền khi đang có token": token f-dev bị từ chối ngay
+    // khi chủ token không còn vai trò Lập trình viên; cấp lại thì dùng tiếp được.
+    let manifest_url = format!("{BASE}/v1/dev/apps/{app_id}/versions");
+    let by = feco_server::roles::ChangedBy {
+        subject: None,
+        name: "e2e".into(),
+    };
+    feco_server::roles::set_role(
+        &st.db,
+        subject_of(&dev_email).await,
+        &dev_email,
+        feco_server::roles::PlatformRole::User,
+        &[],
+        &by,
+        "Thử thu hồi",
+    )
+    .await
+    .unwrap();
+    let res = reqwest::Client::new()
+        .post(&manifest_url)
+        .bearer_auth(&token)
+        .body("")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 403);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["error"], "developer_role_required", "{body}");
+    grant_developer(&dev_email).await;
     let client_id = text_of(
         &get(&dev_c, &format!("/developer/apps/{app_id}")).await,
         "#client-id",
@@ -6512,6 +6692,14 @@ purpose = "Kiểm tra bản quyền"
         .expect("app nhận phiên từ launcher");
     let me = session.me().await.unwrap();
     assert_eq!(me.name.as_deref(), Some("Anh Hải"));
+    // Scenario "Token của app khác": chỉ F-Launcher được hỏi vai trò.
+    let res = reqwest::Client::new()
+        .get(format!("{BASE}/v1/account/role"))
+        .bearer_auth(session.access_token().await.unwrap())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 403);
     assert_ne!(
         me.sub,
         subject_of(&email).await.to_string(),

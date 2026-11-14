@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # Môi trường dev cho F-Launcher (README, bước 7). Cần Hydra đang chạy (bước 2).
 #
-#   scripts/dev-launcher.sh setup     # khóa + kho TUF cục bộ, client OAuth của launcher, Demo App
-#                                     # và app mẫu F-SDK
-#   scripts/dev-launcher.sh publish   # ký một phiên bản Demo App mới (để thử cập nhật, quay lại)
-#   scripts/dev-launcher.sh revoke    # thu hồi phiên bản Demo App mới nhất
+#   scripts/dev-launcher.sh setup     # khóa + kho TUF cục bộ, client OAuth của launcher, của Demo
+#                                     # App (thử đăng nhập một lần, README bước 5) và app mẫu F-SDK
+#   scripts/dev-launcher.sh publish   # ký phiên bản mới của app mẫu Ghi chú (thử cập nhật, quay lại)
+#   scripts/dev-launcher.sh revoke    # thu hồi phiên bản Ghi chú mới nhất
+#   scripts/dev-launcher.sh remove-demo  # gỡ Demo App khỏi kho TUF và danh mục (môi trường dev cũ)
 #   scripts/dev-launcher.sh refresh   # ký lại timestamp (hết hạn sau 1 giờ)
 #   scripts/dev-launcher.sh env       # in biến môi trường cho feco-server, launcher và app mẫu F-SDK
 #
-# setup và publish cũng ghi Demo App vào danh mục F-Store (cần PostgreSQL đang chạy).
+# Demo App không còn nằm trong kho ứng dụng (thay đổi platform-roles); thêm app vào kho bằng
+# scripts/dev-apps.sh. publish, revoke cũng ghi danh mục F-Store (cần PostgreSQL đang chạy).
 #
 # Mọi thứ nằm trong .dev/ (không commit). Khóa ở đây chỉ dùng cho dev.
 set -euo pipefail
@@ -24,27 +26,14 @@ PY="$(command -v python3 || command -v python)"
 exe() { if [[ -f "$1.exe" ]]; then echo "$1.exe"; else echo "$1"; fi; }
 
 build() {
-  cargo build -q --manifest-path "$ROOT/Cargo.toml" -p feco-tuf -p feco-demo-app >&2
+  cargo build -q --manifest-path "$ROOT/Cargo.toml" -p feco-tuf >&2
   cargo build -q --manifest-path "$ROOT/Cargo.toml" -p feco-server --bin feco-catalog >&2
   TUF="$(exe "$TARGET_DIR/debug/feco-tuf")"
-  DEMO="$(exe "$TARGET_DIR/debug/feco-demo-app")"
   CATALOG="$(exe "$TARGET_DIR/debug/feco-catalog")"
 }
 
 # Ghi vào danh mục F-Store; không chặn nếu PostgreSQL chưa chạy.
 catalog() { FECO_ENV="${FECO_ENV:-dev}" "$CATALOG" "$@" || echo "(bỏ qua danh mục: PostgreSQL chưa chạy?)" >&2; }
-
-catalog_app() {
-  local json="$DEV/catalog-demo-app.json"
-  cat > "$json" <<EOF
-{"id":"feco-demo-app","client_id":"$(cat "$DEV/demo-client-id")","name":"Demo App",
- "developer":"F-Eco","developer_verified":true,"first_party":true,
- "summary":"App con mẫu: đăng nhập một lần bằng tài khoản F-Eco và đọc hồ sơ.",
- "description":"Demo App cho thấy cách một app con dùng tài khoản F-Eco: đăng nhập không cần trình duyệt khi được F-Launcher mở, rồi gọi /v1/me.",
- "category":"Công cụ","price_vnd":0,"license":"MIT OR Apache-2.0","screenshots":[]}
-EOF
-  catalog add-app "$json"
-}
 
 platform() {
   local os arch
@@ -115,44 +104,30 @@ setup() {
       "metadata":{"developer":"F-Eco (app mẫu)","scopes":{
         "profile":{"required":true,"purpose_vi":"Hiển thị tên của bạn trong app","purpose_en":"Show your name in the app"},
         "purchases":{"required":true,"purpose_vi":"Kiểm tra bạn có quyền dùng app","purpose_en":"Check that you may use the app"}}}}'
-  catalog_app
-  publish
+  echo "Thêm app vào kho bằng scripts/dev-apps.sh all (app mẫu và app mã nguồn mở từ GitHub)." >&2
   env_vars
 }
 
 publish() {
-  build
-  local plat version name entry zipfile
-  plat="$(platform)"
-  version="0.1.$(date +%Y%m%d%H%M%S)"
-  name="feco-demo-app-$version-$plat.zip"
-  entry="bin/$(basename "$DEMO")"
-  zipfile="$DEV/uploads/$name"
-  mkdir -p "$DEV/uploads"
-  "$PY" -I - "$zipfile" "$DEMO" "$entry" <<'EOF'
-import sys, zipfile
-out, exe, entry = sys.argv[1:4]
-with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-    info = zipfile.ZipInfo(entry)
-    info.external_attr = 0o755 << 16
-    info.compress_type = zipfile.ZIP_DEFLATED
-    with open(exe, "rb") as f:
-        z.writestr(info, f.read())
-EOF
-  "$TUF" publish --repo "$REPO" --file "$zipfile" --name "$name" --app feco-demo-app --version "$version" \
-    --platform "$plat" --title "Demo App" --entry "$entry" --client-id "$(cat "$DEV/demo-client-id")" \
-    --sign "$(RELEASE_KEYS)"
-  catalog release feco-demo-app "$version" "$plat" "$(wc -c < "$zipfile" | tr -d ' ')" "$name" \
-    "Bản dựng dev lúc $(date '+%H:%M %d/%m/%Y')"
+  # Một phiên bản mới của app mẫu Ghi chú (số phiên bản theo thời điểm dựng).
+  "$(dirname "${BASH_SOURCE[0]}")/dev-apps.sh" samples
 }
 
 revoke() {
   build
   local latest
-  latest="$(ls "$DEV/uploads" | sort | tail -1)"
+  latest="$(ls "$DEV/uploads" | grep '^f-notes-' | sort | tail -1)"
+  [[ -n "$latest" ]] || { echo "chưa có phiên bản Ghi chú nào: chạy publish trước" >&2; exit 1; }
   "$TUF" revoke --repo "$REPO" --name "$latest" --reason "${1:-Diễn tập thu hồi}" --sign "$(RELEASE_KEYS)"
-  local version="${latest#feco-demo-app-}"
-  catalog revoke feco-demo-app "${version%-*-*.zip}"
+  local version="${latest#f-notes-}"
+  catalog revoke f-notes "${version%-*-*.zip}"
+}
+
+# Gỡ Demo App khỏi kho TUF (không thu hồi: máy đã cài vẫn mở được) và khỏi danh mục F-Store.
+remove_demo() {
+  build
+  "$TUF" remove --repo "$REPO" --app feco-demo-app --sign "$(RELEASE_KEYS)" || true
+  catalog remove feco-demo-app "Gỡ app thử nghiệm khỏi kho ứng dụng"
 }
 
 refresh() {
@@ -187,8 +162,9 @@ EOF
 case "${1:-}" in
   setup) setup ;;
   publish) publish ;;
+  remove-demo) remove_demo ;;
   revoke) revoke "${2:-}" ;;
   refresh) refresh ;;
   env) env_vars ;;
-  *) sed -n '2,10p' "$0"; exit 2 ;;
+  *) sed -n '2,13p' "$0"; exit 2 ;;
 esac

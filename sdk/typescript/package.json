@@ -1,6 +1,6 @@
 {
   "name": "@f-eco/sdk",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "F-SDK: đăng nhập bằng tài khoản F-Eco, đọc dữ liệu người dùng theo scope, kiểm tra quyền sử dụng",
   "license": "MIT OR Apache-2.0",
   "type": "module",

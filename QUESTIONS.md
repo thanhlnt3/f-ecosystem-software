@@ -270,7 +270,8 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 74. **App terminal trên macOS** mở qua `open -a Terminal` nên không nhận được mã khởi chạy (biến môi
     trường không đi qua). Hiện `f-dev` chỉ cảnh báo. Có muốn launcher ghi mã ra một file tạm chỉ
     app đọc được không? Cách này cần thêm thiết kế bảo mật.
-75. **Tên họa sĩ trong phong cách giao diện** (launcher-personalization). Phong cách chỉ dùng
+75. **Tên họa sĩ trong phong cách giao diện** (đã xử lý 14/11/2026: đổi sang tên phổ thông theo yêu
+    cầu chủ dự án, thay đổi platform-roles) (launcher-personalization). Phong cách chỉ dùng
     bảng màu do F-Eco tự chọn, ghi "cảm hứng từ bảng màu", không dùng hình ảnh tác phẩm. Với họa
     sĩ Việt Nam (Tô Ngọc Vân, Bùi Xuân Phái, Nguyễn Gia Trí), quyền nhân thân về tên và quyền của
     người thừa kế cần luật sư xác nhận trước khi phát hành thương mại. Mã cài đặt (`to_ngoc_van`,

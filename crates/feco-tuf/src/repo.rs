@@ -356,6 +356,38 @@ impl Repo {
         Ok(revocation)
     }
 
+    /// Gỡ mọi phiên bản của một app khỏi danh mục (thay đổi platform-roles, design R7): khác với
+    /// thu hồi, không thêm vào danh sách thu hồi nên máy đã cài vẫn mở được app. Dùng để dọn app
+    /// thử nghiệm; app có vấn đề an toàn phải dùng [`Repo::revoke`]. Trả tên các target đã gỡ.
+    pub async fn remove_app(
+        &self,
+        app: &str,
+        signers: &[Box<dyn KeySource>],
+        expiry: Expiry,
+        now: Timestamp,
+    ) -> Result<Vec<String>> {
+        let repo = self.load().await?;
+        let names: Vec<TargetName> = repo
+            .targets()
+            .signed
+            .targets
+            .iter()
+            .filter(|(name, t)| {
+                name.raw() != REVOCATIONS_TARGET && target_meta(t).is_some_and(|m| m.app == app)
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        if names.is_empty() {
+            return Err(Error::Invalid(format!("không có target nào của app {app}")));
+        }
+        let mut editor = self.editor_from(repo, None, expiry, now).await?;
+        for name in &names {
+            editor.remove_target(name)?;
+        }
+        self.finish(editor, signers).await?;
+        Ok(names.iter().map(|n| n.raw().to_owned()).collect())
+    }
+
     /// Ký lại snapshot và timestamp bằng khóa trực tuyến (không cần khóa targets). Máy chủ chạy
     /// việc này định kỳ, thường hơn nhiều so với thời hạn của timestamp.
     pub async fn refresh(

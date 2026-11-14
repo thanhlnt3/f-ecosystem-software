@@ -654,3 +654,42 @@ async fn root_key_rotation_drill_needs_two_of_three() {
         .unwrap();
     draft.check(&ok).unwrap();
 }
+
+/// platform-roles (design R7): gỡ app thử nghiệm khỏi danh mục mà không thu hồi.
+#[tokio::test]
+async fn removed_app_leaves_the_catalog_without_a_revocation() {
+    let fixture = Fixture::new().await;
+    fixture
+        .publish(SOUNDLAB, "soundlab", "1.2.0", b"SoundLab 1.2.0")
+        .await;
+    let other = "notes-1.0.0-windows-x64.zip";
+    fixture.publish(other, "notes", "1.0.0", b"Notes").await;
+    let client = fixture.client("launcher").await;
+    assert!(client.sync().await.unwrap().targets.contains_key(SOUNDLAB));
+
+    let removed = fixture
+        .repo
+        .remove_app(
+            "soundlab",
+            &fixture.release_keys(),
+            Expiry::default(),
+            Timestamp::now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(removed, [SOUNDLAB]);
+    let state = client.sync().await.unwrap();
+    assert!(!state.targets.contains_key(SOUNDLAB));
+    assert!(state.targets.contains_key(other), "app khác giữ nguyên");
+    assert!(state.revocation(SOUNDLAB).is_none(), "không phải thu hồi");
+    assert!(fixture
+        .repo
+        .remove_app(
+            "soundlab",
+            &fixture.release_keys(),
+            Expiry::default(),
+            Timestamp::now()
+        )
+        .await
+        .is_err());
+}

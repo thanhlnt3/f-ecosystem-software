@@ -57,6 +57,12 @@ struct HomePage {
     secret: Option<String>,
     /// Chưa đủ điều kiện (email chưa xác minh hoặc chưa bật xác thực hai lớp).
     blocked: bool,
+    /// Chưa có vai trò Lập trình viên (thay đổi platform-roles).
+    needs_role: bool,
+    platform_role: String,
+    /// Yêu cầu quyền gần nhất: "pending", "rejected" hoặc rỗng.
+    request_status: String,
+    request_note: String,
     registered: bool,
     invitations: Vec<InviteView>,
     agreement_version: &'static str,
@@ -177,7 +183,8 @@ fn status_label(lang: Lang, status: &str) -> String {
 }
 
 fn ok_message(lang: Lang, key: Option<&str>) -> Vec<Msg> {
-    const KEYS: [&str; 11] = [
+    const KEYS: [&str; 12] = [
+        "role_requested",
         "appealed",
         "registered",
         "agreement",
@@ -224,6 +231,10 @@ async fn render_home(
             csrf: String::new(),
             secret,
             blocked: false,
+            needs_role: false,
+            platform_role: String::new(),
+            request_status: String::new(),
+            request_note: String::new(),
             registered: membership.is_some(),
             invitations: Vec::new(),
             agreement_version: dev::AGREEMENT_VERSION,
@@ -240,6 +251,21 @@ async fn render_home(
             members: Vec::new(),
             apps: Vec::new(),
         };
+        let role = crate::roles::role_of(&state.db, subject).await?;
+        page.platform_role = role.label(lang).to_owned();
+        if !role.can_develop() {
+            // Scenario "Người dùng mở Cổng nhà phát triển": trang yêu cầu quyền, không có biểu mẫu
+            // đăng ký hay thao tác trên tài khoản nhà phát triển.
+            page.needs_role = true;
+            if let Some(r) = crate::roles::latest_request(&state.db, subject).await? {
+                if r.status != "approved" {
+                    page.request_status = r.status;
+                    page.request_note = r.decision_note.unwrap_or_default();
+                }
+            }
+            page.messages = messages;
+            return Ok(page);
+        }
         match membership {
             None => match dev::identity_requirements(&identity) {
                 Ok(email) => {
@@ -513,6 +539,11 @@ async fn member(
     back: &str,
 ) -> Result<(Uuid, Membership), Box<Response>> {
     let subject = current_subject(state, lang, headers, back).await?;
+    match crate::roles::role_of(&state.db, subject).await {
+        Ok(r) if r.can_develop() => {}
+        Ok(_) => return Err(Box::new(see_other("/developer"))),
+        Err(e) => return Err(Box::new(explain(lang, e.into()).1.text.into_response())),
+    }
     match dev::membership(&state.db, subject).await {
         Ok(Some(m)) => Ok((subject, m)),
         Ok(None) => Err(Box::new(see_other("/developer"))),
@@ -569,6 +600,10 @@ pub async fn register(
         Ok(s) => s,
         Err(r) => return *r,
     };
+    match crate::roles::role_of(&state.db, subject).await {
+        Ok(r) if r.can_develop() => {}
+        _ => return see_other("/developer"),
+    }
     let result: DevResult<()> = async {
         let identity = state
             .kratos
@@ -1049,10 +1084,63 @@ async fn token_member(state: &AppState, headers: &HeaderMap) -> Result<Membershi
         ))
     };
     let token = bearer(headers).ok_or_else(invalid)?;
-    match dev::token_membership(&state.db, token).await {
-        Ok(Some(m)) => Ok(m),
-        Ok(None) => Err(invalid()),
-        Err(e) => Err(Box::new(api_problem(e))),
+    let m = match dev::token_membership(&state.db, token).await {
+        Ok(Some(m)) => m,
+        Ok(None) => return Err(invalid()),
+        Err(e) => return Err(Box::new(api_problem(e))),
+    };
+    // Scenario "Thu hồi quyền khi đang có token": kiểm vai trò ở mỗi lần gọi.
+    match crate::roles::role_of(&state.db, m.subject).await {
+        Ok(r) if r.can_develop() => Ok(m),
+        Ok(_) => Err(Box::new(api_error(
+            StatusCode::FORBIDDEN,
+            "developer_role_required",
+            "This account no longer has the Developer role.",
+            "Tài khoản này không còn vai trò Lập trình viên.",
+        ))),
+        Err(e) => Err(Box::new(api_problem(e.into()))),
+    }
+}
+
+/// POST /developer/role-request (note): gửi yêu cầu quyền Lập trình viên (scenario "Gửi và được
+/// duyệt", "Gửi trùng").
+pub async fn request_role(
+    State(state): State<Arc<AppState>>,
+    lang: Lang,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let form = Form::parse(&body);
+    if !form.csrf_ok(&headers) {
+        return csrf_failed(lang);
+    }
+    let subject = match current_subject(&state, lang, &headers, "/developer").await {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    let email = match state.kratos.get_identity(&subject.to_string()).await {
+        Ok(Some(i)) => i["traits"]["email"].as_str().unwrap_or_default().to_owned(),
+        _ => String::new(),
+    };
+    match crate::roles::request_developer(&state, subject, &email, form.get("note")).await {
+        Ok(_) => see_other("/developer?ok=role_requested"),
+        Err(e) => {
+            let status = if matches!(e, crate::roles::RoleError::Db(_)) {
+                StatusCode::INTERNAL_SERVER_ERROR
+            } else {
+                StatusCode::CONFLICT
+            };
+            render_home(
+                &state,
+                lang,
+                &headers,
+                subject,
+                vec![Msg::error(lang.t(e.key()))],
+                None,
+                status,
+            )
+            .await
+        }
     }
 }
 

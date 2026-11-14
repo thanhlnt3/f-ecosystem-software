@@ -139,13 +139,41 @@
 
 {% if section == "members" %}
 <h2>{{ i18n.t("admin.nav.members") }}</h2>
-<table id="members">{% for m in members %}<tr><td>{{ m.email }}</td><td>{{ m.roles }}</td></tr>{% endfor %}</table>
+
+<h3>{{ i18n.t("role.requests") }}</h3>
+{% if role_requests.is_empty() %}<p class="muted" id="role-requests-empty">{{ i18n.t("role.requests_empty") }}</p>{% endif %}
+{% for r in role_requests %}
+<div class="card role-request" data-request="{{ r.id }}">
+  <p><strong>{{ r.email }}</strong> · {{ r.created }}</p>
+  {% if !r.note.is_empty() %}<p>{{ r.note }}</p>{% endif %}
+  <form method="post" action="/admin/members/requests/{{ r.id }}/approve" style="display:inline">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="hidden" name="note" value="">
+    <button type="submit">{{ i18n.t("role.approve") }}</button>
+  </form>
+  <form method="post" action="/admin/members/requests/{{ r.id }}/reject" style="display:inline">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="text" name="note" placeholder="{{ i18n.t("role.decision_note") }}">
+    <button type="submit">{{ i18n.t("role.reject") }}</button>
+  </form>
+</div>
+{% endfor %}
+
+<h3>{{ i18n.t("role.holders") }}</h3>
+<table id="members">{% for m in members %}<tr data-subject="{{ m.subject }}"><td>{{ m.email }}</td><td class="platform-role">{{ m.platform }}</td><td>{{ m.roles }}</td></tr>{% endfor %}</table>
+<p class="muted">{{ i18n.t("role.holders_note") }}</p>
+
+<h3>{{ i18n.t("role.change") }}</h3>
 <form method="post" action="/admin/members" id="member-form">
   <input type="hidden" name="feco_csrf" value="{{ csrf }}">
   <label>{{ i18n.t("admin.email") }}</label>
   <input type="email" name="email" required>
+  <label>{{ i18n.t("role.platform") }}</label>
+  <select name="platform_role">{% for p in platform_options %}<option value="{{ p.code }}">{{ p.label }}</option>{% endfor %}</select>
+  <p class="muted">{{ i18n.t("role.admin_subroles") }}</p>
   {% for r in role_options %}<div><input type="checkbox" name="role" value="{{ r.code }}" id="role-{{ r.code }}"> <label for="role-{{ r.code }}" style="display:inline;font-weight:400">{{ r.label }}</label></div>{% endfor %}
-  <p class="muted">{{ i18n.t("admin.member_note") }}</p>
+  <label>{{ i18n.t("role.reason") }}</label>
+  <input type="text" name="reason" required>
   <button type="submit">{{ i18n.t("admin.save") }}</button>
 </form>
 {% endif %}

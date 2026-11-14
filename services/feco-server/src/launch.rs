@@ -86,6 +86,67 @@ fn invalid_grant() -> Response {
     )
 }
 
+/// GET /v1/account/role: vai trò nền tảng của người dùng, chỉ cho access token của F-Launcher
+/// (thay đổi platform-roles, scenario "Lập trình viên mở launcher", "Token của app khác").
+pub async fn account_role(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let invalid = || {
+        api_error(
+            StatusCode::UNAUTHORIZED,
+            "invalid_token",
+            "The access token is missing, expired or revoked.",
+            "Access token bị thiếu, đã hết hạn hoặc đã bị thu hồi.",
+        )
+    };
+    let Some(launcher) = state.launcher_client_id.as_deref() else {
+        return api_error(
+            StatusCode::NOT_FOUND,
+            "not_enabled",
+            "F-Launcher is not enabled on this server.",
+            "Máy chủ chưa bật F-Launcher.",
+        );
+    };
+    let Some(token) = bearer(&headers) else {
+        return invalid();
+    };
+    let info = match state.hydra.introspect(token).await {
+        Ok(Some(i)) => i,
+        Ok(None) => return invalid(),
+        Err(e) => {
+            tracing::error!(error = %e, "không kiểm tra được token");
+            return unavailable();
+        }
+    };
+    let subject = info["sub"].as_str().and_then(|s| s.parse::<Uuid>().ok());
+    let (Some(subject), Some(caller)) = (subject, info["client_id"].as_str()) else {
+        return invalid();
+    };
+    if caller != launcher {
+        return api_error(
+            StatusCode::FORBIDDEN,
+            "launcher_only",
+            "Only F-Launcher can read the account role.",
+            "Chỉ F-Launcher được hỏi vai trò tài khoản.",
+        );
+    }
+    let role = match crate::roles::role_of(&state.db, subject).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "không đọc được vai trò");
+            return unavailable();
+        }
+    };
+    let admin_roles = crate::roles::admin_roles(&state.db, subject)
+        .await
+        .unwrap_or_default();
+    Json(json!({
+        "role": role.as_str(),
+        "admin_roles": admin_roles,
+        "developer_portal": format!("{}developer", state.public_url),
+        "admin_console": format!("{}admin", state.public_url),
+    }))
+    .into_response()
+}
+
 /// POST /v1/launch-codes
 pub async fn issue(
     State(state): State<Arc<AppState>>,

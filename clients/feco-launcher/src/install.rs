@@ -509,6 +509,21 @@ impl Launcher {
 
     pub fn set_user_name(&mut self, name: Option<String>) -> Result<(), LauncherError> {
         self.state.user_name = name;
+        if self.state.user_name.is_none() {
+            self.state.account_role = None;
+        }
+        self.save()
+    }
+
+    /// Ghi vai trò nền tảng lấy từ máy chủ (None khi đăng xuất).
+    pub fn set_account_role(
+        &mut self,
+        role: Option<crate::auth::AccountRole>,
+    ) -> Result<(), LauncherError> {
+        if self.state.account_role == role {
+            return Ok(());
+        }
+        self.state.account_role = role;
         self.save()
     }
 
