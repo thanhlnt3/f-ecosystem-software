@@ -2,12 +2,12 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Phiên bản 1.3.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+> **Phiên bản 1.4.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
 >
 > Đã chạy được (nhóm task 1–14; các mục còn mở ghi ở cuối nhật ký thay đổi):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
-> - Giao diện tiếng Việt và tiếng Anh.
+> - Giao diện web tiếng Việt, tiếng Anh và tiếng Nhật; trang Giao diện (`/preferences`) chọn ngôn ngữ, chủ đề, màu nhấn, 10 phong cách như F-Launcher, mật độ, cỡ chữ.
 > - Bảo mật: HSTS và header bảo vệ, mã hóa dữ liệu nhạy cảm khi lưu (AES-256-GCM), giới hạn tần suất, nhật ký kiểm toán chỉ ghi thêm, cảnh báo đăng nhập từ thiết bị mới. Quy trình xử lý sự cố: [`docs/security/incident-response.md`](docs/security/incident-response.md).
 > - Chuỗi tin cậy cho gói cài đặt theo TUF (dùng `tough`): ký phiên bản đã duyệt, thu hồi tới launcher trong 1 giờ, chặn gói hoặc metadata bị sửa, rollback, đóng băng; xoay khóa targets và root (ngưỡng 2/3). Công cụ `feco-tuf`, quy trình giữ khóa: [`docs/security/tuf-keys.md`](docs/security/tuf-keys.md).
 > - F-Launcher (Rust + egui):
@@ -15,7 +15,7 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 >   - cài, cập nhật, quay lại, gỡ app con có xác minh TUF; chạy được khi ngoại tuyến; chặn phiên bản bị thu hồi;
 >   - mở app con bằng mã khởi chạy dùng một lần; mở app chạy trong terminal ở cửa sổ riêng;
 >   - Thư viện và Cửa hàng xem theo lưới hoặc danh sách, có tìm không dấu, lọc nhóm và sắp xếp;
->   - trang Cài đặt giao diện: ngôn ngữ (tiếng Việt, tiếng Anh, tiếng Pháp), phong cách (Chân
+>   - trang Cài đặt giao diện: ngôn ngữ (tiếng Việt, tiếng Anh, tiếng Pháp, tiếng Nhật), phong cách (Chân
 >     phương, Trang nhã, Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài),
 >     chủ đề, màu nhấn, cỡ chữ, bố cục;
 >   - hiện vai trò nền tảng, lối tắt tới Cổng nhà phát triển và Bảng quản trị theo vai trò;
@@ -133,14 +133,14 @@ Lần đầu biên dịch mất vài phút. Khi thấy dòng `feco-server đang 
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.3.0"}
+# {"status":"ok","environment":"dev","version":"1.4.0"}
 ```
 
 Ở môi trường `dev`, mọi địa chỉ đã có giá trị mặc định trỏ tới hạ tầng ở bước 2, và lược đồ cơ sở dữ liệu được tạo tự động khi khởi động. Xem thêm phần [Cấu hình](#cấu-hình).
 
 ### 4. Dùng thử tài khoản
 
-Mở http://127.0.0.1:8080 trong trình duyệt. Giao diện theo ngôn ngữ của trình duyệt; đổi bằng liên kết ở góc phải trên.
+Mở http://127.0.0.1:8080 trong trình duyệt. Giao diện theo ngôn ngữ của trình duyệt; đổi bằng nút **VI · EN · 日本語** ở góc phải trên. Nút **Giao diện** bên cạnh mở trang tùy chỉnh: phong cách (Chân phương, Trang nhã, Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài), chủ đề sáng/tối, màu nhấn, mật độ, cỡ chữ. Tùy chỉnh lưu trên trình duyệt (cookie `feco_ui`).
 
 1. **Đăng ký** tại http://127.0.0.1:8080/registration. Mật khẩu phải dài từ 10 ký tự và không nằm trong các vụ rò rỉ dữ liệu, nên ví dụ `Password123!` sẽ bị từ chối.
 2. **Xác minh email**: mở Mailpit tại http://127.0.0.1:8025. Mọi email của hệ thống dev đều được giữ ở đây, không gửi ra ngoài. Mở email "Xác minh email tài khoản F-Eco" rồi bấm liên kết.
@@ -262,8 +262,8 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
 11. Bấm vào một app để mở trang chi tiết: giới thiệu, tính năng, có gì mới, bảng thông tin, nút
     Cài, Mở, Gỡ, Mã nguồn, Website. Nút **‹ Trước** / **Sau ›** (hoặc phím mũi tên trái, phải)
     chuyển sang app kề bên theo đúng thứ tự đang hiển thị; **Esc** quay lại danh sách.
-12. **Ngôn ngữ và phong cách**: Cài đặt → Giao diện. Chọn "English" hoặc "Français" để đổi ngôn
-    ngữ ngay. Bấm một ô xem trước để đổi phong cách: Chân phương, Trang nhã, Giấy da, Bích họa,
+12. **Ngôn ngữ và phong cách**: Cài đặt → Giao diện. Chọn "English", "Français" hoặc "日本語" để
+    đổi ngôn ngữ ngay. Bấm một ô xem trước để đổi phong cách: Chân phương, Trang nhã, Giấy da, Bích họa,
     Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài. Tám phong cách sau dùng bảng màu riêng, nên
     ô chủ đề và màu nhấn bị tắt.
 13. **Vai trò**: dưới tên người dùng ở thanh bên là vai trò nền tảng (Người sử dụng ứng dụng, Lập
@@ -455,7 +455,9 @@ Không có khóa ZaloPay thì trang thanh toán báo chưa cấu hình cổng; �
    cargo run -p feco-server --bin feco-catalog -- admin-set <email> project_manager,finance,sysadmin
    ```
 
-2. Bảng quản trị cần passkey hoặc khóa bảo mật: vào Cài đặt (http://127.0.0.1:8080/settings), bấm **Thêm passkey**, rồi đăng xuất và đăng nhập lại (mật khẩu, sau đó passkey). Mở http://127.0.0.1:8080/admin: mỗi vai trò chỉ thấy mục của mình (hàng chờ duyệt, đơn xây app có cảnh báo sắp trễ, hoàn tiền, hỗ trợ người dùng phải nhập lý do, thành viên quản trị).
+2. Bảng quản trị cần passkey hoặc khóa bảo mật: vào Cài đặt (http://127.0.0.1:8080/settings), bấm **Thêm passkey**, rồi đăng xuất và đăng nhập lại (mật khẩu, sau đó passkey). Mở http://127.0.0.1:8080/admin: trang **Tổng quan** có thẻ số liệu theo vai trò (yêu cầu quyền Lập trình viên, người dùng, phiên bản chờ duyệt, đơn sắp trễ, hoàn tiền chờ duyệt, doanh thu 30 ngày và biểu đồ 14 ngày); thanh bên chỉ có mục của vai trò bạn có (hàng chờ duyệt, đơn xây app, hoàn tiền, hỗ trợ người dùng phải nhập lý do, phân quyền).
+
+   Trình duyệt thường không cho tạo passkey trên địa chỉ `127.0.0.1`. Ở máy dev, đặt `FECO_ADMIN_PASSKEY_OPTIONAL=true` (cùng `FECO_ENV=dev`) để vào bảng quản trị chỉ bằng mật khẩu; mọi trang quản trị sẽ hiện cảnh báo. Biến này làm staging và production từ chối khởi động.
 3. Trung tâm thông báo: http://127.0.0.1:8080/notifications (và tab **Thông báo** trong F-Launcher). Tắt hoặc bật thông báo cập nhật app, gợi ý app, bản tin; email bản tin có liên kết hủy đăng ký không cần đăng nhập.
 4. Thêm cổng VNPAY, MoMo và hóa đơn điện tử MISA bằng biến môi trường (khóa sandbox của chính bạn, không ghi vào repo): `FECO_VNPAY_TMN_CODE`, `FECO_VNPAY_HASH_SECRET`, `FECO_VNPAY_PAYMENT_URL`; `FECO_MOMO_PARTNER_CODE`, `FECO_MOMO_ACCESS_KEY`, `FECO_MOMO_SECRET_KEY`, `FECO_MOMO_ENDPOINT`; `FECO_MISA_CLIENT_ID`, `FECO_MISA_CLIENT_SECRET`, `FECO_MISA_TAX_CODE`, `FECO_MISA_USERNAME`, `FECO_MISA_PASSWORD`, `FECO_MISA_INV_SERIES`, `FECO_MISA_VAT_RATE`. Cổng gọi callback về `FECO_PAYMENT_CALLBACK_BASE` (địa chỉ công khai, ví dụ tunnel).
 5. Kiểm tên miền gửi email: `cargo run -p feco-server --bin feco-catalog -- mail-dns <tên miền> <selector DKIM>`. Production chỉ nhận `FECO_SMTP_URL` dạng `smtps://` hoặc `smtp://...?tls=starttls`.
@@ -522,6 +524,7 @@ Các API chính của `feco-server`:
 | `FECO_CLAMD_ADDR` | không đặt | ClamAV (`clamd`, ví dụ `127.0.0.1:3310`), engine quét thứ hai của khâu kiểm duyệt. Bắt buộc ở production |
 | `FECO_ADMIN_EMAILS` | không đặt | Email nhận cảnh báo kiểm duyệt (mã độc, phát hiện muộn), ngăn bởi dấu phẩy. Bắt buộc ở production |
 | `FECO_TUF_REPO` / `FECO_TUF_SIGN_KEYS` | không đặt | Kho TUF và các file khóa targets, snapshot, timestamp để ký gói khi phát hành. Không đặt thì bỏ qua bước ký |
+| `FECO_ADMIN_PASSKEY_OPTIONAL` | `false` | `true`: bảng quản trị không bắt buộc passkey. Chỉ được đặt khi `FECO_ENV=dev`; môi trường khác từ chối khởi động |
 | `FECO_LAUNCHER_CLIENT_ID` | không đặt | Client ID của F-Launcher trong Hydra. Có thì bật mã khởi chạy app con (`/v1/launch-codes`) và launcher không phải qua màn hình đồng ý |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |
 | `RUST_LOG` | `info` | Mức nhật ký, ví dụ `debug` |

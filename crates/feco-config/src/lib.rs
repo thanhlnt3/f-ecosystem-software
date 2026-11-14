@@ -145,6 +145,9 @@ pub struct SecurityConfig {
     pub rate_app_per_min: u32,
     /// Số lần gọi API dữ liệu tối đa mỗi phút cho một người dùng (mọi app cộng lại).
     pub rate_user_per_min: u32,
+    /// `FECO_ADMIN_PASSKEY_OPTIONAL=true`: bảng quản trị không bắt buộc passkey. Chỉ được đặt khi
+    /// `FECO_ENV=dev` (WebAuthn không chạy trên RP ID 127.0.0.1); môi trường khác từ chối khởi động.
+    pub admin_passkey_optional: bool,
 }
 
 /// Kho TUF mà máy chủ ký target khi một phiên bản được phát hành (design D3). Bản dev dùng khóa
@@ -553,8 +556,27 @@ fn security_config<'a>(
                 }),
         }
     };
+    let admin_passkey_optional = match get("FECO_ADMIN_PASSKEY_OPTIONAL") {
+        None | Some("false" | "0" | "") => false,
+        Some("true" | "1") if environment == Environment::Dev => true,
+        Some("true" | "1") => {
+            return Err(ConfigError::Invalid {
+                var: "FECO_ADMIN_PASSKEY_OPTIONAL",
+                reason: format!(
+                    "chỉ được bật khi FECO_ENV=dev; môi trường {environment} luôn bắt buộc passkey"
+                ),
+            })
+        }
+        Some(v) => {
+            return Err(ConfigError::Invalid {
+                var: "FECO_ADMIN_PASSKEY_OPTIONAL",
+                reason: format!("{v:?} không phải true/false"),
+            })
+        }
+    };
     Ok(SecurityConfig {
         data_key,
+        admin_passkey_optional,
         rate_ip_per_min: num("FECO_RATE_IP_PER_MIN", 1200)?,
         rate_app_per_min: num("FECO_RATE_APP_PER_MIN", 1200)?,
         rate_user_per_min: num("FECO_RATE_USER_PER_MIN", 120)?,
@@ -1096,6 +1118,44 @@ mod tests {
             ConfigError::Incomplete { .. }
         ));
         assert!(!format!("{c:?}").contains("sandbox-key1"));
+    }
+
+    /// Spec admin-console, "Ngoại lệ passkey ở môi trường dev": scenario "Production với cờ bỏ
+    /// passkey" và chỉ dev mới bật được.
+    #[test]
+    fn admin_passkey_flag_is_dev_only() {
+        let mut dev = with_env("dev", VNPAY_SANDBOX);
+        assert!(
+            !Config::from_vars(&dev)
+                .unwrap()
+                .security
+                .admin_passkey_optional
+        );
+        dev.insert("FECO_ADMIN_PASSKEY_OPTIONAL".into(), "true".into());
+        assert!(
+            Config::from_vars(&dev)
+                .unwrap()
+                .security
+                .admin_passkey_optional
+        );
+        dev.insert("FECO_ADMIN_PASSKEY_OPTIONAL".into(), "co".into());
+        assert!(Config::from_vars(&dev).is_err());
+        let mut staging = with_env("staging", VNPAY_SANDBOX);
+        staging.insert("FECO_ADMIN_PASSKEY_OPTIONAL".into(), "true".into());
+        assert!(matches!(
+            Config::from_vars(&staging).unwrap_err(),
+            ConfigError::Invalid {
+                var: "FECO_ADMIN_PASSKEY_OPTIONAL",
+                ..
+            }
+        ));
+        staging.insert("FECO_ADMIN_PASSKEY_OPTIONAL".into(), "false".into());
+        assert!(
+            !Config::from_vars(&staging)
+                .unwrap()
+                .security
+                .admin_passkey_optional
+        );
     }
 
     /// Spec platform-security: bí mật không xuất hiện trong nhật ký.

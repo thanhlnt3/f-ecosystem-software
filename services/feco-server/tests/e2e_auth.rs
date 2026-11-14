@@ -5880,6 +5880,18 @@ async fn admin_console_end_to_end() {
         home.contains("Hỗ trợ người dùng") && !home.contains("/admin/refunds"),
         "{home}"
     );
+    // Scenario "Thẻ theo vai trò" (web-ui-and-japanese): Hỗ trợ không thấy doanh thu hay hoàn tiền.
+    assert!(home.contains(r#"id="kpi-users""#), "{home}");
+    for hidden in [
+        "kpi-revenue",
+        "kpi-refunds",
+        "revenue-chart",
+        "kpi-role-requests",
+    ] {
+        assert!(!home.contains(hidden), "Hỗ trợ không được thấy {hidden}");
+    }
+    // Passkey bắt buộc (cờ dev tắt): không có cảnh báo.
+    assert!(!home.contains("dev-no-passkey"));
     assert_eq!(
         support
             .get(format!("{BASE}/admin/refunds"))
@@ -6221,6 +6233,27 @@ async fn admin_console_end_to_end() {
         members.contains("Tôi muốn phát hành app ghi chú"),
         "{members}"
     );
+    // Scenario "Quản trị hệ thống mở bảng quản trị": thẻ đếm yêu cầu đang chờ, dẫn tới Phân quyền.
+    let pending: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM role_requests WHERE status = 'pending'")
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert!(pending >= 1);
+    let dash = get(&pm, "/admin").await;
+    let doc = Html::parse_document(&dash);
+    let card = doc
+        .select(&Selector::parse("a#kpi-role-requests").unwrap())
+        .next()
+        .unwrap_or_else(|| panic!("thiếu thẻ yêu cầu quyền: {dash}"));
+    assert_eq!(card.value().attr("href"), Some("/admin/members"));
+    let value: String = card
+        .select(&Selector::parse(".kpi-value").unwrap())
+        .next()
+        .unwrap()
+        .text()
+        .collect();
+    assert_eq!(value.trim(), pending.to_string());
     let request = roles::pending_requests(&db)
         .await
         .unwrap()
@@ -6722,4 +6755,221 @@ purpose = "Kiểm tra bản quyền"
     assert!(fsdk::session_from_launch(&config, &fsdk::Launch { code })
         .await
         .is_err());
+}
+
+/// Thay đổi web-ui-and-japanese, spec platform-support: "Trình duyệt tiếng Nhật", "Chọn tiếng
+/// Nhật", "Đổi sang chủ đề tối và phong cách Trời sao", "Cookie hỏng".
+#[tokio::test]
+async fn web_japanese_and_appearance() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    // Trình duyệt tiếng Nhật: trang đầu tiên đã là tiếng Nhật.
+    let jp = browser_with(UA_WINDOWS_CHROME, "ja-JP,ja;q=0.9,en;q=0.8");
+    let page = get(&jp, "/login").await;
+    assert!(page.contains(r#"lang="ja""#), "{page}");
+    assert!(page.contains("サインイン"), "{page}");
+
+    // Chọn tiếng Nhật từ trình duyệt tiếng Việt; lựa chọn được nhớ cho trang sau.
+    let c = browser();
+    let page = get(&c, "/login").await;
+    assert!(page.contains(r#"lang="vi""#) && page.contains("Đăng nhập"));
+    assert!(
+        page.contains(r#"href="/lang/ja""#),
+        "thanh trên cùng có nút 日本語"
+    );
+    let page = get(&c, "/lang/ja?next=/login").await;
+    assert!(
+        page.contains("サインイン") && page.contains(r#"lang="ja""#),
+        "{page}"
+    );
+    let store = get(&c, "/store").await;
+    assert!(
+        store.contains(r#"lang="ja""#) && store.contains("ストア"),
+        "{store}"
+    );
+    // Không có `next`: quay lại trang trước (Referer cùng nguồn), không chuyển hướng ra ngoài.
+    let res = c
+        .get(format!("{BASE}/lang/vi"))
+        .header("referer", format!("{BASE}/store?q=notes"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.url().path(), "/store");
+    let res = c
+        .get(format!("{BASE}/lang/vi"))
+        .header("referer", "https://evil.example/x")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.url().as_str(), format!("{BASE}/"));
+
+    // Trang Giao diện: chọn Trời sao, chủ đề tối, cỡ chữ 110%, chế độ gọn.
+    let prefs = get(&c, "/preferences").await;
+    assert!(
+        prefs.contains(r#"data-style-option="starry_night""#),
+        "{prefs}"
+    );
+    assert_eq!(
+        Html::parse_document(&prefs)
+            .select(&Selector::parse(r#"input[name="style"]"#).unwrap())
+            .count(),
+        10,
+        "đủ 10 phong cách như F-Launcher"
+    );
+    let (status, _) = post(
+        &c,
+        "/preferences",
+        "sai-token",
+        &[("style", "starry_night")],
+    )
+    .await;
+    assert_eq!(status, 403, "thiếu CSRF bị từ chối");
+    let (status, page) = post(
+        &c,
+        "/preferences",
+        &csrf_of(&prefs),
+        &[
+            ("lang", "ja"),
+            ("style", "starry_night"),
+            ("theme", "dark"),
+            ("accent", "pink"),
+            ("density", "compact"),
+            ("size", "110"),
+            ("next", "/store"),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert!(page.contains("外観を保存しました。"), "{page}");
+    let store = get(&c, "/store").await;
+    for attr in [
+        r#"data-style="starry_night""#,
+        r#"data-theme="dark""#,
+        r#"data-accent="pink""#,
+        r#"data-density="compact""#,
+        "--scale:1.10",
+        r#"lang="ja""#,
+    ] {
+        assert!(store.contains(attr), "thiếu {attr}");
+    }
+    assert!(store.contains(r#"<link rel="stylesheet" href="/ui.css">"#));
+    // Nền trang dùng bảng màu Trời sao (CSS sinh từ bảng màu chung).
+    let css = c
+        .get(format!("{BASE}/ui.css"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let starry = feco_core::ui_palette::StyleId::StarryNight
+        .palette()
+        .unwrap();
+    assert!(css.contains(":root[data-style=starry_night]{--radius:"));
+    assert!(css.contains(&format!(
+        "--bg:{};",
+        feco_core::ui_palette::hex(starry.window)
+    )));
+    // Khôi phục mặc định.
+    let prefs = get(&c, "/preferences").await;
+    let (_, _) = post(&c, "/preferences", &csrf_of(&prefs), &[("reset", "1")]).await;
+    let store = get(&c, "/store").await;
+    assert!(store.contains(r#"data-style="plain""#) && !store.contains(r#"style="--scale"#));
+
+    // Cookie hỏng: về Chân phương, cỡ chữ kẹp ở 125%.
+    let raw = reqwest::Client::new();
+    let page = raw
+        .get(format!("{BASE}/store"))
+        .header("cookie", "feco_ui=style=khong-ton-tai&size=900")
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(page.contains(r#"data-style="plain""#), "{page}");
+    assert!(page.contains("--scale:1.25"), "{page}");
+}
+
+/// Spec admin-console, "Ngoại lệ passkey ở môi trường dev": scenario "Dev không có passkey".
+/// Chạy thêm một máy chủ với `FECO_ADMIN_PASSKEY_OPTIONAL=true` (cùng Kratos, cùng cơ sở dữ liệu).
+#[tokio::test]
+async fn dev_admin_without_passkey() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let mut vars = SERVER_VARS.get().cloned().unwrap();
+    vars.insert("FECO_ADMIN_PASSKEY_OPTIONAL".into(), "true".into());
+    let state =
+        std::sync::Arc::new(AppState::from_config(&Config::from_vars(&vars).unwrap()).unwrap());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let dev_base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            router(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await
+        .unwrap()
+    });
+    // Quản trị viên chỉ đăng nhập bằng mật khẩu (chưa có passkey).
+    let (email, password) = unique("qtv-dev");
+    let c = app_browser();
+    register_in(&c, &email, &password, "Quản trị viên dev").await;
+    verify_email(&c, &email).await;
+    feco_server::admin::set_member(
+        &local_state(),
+        "khoi-tao",
+        &email,
+        &[
+            feco_server::admin::Role::Sysadmin,
+            feco_server::admin::Role::Finance,
+        ],
+    )
+    .await
+    .unwrap();
+    // Máy chủ bình thường vẫn đòi passkey.
+    let res = c.get(format!("{BASE}/admin")).send().await.unwrap();
+    assert_eq!(res.status().as_u16(), 403);
+    // Máy chủ dev có cờ: vào được, kèm cảnh báo; dashboard có thẻ và biểu đồ của Tài chính.
+    let res = c.get(format!("{dev_base}/admin")).send().await.unwrap();
+    assert_eq!(res.status().as_u16(), 200);
+    let page = res.text().await.unwrap();
+    assert!(page.contains(r#"id="dev-no-passkey""#), "{page}");
+    assert!(
+        page.contains("Chế độ dev: không bắt buộc passkey"),
+        "{page}"
+    );
+    for id in [
+        "kpi-role-requests",
+        "kpi-users",
+        "kpi-refunds",
+        "kpi-revenue",
+        "revenue-chart",
+    ] {
+        assert!(page.contains(id), "thiếu {id}");
+    }
+    assert_eq!(
+        Html::parse_document(&page)
+            .select(&Selector::parse("#revenue-chart .bar").unwrap())
+            .count(),
+        14
+    );
+    // Trang con cũng hiện cảnh báo.
+    let members = c
+        .get(format!("{dev_base}/admin/members"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    assert!(members.contains("dev-no-passkey"));
+    let _ = sqlx::query("DELETE FROM admin_members WHERE email = $1")
+        .bind(&email)
+        .execute(&local_state().db)
+        .await;
 }

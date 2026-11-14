@@ -19,6 +19,7 @@ pub mod catalog;
 pub mod config;
 pub mod events;
 pub mod i18n;
+mod i18n_ja;
 pub mod install;
 pub mod launch;
 pub mod library;

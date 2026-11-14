@@ -317,11 +317,11 @@ pub async fn consent(
                 name: s.as_str().into(),
                 description: match lang {
                     Lang::Vi => s.description_vi().into(),
-                    Lang::En => s.description_en().into(),
+                    Lang::En | Lang::Ja => s.description_en().into(),
                 },
                 purpose: match lang {
                     Lang::Vi => d.purpose_vi.clone(),
-                    Lang::En => d.purpose_en.clone(),
+                    Lang::En | Lang::Ja => d.purpose_en.clone(),
                 },
                 required: d.required,
             }

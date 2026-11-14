@@ -42,7 +42,8 @@
           "title": "Ngôn ngữ",
           "enum": [
             "vi",
-            "en"
+            "en",
+            "ja"
           ],
           "default": "vi"
         },

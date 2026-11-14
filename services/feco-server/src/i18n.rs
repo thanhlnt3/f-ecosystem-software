@@ -1,5 +1,7 @@
-//! Ngôn ngữ giao diện (spec platform-support, "Ngôn ngữ"): tiếng Việt và tiếng Anh,
-//! mặc định theo trình duyệt, đổi được bằng liên kết `/lang/{vi|en}` (lưu cookie).
+//! Ngôn ngữ giao diện (spec platform-support, "Ngôn ngữ"): tiếng Việt, tiếng Anh và tiếng Nhật
+//! (thay đổi web-ui-and-japanese), mặc định theo trình duyệt, đổi được bằng liên kết
+//! `/lang/{vi|en|ja}` (lưu cookie). Bản tiếng Nhật nằm ở `i18n_ja.rs`; nội dung do hệ thống tạo
+//! chưa có bản tiếng Nhật thì hiện tiếng Anh.
 
 use axum::{
     extract::FromRequestParts,
@@ -13,6 +15,7 @@ pub enum Lang {
     #[default]
     Vi,
     En,
+    Ja,
 }
 
 impl Lang {
@@ -20,6 +23,7 @@ impl Lang {
         match s {
             "vi" => Some(Lang::Vi),
             "en" => Some(Lang::En),
+            "ja" => Some(Lang::Ja),
             _ => None,
         }
     }
@@ -28,7 +32,24 @@ impl Lang {
         match self {
             Lang::Vi => "vi",
             Lang::En => "en",
+            Lang::Ja => "ja",
         }
+    }
+
+    pub const ALL: [Lang; 3] = [Lang::Vi, Lang::En, Lang::Ja];
+
+    /// Tên ngôn ngữ viết bằng chính ngôn ngữ đó (nút chọn ngôn ngữ).
+    pub const fn native_name(self) -> &'static str {
+        match self {
+            Lang::Vi => "Tiếng Việt",
+            Lang::En => "English",
+            Lang::Ja => "日本語",
+        }
+    }
+
+    /// Nội dung chỉ có tiếng Việt và tiếng Anh: chọn tiếng Việt hay không (tiếng Nhật dùng tiếng Anh).
+    pub const fn is_vi(self) -> bool {
+        matches!(self, Lang::Vi)
     }
 
     /// Chọn ngôn ngữ: cookie `feco_lang` trước, rồi `Accept-Language`, mặc định tiếng Việt.
@@ -47,6 +68,7 @@ impl Lang {
             .map(|first| first.trim().to_ascii_lowercase())
         {
             Some(l) if l.starts_with("en") => Lang::En,
+            Some(l) if l.starts_with("ja") => Lang::Ja,
             _ => Lang::Vi,
         }
     }
@@ -71,6 +93,11 @@ impl<S: Send + Sync> FromRequestParts<S> for Lang {
 /// Bảng chuỗi giao diện. Khóa không có bản dịch trả về chuỗi rỗng và ghi cảnh báo;
 /// test `every_key_has_both_languages` bắt lỗi này trước khi phát hành.
 pub fn t(lang: Lang, key: &str) -> &'static str {
+    if lang == Lang::Ja {
+        if let Some(ja) = crate::i18n_ja::ja(key) {
+            return ja;
+        }
+    }
     let (vi, en) = match key {
         "lang.switch.label" => ("English", "Tiếng Việt"),
         "lang.switch.code" => ("en", "vi"),
@@ -639,6 +666,61 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "notify.unsubscribe_button" => ("Hủy đăng ký", "Unsubscribe"),
         "notify.unsubscribed" => ("Đã hủy đăng ký:", "Unsubscribed from:"),
         "notify.bad_link" => ("Liên kết hủy đăng ký không hợp lệ.", "This unsubscribe link is not valid."),
+        "nav.account" => ("Tài khoản", "Account"),
+        "nav.store" => ("Cửa hàng", "Store"),
+        "nav.orders" => ("Đơn hàng", "Orders"),
+        "nav.notifications" => ("Thông báo", "Notifications"),
+        "nav.developer" => ("Nhà phát triển", "Developers"),
+        "nav.preferences" => ("Giao diện", "Appearance"),
+        "prefs.title" => ("Giao diện", "Appearance"),
+        "prefs.intro" => ("Tùy chỉnh lưu trên trình duyệt này (cookie) và áp dụng cho mọi trang F-Eco, giống phần Giao diện trong F-Launcher.", "These settings are saved in this browser (a cookie) and apply to every F-Eco page, like Appearance in F-Launcher."),
+        "prefs.language" => ("Ngôn ngữ", "Language"),
+        "prefs.style" => ("Phong cách", "Style"),
+        "prefs.style_note" => ("Các phong cách có bảng màu riêng không dùng chủ đề và màu nhấn.", "Styles with their own palette ignore the theme and accent color."),
+        "prefs.follows_theme" => ("theo chủ đề", "follows theme"),
+        "prefs.theme" => ("Chủ đề", "Theme"),
+        "prefs.theme.system" => ("Theo hệ thống", "System"),
+        "prefs.theme.light" => ("Sáng", "Light"),
+        "prefs.theme.dark" => ("Tối", "Dark"),
+        "prefs.accent" => ("Màu nhấn", "Accent color"),
+        "prefs.accent.default" => ("Mặc định F-Eco", "F-Eco default"),
+        "prefs.accent.blue" => ("Xanh dương", "Blue"),
+        "prefs.accent.teal" => ("Xanh ngọc", "Teal"),
+        "prefs.accent.green" => ("Xanh lá", "Green"),
+        "prefs.accent.purple" => ("Tím", "Purple"),
+        "prefs.accent.pink" => ("Hồng", "Pink"),
+        "prefs.accent.orange" => ("Cam", "Orange"),
+        "prefs.density" => ("Mật độ", "Density"),
+        "prefs.density.normal" => ("Thường", "Normal"),
+        "prefs.density.compact" => ("Gọn", "Compact"),
+        "prefs.size" => ("Cỡ chữ", "Text size"),
+        "prefs.save" => ("Lưu", "Save"),
+        "prefs.reset" => ("Khôi phục mặc định", "Restore defaults"),
+        "prefs.saved" => ("Đã lưu giao diện.", "Appearance saved."),
+        "prefs.back" => ("Quay lại", "Back"),
+        "prefs.style.plain" => ("Chân phương", "Plain"),
+        "prefs.style.elegant" => ("Trang nhã", "Elegant"),
+        "prefs.style.parchment" => ("Giấy da", "Parchment"),
+        "prefs.style.fresco" => ("Bích họa", "Fresco"),
+        "prefs.style.starry_night" => ("Trời sao", "Starry night"),
+        "prefs.style.lotus_pond" => ("Hồ sen", "Lotus pond"),
+        "prefs.style.cubist" => ("Lập thể", "Cubist"),
+        "prefs.style.lily" => ("Hoa huệ", "Lily"),
+        "prefs.style.old_quarter" => ("Phố cổ", "Old quarter"),
+        "prefs.style.lacquer" => ("Sơn mài", "Lacquer"),
+        "admin.dash.title" => ("Tổng quan", "Overview"),
+        "admin.dash.role_requests" => ("Yêu cầu quyền Lập trình viên", "Developer role requests"),
+        "admin.dash.users" => ("Người dùng", "Users"),
+        "admin.dash.users_note" => ("{developers} lập trình viên · {admins} quản trị viên", "{developers} developers · {admins} administrators"),
+        "admin.dash.reviews" => ("Phiên bản chờ duyệt thủ công", "Versions awaiting manual review"),
+        "admin.dash.orders_due" => ("Đơn sắp trễ hạn", "Orders due soon"),
+        "admin.dash.orders_note" => ("{open} đơn đang thực hiện", "{open} open orders"),
+        "admin.dash.refunds" => ("Lệnh hoàn chờ phê duyệt", "Refunds awaiting approval"),
+        "admin.dash.revenue" => ("Doanh thu 30 ngày", "Revenue, last 30 days"),
+        "admin.dash.revenue_note" => ("{count} giao dịch thành công", "{count} successful payments"),
+        "admin.dash.chart" => ("Doanh thu 14 ngày gần nhất", "Revenue, last 14 days"),
+        "admin.dash.no_cards" => ("Vai trò của bạn chưa có thẻ số liệu; hãy dùng các mục ở thanh bên.", "Your role has no summary cards; use the sections in the sidebar."),
+        "admin.dev_no_passkey" => ("Chế độ dev: không bắt buộc passkey (FECO_ADMIN_PASSKEY_OPTIONAL). Không bao giờ bật ở staging hay production.", "Dev mode: passkey not required (FECO_ADMIN_PASSKEY_OPTIONAL). Never enable this in staging or production."),
         _ => {
             tracing::warn!(key, "thiếu bản dịch");
             ("", "")
@@ -646,7 +728,7 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
     };
     match lang {
         Lang::Vi => vi,
-        Lang::En => en,
+        Lang::En | Lang::Ja => en,
     }
 }
 
@@ -665,6 +747,63 @@ mod tests {
             "cookie thắng Accept-Language"
         );
         assert_eq!(Lang::detect(Some("feco_lang=fr"), None), Lang::Vi);
+        // Scenario "Trình duyệt tiếng Nhật".
+        assert_eq!(
+            Lang::detect(None, Some("ja-JP,ja;q=0.9,en;q=0.8")),
+            Lang::Ja
+        );
+        assert_eq!(Lang::detect(Some("feco_lang=ja"), Some("vi-VN")), Lang::Ja);
+        for l in Lang::ALL {
+            assert_eq!(Lang::parse(l.code()), Some(l));
+            assert!(!l.native_name().is_empty());
+        }
+    }
+
+    /// Scenario "Thiếu bản dịch tiếng Nhật": mọi khóa của bảng có bản tiếng Nhật, cùng các chỗ
+    /// `{...}` như bản tiếng Anh; bảng tiếng Nhật không có khóa lạ.
+    #[test]
+    fn every_key_has_japanese() {
+        let src = include_str!("i18n.rs");
+        let body = &src
+            [src.find("let (vi, en) = match key {").unwrap()..src.find("#[cfg(test)]").unwrap()];
+        let arm = regex::Regex::new(r#"(?m)^\s*"([a-z_.0-9]+)"(?:\s*\|\s*"([a-z_.0-9]+)")*\s*=>"#)
+            .unwrap();
+        let key_re = regex::Regex::new(r#""([a-z_.0-9]+)""#).unwrap();
+        let holes = regex::Regex::new(r"\{[a-z_0-9]*\}").unwrap();
+        let sorted = |s: &str| {
+            let mut v: Vec<String> = holes.find_iter(s).map(|m| m.as_str().to_owned()).collect();
+            v.sort();
+            v
+        };
+        let mut keys = Vec::new();
+        for m in arm.find_iter(body) {
+            let text = m.as_str();
+            for k in key_re.captures_iter(text) {
+                keys.push(k[1].to_owned());
+            }
+        }
+        assert!(keys.len() > 400, "chỉ tìm thấy {} khóa", keys.len());
+        let mut missing = Vec::new();
+        for key in &keys {
+            match crate::i18n_ja::ja(key) {
+                None => missing.push(key.clone()),
+                Some(ja) => {
+                    assert!(!ja.is_empty(), "bản tiếng Nhật rỗng: {key}");
+                    assert_eq!(sorted(ja), sorted(t(Lang::En, key)), "chỗ {{…}} của {key}");
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "thiếu bản tiếng Nhật:\n{}",
+            missing.join("\n")
+        );
+        assert_eq!(
+            crate::i18n_ja::JA.len(),
+            keys.len(),
+            "bảng tiếng Nhật có khóa thừa"
+        );
+        assert_eq!(t(Lang::Ja, "khong.co.khoa.nay"), "");
     }
 
     /// Mọi khóa dùng trong mã và mẫu trang đều phải có bản dịch.
@@ -710,6 +849,8 @@ mod tests {
             include_str!("../templates/pay.html"),
             include_str!("../templates/payment_return.html"),
             include_str!("../templates/payments.html"),
+            include_str!("ui_prefs.rs"),
+            include_str!("../templates/preferences.html"),
             include_str!("../templates/home.html"),
         ];
         for key in [

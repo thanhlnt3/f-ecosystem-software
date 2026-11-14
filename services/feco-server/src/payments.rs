@@ -2021,7 +2021,9 @@ async fn store_and_send(
         content_type: "text/html; charset=utf-8".into(),
         bytes: doc.as_bytes().to_vec(),
     });
-    let english = crate::notifications::language_of(state, subject).await == crate::i18n::Lang::En;
+    let english = !crate::notifications::language_of(state, subject)
+        .await
+        .is_vi();
     let body = if english {
         format!(
             "Invoice no. {number} ({}) issued to {}{}, amount {}.{}\nDownload it again any time from Payment history: {}payments\n",

@@ -24,6 +24,7 @@ pub mod export;
 pub mod gateways;
 pub mod hydra;
 pub mod i18n;
+pub mod i18n_ja;
 pub mod kratos;
 pub mod launch;
 pub mod maildns;
@@ -38,6 +39,7 @@ pub mod pairwise;
 pub mod payments;
 pub mod payments_web;
 pub mod ratelimit;
+pub mod ui_prefs;
 
 pub mod review;
 pub mod roles;
@@ -110,6 +112,8 @@ pub struct AppState {
     pub clamd: Option<std::net::SocketAddr>,
     /// Địa chỉ nhận cảnh báo kiểm duyệt.
     pub admin_emails: Vec<String>,
+    /// Bảng quản trị không bắt buộc passkey (chỉ dev; feco-config đã kiểm).
+    pub admin_passkey_optional: bool,
     /// Cổng thanh toán ZaloPay (không cấu hình thì trang thanh toán báo chưa sẵn sàng).
     pub zalopay: Option<zalopay::ZaloPay>,
     /// Cổng VNPAY (QR, thẻ ATM, thẻ quốc tế) và MoMo (ví MoMo).
@@ -191,6 +195,7 @@ impl AppState {
             tuf_lock: tokio::sync::Mutex::new(()),
             clamd: config.developer.clamd,
             admin_emails: config.developer.admin_emails.clone(),
+            admin_passkey_optional: config.security.admin_passkey_optional,
             zalopay: config.payments.zalopay.as_ref().map(zalopay::ZaloPay::new),
             vnpay: config.payments.vnpay.as_ref().map(vnpay::Vnpay::new),
             momo: config.payments.momo.as_ref().map(momo::Momo::new),
@@ -246,6 +251,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/logout", get(auth::logout))
         .route("/error", get(auth::error))
         .route("/lang/{code}", get(auth::set_lang))
+        .route("/ui.css", get(ui_prefs::stylesheet))
+        .route("/preferences", get(ui_prefs::show).post(ui_prefs::save))
         .route("/sessions", get(account::sessions))
         .route("/sessions/revoke-others", post(account::revoke_others))
         .route("/sessions/{id}/revoke", post(account::revoke))
@@ -383,11 +390,12 @@ pub fn router(state: Arc<AppState>) -> Router {
     ] {
         r = flow_routes(r, kind);
     }
-    r.layer(axum::middleware::from_fn_with_state(
-        state.clone(),
-        security::layer,
-    ))
-    .with_state(state)
+    r.layer(axum::middleware::from_fn(ui_prefs::apply))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            security::layer,
+        ))
+        .with_state(state)
 }
 
 #[cfg(test)]
@@ -430,6 +438,7 @@ mod tests {
             tuf_lock: tokio::sync::Mutex::new(()),
             clamd: None,
             admin_emails: Vec::new(),
+            admin_passkey_optional: false,
             zalopay: None,
             vnpay: None,
             momo: None,

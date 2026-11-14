@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("prefs.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("prefs.title") }}</h1>
+<p class="muted">{{ i18n.t("prefs.intro") }}</p>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<form method="post" action="/preferences" id="ui-prefs" class="prefs">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <input type="hidden" name="next" value="{{ back }}">
+
+  <fieldset>
+    <legend>{{ i18n.t("prefs.language") }}</legend>
+    <div class="chips">
+    {% for l in languages %}<label class="chip"><input type="radio" name="lang" value="{{ l.code }}"{% if l.selected %} checked{% endif %}> <span lang="{{ l.code }}">{{ l.label }}</span></label>{% endfor %}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>{{ i18n.t("prefs.style") }}</legend>
+    <p class="muted">{{ i18n.t("prefs.style_note") }}</p>
+    <div class="styles">
+    {% for s in styles %}
+      <label class="style-card" data-style-option="{{ s.code }}">
+        <input type="radio" name="style" value="{{ s.code }}"{% if s.selected %} checked{% endif %}>
+        <span class="swatch" style="background:{{ s.swatch[0] }}"><span style="background:{{ s.swatch[1] }}"></span><span style="background:{{ s.swatch[2] }}"></span></span>
+        <span>{{ s.label }}{% if !s.own_palette %} <span class="muted">· {{ i18n.t("prefs.follows_theme") }}</span>{% endif %}</span>
+      </label>
+    {% endfor %}
+    </div>
+  </fieldset>
+
+  <div class="cols">
+    <fieldset>
+      <legend>{{ i18n.t("prefs.theme") }}</legend>
+      {% for t in themes %}<label class="opt"><input type="radio" name="theme" value="{{ t.code }}"{% if t.selected %} checked{% endif %}> {{ t.label }}</label>{% endfor %}
+    </fieldset>
+    <fieldset>
+      <legend>{{ i18n.t("prefs.accent") }}</legend>
+      {% for a in accents %}<label class="opt"><input type="radio" name="accent" value="{{ a.code }}"{% if a.selected %} checked{% endif %}> <span class="dot" data-accent-dot="{{ a.code }}"></span> {{ a.label }}</label>{% endfor %}
+    </fieldset>
+    <fieldset>
+      <legend>{{ i18n.t("prefs.density") }}</legend>
+      <label class="opt"><input type="radio" name="density" value="normal"{% if !compact %} checked{% endif %}> {{ i18n.t("prefs.density.normal") }}</label>
+      <label class="opt"><input type="radio" name="density" value="compact"{% if compact %} checked{% endif %}> {{ i18n.t("prefs.density.compact") }}</label>
+      <label for="size">{{ i18n.t("prefs.size") }}</label>
+      <select name="size" id="size">
+        {% for n in [90u8, 95, 100, 105, 110, 115, 120, 125] %}<option value="{{ n }}"{% if *n == size %} selected{% endif %}>{{ n }}%</option>{% endfor %}
+      </select>
+    </fieldset>
+  </div>
+
+  <div class="actions">
+    <button type="submit" id="prefs-save">{{ i18n.t("prefs.save") }}</button>
+    <button type="submit" name="reset" value="1" class="secondary">{{ i18n.t("prefs.reset") }}</button>
+  </div>
+</form>
+<div class="links"><a href="{{ back }}">‹ {{ i18n.t("prefs.back") }}</a></div>
+{% endblock %}

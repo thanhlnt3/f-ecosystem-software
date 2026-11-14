@@ -14,7 +14,7 @@ use feco_launcher::i18n::{self, t, tf, Language};
 use feco_launcher::launch::{command, LaunchEnv};
 use feco_launcher::library::{self, SortKey};
 use feco_launcher::prefs::{Accent, Layout, Prefs, StartPage, Theme, TileSize};
-use feco_launcher::style::{self as ui_style, UiStyle};
+use feco_launcher::style::{self as ui_style, StyleText, UiStyle};
 use feco_launcher::{
     AppStatus, CatalogEntry, Config, Launcher, LauncherError, MyApp, Paths, ISOLATION_NOTICE,
 };
@@ -81,14 +81,48 @@ fn install_fonts(ctx: &egui::Context) -> Result<(), String> {
     fonts
         .font_data
         .insert("ui".into(), Arc::new(egui::FontData::from_owned(bytes)));
+    let mut family: Vec<String> = vec!["ui".into()];
+    // Chữ tiếng Nhật: phông của hệ điều hành làm phông dự phòng (spec "Tiếng Nhật trong launcher";
+    // không đóng gói phông). Không có thì vẫn chạy, chữ Nhật hiện ô trống.
+    if let Some(bytes) = japanese_font_candidates(&windir)
+        .iter()
+        .find_map(|p| std::fs::read(p).ok())
+    {
+        fonts
+            .font_data
+            .insert("ja".into(), Arc::new(egui::FontData::from_owned(bytes)));
+        family.push("ja".into());
+    }
     fonts
         .families
-        .insert(egui::FontFamily::Proportional, vec!["ui".into()]);
-    fonts
-        .families
-        .insert(egui::FontFamily::Monospace, vec!["ui".into()]);
+        .insert(egui::FontFamily::Proportional, family.clone());
+    fonts.families.insert(egui::FontFamily::Monospace, family);
     ctx.set_fonts(fonts);
     Ok(())
+}
+
+/// Phông chữ tiếng Nhật có sẵn: Windows (Yu Gothic, Meiryo, MS Gothic), macOS (Hiragino),
+/// Linux (Noto CJK, IPA). `FECO_LAUNCHER_JA_FONT` được ưu tiên.
+fn japanese_font_candidates(windir: &str) -> Vec<std::path::PathBuf> {
+    let mut out: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(p) = std::env::var("FECO_LAUNCHER_JA_FONT") {
+        out.push(p.into());
+    }
+    for name in ["YuGothM.ttc", "YuGothR.ttc", "meiryo.ttc", "msgothic.ttc"] {
+        out.push(std::path::Path::new(windir).join("Fonts").join(name));
+    }
+    for p in [
+        // ヒラギノ角ゴシック W3
+        "/System/Library/Fonts/\u{30d2}\u{30e9}\u{30ae}\u{30ce}\u{89d2}\u{30b4}\u{30b7}\u{30c3}\u{30af} W3.ttc",
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",
+    ] {
+        out.push(p.into());
+    }
+    out
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

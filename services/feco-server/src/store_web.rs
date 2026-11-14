@@ -224,7 +224,7 @@ fn scope_lines(lang: Lang, app: &AppInfo) -> Vec<ScopeLine> {
         .map(|d| {
             let (desc, purpose) = match lang {
                 Lang::Vi => (d.scope.description_vi(), d.purpose_vi.as_str()),
-                Lang::En => (d.scope.description_en(), d.purpose_en.as_str()),
+                Lang::En | Lang::Ja => (d.scope.description_en(), d.purpose_en.as_str()),
             };
             let flag = if d.required {
                 lang.t("store.required")

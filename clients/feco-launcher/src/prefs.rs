@@ -388,4 +388,13 @@ mod tests {
         let back = Prefs::load(&path).0;
         assert_eq!((back.language, back.style), (Language::Vi, UiStyle::Plain));
     }
+
+    /// Màu nhấn của launcher trùng bảng chung `feco_core::ui_palette::ACCENTS` (trang web dùng bảng đó).
+    #[test]
+    fn accents_match_the_shared_palette() {
+        for (code, rgb) in feco_core::ui_palette::ACCENTS {
+            let a: Accent = serde_json::from_value(serde_json::Value::String(code.into())).unwrap();
+            assert_eq!(a.rgb(), rgb, "{code}");
+        }
+    }
 }

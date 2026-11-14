@@ -130,7 +130,7 @@ fn data_scope_names(lang: Lang, scopes: &Value) -> Vec<String> {
         .filter_map(|s| s.parse::<Scope>().ok())
         .map(|s| match lang {
             Lang::Vi => s.description_vi().to_owned(),
-            Lang::En => s.description_en().to_owned(),
+            Lang::En | Lang::Ja => s.description_en().to_owned(),
         })
         .collect()
 }

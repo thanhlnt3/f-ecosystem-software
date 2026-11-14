@@ -1282,7 +1282,7 @@ pub async fn terms(lang: Lang) -> Response {
                 title: tv,
                 body: bv,
             },
-            Lang::En => TermView {
+            Lang::En | Lang::Ja => TermView {
                 title: te,
                 body: be,
             },

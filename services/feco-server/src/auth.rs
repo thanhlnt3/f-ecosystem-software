@@ -614,13 +614,26 @@ pub async fn error(
     }
 }
 
-/// GET /lang/{vi|en}?next=/đường-dẫn — đổi ngôn ngữ giao diện (lưu cookie 1 năm).
-pub async fn set_lang(Path(code): Path<String>, Query(q): Query<LangQuery>) -> Response {
-    let lang = Lang::parse(&code).unwrap_or_default();
+/// GET /lang/{vi|en|ja}?next=/đường-dẫn — đổi ngôn ngữ giao diện (lưu cookie 1 năm). Không có
+/// `next` thì quay lại trang trước (Referer cùng nguồn).
+pub async fn set_lang(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(code): Path<String>,
+    Query(q): Query<LangQuery>,
+) -> Response {
+    lang_redirect(
+        &code,
+        q.next
+            .or_else(|| crate::ui_prefs::referer_path(&state, &headers)),
+    )
+}
+
+fn lang_redirect(code: &str, next: Option<String>) -> Response {
+    let lang = Lang::parse(code).unwrap_or_default();
     // Chỉ quay về đường dẫn nội bộ, tránh chuyển hướng mở.
-    let next = q
-        .next
-        .filter(|n| n.starts_with('/') && !n.starts_with("//"))
+    let next = next
+        .filter(|n| n.starts_with('/') && !n.starts_with("//") && !n.contains('\\'))
         .unwrap_or_else(|| "/".into());
     let cookie = format!(
         "{}={}; Path=/; Max-Age=31536000; SameSite=Lax",
@@ -665,27 +678,15 @@ mod tests {
         assert_eq!(init_options(&q).aal.as_deref(), Some("aal2"));
     }
 
-    #[tokio::test]
-    async fn set_lang_rejects_open_redirects() {
-        let res = set_lang(
-            Path("en".into()),
-            Query(LangQuery {
-                next: Some("//evil.example".into()),
-            }),
-        )
-        .await;
+    #[test]
+    fn set_lang_rejects_open_redirects() {
+        let res = lang_redirect("en", Some("//evil.example".into()));
         assert_eq!(res.headers()["location"], "/");
         assert!(res.headers()["set-cookie"]
             .to_str()
             .unwrap()
             .starts_with("feco_lang=en"));
-        let res = set_lang(
-            Path("vi".into()),
-            Query(LangQuery {
-                next: Some("/settings".into()),
-            }),
-        )
-        .await;
+        let res = lang_redirect("vi", Some("/settings".into()));
         assert_eq!(res.headers()["location"], "/settings");
     }
 }

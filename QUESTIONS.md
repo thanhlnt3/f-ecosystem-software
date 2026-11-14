@@ -285,3 +285,14 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     Cần chủ dự án đăng ký M4B, khai địa chỉ IP máy chủ thử, rồi chạy
     `feco-catalog payments-check` và `cargo test -p feco-server --test momo_sandbox`
     (docs/payments-setup.md mục 4).
+78. **Rà soát bản dịch tiếng Nhật** (web-ui-and-japanese). Chuỗi tiếng Nhật của F-Launcher
+    (`clients/feco-launcher/src/i18n_ja.rs`) và trang web (`services/feco-server/src/i18n_ja.rs`)
+    do nhóm phát triển dịch từ bản tiếng Anh, chưa có người bản ngữ đọc lại. Thông báo của Kratos
+    và email vẫn tiếng Anh với người dùng chọn tiếng Nhật. Cần người bản ngữ rà soát trước khi mở
+    cho người dùng Nhật, và quyết định có dịch email không.
+79. **Tiếng Pháp trên web.** F-Launcher có tiếng Pháp nhưng trang web chỉ có tiếng Việt, tiếng Anh
+    và tiếng Nhật (theo yêu cầu thay đổi web-ui-and-japanese). Có cần thêm tiếng Pháp cho web để
+    hai bên đồng nhất không?
+80. **Đếm người dùng trên dashboard** gọi API danh sách danh tính của Kratos mỗi lần mở trang Tổng
+    quan. Ổn với số người dùng nhỏ; khi lớn cần đếm định kỳ hoặc lưu số liệu. Chọn cách nào khi lên
+    production?

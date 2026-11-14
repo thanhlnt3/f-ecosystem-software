@@ -1,5 +1,41 @@
 # Nhật ký thay đổi
 
+## 1.4.0 (14/11/2026)
+
+Thay đổi OpenSpec `web-ui-and-japanese`.
+
+### Tiếng Nhật
+
+- F-Launcher có tiếng Nhật (日本語) trong Cài đặt → Giao diện, cùng tiếng Việt, tiếng Anh, tiếng
+  Pháp. Chữ Nhật dùng phông có sẵn của hệ điều hành (Yu Gothic, Meiryo, MS Gothic trên Windows;
+  Hiragino trên macOS; Noto CJK hoặc IPA trên Linux), không đóng gói phông. Có thể chỉ định bằng
+  `FECO_LAUNCHER_JA_FONT`.
+- Trang web có tiếng Nhật: nút VI · EN · 日本語 ở thanh trên cùng, `/lang/ja`, tự nhận trình duyệt
+  gửi `Accept-Language: ja`. Toàn bộ chuỗi giao diện web có bản tiếng Nhật; nội dung hệ thống tạo
+  chưa có bản tiếng Nhật (thông báo của Kratos, email) hiện bằng tiếng Anh.
+- Hồ sơ người dùng nhận ngôn ngữ `ja` (schema danh tính Kratos).
+
+### Giao diện web
+
+- Thiết kế mới: thanh trên cùng (Tài khoản, Cửa hàng, Đơn hàng, Thông báo, Nhà phát triển), chọn
+  ngôn ngữ, lối tới trang **Giao diện**; dải màu trang trí theo phong cách.
+- Trang **Giao diện** (`/preferences`): ngôn ngữ, phong cách (10 phong cách như F-Launcher), chủ đề
+  (theo hệ thống, sáng, tối), màu nhấn, mật độ (thường, gọn), cỡ chữ 90–125%. Lưu trong cookie
+  `feco_ui`, áp dụng từ lần vẽ đầu của mọi trang, không cần JavaScript; giá trị hỏng về mặc định.
+- Bảng màu dùng chung: `feco_core::ui_palette` là nguồn duy nhất cho F-Launcher và CSS của web
+  (`/ui.css`), có kiểm thử độ tương phản WCAG 2.1.
+- Đổi ngôn ngữ giờ quay lại đúng trang đang xem.
+
+### Bảng quản trị
+
+- Bố cục mới với thanh bên và trang **Tổng quan**: thẻ số liệu theo vai trò con (yêu cầu quyền
+  Lập trình viên và số người dùng cho Quản trị hệ thống; phiên bản chờ duyệt thủ công cho Người
+  duyệt app; đơn sắp trễ cho Quản lý dự án; lệnh hoàn chờ duyệt, doanh thu 30 ngày và biểu đồ
+  doanh thu 14 ngày cho Tài chính). Bấm thẻ để tới mục tương ứng.
+- `FECO_ADMIN_PASSKEY_OPTIONAL=true` bỏ yêu cầu passkey của bảng quản trị, **chỉ khi
+  `FECO_ENV=dev`** (WebAuthn không chạy trên địa chỉ 127.0.0.1). Mọi trang quản trị hiện cảnh báo;
+  staging và production từ chối khởi động nếu đặt biến này.
+
 ## 1.3.0 (14/11/2026)
 
 Thay đổi OpenSpec `platform-roles`, cùng các thay đổi về thanh toán và thông báo.

@@ -137,9 +137,10 @@ pub fn title(lang: Lang, kind: FlowKind, aal2: bool) -> &'static str {
     })
 }
 
-/// Dịch một thông báo của Kratos. Ở tiếng Anh hoặc khi chưa có bản dịch, giữ văn bản gốc.
+/// Dịch một thông báo của Kratos. Ở tiếng Anh, tiếng Nhật (chưa có bản dịch thông báo của Kratos)
+/// hoặc khi chưa có bản dịch, giữ văn bản gốc tiếng Anh.
 pub fn translate(lang: Lang, id: i64, text: &str) -> String {
-    if lang == Lang::En {
+    if lang != Lang::Vi {
         return text.to_owned();
     }
     let vi = match id {
@@ -207,9 +208,17 @@ fn label_of(lang: Lang, node: &Value) -> String {
     }
 }
 
-/// Tiêu đề trường trong schema danh tính được viết bằng tiếng Việt; dịch sang tiếng Anh.
+/// Tiêu đề trường trong schema danh tính được viết bằng tiếng Việt; dịch sang tiếng Anh/Nhật.
 fn schema_label(lang: Lang, text: &str) -> String {
     match (lang, text) {
+        (Lang::Ja, "Tên hiển thị") => "表示名".into(),
+        (Lang::Ja, "Ngôn ngữ") => "言語".into(),
+        (Lang::Ja, "Ảnh đại diện (URL)") => "プロフィール画像 (URL)".into(),
+        (Lang::Ja, "Múi giờ") => "タイムゾーン".into(),
+        (Lang::Ja, "Số điện thoại") => "電話番号".into(),
+        (Lang::Ja, "Tên trên hóa đơn") => "請求先の名前".into(),
+        (Lang::Ja, "Mã số thuế") => "税番号".into(),
+        (Lang::Ja, "Địa chỉ xuất hóa đơn") => "請求先住所".into(),
         (Lang::En, "Tên hiển thị") => "Display name".into(),
         (Lang::En, "Ngôn ngữ") => "Language".into(),
         (Lang::En, "Ảnh đại diện (URL)") => "Profile picture (URL)".into(),

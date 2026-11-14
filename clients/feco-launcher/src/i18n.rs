@@ -1,16 +1,18 @@
 //! Ngôn ngữ giao diện của launcher: tiếng Việt, tiếng Anh, tiếng Pháp (spec launcher của thay
-//! đổi launcher-personalization; design P1).
+//! đổi launcher-personalization; design P1) và tiếng Nhật (thay đổi web-ui-and-japanese).
 //!
 //! Khóa là chuỗi tiếng Việt gốc: `t("Thư viện")` trả bản dịch theo ngôn ngữ đang chọn, chuỗi
 //! chưa có trong bảng thì giữ tiếng Việt. Chuỗi có tham số dùng `tf("Đã cài {} {}", &[&a, &b])`;
 //! bản dịch giữ đúng số `{}`. Test trong mô-đun này kiểm mọi chuỗi trong mã giao diện đều có bản
-//! tiếng Anh và tiếng Pháp.
+//! tiếng Anh, tiếng Pháp và tiếng Nhật (`i18n_ja.rs`).
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::OnceLock;
+
+use crate::i18n_ja::JA;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -19,10 +21,11 @@ pub enum Language {
     Vi,
     En,
     Fr,
+    Ja,
 }
 
 impl Language {
-    pub const ALL: [Language; 3] = [Language::Vi, Language::En, Language::Fr];
+    pub const ALL: [Language; 4] = [Language::Vi, Language::En, Language::Fr, Language::Ja];
 
     /// Tên ngôn ngữ viết bằng chính ngôn ngữ đó.
     pub const fn native_name(self) -> &'static str {
@@ -30,6 +33,7 @@ impl Language {
             Language::Vi => "Tiếng Việt",
             Language::En => "English",
             Language::Fr => "Français",
+            Language::Ja => "日本語",
         }
     }
 }
@@ -44,6 +48,7 @@ pub fn language() -> Language {
     match CURRENT.load(Ordering::Relaxed) {
         1 => Language::En,
         2 => Language::Fr,
+        3 => Language::Ja,
         _ => Language::Vi,
     }
 }
@@ -58,7 +63,15 @@ pub fn t(vi: &'static str) -> &'static str {
     translate(language(), vi)
 }
 
+fn ja_table() -> &'static HashMap<&'static str, &'static str> {
+    static MAP: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+    MAP.get_or_init(|| JA.iter().copied().collect())
+}
+
 pub fn translate(lang: Language, vi: &'static str) -> &'static str {
+    if lang == Language::Ja {
+        return ja_table().get(vi).copied().unwrap_or(vi);
+    }
     match (lang, table().get(vi)) {
         (Language::En, Some((en, _))) => en,
         (Language::Fr, Some((_, fr))) => fr,
@@ -351,6 +364,62 @@ mod tests {
             ("Cài đặt", "Settings"),
         ] {
             assert_eq!(translate(Language::En, vi), en);
+        }
+    }
+
+    /// Scenario "Đổi sang tiếng Nhật" (phần chuỗi): thanh bên.
+    #[test]
+    fn japanese_sidebar_labels() {
+        for (vi, ja) in [
+            ("Thư viện", "ライブラリ"),
+            ("Cửa hàng", "ストア"),
+            ("Thông báo", "通知"),
+            ("Cài đặt", "設定"),
+        ] {
+            assert_eq!(translate(Language::Ja, vi), ja);
+        }
+        assert_eq!(serde_json::to_string(&Language::Ja).unwrap(), "\"ja\"");
+        set_language(Language::Ja);
+        assert_eq!(language(), Language::Ja);
+        set_language(Language::Vi);
+    }
+
+    /// Mọi khóa có bản tiếng Nhật, cùng số `{}`, và bảng tiếng Nhật không có khóa thừa.
+    #[test]
+    fn japanese_table_matches() {
+        let mut missing = Vec::new();
+        for (vi, _, _) in TABLE {
+            match ja_table().get(vi) {
+                None => missing.push(*vi),
+                Some(ja) => {
+                    assert!(!ja.is_empty(), "bản tiếng Nhật rỗng: {vi}");
+                    assert_eq!(
+                        placeholders(ja),
+                        placeholders(vi),
+                        "số {{}} của bản tiếng Nhật: {vi}"
+                    );
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "thiếu bản tiếng Nhật:
+{}",
+            missing.join(
+                "
+"
+            )
+        );
+        assert_eq!(
+            JA.len(),
+            TABLE.len(),
+            "bảng tiếng Nhật có khóa thừa hoặc trùng"
+        );
+        for (vi, _) in JA {
+            assert!(
+                table().contains_key(vi),
+                "khóa tiếng Nhật không có trong TABLE: {vi}"
+            );
         }
     }
 

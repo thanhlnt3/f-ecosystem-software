@@ -2,7 +2,10 @@
 //!
 //! - Năm vai trò: Người duyệt app, Hỗ trợ, Quản lý dự án, Tài chính, Quản trị hệ thống. Mỗi vai trò
 //!   chỉ thấy và gọi được phần của mình: chức năng khác bị ẩn và lời gọi trực tiếp trả 403.
-//! - Vào bảng quản trị cần phiên đã xác thực bằng passkey hoặc khóa bảo mật phần cứng (WebAuthn).
+//! - Vào bảng quản trị cần phiên đã xác thực bằng passkey hoặc khóa bảo mật phần cứng (WebAuthn);
+//!   riêng dev có thể bỏ bằng `FECO_ADMIN_PASSKEY_OPTIONAL=true` (mọi trang hiện cảnh báo).
+//! - Trang chủ là dashboard: thẻ số liệu theo vai trò con và biểu đồ doanh thu (thay đổi
+//!   web-ui-and-japanese).
 //! - Mọi thao tác ghi nhật ký kiểm toán; xem hồ sơ người dùng phải nhập lý do.
 //! - Không có chức năng đăng nhập thay người dùng hay xem dữ liệu trong app con.
 
@@ -194,7 +197,7 @@ pub async fn gate(
             )));
         }
     };
-    if !has_security_key(&session) {
+    if !has_security_key(&session) && !state.admin_passkey_optional {
         return Err(Box::new(page_status(
             lang,
             StatusCode::FORBIDDEN,
@@ -378,6 +381,203 @@ pub struct RoleOption {
     pub label: &'static str,
 }
 
+/// Thẻ số liệu trên dashboard (spec admin-console, "Dashboard quản trị").
+pub struct Kpi {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub value: String,
+    pub note: String,
+    pub href: &'static str,
+    /// Cần chú ý (số > 0 ở hàng chờ).
+    pub attention: bool,
+}
+
+/// Một cột của biểu đồ doanh thu theo ngày.
+pub struct Bar {
+    pub day: String,
+    pub amount: String,
+    /// Chiều cao so với ngày cao nhất, phần trăm.
+    pub pct: u32,
+}
+
+/// Số liệu doanh thu cho dashboard: (ngày giờ VN, số tiền) của giao dịch thành công.
+fn revenue_bars(rows: &[(time::Date, i64)], today: time::Date, days: i64) -> Vec<Bar> {
+    let per_day: Vec<(time::Date, i64)> = (0..days)
+        .rev()
+        .map(|i| {
+            let d = today - Duration::days(i);
+            let amount = rows
+                .iter()
+                .filter(|(day, _)| *day == d)
+                .map(|(_, a)| *a)
+                .sum::<i64>();
+            (d, amount)
+        })
+        .collect();
+    let max = per_day.iter().map(|(_, a)| *a).max().unwrap_or(0).max(1);
+    per_day
+        .into_iter()
+        .map(|(d, amount)| Bar {
+            day: format!("{:02}/{:02}", d.day(), u8::from(d.month())),
+            amount: orders::vnd(amount),
+            pct: u32::try_from(amount * 100 / max).unwrap_or(0),
+        })
+        .collect()
+}
+
+/// Múi giờ hiển thị của dashboard (Việt Nam, UTC+7).
+const VN: time::UtcOffset = time::macros::offset!(+7);
+
+async fn dashboard(state: &AppState, lang: Lang, admin: &Admin, page: &mut AdminPage) {
+    let db = &state.db;
+    let count = |r: sqlx::Result<i64>| match r {
+        Ok(n) => n.to_string(),
+        Err(e) => {
+            tracing::error!(error = %e, "không đọc được số liệu dashboard");
+            "—".into()
+        }
+    };
+    let mut kpis: Vec<Kpi> = Vec::new();
+    if admin.has(Role::Sysadmin) {
+        let n: sqlx::Result<i64> =
+            sqlx::query_scalar("SELECT count(*) FROM role_requests WHERE status = 'pending'")
+                .fetch_one(db)
+                .await;
+        let attention = matches!(n, Ok(x) if x > 0);
+        kpis.push(Kpi {
+            id: "kpi-role-requests",
+            label: lang.t("admin.dash.role_requests"),
+            value: count(n),
+            note: String::new(),
+            href: "/admin/members",
+            attention,
+        });
+    }
+    if admin.has(Role::Sysadmin) || admin.has(Role::Support) {
+        let users = match state.kratos.list_identities().await {
+            Ok(v) => v.len().to_string(),
+            Err(e) => {
+                tracing::warn!(error = %e, "không đếm được người dùng");
+                "—".into()
+            }
+        };
+        let devs = count(
+            sqlx::query_scalar("SELECT count(*) FROM role_grants WHERE role = 'developer'")
+                .fetch_one(db)
+                .await,
+        );
+        let admins = count(
+            sqlx::query_scalar("SELECT count(*) FROM admin_members")
+                .fetch_one(db)
+                .await,
+        );
+        kpis.push(Kpi {
+            id: "kpi-users",
+            label: lang.t("admin.dash.users"),
+            value: users,
+            note: lang
+                .t("admin.dash.users_note")
+                .replace("{developers}", &devs)
+                .replace("{admins}", &admins),
+            href: if admin.has(Role::Support) {
+                "/admin/users"
+            } else {
+                "/admin/members"
+            },
+            attention: false,
+        });
+    }
+    if admin.has(Role::Reviewer) {
+        let n = review::manual_queue(db).await.map(|q| q.len() as i64);
+        let attention = matches!(n, Ok(x) if x > 0);
+        kpis.push(Kpi {
+            id: "kpi-reviews",
+            label: lang.t("admin.dash.reviews"),
+            value: count(n),
+            note: String::new(),
+            href: "/admin/reviews",
+            attention,
+        });
+    }
+    if admin.has(Role::ProjectManager) {
+        match order_rows(state, lang, OffsetDateTime::now_utc()).await {
+            Ok(rows) => {
+                let due = rows.iter().filter(|r| r.warning).count();
+                kpis.push(Kpi {
+                    id: "kpi-orders-due",
+                    label: lang.t("admin.dash.orders_due"),
+                    value: due.to_string(),
+                    note: lang
+                        .t("admin.dash.orders_note")
+                        .replace("{open}", &rows.len().to_string()),
+                    href: "/admin/orders",
+                    attention: due > 0,
+                });
+            }
+            Err(e) => tracing::error!(error = %e, "không đọc được đơn cho dashboard"),
+        }
+    }
+    if admin.has(Role::Finance) {
+        let n: sqlx::Result<i64> =
+            sqlx::query_scalar("SELECT count(*) FROM refunds WHERE status = 'pending_approval'")
+                .fetch_one(db)
+                .await;
+        let attention = matches!(n, Ok(x) if x > 0);
+        kpis.push(Kpi {
+            id: "kpi-refunds",
+            label: lang.t("admin.dash.refunds"),
+            value: count(n),
+            note: String::new(),
+            href: "/admin/refunds",
+            attention,
+        });
+        let since = OffsetDateTime::now_utc() - Duration::days(30);
+        let rev: sqlx::Result<(i64, i64)> = sqlx::query_as(
+            "SELECT coalesce(sum(amount_vnd), 0)::bigint, count(*) FROM payment_transactions
+             WHERE status = 'succeeded' AND settled_at >= $1",
+        )
+        .bind(since)
+        .fetch_one(db)
+        .await;
+        let (value, note) = match rev {
+            Ok((sum, n)) => (
+                orders::vnd(sum),
+                lang.t("admin.dash.revenue_note")
+                    .replace("{count}", &n.to_string()),
+            ),
+            Err(e) => {
+                tracing::error!(error = %e, "không đọc được doanh thu");
+                ("—".into(), String::new())
+            }
+        };
+        kpis.push(Kpi {
+            id: "kpi-revenue",
+            label: lang.t("admin.dash.revenue"),
+            value,
+            note,
+            href: "/admin/refunds",
+            attention: false,
+        });
+        let today = OffsetDateTime::now_utc().to_offset(VN).date();
+        let days: sqlx::Result<Vec<(time::Date, i64)>> = sqlx::query_as(
+            "SELECT (settled_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS d, sum(amount_vnd)::bigint
+             FROM payment_transactions WHERE status = 'succeeded' AND settled_at >= $1 GROUP BY d",
+        )
+        .bind(OffsetDateTime::now_utc() - Duration::days(15))
+        .fetch_all(db)
+        .await;
+        match days {
+            Ok(rows) => {
+                page.chart_total = orders::vnd(rows.iter().map(|(_, a)| a).sum());
+                page.chart = revenue_bars(&rows, today, 14);
+                page.show_chart = true;
+            }
+            Err(e) => tracing::error!(error = %e, "không đọc được biểu đồ doanh thu"),
+        }
+    }
+    page.kpis = kpis;
+}
+
 #[derive(Template)]
 #[template(path = "admin.html")]
 struct AdminPage {
@@ -402,6 +602,12 @@ struct AdminPage {
     /// Vai trò nền tảng để chọn trên trang Phân quyền.
     platform_options: Vec<RoleOption>,
     role_requests: Vec<RoleRequestRow>,
+    kpis: Vec<Kpi>,
+    chart: Vec<Bar>,
+    chart_total: String,
+    show_chart: bool,
+    /// Dev bỏ passkey: mọi trang quản trị hiện cảnh báo.
+    dev_no_passkey: bool,
 }
 
 impl AdminPage {
@@ -456,6 +662,11 @@ impl AdminPage {
                 })
                 .collect(),
             role_requests: Vec::new(),
+            kpis: Vec::new(),
+            chart: Vec::new(),
+            chart_total: String::new(),
+            show_chart: false,
+            dev_no_passkey: false,
         }
     }
 }
@@ -468,6 +679,7 @@ fn render(
 ) -> Response {
     let (token, set) = csrf::issue(headers, state.public_url.scheme() == "https");
     page.csrf = token;
+    page.dev_no_passkey = state.admin_passkey_optional;
     let lang = page.i18n;
     let mut res = match page.render() {
         Ok(h) => (status, Html(h)).into_response(),
@@ -488,12 +700,9 @@ pub async fn home(State(state): State<Arc<AppState>>, lang: Lang, headers: Heade
         Ok(a) => a,
         Err(r) => return *r,
     };
-    render(
-        &state,
-        &headers,
-        AdminPage::new(lang, &admin, "home"),
-        StatusCode::OK,
-    )
+    let mut page = AdminPage::new(lang, &admin, "home");
+    dashboard(&state, lang, &admin, &mut page).await;
+    render(&state, &headers, page, StatusCode::OK)
 }
 
 // ---------- Hàng chờ duyệt app ----------
@@ -1721,6 +1930,24 @@ pub async fn decide_role_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn revenue_chart_has_one_bar_per_day() {
+        let today = time::macros::date!(2026 - 11 - 14);
+        let rows = vec![
+            (time::macros::date!(2026 - 11 - 14), 200_000),
+            (time::macros::date!(2026 - 11 - 10), 100_000),
+            (time::macros::date!(2026 - 10 - 01), 999_999_999),
+        ];
+        let bars = revenue_bars(&rows, today, 14);
+        assert_eq!(bars.len(), 14);
+        assert_eq!(bars[13].day, "14/11");
+        assert_eq!(bars[13].pct, 100);
+        assert_eq!(bars[9].pct, 50);
+        assert_eq!(bars[0].day, "01/11");
+        assert_eq!(bars[0].pct, 0);
+        assert!(revenue_bars(&[], today, 14).iter().all(|b| b.pct == 0));
+    }
 
     #[test]
     fn emails_are_masked() {

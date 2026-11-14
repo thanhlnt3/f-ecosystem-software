@@ -1,19 +1,44 @@
 {% extends "base.html" %}
-{% block main_class %}wide{% endblock %}
 {% block title %}{{ i18n.t("admin.title") }}{% endblock %}
-{% block content %}
-<h1>{{ i18n.t("admin.title") }}</h1>
-<p class="muted" id="admin-me">{{ me }} · {{ roles }}</p>
-<div class="links" id="admin-nav">
-  <a href="/admin">{{ i18n.t("admin.nav.home") }}</a>
-  {% for n in nav %}<a href="{{ n.href }}"{% if n.current %} aria-current="page"{% endif %}>{{ n.label }}</a>{% endfor %}
-</div>
+{% block page %}
+<div class="admin-shell">
+  <aside class="admin-side">
+    <div class="admin-who">
+      <strong>{{ i18n.t("admin.title") }}</strong>
+      <span class="muted" id="admin-me">{{ me }} · {{ roles }}</span>
+    </div>
+    <nav id="admin-nav" aria-label="{{ i18n.t("admin.title") }}">
+      <a href="/admin"{% if section == "home" %} aria-current="page"{% endif %}>{{ i18n.t("admin.nav.home") }}</a>
+      {% for n in nav %}<a href="{{ n.href }}"{% if n.current %} aria-current="page"{% endif %}>{{ n.label }}</a>{% endfor %}
+    </nav>
+  </aside>
+  <main class="admin-main">
+{% if dev_no_passkey %}<div class="msg warn" role="alert" id="dev-no-passkey">{{ i18n.t("admin.dev_no_passkey") }}</div>{% endif %}
 {% for m in messages %}<div class="msg {{ m.kind }}" role="status" style="white-space:pre-line">{{ m.text }}</div>{% endfor %}
 
 {% if section == "home" %}
-<p>{{ i18n.t("admin.intro") }}</p>
+<h1>{{ i18n.t("admin.dash.title") }}</h1>
+<p class="muted">{{ i18n.t("admin.intro") }}</p>
+{% if kpis.is_empty() %}<p class="muted" id="no-kpis">{{ i18n.t("admin.dash.no_cards") }}</p>{% endif %}
+<div class="kpis" id="kpis">
+{% for k in kpis %}
+  <a class="kpi{% if k.attention %} attention{% endif %}" id="{{ k.id }}" href="{{ k.href }}">
+    <span class="kpi-label">{{ k.label }}</span>
+    <span class="kpi-value">{{ k.value }}</span>
+    {% if !k.note.is_empty() %}<span class="kpi-note">{{ k.note }}</span>{% endif %}
+  </a>
+{% endfor %}
+</div>
+{% if show_chart %}
+<section class="card chart" id="revenue-chart">
+  <h2>{{ i18n.t("admin.dash.chart") }} <span class="muted">· {{ chart_total }}</span></h2>
+  <div class="bars" role="img" aria-label="{{ i18n.t("admin.dash.chart") }}">
+  {% for b in chart %}<div class="bar" title="{{ b.day }}: {{ b.amount }}"><span style="height:{{ b.pct }}%"></span><small>{{ b.day }}</small></div>{% endfor %}
+  </div>
+</section>
 {% endif %}
-
+{% else %}
+<div class="card">
 {% if section == "reviews" %}
 <h2>{{ i18n.t("admin.nav.reviews") }}</h2>
 {% if reviews.is_empty() %}<p class="muted">{{ i18n.t("admin.queue_empty") }}</p>{% endif %}
@@ -177,4 +202,8 @@
   <button type="submit">{{ i18n.t("admin.save") }}</button>
 </form>
 {% endif %}
+</div>
+{% endif %}
+  </main>
+</div>
 {% endblock %}
