@@ -425,6 +425,22 @@ fn revenue_bars(rows: &[(time::Date, i64)], today: time::Date, days: i64) -> Vec
         .collect()
 }
 
+/// Số người dùng được đếm lại tối đa mỗi 10 phút (QUESTIONS 80): mở dashboard không gọi Kratos
+/// liệt kê toàn bộ danh tính mỗi lần.
+pub const USER_COUNT_TTL: std::time::Duration = std::time::Duration::from_secs(600);
+
+/// Số danh tính trong Kratos, lấy từ bộ nhớ đệm nếu còn mới.
+pub async fn user_count(state: &AppState) -> Result<usize, crate::kratos::KratosError> {
+    if let Some((at, n)) = *state.user_count.lock().expect("khóa") {
+        if at.elapsed() < USER_COUNT_TTL {
+            return Ok(n);
+        }
+    }
+    let n = state.kratos.list_identities().await?.len();
+    *state.user_count.lock().expect("khóa") = Some((std::time::Instant::now(), n));
+    Ok(n)
+}
+
 /// Múi giờ hiển thị của dashboard (Việt Nam, UTC+7).
 const VN: time::UtcOffset = time::macros::offset!(+7);
 
@@ -454,8 +470,8 @@ async fn dashboard(state: &AppState, lang: Lang, admin: &Admin, page: &mut Admin
         });
     }
     if admin.has(Role::Sysadmin) || admin.has(Role::Support) {
-        let users = match state.kratos.list_identities().await {
-            Ok(v) => v.len().to_string(),
+        let users = match user_count(state).await {
+            Ok(n) => n.to_string(),
             Err(e) => {
                 tracing::warn!(error = %e, "không đếm được người dùng");
                 "—".into()

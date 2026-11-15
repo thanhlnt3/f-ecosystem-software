@@ -36,6 +36,22 @@ impl HydraClient {
         }
     }
 
+    /// Hydra còn trả lời (`/health/alive`), dùng cho trang trạng thái.
+    pub async fn alive(&self) -> Result<(), String> {
+        let res = self
+            .http
+            .get(self.url("health/alive"))
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if res.status().is_success() {
+            Ok(())
+        } else {
+            Err(format!("HTTP {}", res.status()))
+        }
+    }
+
     fn url(&self, path: &str) -> Url {
         self.admin.join(path).expect("đường dẫn hợp lệ")
     }

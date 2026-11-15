@@ -211,6 +211,14 @@ fn label_of(lang: Lang, node: &Value) -> String {
 /// Tiêu đề trường trong schema danh tính được viết bằng tiếng Việt; dịch sang tiếng Anh/Nhật.
 fn schema_label(lang: Lang, text: &str) -> String {
     match (lang, text) {
+        (Lang::Fr, "Tên hiển thị") => "Nom affiché".into(),
+        (Lang::Fr, "Ngôn ngữ") => "Langue".into(),
+        (Lang::Fr, "Ảnh đại diện (URL)") => "Photo de profil (URL)".into(),
+        (Lang::Fr, "Múi giờ") => "Fuseau horaire".into(),
+        (Lang::Fr, "Số điện thoại") => "Numéro de téléphone".into(),
+        (Lang::Fr, "Tên trên hóa đơn") => "Nom de facturation".into(),
+        (Lang::Fr, "Mã số thuế") => "Numéro fiscal".into(),
+        (Lang::Fr, "Địa chỉ xuất hóa đơn") => "Adresse de facturation".into(),
         (Lang::Ja, "Tên hiển thị") => "表示名".into(),
         (Lang::Ja, "Ngôn ngữ") => "言語".into(),
         (Lang::Ja, "Ảnh đại diện (URL)") => "プロフィール画像 (URL)".into(),

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("status.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("status.title") }}</h1>
+{% if overview.state == "operational" %}
+<div class="msg success" id="status-summary" data-state="operational">{{ i18n.t("status.all_ok") }}</div>
+{% else %}
+<div class="msg error" id="status-summary" data-state="outage">{{ i18n.t("status.some_down") }}</div>
+{% endif %}
+<p class="muted">{{ i18n.t("status.intro") }}</p>
+<table id="status-components">
+  <thead><tr><th>{{ i18n.t("status.component") }}</th><th>{{ i18n.t("status.state") }}</th><th>{{ i18n.t("status.uptime_24h") }}</th><th>{{ i18n.t("status.uptime_30d") }}</th></tr></thead>
+  <tbody>
+  {% for c in overview.components %}
+    <tr data-component="{{ c.component.as_str() }}" data-state="{{ c.state }}">
+      <td><strong>{{ c.label }}</strong>{% if !c.checked.is_empty() %}<br><span class="muted">{{ i18n.t("status.checked") }} {{ c.checked }}</span>{% endif %}</td>
+      <td>{% if c.state == "operational" %}<span class="badge ok">{{ c.state_label }}</span>{% else if c.state == "outage" %}<span class="badge warn">{{ c.state_label }}</span>{% else %}<span class="muted">{{ c.state_label }}</span>{% endif %}</td>
+      <td>{{ c.uptime_24h_text }}</td>
+      <td>{{ c.uptime_30d_text }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h2>{{ i18n.t("status.incidents") }}</h2>
+{% if overview.incidents.is_empty() %}<p class="muted" id="no-incidents">{{ i18n.t("status.no_incidents") }}</p>{% endif %}
+<ul id="status-incidents">
+{% for i in overview.incidents %}
+  <li data-component="{{ i.component }}" data-open="{{ i.resolved_at.is_none() }}"><strong>{{ i.label }}</strong> · {{ i.started_at }} →
+    {% match i.resolved_at %}{% when Some with (r) %}{{ r }} <span class="badge ok">{{ i18n.t("status.resolved") }}</span>{% when None %}<span class="badge warn">{{ i18n.t("status.ongoing") }}</span>{% endmatch %}</li>
+{% endfor %}
+</ul>
+<p class="muted"><a href="/status.json">status.json</a></p>
+{% endblock %}

@@ -2,19 +2,21 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Phiên bản 1.4.0** ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+> **Phiên bản 1.5.0** (English: [README.en.md](README.en.md)) ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
 >
 > Đã chạy được (nhóm task 1–14; các mục còn mở ghi ở cuối nhật ký thay đổi):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
-> - Giao diện web tiếng Việt, tiếng Anh và tiếng Nhật; trang Giao diện (`/preferences`) chọn ngôn ngữ, chủ đề, màu nhấn, 10 phong cách như F-Launcher, mật độ, cỡ chữ.
+> - Giao diện web tiếng Việt, tiếng Anh, tiếng Pháp và tiếng Nhật; trang Giao diện (`/preferences`) chọn ngôn ngữ, chủ đề, màu nhấn, 10 phong cách như F-Launcher, mật độ, cỡ chữ. Trang hồ sơ cho người đã đăng nhập (vai trò, thẻ số liệu, bảo mật, quyền riêng tư). Tài liệu có bản tiếng Anh trong `docs/en/`.
+> - Trang trạng thái công khai (`/status`, `/status.json`), diễn tập sao lưu và khôi phục (`scripts/backup-drill.sh`), kiểm thử tải `/v1/me` ([biên bản](docs/reports/2026-11-15-performance.md)).
 > - Bảo mật: HSTS và header bảo vệ, mã hóa dữ liệu nhạy cảm khi lưu (AES-256-GCM), giới hạn tần suất, nhật ký kiểm toán chỉ ghi thêm, cảnh báo đăng nhập từ thiết bị mới. Quy trình xử lý sự cố: [`docs/security/incident-response.md`](docs/security/incident-response.md).
 > - Chuỗi tin cậy cho gói cài đặt theo TUF (dùng `tough`): ký phiên bản đã duyệt, thu hồi tới launcher trong 1 giờ, chặn gói hoặc metadata bị sửa, rollback, đóng băng; xoay khóa targets và root (ngưỡng 2/3). Công cụ `feco-tuf`, quy trình giữ khóa: [`docs/security/tuf-keys.md`](docs/security/tuf-keys.md).
 > - F-Launcher (Rust + egui):
 >   - đăng nhập qua trình duyệt, nhớ đăng nhập qua khởi động lại máy;
 >   - cài, cập nhật, quay lại, gỡ app con có xác minh TUF; chạy được khi ngoại tuyến; chặn phiên bản bị thu hồi;
 >   - mở app con bằng mã khởi chạy dùng một lần; mở app chạy trong terminal ở cửa sổ riêng;
->   - Thư viện và Cửa hàng xem theo lưới hoặc danh sách, có tìm không dấu, lọc nhóm và sắp xếp;
+>   - Thư viện và Cửa hàng xem theo lưới (ô đều nhau) hoặc danh sách, có tìm không dấu, lọc nhóm và sắp xếp;
+>   - nút công cụ dạng icon kèm tooltip; Cài đặt và trang chi tiết app mở trong cửa sổ riêng;
 >   - trang Cài đặt giao diện: ngôn ngữ (tiếng Việt, tiếng Anh, tiếng Pháp, tiếng Nhật), phong cách (Chân
 >     phương, Trang nhã, Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài),
 >     chủ đề, màu nhấn, cỡ chữ, bố cục;
@@ -115,7 +117,7 @@ KRATOS_BIN=/duong/dan/kratos scripts/dev-local.sh kratos
 HYDRA_BIN=/duong/dan/hydra scripts/dev-local.sh hydra
 ```
 
-`scripts/dev-local.sh` dùng đúng cấu hình trong `infra/`, nên hành vi giống hệt cách A. Dữ liệu PostgreSQL nằm trong `infra/.data/pg` (không được commit). Kratos và Hydra ở chế độ dev lưu dữ liệu trong bộ nhớ, nên khởi động lại là mất hết tài khoản.
+`scripts/dev-local.sh` dùng đúng cấu hình trong `infra/`, nên hành vi giống hệt cách A. Dữ liệu nằm trong `infra/.data` (không được commit): PostgreSQL trong `infra/.data/pg`, Kratos và Hydra trong `kratos.sqlite`, `hydra.sqlite`, nên tài khoản và client OAuth còn sau khi khởi động lại. Muốn chạy Kratos và Hydra trong bộ nhớ như trước (mỗi lần khởi động là sạch), đặt `FECO_DEV_MEMORY=1`.
 
 ### 3. Chạy feco-server
 
@@ -133,18 +135,18 @@ Lần đầu biên dịch mất vài phút. Khi thấy dòng `feco-server đang 
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.4.0"}
+# {"status":"ok","environment":"dev","version":"1.5.0"}
 ```
 
 Ở môi trường `dev`, mọi địa chỉ đã có giá trị mặc định trỏ tới hạ tầng ở bước 2, và lược đồ cơ sở dữ liệu được tạo tự động khi khởi động. Xem thêm phần [Cấu hình](#cấu-hình).
 
 ### 4. Dùng thử tài khoản
 
-Mở http://127.0.0.1:8080 trong trình duyệt. Giao diện theo ngôn ngữ của trình duyệt; đổi bằng nút **VI · EN · 日本語** ở góc phải trên. Nút **Giao diện** bên cạnh mở trang tùy chỉnh: phong cách (Chân phương, Trang nhã, Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài), chủ đề sáng/tối, màu nhấn, mật độ, cỡ chữ. Tùy chỉnh lưu trên trình duyệt (cookie `feco_ui`).
+Mở http://127.0.0.1:8080 trong trình duyệt. Giao diện theo ngôn ngữ của trình duyệt; đổi bằng nút **VI · EN · FR · 日本語** ở góc phải trên. Nút **Giao diện** bên cạnh mở trang tùy chỉnh: phong cách (Chân phương, Trang nhã, Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài), chủ đề sáng/tối, màu nhấn, mật độ, cỡ chữ. Tùy chỉnh lưu trên trình duyệt (cookie `feco_ui`).
 
 1. **Đăng ký** tại http://127.0.0.1:8080/registration. Mật khẩu phải dài từ 10 ký tự và không nằm trong các vụ rò rỉ dữ liệu, nên ví dụ `Password123!` sẽ bị từ chối.
 2. **Xác minh email**: mở Mailpit tại http://127.0.0.1:8025. Mọi email của hệ thống dev đều được giữ ở đây, không gửi ra ngoài. Mở email "Xác minh email tài khoản F-Eco" rồi bấm liên kết.
-3. **Đăng nhập** tại http://127.0.0.1:8080/login. Trang chủ cho biết email đã xác minh hay chưa.
+3. **Đăng nhập** tại http://127.0.0.1:8080/login. Trang chủ là **trang hồ sơ**: tên, email và trạng thái xác minh, vai trò, ngày tham gia; thẻ số liệu (ứng dụng đã kết nối, thiết bị, đơn hàng, thông báo chưa đọc); lối tắt bảo mật (kèm trạng thái xác thực hai lớp), quyền riêng tư, mua sắm và công cụ theo vai trò.
 4. **Cài đặt** tại http://127.0.0.1:8080/settings:
    - sửa hồ sơ (tên, ảnh, số điện thoại, thông tin xuất hóa đơn), đổi mật khẩu;
    - bật **ứng dụng xác thực (TOTP)**: quét mã QR bằng Google Authenticator, Microsoft Authenticator hoặc ứng dụng tương tự, rồi nhập mã 6 số;
@@ -251,15 +253,15 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
 
    Cách làm từng bước có trong [docs/github-apps.md](docs/github-apps.md). App terminal mở trong
    cửa sổ console riêng.
-10. Giao diện launcher:
-    - nút **Lưới** / **Danh sách** ở góc phải thanh công cụ;
+10. Giao diện launcher (rê chuột lên một icon để xem tooltip):
+    - icon **Lưới** / **Danh sách** ở góc phải thanh công cụ; ở dạng lưới mọi ô cùng kích thước;
     - ô tìm (không phân biệt dấu, ví dụ "ghi chu"), bộ lọc nhóm và kiểu sắp xếp (tên, mở gần
       đây, cài gần đây, nhóm, dung lượng);
-    - trang **Cài đặt**: chủ đề sáng, tối hoặc theo hệ thống; màu nhấn; cỡ chữ 80–150%; bố cục
+    - **Cài đặt** (icon bánh răng ở thanh bên) mở trong cửa sổ riêng: chủ đề sáng, tối hoặc theo hệ thống; màu nhấn; cỡ chữ 80–150%; bố cục
       mặc định; cỡ ô lưới; trang mở đầu; mô tả ngắn; chế độ gọn; khôi phục mặc định.
 
     Mọi lựa chọn lưu trong `%LOCALAPPDATA%\F-Eco\Launcher\settings.json` và có hiệu lực ngay.
-11. Bấm vào một app để mở trang chi tiết: giới thiệu, tính năng, có gì mới, bảng thông tin, nút
+11. Bấm vào một app để mở trang chi tiết trong cửa sổ riêng (mỗi app một cửa sổ, tối đa 6; bấm lại thì cửa sổ đó hiện lên trước): giới thiệu, tính năng, có gì mới, bảng thông tin, nút
     Cài, Mở, Gỡ, Mã nguồn, Website. Nút **‹ Trước** / **Sau ›** (hoặc phím mũi tên trái, phải)
     chuyển sang app kề bên theo đúng thứ tự đang hiển thị; **Esc** quay lại danh sách.
 12. **Ngôn ngữ và phong cách**: Cài đặt → Giao diện. Chọn "English", "Français" hoặc "日本語" để
@@ -562,7 +564,22 @@ scripts/tuf-drill.sh > /tmp/tuf-drill.md
 cargo run -p feco-tuf -- help                   # các lệnh: keygen, init, publish, revoke, refresh, resign, rotate, status
 ```
 
-CI (GitHub Actions) chạy tất cả những bước trên, kể cả kiểm thử đầu-cuối với hạ tầng Docker và diễn tập TUF, ở mỗi lần push.
+**Hiệu năng, sao lưu, trạng thái** (nhóm task 15):
+
+```bash
+# Kiểm thử tải /v1/me: 1.000 yêu cầu/giây trong 30 giây, đạt khi p95 < 300 ms và không lỗi
+FECO_E2E=1 cargo test --release -p feco-server --test e2e_auth -- --ignored load_v1_me --nocapture
+# Thời gian khởi động F-Launcher (dưới 3 giây), Windows
+powershell -File scripts\measure-launcher-startup.ps1 -Exe target\release\feco-launcher.exe
+# Diễn tập sao lưu liên tục và khôi phục (cụm Postgres tạm, không đụng dữ liệu đang dùng)
+PG_BIN=/duong/dan/pgsql/bin scripts/backup-drill.sh docs/ops/drills/<ngày>-backup-drill.md
+# Mọi tài liệu có bản tiếng Anh đủ phần
+python3 scripts/check-docs-i18n.py
+```
+
+Trang trạng thái: http://127.0.0.1:8080/status. Cách vận hành sao lưu và giám sát: [docs/ops/status-and-backup.md](docs/ops/status-and-backup.md).
+
+CI (GitHub Actions) chạy tất cả những bước trên (trừ kiểm thử tải, đo khởi động và diễn tập sao lưu, chạy tay mỗi quý), kể cả kiểm thử đầu-cuối với hạ tầng Docker và diễn tập TUF, ở mỗi lần push.
 
 ## Xử lý sự cố
 

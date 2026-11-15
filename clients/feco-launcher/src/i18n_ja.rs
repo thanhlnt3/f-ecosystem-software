@@ -200,4 +200,6 @@ pub(crate) const JA: &[(&str, &str)] = &[
     ("Cảm hứng từ bảng màu sơn dầu: trắng ngà, lục nhạt, vàng hoa huệ", "油彩の配色から着想: アイボリー、淡い緑、百合の黄色"),
     ("Cảm hứng từ bảng màu phố cũ: vàng đất, xám ngói, nâu son", "旧市街の配色から着想: 黄土色、瓦の灰色、錆びた茶色"),
     ("Cảm hứng từ bảng màu sơn mài: đen then, son đỏ, vàng thếp", "漆の配色から着想: 漆黒、朱、金箔"),
+    ("Mở Cài đặt trong cửa sổ riêng", "設定を別ウィンドウで開く"),
+    ("Thêm thao tác", "その他の操作"),
 ];

@@ -251,6 +251,8 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("Có gì mới trong bản {}", "What's new in {}", "Nouveautés de la version {}"),
     ("Phát hành ngày {}", "Released on {}", "Publiée le {}"),
     ("Thông tin", "Information", "Informations"),
+    ("Mở Cài đặt trong cửa sổ riêng", "Open Settings in a separate window", "Ouvrir les Paramètres dans une fenêtre séparée"),
+    ("Thêm thao tác", "More actions", "Plus d'actions"),
     ("Phiên bản mới nhất", "Latest version", "Dernière version"),
     ("Chưa cài", "Not installed", "Non installée"),
     ("Ngày phát hành", "Release date", "Date de publication"),

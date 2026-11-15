@@ -18,16 +18,30 @@ case "${1:-}" in
     native_root="$root"
     if command -v cygpath >/dev/null; then native_root="$(cygpath -m "$root")"; fi
     py="$(command -v python3 || command -v python)"
+    mkdir -p "$root/infra/.data"
     local_cfg="$native_root/infra/.data/kratos.local.yml"
     "$py" "$native_root/scripts/inline-kratos-config.py" "$native_root/infra/kratos" "$local_cfg"
-    export DSN=memory
+    # Danh tính lưu trong SQLite ở infra/.data để còn sau khi khởi động lại (đặt
+    # FECO_DEV_MEMORY=1 để dùng bộ nhớ như trước).
+    if [ "${FECO_DEV_MEMORY:-}" = 1 ]; then
+      export DSN=memory
+    else
+      export DSN="sqlite://$native_root/infra/.data/kratos.sqlite?_fk=true"
+      "${KRATOS_BIN:-kratos}" migrate sql -e --yes >/dev/null
+    fi
     export COURIER_SMTP_CONNECTION_URI="smtp://127.0.0.1:1025/?disable_starttls=true"
     exec "${KRATOS_BIN:-kratos}" serve --config "$local_cfg" --dev --watch-courier
     ;;
   hydra)
     native_root="$root"
     if command -v cygpath >/dev/null; then native_root="$(cygpath -m "$root")"; fi
-    export DSN=memory
+    if [ "${FECO_DEV_MEMORY:-}" = 1 ]; then
+      export DSN=memory
+    else
+      mkdir -p "$root/infra/.data"
+      export DSN="sqlite://$native_root/infra/.data/hydra.sqlite?_fk=true"
+      "${HYDRA_BIN:-hydra}" migrate sql up -e --yes >/dev/null
+    fi
     exec "${HYDRA_BIN:-hydra}" serve all --config "$native_root/infra/hydra/hydra.yml" --dev
     ;;
   postgres)

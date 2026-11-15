@@ -1,31 +1,83 @@
 {% extends "base.html" %}
 {% block title %}{{ i18n.t("home.title") }}{% endblock %}
-{% block content %}
-{% for m in notices %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+{% block page %}
 {% if let Some(u) = user %}
-  <h1>{{ i18n.t("home.hello") }}{% if !u.name.is_empty() %}, {{ u.name }}{% endif %}</h1>
-  <p>Email: <strong id="email">{{ u.email }}</strong></p>
+<main class="wide profile">
+{% for m in notices %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+  <section class="card profile-head" id="profile">
+    <div class="avatar" style="background:{{ u.avatar }}" aria-hidden="true">{{ u.initials }}</div>
+    <div class="who">
+      <p class="muted hello">{{ i18n.t("home.hello") }}</p>
+      <h1>{% if u.name.is_empty() %}{{ u.email }}{% else %}{{ u.name }}{% endif %}</h1>
+      <p class="line"><strong id="email">{{ u.email }}</strong>
+        {% if u.verified %}<span class="badge ok">{{ i18n.t("profile.verified") }}</span>{% endif %}</p>
+      <p class="line"><span class="badge brand" id="platform-role" data-role="{{ u.role_code }}">{{ u.role }}</span>
+        {% if !u.member_since.is_empty() %}<span class="muted">{{ i18n.t("profile.member_since") }} {{ u.member_since }}</span>{% endif %}</p>
+    </div>
+    <div class="head-actions">
+      <a class="btn" href="/settings">{{ i18n.t("profile.edit") }}</a>
+      <a class="btn secondary" href="/logout">{{ i18n.t("home.logout") }}</a>
+    </div>
+  </section>
   {% if u.verified %}
-    <div class="msg success" id="verify-status">{{ i18n.t("home.verified") }}</div>
+  <div class="msg success" id="verify-status">{{ i18n.t("home.verified") }}</div>
   {% else %}
-    <div class="msg info" id="verify-status">{{ i18n.t("home.unverified") }}</div>
+  <div class="msg info" id="verify-status">{{ i18n.t("home.unverified") }} <a href="/verification">{{ i18n.t("home.resend") }}</a></div>
   {% endif %}
-  <div class="links">
-    {% if !u.verified %}<a href="/verification">{{ i18n.t("home.resend") }}</a>{% endif %}
-    <a href="/settings">{{ i18n.t("home.settings") }}</a>
-    <a href="/sessions">{{ i18n.t("home.sessions") }}</a>
-    <a href="/apps">{{ i18n.t("home.apps") }}</a>
-    <a href="/orders">{{ i18n.t("home.orders") }}</a>
-    <a href="/payments">{{ i18n.t("home.payments") }}</a>
-    <a href="/notifications">{{ i18n.t("home.notifications") }}</a>
-    <a href="/logout">{{ i18n.t("home.logout") }}</a>
+
+  <div class="stats" id="profile-stats">
+  {% for s in u.stats %}
+    <a class="stat" id="{{ s.id }}" href="{{ s.href }}"><span class="stat-value">{{ s.value }}</span><span class="stat-label">{{ s.label }}</span></a>
+  {% endfor %}
   </div>
+
+  <div class="profile-grid">
+    <section class="card">
+      <h2>{{ i18n.t("profile.security") }}</h2>
+      <ul class="menu">
+        <li><a href="/settings">{{ i18n.t("profile.password_2fa") }}</a>
+          {% match u.two_factor %}{% when Some with (true) %}<span class="badge ok" id="two-factor">{{ i18n.t("profile.2fa_on") }}</span>{% when Some with (false) %}<span class="badge warn" id="two-factor">{{ i18n.t("profile.2fa_off") }}</span>{% when None %}{% endmatch %}</li>
+        <li><a href="/sessions">{{ i18n.t("home.sessions") }}</a></li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>{{ i18n.t("profile.privacy") }}</h2>
+      <ul class="menu">
+        <li><a href="/apps">{{ i18n.t("home.apps") }}</a></li>
+        <li><a href="/account/export">{{ i18n.t("profile.export") }}</a></li>
+        <li><a href="/account/delete" class="danger-link">{{ i18n.t("profile.delete") }}</a></li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>{{ i18n.t("profile.shopping") }}</h2>
+      <ul class="menu">
+        <li><a href="/store">{{ i18n.t("nav.store") }}</a></li>
+        <li><a href="/orders">{{ i18n.t("home.orders") }}</a></li>
+        <li><a href="/payments">{{ i18n.t("home.payments") }}</a></li>
+      </ul>
+    </section>
+    <section class="card">
+      <h2>{{ i18n.t("profile.tools") }}</h2>
+      <ul class="menu">
+        <li><a href="/notifications">{{ i18n.t("home.notifications") }}</a></li>
+        <li><a href="/preferences">{{ i18n.t("profile.appearance") }}</a></li>
+        {% if u.developer %}<li><a href="/developer" id="link-developer">{{ i18n.t("profile.developer") }}</a></li>{% endif %}
+        {% if u.admin %}<li><a href="/admin" id="link-admin">{{ i18n.t("profile.admin") }}</a></li>{% endif %}
+      </ul>
+    </section>
+  </div>
+</main>
 {% else %}
+<main>
+  <div class="card">
+{% for m in notices %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
   <h1>{{ i18n.t("home.welcome") }}</h1>
   <p class="muted">{{ i18n.t("home.tagline") }}</p>
   <div class="links">
     <a href="/login">{{ i18n.t("home.login") }}</a>
     <a href="/registration">{{ i18n.t("home.register") }}</a>
   </div>
+  </div>
+</main>
 {% endif %}
 {% endblock %}

@@ -4,8 +4,13 @@
 //! Bố cục: thanh bên (Thư viện, Cửa hàng, Thông báo, Cài đặt, tài khoản) và vùng chính. Thư viện
 //! và Cửa hàng xem theo lưới hoặc danh sách, có tìm, lọc nhóm, sắp xếp; cài đặt giao diện lưu
 //! trong `settings.json` (spec launcher của thay đổi improve-launcher-experience).
+//!
+//! Cài đặt và trang chi tiết app mở trong cửa sổ riêng của hệ điều hành; nút công cụ dùng icon
+//! kèm tooltip; ô lưới cùng kích thước (thay đổi launcher-windows-and-web-profile).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod icons;
 
 use eframe::egui;
 use feco_launcher::auth::{Auth, AuthError, KeyringStore, Session};
@@ -18,6 +23,7 @@ use feco_launcher::style::{self as ui_style, StyleText, UiStyle};
 use feco_launcher::{
     AppStatus, CatalogEntry, Config, Launcher, LauncherError, MyApp, Paths, ISOLATION_NOTICE,
 };
+use icons::Icon;
 use jiff::Timestamp;
 use std::future::Future;
 use std::sync::{mpsc, Arc};
@@ -27,7 +33,11 @@ use std::time::{Duration, Instant};
 const SYNC_ONLINE: Duration = Duration::from_secs(60 * 60);
 const SYNC_OFFLINE: Duration = Duration::from_secs(5 * 60);
 
+/// Thời điểm tiến trình bắt đầu, để đo thời gian khởi động (tasks.md 15.2).
+static STARTED: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
 fn main() -> eframe::Result {
+    STARTED.get_or_init(Instant::now);
     let config = match Config::from_env() {
         Ok(c) => c,
         Err(e) => {
@@ -227,11 +237,20 @@ enum Action {
     OpenLink(String),
     SetAutoUpdate(bool),
     CloseDialog,
-    /// Mở trang chi tiết của app (kèm thứ tự đang hiển thị để chuyển trước/sau).
+    /// Mở cửa sổ chi tiết của app (kèm thứ tự đang hiển thị để chuyển trước/sau).
     ShowDetail(Detail),
-    /// Chuyển trang chi tiết sang app khác trong cùng thứ tự.
-    MoveDetail(String),
-    CloseDetail,
+    /// Chuyển cửa sổ chi tiết `key` sang app khác trong cùng thứ tự.
+    MoveDetail(u64, String),
+    CloseDetail(u64),
+    /// Mở (hoặc đưa lên trước) cửa sổ Cài đặt.
+    OpenSettings,
+}
+
+/// Số cửa sổ chi tiết mở cùng lúc; mở thêm thì cửa sổ cũ nhất đóng lại.
+const MAX_DETAIL_WINDOWS: usize = 6;
+
+fn settings_viewport() -> egui::ViewportId {
+    egui::ViewportId::from_hash_of("feco-settings")
 }
 
 struct LauncherApp {
@@ -246,12 +265,19 @@ struct LauncherApp {
     prefs_path: std::path::PathBuf,
     library_filter: Filter,
     store_filter: Filter,
-    detail: Option<Detail>,
+    /// Các cửa sổ chi tiết app đang mở.
+    details: Vec<Detail>,
+    next_detail_key: u64,
+    settings_open: bool,
+    /// Cửa sổ hiện hộp thoại xác nhận (cài, gỡ): cửa sổ nơi người dùng bấm nút.
+    dialog_viewport: egui::ViewportId,
     busy: Option<String>,
     notice: Option<(bool, String)>,
     confirm_install: Option<CatalogEntry>,
     confirm_uninstall: Option<(MyApp, bool)>,
     next_sync: Instant,
+    /// Đã vẽ khung hình đầu tiên.
+    probed: bool,
 }
 
 impl LauncherApp {
@@ -330,12 +356,16 @@ impl LauncherApp {
             prefs_path,
             library_filter: Filter::default(),
             store_filter: Filter::default(),
-            detail: None,
+            details: Vec::new(),
+            next_detail_key: 1,
+            settings_open: false,
+            dialog_viewport: egui::ViewportId::ROOT,
             busy: None,
             notice: None,
             confirm_install: None,
             confirm_uninstall: None,
             next_sync: Instant::now() + SYNC_OFFLINE,
+            probed: false,
         };
         app.run(t("Đang đăng nhập lại và đồng bộ..."), true, startup);
         Ok(app)
@@ -489,13 +519,42 @@ impl LauncherApp {
                     .map_err(|e| e.to_string())?;
                 Ok(String::new())
             }),
-            Action::ShowDetail(detail) => self.detail = Some(detail),
-            Action::MoveDetail(app) => {
-                if let Some(d) = &mut self.detail {
+            Action::ShowDetail(mut detail) => {
+                if let Some(open) = self.details.iter().find(|d| d.app == detail.app) {
+                    self.ctx
+                        .send_viewport_cmd_to(open.viewport(), egui::ViewportCommand::Focus);
+                } else {
+                    if self.details.len() >= MAX_DETAIL_WINDOWS {
+                        self.details.remove(0);
+                    }
+                    detail.key = self.next_detail_key;
+                    self.next_detail_key += 1;
+                    self.details.push(detail);
+                }
+            }
+            Action::MoveDetail(key, app) => {
+                if let Some(d) = self.details.iter_mut().find(|d| d.key == key) {
                     d.app = app;
                 }
             }
-            Action::CloseDetail => self.detail = None,
+            Action::CloseDetail(key) => {
+                if let Some(d) = self.details.iter().find(|d| d.key == key) {
+                    if self.dialog_viewport == d.viewport() {
+                        self.dialog_viewport = egui::ViewportId::ROOT;
+                        self.confirm_install = None;
+                        self.confirm_uninstall = None;
+                    }
+                }
+                self.details.retain(|d| d.key != key);
+            }
+            Action::OpenSettings => {
+                if self.settings_open {
+                    self.ctx
+                        .send_viewport_cmd_to(settings_viewport(), egui::ViewportCommand::Focus);
+                } else {
+                    self.settings_open = true;
+                }
+            }
             Action::CloseDialog => {
                 self.confirm_install = None;
                 self.confirm_uninstall = None;
@@ -609,6 +668,18 @@ impl eframe::App for LauncherApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Đầu dò khởi động: in thời gian từ lúc chạy tới khung hình đầu tiên rồi thoát
+        // (scripts/measure-launcher-startup.ps1).
+        if !self.probed {
+            self.probed = true;
+            // Bản phát hành trên Windows không có console, nên kết quả ghi vào tệp được chỉ định.
+            if let Some(out) = std::env::var_os("FECO_LAUNCHER_STARTUP_PROBE") {
+                let ms = STARTED.get().map_or(0, |t| t.elapsed().as_millis());
+                eprintln!("startup_ms={ms}");
+                let _ = std::fs::write(out, format!("{ms}\n"));
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
         let mut actions = Vec::new();
         let mut nav = egui::Panel::left("nav").exact_size(210.0).resizable(false);
         if let Some(p) = self.prefs.style.palette() {
@@ -619,7 +690,33 @@ impl eframe::App for LauncherApp {
             );
         }
         nav.show(ui, |ui| self.sidebar(ui, &mut actions));
-        egui::Panel::bottom("status").show(ui, |ui| {
+        self.status_panel(ui, "status");
+        egui::CentralPanel::default().show(ui, |ui| match self.page {
+            Page::Library => self.library_page(ui, &mut actions),
+            Page::Store => self.store_page(ui, &mut actions),
+            Page::Notifications => self.notifications(ui, &mut actions),
+        });
+        let ctx = ui.ctx().clone();
+        self.route_dialogs(egui::ViewportId::ROOT, &actions);
+        if self.dialog_viewport == egui::ViewportId::ROOT {
+            self.dialogs(&ctx, &mut actions);
+        }
+        self.settings_window(&ctx, &mut actions);
+        self.detail_windows(&ctx, &mut actions);
+        // Thao tác có thể mở hoặc đóng cửa sổ: vẽ lại ngay, không chờ sự kiện tiếp theo.
+        if !actions.is_empty() {
+            ctx.request_repaint();
+        }
+        for action in actions {
+            self.apply(action);
+        }
+    }
+}
+
+impl LauncherApp {
+    /// Thanh trạng thái dưới cùng: việc đang làm hoặc kết quả gần nhất.
+    fn status_panel(&self, ui: &mut egui::Ui, id: &'static str) {
+        egui::Panel::bottom(id).show(ui, |ui| {
             ui.horizontal(|ui| {
                 if let Some(label) = self.busy.as_deref().filter(|l| !l.is_empty()) {
                     ui.spinner();
@@ -636,23 +733,65 @@ impl eframe::App for LauncherApp {
                 }
             });
         });
-        let detail = self
-            .detail
-            .clone()
-            .filter(|_| matches!(self.page, Page::Library | Page::Store));
-        egui::CentralPanel::default().show(ui, |ui| match (&detail, self.page) {
-            (Some(d), _) => self.detail_page(ui, d, &mut actions),
-            (None, page) => match page {
-                Page::Library => self.library_page(ui, &mut actions),
-                Page::Store => self.store_page(ui, &mut actions),
-                Page::Notifications => self.notifications(ui, &mut actions),
-                Page::Settings => self.settings_page(ui, &mut actions),
-            },
+    }
+
+    /// Hộp thoại xác nhận hiện ở cửa sổ nơi người dùng bấm Cài hoặc Gỡ.
+    fn route_dialogs(&mut self, viewport: egui::ViewportId, actions: &[Action]) {
+        if actions
+            .iter()
+            .any(|a| matches!(a, Action::AskInstall(_) | Action::AskUninstall(_)))
+        {
+            self.dialog_viewport = viewport;
+        }
+    }
+
+    /// Cửa sổ Cài đặt (spec "Cửa sổ riêng cho Cài đặt và chi tiết app").
+    fn settings_window(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        if !self.settings_open {
+            return;
+        }
+        let builder = egui::ViewportBuilder::default()
+            .with_title(format!("{} · F-Launcher", t("Cài đặt")))
+            .with_inner_size([760.0, 700.0])
+            .with_min_inner_size([520.0, 420.0]);
+        let mut local = Vec::new();
+        let close = ctx.show_viewport_immediate(settings_viewport(), builder, |ui, _| {
+            egui::CentralPanel::default().show(ui, |ui| self.settings_page(ui, &mut local));
+            let typing = ui.ctx().egui_wants_keyboard_input();
+            ui.ctx().input(|i| {
+                i.viewport().close_requested() || (!typing && i.key_pressed(egui::Key::Escape))
+            })
         });
-        let ctx = ui.ctx().clone();
-        self.dialogs(&ctx, &mut actions);
-        for action in actions {
-            self.apply(action);
+        if close {
+            self.settings_open = false;
+        }
+        actions.extend(local);
+    }
+
+    /// Mỗi app được bấm mở trong một cửa sổ chi tiết riêng.
+    fn detail_windows(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        for detail in self.details.clone() {
+            let id = detail.viewport();
+            let builder = egui::ViewportBuilder::default()
+                .with_title(format!("{} · F-Launcher", self.title_of(&detail.app)))
+                .with_inner_size([840.0, 720.0])
+                .with_min_inner_size([560.0, 420.0]);
+            let mut local = Vec::new();
+            let close = ctx.show_viewport_immediate(id, builder, |ui, _| {
+                self.status_panel(ui, "detail-status");
+                egui::CentralPanel::default()
+                    .show(ui, |ui| self.detail_page(ui, &detail, &mut local));
+                if self.dialog_viewport == id {
+                    let ctx = ui.ctx().clone();
+                    self.dialogs(&ctx, &mut local);
+                }
+                ui.ctx().input(|i| i.viewport().close_requested())
+            });
+            if close {
+                local.push(Action::CloseDetail(detail.key));
+            }
+            self.route_dialogs(id, &local);
+            actions.extend(local);
         }
     }
 }
@@ -665,7 +804,6 @@ enum Page {
     Library,
     Store,
     Notifications,
-    Settings,
 }
 
 /// Ô tìm và bộ lọc nhóm của một trang (kiểu sắp xếp nằm trong [`Prefs`] để được nhớ).
@@ -945,10 +1083,9 @@ fn app_icon(ui: &mut egui::Ui, app_id: &str, title: &str, size: f32) -> egui::Re
     response
 }
 
-fn primary_button(ui: &mut egui::Ui, prefs: &Prefs, enabled: bool, text: &str) -> bool {
-    let button =
-        egui::Button::new(egui::RichText::new(text).color(on_accent(prefs))).fill(accent(prefs));
-    ui.add_enabled(enabled, button).clicked()
+/// Nút hành động chính: icon và chữ trên nền màu nhấn.
+fn primary_button(ui: &mut egui::Ui, prefs: &Prefs, enabled: bool, icon: Icon, text: &str) -> bool {
+    icons::filled(ui, icon, text, accent(prefs), on_accent(prefs), enabled).clicked()
 }
 
 fn size_mb(bytes: u64) -> String {
@@ -962,6 +1099,17 @@ fn byline(info: &feco_launcher::AppInfo) -> String {
         Some(d) => format!("{d} · {category}"),
         None => category,
     }
+}
+
+/// Lề trong của ô lưới.
+const TILE_MARGIN: f32 = 10.0;
+
+/// Số cột và chiều rộng mỗi ô: càng nhiều cột càng tốt mà ô không hẹp hơn `min_width`; các ô
+/// trải đều để hàng lấp đầy chiều rộng.
+fn grid_columns(available: f32, min_width: f32, gap: f32) -> (usize, f32) {
+    let columns = (((available + gap) / (min_width + gap)).floor() as usize).max(1);
+    let width = ((available - gap * (columns - 1) as f32) / columns as f32).floor();
+    (columns, width.max(1.0))
 }
 
 fn card_frame(ui: &egui::Ui) -> egui::Frame {
@@ -1013,6 +1161,7 @@ impl LauncherApp {
             .count();
         let entries = [
             (
+                Icon::Library,
                 Page::Library,
                 if updates > 0 {
                     tf("Thư viện  ({} cập nhật)", &[&updates])
@@ -1020,8 +1169,9 @@ impl LauncherApp {
                     t("Thư viện").to_owned()
                 },
             ),
-            (Page::Store, t("Cửa hàng").to_owned()),
+            (Icon::Store, Page::Store, t("Cửa hàng").to_owned()),
             (
+                Icon::Bell,
                 Page::Notifications,
                 if unread > 0 {
                     tf("Thông báo  ({})", &[&unread])
@@ -1029,21 +1179,25 @@ impl LauncherApp {
                     t("Thông báo").to_owned()
                 },
             ),
-            (Page::Settings, t("Cài đặt").to_owned()),
         ];
-        for (page, label) in entries {
+        let width = ui.available_width();
+        for (icon, page, label) in entries {
             let selected = self.page == page;
             let text = if selected {
                 egui::RichText::new(label).strong()
             } else {
                 egui::RichText::new(label)
             };
-            let button = egui::Button::selectable(selected, text)
-                .min_size(egui::vec2(ui.available_width(), 30.0));
-            if ui.add(button).clicked() {
+            if icons::labeled(ui, icon, text, selected, width).clicked() {
                 self.page = page;
-                self.detail = None;
             }
+        }
+        // Cài đặt mở trong cửa sổ riêng.
+        if icons::labeled(ui, Icon::Gear, t("Cài đặt"), self.settings_open, width)
+            .on_hover_text(t("Mở Cài đặt trong cửa sổ riêng"))
+            .clicked()
+        {
+            actions.push(Action::OpenSettings);
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             ui.add_space(8.0);
@@ -1053,36 +1207,51 @@ impl LauncherApp {
                 let local = t.to_zoned(jiff::tz::TimeZone::system());
                 ui.weak(tf("Đồng bộ lúc {}", &[&local.strftime("%H:%M %d/%m")]));
             }
-            if ui
-                .add_enabled(idle, egui::Button::new(t("Đồng bộ")))
-                .clicked()
-            {
-                actions.push(Action::Sync);
-            }
-            ui.separator();
-            match self.view.sign_in {
-                Some(SignIn::SignedIn) | Some(SignIn::Offline) => {
-                    if ui
-                        .add_enabled(idle, egui::Button::new(t("Đăng xuất")))
-                        .clicked()
-                    {
-                        actions.push(Action::Logout);
-                    }
+            let signed_in = matches!(
+                self.view.sign_in,
+                Some(SignIn::SignedIn) | Some(SignIn::Offline)
+            );
+            // Hàng nút icon: đồng bộ, lối tắt theo vai trò, đăng xuất.
+            ui.horizontal(|ui| {
+                if icons::button(ui, Icon::Sync, t("Đồng bộ"), false, idle).clicked() {
+                    actions.push(Action::Sync);
+                }
+                if signed_in {
                     if let Some(role) = &self.view.role {
                         if role.is_admin() {
                             if let Some(url) = &role.admin_console {
-                                if ui.button(t("Bảng quản trị")).clicked() {
+                                if icons::button(ui, Icon::Shield, t("Bảng quản trị"), false, true)
+                                    .clicked()
+                                {
                                     actions.push(Action::OpenLink(url.clone()));
                                 }
                             }
                         }
                         if role.can_develop() {
                             if let Some(url) = &role.developer_portal {
-                                if ui.button(t("Cổng nhà phát triển")).clicked() {
+                                if icons::button(
+                                    ui,
+                                    Icon::Code,
+                                    t("Cổng nhà phát triển"),
+                                    false,
+                                    true,
+                                )
+                                .clicked()
+                                {
                                     actions.push(Action::OpenLink(url.clone()));
                                 }
                             }
                         }
+                    }
+                    if icons::button(ui, Icon::SignOut, t("Đăng xuất"), false, idle).clicked() {
+                        actions.push(Action::Logout);
+                    }
+                }
+            });
+            ui.separator();
+            match self.view.sign_in {
+                Some(SignIn::SignedIn) | Some(SignIn::Offline) => {
+                    if let Some(role) = &self.view.role {
                         ui.label(
                             egui::RichText::new(role_label(&role.role))
                                 .small()
@@ -1097,7 +1266,7 @@ impl LauncherApp {
                     );
                 }
                 _ => {
-                    if primary_button(ui, &self.prefs, idle, t("Đăng nhập")) {
+                    if primary_button(ui, &self.prefs, idle, Icon::SignIn, t("Đăng nhập")) {
                         actions.push(Action::Login);
                     }
                     ui.weak(t("Chưa đăng nhập"));
@@ -1124,8 +1293,11 @@ impl LauncherApp {
             ui.heading(title);
             ui.weak(tf("{} app", &[&count]));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                for layout in [Layout::List, Layout::Grid] {
-                    ui.selectable_value(&mut prefs.layout, layout, layout.label());
+                for (layout, icon) in [(Layout::List, Icon::List), (Layout::Grid, Icon::Grid)] {
+                    let selected = prefs.layout == layout;
+                    if icons::button(ui, icon, layout.label(), selected, true).clicked() {
+                        prefs.layout = layout;
+                    }
                 }
                 if !store {
                     let updates = self
@@ -1139,6 +1311,7 @@ impl LauncherApp {
                             ui,
                             &self.prefs,
                             self.busy.is_none(),
+                            Icon::ArrowUp,
                             &tf("Cập nhật tất cả ({})", &[&updates]),
                         )
                     {
@@ -1187,7 +1360,7 @@ impl LauncherApp {
                     }
                 });
             if (!filter.text.is_empty() || filter.category.is_some())
-                && ui.button(t("Xóa bộ lọc")).clicked()
+                && icons::button(ui, Icon::Close, t("Xóa bộ lọc"), false, true).clicked()
             {
                 *filter = Filter::default();
             }
@@ -1224,7 +1397,21 @@ impl LauncherApp {
         });
     }
 
-    /// Lưới: số cột theo chiều rộng cửa sổ và cỡ ô đã chọn.
+    /// Chiều cao chung của mọi ô lưới: biểu tượng, tên, dòng phụ, mô tả (nếu bật), phiên bản, nút.
+    fn tile_height(&self, ui: &egui::Ui) -> f32 {
+        let body = ui.text_style_height(&egui::TextStyle::Body);
+        let small = ui.text_style_height(&egui::TextStyle::Small);
+        let gap = ui.spacing().item_spacing.y;
+        let icon = (self.prefs.tile_size.width() * 0.42).clamp(48.0, 88.0);
+        let button = ui.spacing().interact_size.y.max(28.0);
+        let mut h = TILE_MARGIN * 2.0 + icon + 4.0 + body * 3.0 + button + gap * 5.0;
+        if self.prefs.show_summary {
+            h += small + gap;
+        }
+        h.ceil()
+    }
+
+    /// Lưới: mọi ô cùng kích thước, xếp liền nhau và trải đều chiều rộng (spec "Ô lưới đều nhau").
     fn grid<T: library::Listed>(
         &self,
         ui: &mut egui::Ui,
@@ -1232,38 +1419,56 @@ impl LauncherApp {
         mut tile: impl FnMut(&Self, &mut egui::Ui, &T),
     ) -> Option<String> {
         let mut clicked = None;
-        let spacing = ui.spacing().item_spacing.x.max(10.0);
-        let width = self.prefs.tile_size.width();
-        let columns =
-            (((ui.available_width() + spacing) / (width + 22.0 + spacing)).floor() as usize).max(1);
+        let gap = if self.prefs.compact { 8.0 } else { 12.0 };
+        let min_width = self.prefs.tile_size.width() + TILE_MARGIN * 2.0;
+        let height = self.tile_height(ui);
+        let radius = f32::from(ui_style::current().shape().card_radius);
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
+                let (columns, width) = grid_columns(ui.available_width(), min_width, gap);
                 for row in items.chunks(columns) {
-                    ui.horizontal_top(|ui| {
-                        ui.spacing_mut().item_spacing.x = spacing;
-                        for item in row {
-                            let card = ui.scope_builder(
-                                egui::UiBuilder::new().sense(egui::Sense::click()),
-                                |ui| {
-                                    // Chữ trong ô không chọn được, để bấm vào đâu cũng mở chi tiết.
-                                    ui.style_mut().interaction.selectable_labels = false;
-                                    card_frame(ui).show(ui, |ui| {
-                                        ui.set_width(width);
-                                        ui.vertical(|ui| tile(self, ui, item));
-                                    });
-                                },
-                            );
-                            let card = card
-                                .response
-                                .on_hover_cursor(egui::CursorIcon::PointingHand)
-                                .on_hover_text(t("Xem chi tiết"));
-                            if card.clicked() {
-                                clicked = Some(item.app_id().to_owned());
-                            }
+                    let (row_rect, _) = ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), height),
+                        egui::Sense::hover(),
+                    );
+                    for (i, item) in row.iter().enumerate() {
+                        let rect = egui::Rect::from_min_size(
+                            row_rect.min + egui::vec2(i as f32 * (width + gap), 0.0),
+                            egui::vec2(width, height),
+                        );
+                        let id = ui.scope_id().with(("tile", item.app_id()));
+                        let response = ui.interact(rect, id, egui::Sense::click());
+                        let visuals = ui.visuals();
+                        let stroke = if response.hovered() {
+                            egui::Stroke::new(1.5, visuals.selection.stroke.color)
+                        } else {
+                            visuals.widgets.noninteractive.bg_stroke
+                        };
+                        ui.painter().rect(
+                            rect,
+                            radius,
+                            visuals.faint_bg_color,
+                            stroke,
+                            egui::StrokeKind::Inside,
+                        );
+                        let mut child = ui.new_child(
+                            egui::UiBuilder::new()
+                                .max_rect(rect.shrink(TILE_MARGIN))
+                                .layout(egui::Layout::top_down(egui::Align::Min)),
+                        );
+                        child.set_clip_rect(rect.intersect(ui.clip_rect()));
+                        // Chữ trong ô không chọn được, để bấm vào đâu cũng mở chi tiết.
+                        child.style_mut().interaction.selectable_labels = false;
+                        tile(self, &mut child, item);
+                        let response = response
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .on_hover_text(t("Xem chi tiết"));
+                        if response.clicked() {
+                            clicked = Some(item.app_id().to_owned());
                         }
-                    });
-                    ui.add_space(spacing);
+                    }
+                    ui.add_space(gap);
                 }
             });
         clicked
@@ -1311,7 +1516,8 @@ impl LauncherApp {
     /// Menu "..." của một app đã cài: cập nhật, quay lại, gỡ, mã nguồn.
     fn app_menu(&self, ui: &mut egui::Ui, app: &MyApp, actions: &mut Vec<Action>) {
         let idle = self.busy.is_none();
-        ui.menu_button("...", |ui| {
+        let button = icons::button(ui, Icon::More, t("Thêm thao tác"), false, true);
+        egui::Popup::menu(&button).show(|ui| {
             if let Some(u) = &app.update {
                 if ui
                     .add_enabled(
@@ -1356,7 +1562,13 @@ impl LauncherApp {
         } else {
             t("Mở")
         };
-        if primary_button(ui, &self.prefs, self.busy.is_none() && ready, label) {
+        if primary_button(
+            ui,
+            &self.prefs,
+            self.busy.is_none() && ready,
+            Icon::Play,
+            label,
+        ) {
             actions.push(Action::Open(app.app.clone()));
         }
     }
@@ -1455,6 +1667,7 @@ impl LauncherApp {
         };
         if let Some(app) = clicked {
             actions.push(Action::ShowDetail(Detail {
+                key: 0,
                 app,
                 store: false,
                 order,
@@ -1467,15 +1680,16 @@ impl LauncherApp {
         let installed = self.view.my_apps.iter().find(|a| a.app == entry.app);
         let label = match installed {
             Some(a) if a.version == entry.version => None,
-            Some(_) => Some(t("Cập nhật")),
-            None => Some(t("Cài")),
+            Some(_) => Some((Icon::ArrowUp, t("Cập nhật"))),
+            None => Some((Icon::Download, t("Cài"))),
         };
         match label {
-            Some(label) => {
+            Some((icon, label)) => {
                 if primary_button(
                     ui,
                     &self.prefs,
                     self.busy.is_none() && self.view.online,
+                    icon,
                     label,
                 ) {
                     actions.push(Action::AskInstall(Box::new(entry.clone())));
@@ -1559,7 +1773,8 @@ impl LauncherApp {
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if let Some(source) = &entry.info.source {
-                        if ui.button(t("Mã nguồn")).clicked() {
+                        if icons::button(ui, Icon::Code, link_label(source), false, true).clicked()
+                        {
                             actions.push(Action::OpenLink(source.clone()));
                         }
                     }
@@ -1569,6 +1784,7 @@ impl LauncherApp {
         };
         if let Some(app) = clicked {
             actions.push(Action::ShowDetail(Detail {
+                key: 0,
                 app,
                 store: true,
                 order,
@@ -1763,7 +1979,8 @@ impl LauncherApp {
                         }
                         _ => {
                             ui.label(t("Chưa đăng nhập."));
-                            if primary_button(ui, &self.prefs, idle, t("Đăng nhập")) {
+                            if primary_button(ui, &self.prefs, idle, Icon::SignIn, t("Đăng nhập"))
+                            {
                                 actions.push(Action::Login);
                             }
                         }
@@ -1802,9 +2019,17 @@ impl LauncherApp {
 /// thị lúc mở (sau tìm, lọc, sắp xếp) để chuyển app trước và sau.
 #[derive(Clone, Debug)]
 struct Detail {
+    /// Mã cửa sổ (không đổi khi chuyển sang app trước/sau trong cùng cửa sổ).
+    key: u64,
     app: String,
     store: bool,
     order: Vec<String>,
+}
+
+impl Detail {
+    fn viewport(&self) -> egui::ViewportId {
+        egui::ViewportId::from_hash_of(("feco-detail", self.key))
+    }
 }
 
 fn section_title(ui: &mut egui::Ui, text: &str) {
@@ -1855,7 +2080,7 @@ impl LauncherApp {
         let (prev, next) = library::neighbors(&detail.order, &detail.app);
         let (prev, next) = (prev.map(str::to_owned), next.map(str::to_owned));
 
-        // Phím tắt: trái/phải chuyển app, Esc quay lại (bỏ qua khi đang gõ vào ô nhập liệu).
+        // Phím tắt: trái/phải chuyển app, Esc đóng cửa sổ (bỏ qua khi đang gõ vào ô nhập liệu).
         if !ui.ctx().egui_wants_keyboard_input() {
             let (left, right, esc) = ui.input(|i| {
                 (
@@ -1865,53 +2090,58 @@ impl LauncherApp {
                 )
             });
             if esc {
-                actions.push(Action::CloseDetail);
+                actions.push(Action::CloseDetail(detail.key));
             } else if let (true, Some(p)) = (left, &prev) {
-                actions.push(Action::MoveDetail(p.clone()));
+                actions.push(Action::MoveDetail(detail.key, p.clone()));
             } else if let (true, Some(n)) = (right, &next) {
-                actions.push(Action::MoveDetail(n.clone()));
+                actions.push(Action::MoveDetail(detail.key, n.clone()));
             }
         }
 
-        // Thanh trên: quay lại danh sách, app trước và sau.
+        // Thanh trên: nguồn (Cửa hàng hay Thư viện), app trước và sau.
         ui.horizontal(|ui| {
-            let back = if detail.store {
-                t("‹ Cửa hàng")
+            ui.weak(if detail.store {
+                t("Cửa hàng")
             } else {
-                t("‹ Thư viện")
-            };
-            if ui.button(back).on_hover_text("Esc").clicked() {
-                actions.push(Action::CloseDetail);
+                t("Thư viện")
+            });
+            if let Some(i) = detail.order.iter().position(|a| *a == detail.app) {
+                ui.weak(format!("{}/{}", i + 1, detail.order.len()));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let next_label = match &next {
-                    Some(n) => format!("Sau: {} ›", self.title_of(n)),
-                    None => "Sau ›".to_owned(),
+                let next_tip = match &next {
+                    Some(n) => tf("Sau: {} ›", &[&self.title_of(n)]),
+                    None => t("Sau ›").to_owned(),
                 };
-                if ui
-                    .add_enabled(next.is_some(), egui::Button::new(next_label))
-                    .on_hover_text(t("Phím mũi tên phải"))
-                    .clicked()
+                if icons::button(
+                    ui,
+                    Icon::ChevronRight,
+                    &format!("{next_tip} ({})", t("Phím mũi tên phải")),
+                    false,
+                    next.is_some(),
+                )
+                .clicked()
                 {
                     if let Some(n) = &next {
-                        actions.push(Action::MoveDetail(n.clone()));
+                        actions.push(Action::MoveDetail(detail.key, n.clone()));
                     }
                 }
-                let prev_label = match &prev {
+                let prev_tip = match &prev {
                     Some(p) => tf("‹ Trước: {}", &[&self.title_of(p)]),
                     None => t("‹ Trước").to_owned(),
                 };
-                if ui
-                    .add_enabled(prev.is_some(), egui::Button::new(prev_label))
-                    .on_hover_text(t("Phím mũi tên trái"))
-                    .clicked()
+                if icons::button(
+                    ui,
+                    Icon::ChevronLeft,
+                    &format!("{prev_tip} ({})", t("Phím mũi tên trái")),
+                    false,
+                    prev.is_some(),
+                )
+                .clicked()
                 {
                     if let Some(p) = &prev {
-                        actions.push(Action::MoveDetail(p.clone()));
+                        actions.push(Action::MoveDetail(detail.key, p.clone()));
                     }
-                }
-                if let Some(i) = detail.order.iter().position(|a| *a == detail.app) {
-                    ui.weak(format!("{}/{}", i + 1, detail.order.len()));
                 }
             });
         });
@@ -1961,18 +2191,19 @@ impl LauncherApp {
                                         }
                                     }
                                     if let Some(prev) = &app.previous_version {
-                                        if ui
-                                            .add_enabled(
-                                                idle,
-                                                egui::Button::new(tf("Quay lại {}", &[&prev])),
-                                            )
-                                            .clicked()
+                                        if icons::button(
+                                            ui,
+                                            Icon::Undo,
+                                            &tf("Quay lại {}", &[&prev]),
+                                            false,
+                                            idle,
+                                        )
+                                        .clicked()
                                         {
                                             actions.push(Action::Rollback(app.app.clone()));
                                         }
                                     }
-                                    if ui
-                                        .add_enabled(idle, egui::Button::new(t("Gỡ...")))
+                                    if icons::button(ui, Icon::Trash, t("Gỡ..."), false, idle)
                                         .clicked()
                                     {
                                         actions.push(Action::AskUninstall(Box::new(app.clone())));
@@ -1984,6 +2215,7 @@ impl LauncherApp {
                                             ui,
                                             &self.prefs,
                                             idle && self.view.online,
+                                            Icon::Download,
                                             t("Cài"),
                                         ) {
                                             actions.push(Action::AskInstall(Box::new(e.clone())));
@@ -1992,16 +2224,28 @@ impl LauncherApp {
                                 }
                             }
                             if let Some(source) = &info.source {
-                                if ui
-                                    .button(link_label(source))
-                                    .on_hover_text(source)
-                                    .clicked()
+                                if icons::button(
+                                    ui,
+                                    Icon::Code,
+                                    &format!("{}: {source}", link_label(source)),
+                                    false,
+                                    true,
+                                )
+                                .clicked()
                                 {
                                     actions.push(Action::OpenLink(source.clone()));
                                 }
                             }
                             if let Some(site) = &info.website {
-                                if ui.button("Website").on_hover_text(site).clicked() {
+                                if icons::button(
+                                    ui,
+                                    Icon::Globe,
+                                    &format!("{}: {site}", t("Website")),
+                                    false,
+                                    true,
+                                )
+                                .clicked()
+                                {
                                     actions.push(Action::OpenLink(site.clone()));
                                 }
                             }
@@ -2125,7 +2369,7 @@ impl LauncherApp {
                                 ui.end_row();
                             }
                             if let Some(site) = &info.website {
-                                ui.weak("Website");
+                                ui.weak(t("Website"));
                                 ui.hyperlink_to(site, site);
                                 ui.end_row();
                             }
@@ -2295,4 +2539,31 @@ async fn open_app(s: &Shared, app: &str) -> Result<String, String> {
         eprintln!("không ghi được lần mở {app}: {e}");
     }
     Ok(tf("Đã mở {} {}{}", &[&plan.title, &plan.version, &note]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Scenario "Ô lưới đều nhau": các ô cùng chiều rộng, lấp đầy hàng, không hẹp hơn cỡ đã chọn.
+    #[test]
+    fn grid_tiles_fill_rows_evenly() {
+        for (available, min, gap) in [
+            (900.0, 180.0, 12.0),
+            (500.0, 230.0, 8.0),
+            (120.0, 180.0, 12.0),
+        ] {
+            let (columns, width) = grid_columns(available, min, gap);
+            assert!(columns >= 1);
+            if columns > 1 {
+                assert!(width >= min, "{available}: ô {width} < {min}");
+            }
+            let used = width * columns as f32 + gap * (columns - 1) as f32;
+            assert!(
+                used <= available + 0.5 && available - used < columns as f32,
+                "{available}: {used}"
+            );
+        }
+        assert_eq!(grid_columns(900.0, 180.0, 12.0).0, 4);
+    }
 }

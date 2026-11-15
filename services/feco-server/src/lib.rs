@@ -24,9 +24,11 @@ pub mod export;
 pub mod gateways;
 pub mod hydra;
 pub mod i18n;
+pub mod i18n_fr;
 pub mod i18n_ja;
 pub mod kratos;
 pub mod launch;
+pub mod loadtest;
 pub mod maildns;
 pub mod mailer;
 pub mod misa;
@@ -38,7 +40,9 @@ pub mod orders_web;
 pub mod pairwise;
 pub mod payments;
 pub mod payments_web;
+pub mod profile;
 pub mod ratelimit;
+pub mod status;
 pub mod ui_prefs;
 
 pub mod review;
@@ -114,6 +118,8 @@ pub struct AppState {
     pub admin_emails: Vec<String>,
     /// Bảng quản trị không bắt buộc passkey (chỉ dev; feco-config đã kiểm).
     pub admin_passkey_optional: bool,
+    /// Số người dùng đếm gần nhất cho dashboard quản trị (QUESTIONS 80): (lúc đếm, số).
+    pub user_count: std::sync::Mutex<Option<(std::time::Instant, usize)>>,
     /// Cổng thanh toán ZaloPay (không cấu hình thì trang thanh toán báo chưa sẵn sàng).
     pub zalopay: Option<zalopay::ZaloPay>,
     /// Cổng VNPAY (QR, thẻ ATM, thẻ quốc tế) và MoMo (ví MoMo).
@@ -196,6 +202,7 @@ impl AppState {
             clamd: config.developer.clamd,
             admin_emails: config.developer.admin_emails.clone(),
             admin_passkey_optional: config.security.admin_passkey_optional,
+            user_count: std::sync::Mutex::new(None),
             zalopay: config.payments.zalopay.as_ref().map(zalopay::ZaloPay::new),
             vnpay: config.payments.vnpay.as_ref().map(vnpay::Vnpay::new),
             momo: config.payments.momo.as_ref().map(momo::Momo::new),
@@ -252,6 +259,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/error", get(auth::error))
         .route("/lang/{code}", get(auth::set_lang))
         .route("/ui.css", get(ui_prefs::stylesheet))
+        .route("/status", get(status::page))
+        .route("/status.json", get(status::json))
         .route("/preferences", get(ui_prefs::show).post(ui_prefs::save))
         .route("/sessions", get(account::sessions))
         .route("/sessions/revoke-others", post(account::revoke_others))
@@ -439,6 +448,7 @@ mod tests {
             clamd: None,
             admin_emails: Vec::new(),
             admin_passkey_optional: false,
+            user_count: std::sync::Mutex::new(None),
             zalopay: None,
             vnpay: None,
             momo: None,

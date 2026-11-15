@@ -324,6 +324,22 @@ impl KratosClient {
         Ok(res.status().is_success())
     }
 
+    /// Kratos còn trả lời (`/health/alive` của cổng quản trị), dùng cho trang trạng thái.
+    pub async fn alive(&self) -> Result<(), String> {
+        let res = self
+            .http
+            .get(self.admin_url("admin/health/alive"))
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if res.status().is_success() {
+            Ok(())
+        } else {
+            Err(format!("HTTP {}", res.status()))
+        }
+    }
+
     fn admin_url(&self, path: &str) -> Url {
         self.admin.join(path).expect("đường dẫn hợp lệ")
     }
@@ -331,6 +347,27 @@ impl KratosClient {
     fn identity_url(&self, id: &str, suffix: &str) -> Url {
         let id: String = form_urlencoded::byte_serialize(id.as_bytes()).collect();
         self.admin_url(&format!("admin/identities/{id}{suffix}"))
+    }
+
+    /// Danh tính đã bật xác thực hai lớp chưa: có TOTP, mã khôi phục, hoặc ít nhất một khóa
+    /// bảo mật/passkey. Kratos luôn tạo mục `webauthn` rỗng khi đăng ký, nên phải xem danh sách
+    /// khóa (chỉ là khóa công khai).
+    pub async fn has_second_factor(&self, id: &str) -> Result<Option<bool>, KratosError> {
+        let mut url = self.identity_url(id, "");
+        url.query_pairs_mut()
+            .append_pair("include_credential", "webauthn");
+        let res = self.http.get(url).send().await?;
+        let r = Self::into_response(res).await?;
+        if r.status != StatusCode::OK {
+            return Ok(None);
+        }
+        let creds = &r.body["credentials"];
+        let keys = creds["webauthn"]["config"]["credentials"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty());
+        Ok(Some(
+            keys || creds.get("totp").is_some() || creds.get("lookup_secret").is_some(),
+        ))
     }
 
     /// Đọc danh tính (API quản trị), gồm cả `metadata_admin`.

@@ -63,6 +63,30 @@
   .bar span { display:block; width:100%; min-height:2px; background:var(--accent); border-radius:var(--radius) var(--radius) 0 0; }
   .bar small { color:var(--muted); font-size:.7rem; }
   @media (max-width:800px) { .admin-shell { grid-template-columns:1fr; } .admin-side { border-right:0; border-bottom:var(--stroke) solid var(--line); } .admin-side nav { flex-direction:row; flex-wrap:wrap; } .admin-main { padding:16px; } }
+  .btn { display:inline-block; padding:9px 16px; border-radius:var(--radius); background:var(--accent); color:var(--on-accent); text-decoration:none; font-weight:600; }
+  .btn.secondary { background:transparent; color:var(--accent); border:1px solid currentColor; }
+  .badge.warn { color:var(--warn); }
+  .profile .card + .card, .profile .msg { margin-top:12px; }
+  .profile-head { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+  .profile-head h1 { margin:0; }
+  .profile-head .who { flex:1 1 260px; }
+  .profile-head .hello { margin:0; }
+  .profile-head .line { margin:4px 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .profile-head .badge { margin-left:0; }
+  .head-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .avatar { width:72px; height:72px; border-radius:50%; display:grid; place-items:center; color:#fff; font-size:1.6rem; font-weight:700; letter-spacing:.02em; flex:none; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:var(--gap); margin:16px 0; }
+  .stat { display:flex; flex-direction:column; padding:14px 16px; background:var(--card); border:var(--stroke) solid var(--line); border-radius:var(--card-radius); color:var(--fg); text-decoration:none; }
+  .stat:hover { border-color:var(--accent); }
+  .stat-value { font-size:1.6rem; font-weight:700; }
+  .stat-label { color:var(--muted); font-size:.9rem; }
+  .profile-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:var(--gap); }
+  .profile-grid .card { margin:0 !important; }
+  .profile-grid h2 { margin-top:0; }
+  ul.menu { list-style:none; padding:0; margin:0; }
+  ul.menu li { padding:8px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  ul.menu li:last-child { border-bottom:0; }
+  .danger-link { color:var(--err); }
   @media (max-width:640px) { .topbar { flex-wrap:wrap; padding:10px 12px; gap:8px; } .mainnav { order:3; flex-basis:100%; } }
   * { box-sizing:border-box; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; margin-top:16px; }
@@ -120,11 +144,13 @@
     <a href="/orders">{{ i18n.t("nav.orders") }}</a>
     <a href="/notifications">{{ i18n.t("nav.notifications") }}</a>
     <a href="/developer">{{ i18n.t("nav.developer") }}</a>
+    <a href="/status">{{ i18n.t("nav.status") }}</a>
   </nav>
   <div class="tools">
     <span class="langs" id="lang-switch" role="group" aria-label="{{ i18n.t("prefs.language") }}">
       <a href="/lang/vi" lang="vi" title="Tiếng Việt"{% if i18n.code() == "vi" %} aria-current="true"{% endif %}>VI</a>
       <a href="/lang/en" lang="en" title="English"{% if i18n.code() == "en" %} aria-current="true"{% endif %}>EN</a>
+      <a href="/lang/fr" lang="fr" title="Français"{% if i18n.code() == "fr" %} aria-current="true"{% endif %}>FR</a>
       <a href="/lang/ja" lang="ja" title="日本語"{% if i18n.code() == "ja" %} aria-current="true"{% endif %}>日本語</a>
     </span>
     <a href="/preferences" id="nav-preferences">{{ i18n.t("nav.preferences") }}</a>

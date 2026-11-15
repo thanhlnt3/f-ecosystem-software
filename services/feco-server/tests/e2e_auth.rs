@@ -5892,6 +5892,10 @@ async fn admin_console_end_to_end() {
     }
     // Passkey bắt buộc (cờ dev tắt): không có cảnh báo.
     assert!(!home.contains("dev-no-passkey"));
+    // Trang hồ sơ: người đã có passkey thấy xác thực hai lớp đang bật, và lối tắt Bảng quản trị.
+    let profile = get(&support, "/").await;
+    assert!(profile.contains("Đang bật xác thực hai lớp"), "{profile}");
+    assert!(profile.contains("link-admin"), "{profile}");
     assert_eq!(
         support
             .get(format!("{BASE}/admin/refunds"))
@@ -6972,4 +6976,284 @@ async fn dev_admin_without_passkey() {
         .bind(&email)
         .execute(&local_state().db)
         .await;
+}
+
+/// tasks.md 15.2: kiểm thử tải `/v1/me` (1.000 yêu cầu/giây, p95 dưới 300 ms).
+///
+/// Không chạy cùng bộ E2E thường (`#[ignore]`): chạy riêng bằng
+/// `FECO_E2E=1 cargo test -p feco-server --test e2e_auth --release -- --ignored load_v1_me --nocapture`.
+/// Tốc độ và thời gian đổi được bằng `FECO_LOAD_RPS`, `FECO_LOAD_SECONDS`. Biên bản ghi ra
+/// `target/load-v1-me.md`.
+#[tokio::test]
+#[ignore]
+async fn load_v1_me() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let rps: u32 = std::env::var("FECO_LOAD_RPS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1000);
+    let seconds: u64 = std::env::var("FECO_LOAD_SECONDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(30);
+    // Token thật của một app qua luồng OAuth đầy đủ.
+    let (email, password) = unique("tai");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Người thử tải").await;
+    let app = create_app(
+        "LoadApp",
+        serde_json::json!({"profile": {"required": true}}),
+    )
+    .await;
+    let a = authorize(&user, &app, "openid profile").await;
+    let a = answer_consent(&user, a, "accept", &[]).await;
+    let token = exchange(&app, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(me(&token, None).await.0, 200);
+    // Máy chủ riêng với giới hạn tần suất rất cao: đo hiệu năng, không đo bộ chặn.
+    let mut vars = SERVER_VARS.get().cloned().unwrap();
+    for k in [
+        "FECO_RATE_IP_PER_MIN",
+        "FECO_RATE_APP_PER_MIN",
+        "FECO_RATE_USER_PER_MIN",
+    ] {
+        vars.insert(k.into(), "100000000".into());
+    }
+    let state =
+        std::sync::Arc::new(AppState::from_config(&Config::from_vars(&vars).unwrap()).unwrap());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            router(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await
+        .unwrap()
+    });
+    let client = reqwest::Client::builder()
+        .pool_max_idle_per_host(512)
+        .build()
+        .unwrap();
+    // Làm nóng kết nối.
+    let _ = feco_server::loadtest::run(
+        client.clone(),
+        format!("{base}/v1/me"),
+        token.clone(),
+        100,
+        std::time::Duration::from_secs(2),
+        512,
+    )
+    .await;
+    let report = feco_server::loadtest::run(
+        client,
+        format!("{base}/v1/me"),
+        token,
+        rps,
+        std::time::Duration::from_secs(seconds),
+        2048,
+    )
+    .await;
+    let md = report.markdown();
+    println!("{md}");
+    let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/load-v1-me.md");
+    let _ = std::fs::write(&out, &md);
+    assert_eq!(report.errors, 0, "{report:?}");
+    assert!(report.p95_ms < 300.0, "p95 {:.1} ms", report.p95_ms);
+}
+
+/// Thay đổi launcher-windows-and-web-profile, spec account-identity "Trang hồ sơ": scenario
+/// "Người dùng mở trang hồ sơ", "Lập trình viên thấy lối tắt Cổng nhà phát triển"; spec
+/// platform-support "Tiếng Pháp trên web": scenario "Trình duyệt tiếng Pháp".
+#[tokio::test]
+async fn profile_page_and_french() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let (email, password) = unique("ho-so");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Lê Thu Hà").await;
+    verify_email(&user, &email).await;
+    let app = create_app(
+        "ProfileApp",
+        serde_json::json!({"profile": {"required": true}}),
+    )
+    .await;
+    let a = authorize(&user, &app, "openid profile").await;
+    let a = answer_consent(&user, a, "accept", &[]).await;
+    let _ = exchange(&app, &a).await;
+
+    let page = get(&user, "/").await;
+    let doc = Html::parse_document(&page);
+    let text = |sel: &str| -> String {
+        doc.select(&Selector::parse(sel).unwrap())
+            .next()
+            .unwrap_or_else(|| panic!("thiếu {sel}: {page}"))
+            .text()
+            .collect::<String>()
+            .trim()
+            .to_owned()
+    };
+    assert_eq!(text("#email"), email);
+    assert_eq!(text(".avatar"), "LH");
+    assert_eq!(text("#platform-role"), "Người sử dụng ứng dụng");
+    assert_eq!(text("#stat-apps .stat-value"), "1");
+    assert_eq!(text("#stat-orders .stat-value"), "0");
+    assert!(text("#stat-sessions .stat-value").parse::<u32>().unwrap() >= 1);
+    assert!(page.contains("Đã xác minh"), "{page}");
+    assert!(text("#two-factor").contains("Chưa bật"));
+    assert!(!page.contains("link-admin") && !page.contains("link-developer"));
+    for href in [
+        "/settings",
+        "/sessions",
+        "/apps",
+        "/account/export",
+        "/account/delete",
+        "/orders",
+        "/payments",
+        "/notifications",
+        "/preferences",
+        "/logout",
+    ] {
+        assert!(
+            page.contains(&format!(r#"href="{href}""#)),
+            "thiếu lối tắt {href}"
+        );
+    }
+    // Lập trình viên thấy lối tắt Cổng nhà phát triển.
+    grant_developer(&email).await;
+    let page = get(&user, "/").await;
+    assert!(
+        page.contains("link-developer") && page.contains("Lập trình viên"),
+        "{page}"
+    );
+    assert!(!page.contains("link-admin"));
+
+    // Trình duyệt tiếng Pháp.
+    let fr = browser_with(UA_WINDOWS_CHROME, "fr-FR,fr;q=0.9,en;q=0.5");
+    let page = get(&fr, "/login").await;
+    assert!(
+        page.contains(r#"lang="fr""#) && page.contains("Se connecter"),
+        "{page}"
+    );
+    assert!(page.contains(r#"href="/lang/fr""#));
+    let page = get(&user, "/lang/fr?next=/").await;
+    assert!(page.contains("Modifier le profil"), "{page}");
+    let _ = get(&user, "/lang/vi").await;
+}
+
+/// tasks.md 15.3, spec platform-support "Độ sẵn sàng": scenario "Sự cố dịch vụ" (trang trạng
+/// thái hiện sự cố sau hai lần kiểm tra lỗi, đóng khi dịch vụ trở lại).
+#[tokio::test]
+async fn status_page_shows_incidents() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::status::{self, Component};
+    let state = local_state();
+    let now = time::OffsetDateTime::now_utc();
+    // Dịch vụ thật đang chạy: kiểm tra thật đều đạt.
+    for (c, ok, _, detail) in status::probe(&state).await {
+        assert!(ok, "{c:?}: {detail}");
+    }
+    status::run_once(&state).await;
+    let c = browser();
+    let page = get(&c, "/status").await;
+    assert!(page.contains(r#"data-state="operational""#), "{page}");
+    assert!(page.contains(r#"data-component="oauth""#));
+    // Hai lần lỗi liên tiếp của dịch vụ đăng nhập cho app: mở sự cố.
+    status::record(
+        &state.db,
+        Component::Oauth,
+        false,
+        5000,
+        "timeout",
+        now + time::Duration::seconds(1),
+    )
+    .await
+    .unwrap();
+    let page = get(&c, "/status").await;
+    assert!(
+        !page.contains(r#"data-state="outage""#),
+        "một lần lỗi chưa là sự cố"
+    );
+    status::record(
+        &state.db,
+        Component::Oauth,
+        false,
+        5000,
+        "timeout",
+        now + time::Duration::seconds(61),
+    )
+    .await
+    .unwrap();
+    let page = get(&c, "/status").await;
+    assert!(
+        page.contains(r#"<tr data-component="oauth" data-state="outage">"#),
+        "{page}"
+    );
+    assert!(page.contains(r#"data-open="true""#), "{page}");
+    let json: Value = c
+        .get(format!("{BASE}/status.json"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(json["state"], "outage");
+    // Dịch vụ trở lại: sự cố đóng.
+    status::record(
+        &state.db,
+        Component::Oauth,
+        true,
+        3,
+        "",
+        now + time::Duration::seconds(121),
+    )
+    .await
+    .unwrap();
+    let page = get(&c, "/status").await;
+    assert!(
+        page.contains(r#"<tr data-component="oauth" data-state="operational">"#),
+        "{page}"
+    );
+    assert!(
+        page.contains(r#"data-component="oauth" data-open="false""#),
+        "{page}"
+    );
+}
+
+/// QUESTIONS 80, spec admin-console "Đếm người dùng có bộ nhớ đệm": scenario "Mở dashboard hai
+/// lần liền".
+#[tokio::test]
+async fn admin_user_count_is_cached() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let state = local_state();
+    let n = feco_server::admin::user_count(&state).await.unwrap();
+    let (email, password) = unique("dem");
+    register_in(&app_browser(), &email, &password, "Người mới").await;
+    assert_eq!(
+        feco_server::admin::user_count(&state).await.unwrap(),
+        n,
+        "trong 10 phút dùng số cũ"
+    );
+    // Quá 10 phút: đếm lại.
+    *state.user_count.lock().unwrap() = Some((
+        std::time::Instant::now()
+            - feco_server::admin::USER_COUNT_TTL
+            - std::time::Duration::from_secs(1),
+        n,
+    ));
+    assert_eq!(feco_server::admin::user_count(&state).await.unwrap(), n + 1);
 }

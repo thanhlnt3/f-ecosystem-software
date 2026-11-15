@@ -196,13 +196,18 @@
 
 ## 15. Yêu cầu chung và ra mắt (`platform-support`, `dependency-licensing`)
 
-- [ ] 15.1 Giao diện, email và tài liệu bằng tiếng Việt và tiếng Anh, định dạng tiền VND; xác minh bằng kiểm tra không còn chuỗi chưa dịch
-- [ ] 15.2 Kiểm thử tải (1.000 yêu cầu/giây vào `/v1/me`, p95 dưới 300 ms), đo thời gian khởi động launcher dưới 3 giây; xác minh bằng báo cáo kiểm thử tải
-- [ ] 15.3 Trang trạng thái công khai, diễn tập khôi phục sao lưu (RPO 5 phút, RTO 4 giờ); xác minh bằng biên bản diễn tập
+- [x] 15.1 Giao diện, email và tài liệu bằng tiếng Việt và tiếng Anh, định dạng tiền VND; xác minh bằng kiểm tra không còn chuỗi chưa dịch
+  - Đã xác minh: giao diện web có test đủ khóa cho tiếng Việt, tiếng Anh, tiếng Nhật, tiếng Pháp (`every_key_has_both_languages`, `every_key_has_japanese`, `every_key_has_french`); launcher có test không còn chuỗi chưa dịch (`every_ui_string_has_translations`, `no_untranslated_literals_in_main`); email bảo mật song ngữ (`security_emails_are_bilingual`), email nghiệp vụ theo ngôn ngữ người dùng; tiền VND dạng "9.000.000 ₫" (`money_reads_as_vietnamese_dong`); tài liệu có bản tiếng Anh (`README.en.md`, `docs/en/`), CI kiểm bằng `scripts/check-docs-i18n.py` (8 cặp, cùng số tiêu đề và khối mã).
+- [x] 15.2 Kiểm thử tải (1.000 yêu cầu/giây vào `/v1/me`, p95 dưới 300 ms), đo thời gian khởi động launcher dưới 3 giây; xác minh bằng báo cáo kiểm thử tải
+  - Đã xác minh: `load_v1_me` (bộ tạo tải mở `feco_server::loadtest`): 1.000 yêu cầu/giây trong 30 giây, 30.000/30.000 thành công, p95 2,9 ms; launcher khởi động tới khung hình đầu trung vị 356 ms, lâu nhất 469 ms (`scripts/measure-launcher-startup.ps1`). Biên bản: `docs/reports/2026-11-15-performance.md` (máy dev; đo lại trên staging ở QUESTIONS 84).
+- [x] 15.3 Trang trạng thái công khai, diễn tập khôi phục sao lưu (RPO 5 phút, RTO 4 giờ); xác minh bằng biên bản diễn tập
+  - Đã xác minh: trang trạng thái `/status`, `/status.json` (tự kiểm tra mỗi phút, hai lần lỗi liên tiếp mở sự cố), E2E `status_page_shows_incidents`; diễn tập `scripts/backup-drill.sh` với lưu trữ WAL 300 giây: mất 86 giây dữ liệu, khôi phục 2 giây, số dòng khớp. Biên bản: `docs/ops/drills/2026-11-15-backup-drill.md`; cách vận hành: `docs/ops/status-and-backup.md`. Giám sát từ bên ngoài còn mở (QUESTIONS 81).
 - [ ] 15.4 Hồ sơ lưu trữ dữ liệu và chuyển dữ liệu ra nước ngoài theo pháp luật Việt Nam; xác minh bằng biên bản rà soát pháp lý
+  - Đang làm: bản nháp `docs/legal/data-inventory.md` (dữ liệu, nơi lưu, luồng ra nước ngoài, việc cần làm); chờ luật sư rà soát và lập hồ sơ (QUESTIONS 82).
 - [x] 15.5 `THIRD_PARTY_NOTICES` và SBOM cho launcher, F-Builder, F-SDK; xác minh danh sách khớp cây phụ thuộc
   - Đã xác minh: `feco-sbom` (tools/feco-license-check) sinh SBOM CycloneDX 1.5 và `THIRD_PARTY_NOTICES` (bảng thư viện, giấy phép, toàn văn LICENSE/NOTICE của từng crate) cho từng sản phẩm theo đúng cây phụ thuộc thường mà Cargo phân giải cho nền tảng đích (`cargo tree -p`, không gộp tính năng của gói khác, không có dev-dependency); unit test `closure_matches_dependency_tree`. `scripts/package-release.sh` đưa SBOM và notices của F-Launcher, feco-server, f-dev, F-SDK (Rust, C) và F-Builder vào gói phát hành; workflow `release.yml` chạy khi đẩy tag.
 - [ ] 15.6 Kiểm thử xâm nhập độc lập và sửa mọi lỗi mức nghiêm trọng hoặc cao; xác minh bằng báo cáo kiểm thử lại
+  - Chưa làm: cần đơn vị kiểm thử độc lập; phạm vi đề xuất ở QUESTIONS 83.
 
 ## Workflow follow-up
 

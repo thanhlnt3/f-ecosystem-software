@@ -290,9 +290,24 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     do nhóm phát triển dịch từ bản tiếng Anh, chưa có người bản ngữ đọc lại. Thông báo của Kratos
     và email vẫn tiếng Anh với người dùng chọn tiếng Nhật. Cần người bản ngữ rà soát trước khi mở
     cho người dùng Nhật, và quyết định có dịch email không.
-79. **Tiếng Pháp trên web.** F-Launcher có tiếng Pháp nhưng trang web chỉ có tiếng Việt, tiếng Anh
+79. **Tiếng Pháp trên web** (đã xử lý 15/11/2026: thêm tiếng Pháp cho web theo yêu cầu chủ dự án, thay đổi launcher-windows-and-web-profile; bản dịch chờ người bản ngữ rà soát như mục 78). F-Launcher có tiếng Pháp nhưng trang web chỉ có tiếng Việt, tiếng Anh
     và tiếng Nhật (theo yêu cầu thay đổi web-ui-and-japanese). Có cần thêm tiếng Pháp cho web để
     hai bên đồng nhất không?
-80. **Đếm người dùng trên dashboard** gọi API danh sách danh tính của Kratos mỗi lần mở trang Tổng
+80. **Đếm người dùng trên dashboard** (đã xử lý 15/11/2026: giữ số đếm 10 phút trong bộ nhớ của máy chủ, thay đổi launcher-windows-and-web-profile; khi chạy nhiều máy chủ, mỗi máy đếm riêng, chấp nhận được với con số tổng quan) gọi API danh sách danh tính của Kratos mỗi lần mở trang Tổng
     quan. Ổn với số người dùng nhỏ; khi lớn cần đếm định kỳ hoặc lưu số liệu. Chọn cách nào khi lên
     production?
+81. **Giám sát từ bên ngoài cho trang trạng thái** (tasks.md 15.3). `/status` chạy trong
+    feco-server nên không hiện được khi máy chủ hay cơ sở dữ liệu ngừng hẳn. Production cần một
+    dịch vụ giám sát đặt ở nơi khác (tự dựng hay dịch vụ thuê) gọi `/healthz` và `/status.json`
+    mỗi phút và báo cho người trực. Chọn dịch vụ nào, ai trực?
+82. **Rà soát pháp lý về lưu trữ và chuyển dữ liệu ra nước ngoài** (tasks.md 15.4). Bản nháp
+    `docs/legal/data-inventory.md` liệt kê dữ liệu, nơi lưu và các luồng có thể ra nước ngoài (email,
+    AI, hạ tầng chưa chọn). Cần luật sư xác nhận văn bản áp dụng, lập hồ sơ đánh giá tác động và
+    hồ sơ chuyển dữ liệu ra nước ngoài trước khi ra mắt. Task 15.4 chưa đánh dấu xong.
+83. **Kiểm thử xâm nhập độc lập** (tasks.md 15.6) cần một đơn vị bên ngoài. Phạm vi đề xuất:
+    trang web và API của feco-server, luồng OAuth/OIDC, F-Launcher (cập nhật TUF, mã khởi chạy,
+    API cục bộ), cổng nhà phát triển (tải gói), webhook thanh toán. Chủ dự án chọn đơn vị và thời
+    điểm nào?
+84. **Kiểm thử tải trên máy chủ thật.** Biên bản ngày 15/11/2026 đo trên một máy dev (máy tạo tải
+    và máy chủ chung một máy, Kratos và Hydra dùng SQLite). Cần chạy lại trên hạ tầng staging giống
+    production trước khi ra mắt.

@@ -122,7 +122,7 @@ impl Note {
 
     fn pick(&self, lang: Lang) -> (&str, &str) {
         match (lang, &self.title_en, &self.body_en) {
-            (Lang::En | Lang::Ja, Some(t), Some(b)) => (t, b),
+            (Lang::En | Lang::Ja | Lang::Fr, Some(t), Some(b)) => (t, b),
             _ => (&self.title_vi, &self.body_vi),
         }
     }

@@ -1,7 +1,8 @@
-//! Ngôn ngữ giao diện (spec platform-support, "Ngôn ngữ"): tiếng Việt, tiếng Anh và tiếng Nhật
-//! (thay đổi web-ui-and-japanese), mặc định theo trình duyệt, đổi được bằng liên kết
-//! `/lang/{vi|en|ja}` (lưu cookie). Bản tiếng Nhật nằm ở `i18n_ja.rs`; nội dung do hệ thống tạo
-//! chưa có bản tiếng Nhật thì hiện tiếng Anh.
+//! Ngôn ngữ giao diện (spec platform-support, "Ngôn ngữ"): tiếng Việt, tiếng Anh, tiếng Nhật
+//! (thay đổi web-ui-and-japanese) và tiếng Pháp (launcher-windows-and-web-profile, QUESTIONS 79),
+//! mặc định theo trình duyệt, đổi được bằng liên kết `/lang/{vi|en|ja|fr}` (lưu cookie). Bản tiếng
+//! Nhật nằm ở `i18n_ja.rs`, tiếng Pháp ở `i18n_fr.rs`; nội dung do hệ thống tạo chưa có bản dịch
+//! thì hiện tiếng Anh.
 
 use axum::{
     extract::FromRequestParts,
@@ -16,6 +17,7 @@ pub enum Lang {
     Vi,
     En,
     Ja,
+    Fr,
 }
 
 impl Lang {
@@ -24,6 +26,7 @@ impl Lang {
             "vi" => Some(Lang::Vi),
             "en" => Some(Lang::En),
             "ja" => Some(Lang::Ja),
+            "fr" => Some(Lang::Fr),
             _ => None,
         }
     }
@@ -33,10 +36,11 @@ impl Lang {
             Lang::Vi => "vi",
             Lang::En => "en",
             Lang::Ja => "ja",
+            Lang::Fr => "fr",
         }
     }
 
-    pub const ALL: [Lang; 3] = [Lang::Vi, Lang::En, Lang::Ja];
+    pub const ALL: [Lang; 4] = [Lang::Vi, Lang::En, Lang::Fr, Lang::Ja];
 
     /// Tên ngôn ngữ viết bằng chính ngôn ngữ đó (nút chọn ngôn ngữ).
     pub const fn native_name(self) -> &'static str {
@@ -44,6 +48,7 @@ impl Lang {
             Lang::Vi => "Tiếng Việt",
             Lang::En => "English",
             Lang::Ja => "日本語",
+            Lang::Fr => "Français",
         }
     }
 
@@ -69,6 +74,7 @@ impl Lang {
         {
             Some(l) if l.starts_with("en") => Lang::En,
             Some(l) if l.starts_with("ja") => Lang::Ja,
+            Some(l) if l.starts_with("fr") => Lang::Fr,
             _ => Lang::Vi,
         }
     }
@@ -93,10 +99,13 @@ impl<S: Send + Sync> FromRequestParts<S> for Lang {
 /// Bảng chuỗi giao diện. Khóa không có bản dịch trả về chuỗi rỗng và ghi cảnh báo;
 /// test `every_key_has_both_languages` bắt lỗi này trước khi phát hành.
 pub fn t(lang: Lang, key: &str) -> &'static str {
-    if lang == Lang::Ja {
-        if let Some(ja) = crate::i18n_ja::ja(key) {
-            return ja;
-        }
+    let translated = match lang {
+        Lang::Ja => crate::i18n_ja::ja(key),
+        Lang::Fr => crate::i18n_fr::fr(key),
+        Lang::Vi | Lang::En => None,
+    };
+    if let Some(s) = translated {
+        return s;
     }
     let (vi, en) = match key {
         "lang.switch.label" => ("English", "Tiếng Việt"),
@@ -721,6 +730,46 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "admin.dash.chart" => ("Doanh thu 14 ngày gần nhất", "Revenue, last 14 days"),
         "admin.dash.no_cards" => ("Vai trò của bạn chưa có thẻ số liệu; hãy dùng các mục ở thanh bên.", "Your role has no summary cards; use the sections in the sidebar."),
         "admin.dev_no_passkey" => ("Chế độ dev: không bắt buộc passkey (FECO_ADMIN_PASSKEY_OPTIONAL). Không bao giờ bật ở staging hay production.", "Dev mode: passkey not required (FECO_ADMIN_PASSKEY_OPTIONAL). Never enable this in staging or production."),
+        "profile.verified" => ("Đã xác minh", "Verified"),
+        "profile.member_since" => ("Thành viên từ", "Member since"),
+        "profile.edit" => ("Chỉnh sửa hồ sơ", "Edit profile"),
+        "profile.stat.apps" => ("Ứng dụng đã kết nối", "Connected apps"),
+        "profile.stat.sessions" => ("Thiết bị đang đăng nhập", "Signed-in devices"),
+        "profile.stat.orders" => ("Đơn hàng", "Orders"),
+        "profile.stat.unread" => ("Thông báo chưa đọc", "Unread notifications"),
+        "profile.security" => ("Bảo mật", "Security"),
+        "profile.password_2fa" => ("Mật khẩu và xác thực hai lớp", "Password and two-factor authentication"),
+        "profile.2fa_on" => ("Đang bật xác thực hai lớp", "Two-factor on"),
+        "profile.2fa_off" => ("Chưa bật xác thực hai lớp", "Two-factor off"),
+        "profile.privacy" => ("Dữ liệu và quyền riêng tư", "Data and privacy"),
+        "profile.export" => ("Tải dữ liệu cá nhân", "Download your data"),
+        "profile.delete" => ("Xóa tài khoản", "Delete account"),
+        "profile.shopping" => ("Mua sắm và thanh toán", "Shopping and payments"),
+        "profile.tools" => ("Công cụ", "Tools"),
+        "profile.appearance" => ("Giao diện và ngôn ngữ", "Appearance and language"),
+        "profile.developer" => ("Cổng nhà phát triển", "Developer portal"),
+        "profile.admin" => ("Bảng quản trị", "Admin console"),
+        "status.title" => ("Trạng thái hệ thống", "System status"),
+        "status.intro" => ("Mỗi phút F-Eco tự kiểm tra các dịch vụ dưới đây. Sự cố được ghi khi một dịch vụ không trả lời hai lần liên tiếp.", "F-Eco checks the services below every minute. An incident is recorded when a service fails to respond twice in a row."),
+        "status.all_ok" => ("Mọi dịch vụ đang hoạt động bình thường.", "All services are operating normally."),
+        "status.some_down" => ("Một số dịch vụ đang gặp sự cố. Các app đã có token còn hạn vẫn chạy được.", "Some services are having problems. Apps with a valid token keep working."),
+        "status.component" => ("Dịch vụ", "Service"),
+        "status.state" => ("Tình trạng", "State"),
+        "status.uptime_24h" => ("Sẵn sàng 24 giờ", "Uptime, 24 hours"),
+        "status.uptime_30d" => ("Sẵn sàng 30 ngày", "Uptime, 30 days"),
+        "status.component.database" => ("Cơ sở dữ liệu", "Database"),
+        "status.component.accounts" => ("Tài khoản và đăng nhập", "Accounts and sign-in"),
+        "status.component.oauth" => ("Đăng nhập cho app và API /v1/me", "App sign-in and /v1/me API"),
+        "status.ok" => ("Hoạt động bình thường", "Operational"),
+        "status.down" => ("Đang có sự cố", "Outage"),
+        "status.no_data" => ("Chưa có số liệu", "No data yet"),
+        "status.checked" => ("Kiểm tra lúc", "Checked at"),
+        "status.incidents" => ("Sự cố trong 30 ngày", "Incidents in the last 30 days"),
+        "status.no_incidents" => ("Không có sự cố nào trong 30 ngày qua.", "No incidents in the last 30 days."),
+        "status.ongoing" => ("Đang xử lý", "Ongoing"),
+        "status.resolved" => ("Đã khắc phục", "Resolved"),
+        "status.unavailable" => ("Không đọc được trạng thái hệ thống. Vui lòng thử lại sau.", "The system status could not be read. Please try again later."),
+        "nav.status" => ("Trạng thái", "Status"),
         _ => {
             tracing::warn!(key, "thiếu bản dịch");
             ("", "")
@@ -728,7 +777,7 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
     };
     match lang {
         Lang::Vi => vi,
-        Lang::En | Lang::Ja => en,
+        Lang::En | Lang::Ja | Lang::Fr => en,
     }
 }
 
@@ -746,7 +795,10 @@ mod tests {
             Lang::En,
             "cookie thắng Accept-Language"
         );
-        assert_eq!(Lang::detect(Some("feco_lang=fr"), None), Lang::Vi);
+        assert_eq!(Lang::detect(Some("feco_lang=de"), None), Lang::Vi);
+        // Tiếng Pháp (QUESTIONS 79).
+        assert_eq!(Lang::detect(None, Some("fr-FR,fr;q=0.9")), Lang::Fr);
+        assert_eq!(Lang::detect(Some("feco_lang=fr"), None), Lang::Fr);
         // Scenario "Trình duyệt tiếng Nhật".
         assert_eq!(
             Lang::detect(None, Some("ja-JP,ja;q=0.9,en;q=0.8")),
@@ -759,51 +811,79 @@ mod tests {
         }
     }
 
-    /// Scenario "Thiếu bản dịch tiếng Nhật": mọi khóa của bảng có bản tiếng Nhật, cùng các chỗ
-    /// `{...}` như bản tiếng Anh; bảng tiếng Nhật không có khóa lạ.
-    #[test]
-    fn every_key_has_japanese() {
+    /// Khóa của bảng chính (tiếng Việt, tiếng Anh).
+    fn main_keys() -> Vec<String> {
         let src = include_str!("i18n.rs");
         let body = &src
             [src.find("let (vi, en) = match key {").unwrap()..src.find("#[cfg(test)]").unwrap()];
         let arm = regex::Regex::new(r#"(?m)^\s*"([a-z_.0-9]+)"(?:\s*\|\s*"([a-z_.0-9]+)")*\s*=>"#)
             .unwrap();
         let key_re = regex::Regex::new(r#""([a-z_.0-9]+)""#).unwrap();
+        let mut keys = Vec::new();
+        for m in arm.find_iter(body) {
+            for k in key_re.captures_iter(m.as_str()) {
+                keys.push(k[1].to_owned());
+            }
+        }
+        assert!(keys.len() > 400, "chỉ tìm thấy {} khóa", keys.len());
+        keys
+    }
+
+    /// Mọi khóa có bản dịch trong `table`, cùng các chỗ `{...}` như bản tiếng Anh; bảng không có
+    /// khóa lạ.
+    fn check_complete(
+        name: &str,
+        table: &[(&str, &str)],
+        lookup: fn(&str) -> Option<&'static str>,
+    ) {
         let holes = regex::Regex::new(r"\{[a-z_0-9]*\}").unwrap();
         let sorted = |s: &str| {
             let mut v: Vec<String> = holes.find_iter(s).map(|m| m.as_str().to_owned()).collect();
             v.sort();
             v
         };
-        let mut keys = Vec::new();
-        for m in arm.find_iter(body) {
-            let text = m.as_str();
-            for k in key_re.captures_iter(text) {
-                keys.push(k[1].to_owned());
-            }
-        }
-        assert!(keys.len() > 400, "chỉ tìm thấy {} khóa", keys.len());
+        let keys = main_keys();
         let mut missing = Vec::new();
         for key in &keys {
-            match crate::i18n_ja::ja(key) {
+            match lookup(key) {
                 None => missing.push(key.clone()),
-                Some(ja) => {
-                    assert!(!ja.is_empty(), "bản tiếng Nhật rỗng: {key}");
-                    assert_eq!(sorted(ja), sorted(t(Lang::En, key)), "chỗ {{…}} của {key}");
+                Some(text) => {
+                    assert!(!text.is_empty(), "{name}: bản dịch rỗng: {key}");
+                    assert_eq!(
+                        sorted(text),
+                        sorted(t(Lang::En, key)),
+                        "{name}: chỗ {{…}} của {key}"
+                    );
                 }
             }
         }
         assert!(
             missing.is_empty(),
-            "thiếu bản tiếng Nhật:\n{}",
+            "thiếu bản {name}:\n{}",
             missing.join("\n")
         );
         assert_eq!(
-            crate::i18n_ja::JA.len(),
+            table.len(),
             keys.len(),
-            "bảng tiếng Nhật có khóa thừa"
+            "bảng {name} có khóa thừa hoặc trùng"
         );
+    }
+
+    /// Scenario "Thiếu bản dịch tiếng Nhật".
+    #[test]
+    fn every_key_has_japanese() {
+        check_complete("tiếng Nhật", crate::i18n_ja::JA, crate::i18n_ja::ja);
         assert_eq!(t(Lang::Ja, "khong.co.khoa.nay"), "");
+    }
+
+    /// Tiếng Pháp trên web (QUESTIONS 79).
+    #[test]
+    fn every_key_has_french() {
+        check_complete("tiếng Pháp", crate::i18n_fr::FR, crate::i18n_fr::fr);
+        assert_eq!(
+            t(Lang::Fr, "home.title"),
+            crate::i18n_fr::fr("home.title").unwrap()
+        );
     }
 
     /// Mọi khóa dùng trong mã và mẫu trang đều phải có bản dịch.
@@ -850,6 +930,10 @@ mod tests {
             include_str!("../templates/payment_return.html"),
             include_str!("../templates/payments.html"),
             include_str!("ui_prefs.rs"),
+            include_str!("profile.rs"),
+            include_str!("status.rs"),
+            include_str!("../templates/status.html"),
+            include_str!("../templates/home.html"),
             include_str!("../templates/preferences.html"),
             include_str!("../templates/home.html"),
         ];

@@ -60,6 +60,24 @@ async fn main() -> ExitCode {
 }
 
 fn spawn_background_jobs(state: Arc<AppState>) {
+    // Trang trạng thái: kiểm tra các thành phần mỗi phút, dọn số liệu cũ mỗi ngày (tasks.md 15.3).
+    let s = state.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(60));
+        let mut n: u64 = 0;
+        loop {
+            tick.tick().await;
+            feco_server::status::run_once(&s).await;
+            if n % (24 * 60) == 0 {
+                if let Err(e) =
+                    feco_server::status::prune(&s.db, time::OffsetDateTime::now_utc()).await
+                {
+                    tracing::error!(error = %e, "không dọn được số liệu trạng thái");
+                }
+            }
+            n += 1;
+        }
+    });
     // Gửi webhook cho app con mỗi 10 giây (spec app-sdk, "Sự kiện cho app").
     let s = state.clone();
     tokio::spawn(async move {

@@ -65,6 +65,8 @@ jobs:
         with:
           node-version: 22
       - run: npx -y @fission-ai/openspec@1.16.1 validate --changes --strict --no-interactive
+      # tasks.md 15.1: mọi tài liệu có bản tiếng Anh đủ phần.
+      - run: python3 scripts/check-docs-i18n.py
 
   sdk:
     # tasks.md 10.2: binding C, Python, TypeScript của F-SDK.

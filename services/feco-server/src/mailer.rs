@@ -258,6 +258,27 @@ pub mod templates {
 mod tests {
     use super::*;
 
+    /// tasks.md 15.1: email bảo mật luôn có cả tiếng Việt và tiếng Anh.
+    #[test]
+    fn security_emails_are_bilingual() {
+        for (subject, body) in [
+            templates::failed_logins("https://f-eco.example/"),
+            templates::new_device("Chrome", "Hà Nội", "15/11/2026", "https://f-eco.example/x"),
+            templates::export_ready("https://f-eco.example/e"),
+            templates::registration_attempt("https://f-eco.example/"),
+        ] {
+            assert!(subject.contains(" / "), "{subject}");
+            assert!(body.starts_with("Xin chào,"), "{body}");
+            assert!(
+                body.contains(
+                    "---
+Hello,"
+                ),
+                "{body}"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn memory_mailer_records() {
         let (m, store) = Mailer::memory();

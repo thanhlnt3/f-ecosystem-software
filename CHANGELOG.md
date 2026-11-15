@@ -1,5 +1,47 @@
 # Nhật ký thay đổi
 
+## 1.5.0 (15/11/2026)
+
+Thay đổi OpenSpec `launcher-windows-and-web-profile`, cùng nhóm task 15 (yêu cầu chung và ra mắt).
+
+### F-Launcher
+
+- Nút công cụ dùng icon kèm tooltip thay cho chữ: Cài đặt, Lưới, Danh sách, Xóa bộ lọc, Đồng bộ,
+  Đăng xuất, Bảng quản trị, Cổng nhà phát triển, menu thao tác, Mã nguồn, Website, Quay lại, Gỡ, app
+  trước và sau. Nút chính (Mở, Cài, Cập nhật, Đăng nhập) và mục thanh bên có icon đi kèm chữ. Icon
+  vẽ bằng nét, đổi màu theo phong cách; không thêm phông hay ảnh.
+- Cài đặt và trang chi tiết app mở trong cửa sổ riêng của hệ điều hành. Mỗi app một cửa sổ (tối đa
+  6), bấm lại thì cửa sổ đó hiện lên trước; Esc đóng cửa sổ; hộp thoại cài, gỡ hiện ở cửa sổ nơi
+  bấm.
+- Ô lưới trong Thư viện và Cửa hàng cùng kích thước, xếp liền nhau và trải đều chiều rộng.
+- Đo thời gian khởi động: `FECO_LAUNCHER_STARTUP_PROBE`, `scripts/measure-launcher-startup.ps1`.
+
+### Web
+
+- Trang hồ sơ cho người đã đăng nhập: ảnh đại diện chữ cái, vai trò, ngày tham gia, thẻ số liệu
+  (ứng dụng đã kết nối, thiết bị, đơn hàng, thông báo chưa đọc), lối tắt bảo mật (kèm trạng thái
+  xác thực hai lớp), quyền riêng tư, mua sắm, công cụ theo vai trò.
+- Tiếng Pháp (QUESTIONS 79): nút FR ở thanh trên cùng, tự nhận trình duyệt tiếng Pháp, đủ 585 chuỗi giao diện web.
+- Trang trạng thái công khai `/status` và `/status.json`: tự kiểm tra tài khoản, đăng nhập cho app
+  và cơ sở dữ liệu mỗi phút; hai lần lỗi liên tiếp mở sự cố; tỉ lệ sẵn sàng 24 giờ và 30 ngày.
+- Dashboard quản trị đếm người dùng tối đa mỗi 10 phút (QUESTIONS 80).
+
+### Vận hành và ra mắt (nhóm task 15)
+
+- Kiểm thử tải `/v1/me` (`load_v1_me`): 1.000 yêu cầu/giây trong 30 giây, 0 lỗi, p95 2,9 ms trên
+  máy dev ([biên bản](docs/reports/2026-11-15-performance.md)).
+- Diễn tập sao lưu liên tục và khôi phục: `scripts/backup-drill.sh`
+  ([biên bản](docs/ops/drills/2026-11-15-backup-drill.md), [cách vận hành](docs/ops/status-and-backup.md)).
+- Tài liệu có bản tiếng Anh (`README.en.md`, `docs/en/`); CI kiểm bằng
+  `scripts/check-docs-i18n.py`. Email bảo mật có test bảo đảm luôn song ngữ.
+- Bản nháp hồ sơ dữ liệu cá nhân và chuyển dữ liệu ra nước ngoài: `docs/legal/data-inventory.md`
+  (chờ luật sư, QUESTIONS 82).
+
+### Môi trường dev
+
+- Kratos và Hydra lưu dữ liệu trong SQLite (`infra/.data`): tài khoản và client OAuth còn sau khi
+  khởi động lại. `FECO_DEV_MEMORY=1` trở về chạy trong bộ nhớ.
+
 ## 1.4.0 (14/11/2026)
 
 Thay đổi OpenSpec `web-ui-and-japanese`.

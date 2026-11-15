@@ -79,17 +79,11 @@ struct MessagePage {
     links: Vec<(String, String)>,
 }
 
-pub struct HomeUser {
-    pub email: String,
-    pub name: String,
-    pub verified: bool,
-}
-
 #[derive(Template)]
 #[template(path = "home.html")]
 struct HomePage {
     i18n: Lang,
-    user: Option<HomeUser>,
+    user: Option<crate::profile::Profile>,
     notices: Vec<Msg>,
 }
 
@@ -550,33 +544,14 @@ pub async fn home(
             },
             lang,
         ),
-        Ok(Whoami::Session(session)) => {
-            let identity = &session["identity"];
-            let email = identity["traits"]["email"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned();
-            let verified = identity["verifiable_addresses"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|a| a["value"].as_str() == Some(email.as_str()) && a["verified"] == true);
-            render(
-                HomePage {
-                    i18n: lang,
-                    user: Some(HomeUser {
-                        name: identity["traits"]["name"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .to_owned(),
-                        email,
-                        verified,
-                    }),
-                    notices,
-                },
-                lang,
-            )
-        }
+        Ok(Whoami::Session(session)) => render(
+            HomePage {
+                i18n: lang,
+                user: Some(crate::profile::load(&state, lang, &session).await),
+                notices,
+            },
+            lang,
+        ),
     }
 }
 

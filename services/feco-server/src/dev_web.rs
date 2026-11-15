@@ -147,7 +147,7 @@ fn see_other(to: &str) -> Response {
 fn text(lang: Lang, p: &Problem) -> String {
     match lang {
         Lang::Vi => p.vi.clone(),
-        Lang::En | Lang::Ja => p.en.clone(),
+        Lang::En | Lang::Ja | Lang::Fr => p.en.clone(),
     }
 }
 
@@ -168,7 +168,7 @@ fn explain(lang: Lang, e: DevError) -> (StatusCode, Msg) {
 fn role_label(lang: Lang, role: Role) -> String {
     match lang {
         Lang::Vi => role.label_vi().to_owned(),
-        Lang::En | Lang::Ja => match role {
+        Lang::En | Lang::Ja | Lang::Fr => match role {
             Role::Owner => "Owner",
             Role::Admin => "Admin",
             Role::Developer => "Developer",
@@ -486,7 +486,7 @@ pub async fn content_policy(lang: Lang) -> Response {
                 title: c.title_vi,
                 rule: c.rule_vi,
             },
-            Lang::En | Lang::Ja => ClauseView {
+            Lang::En | Lang::Ja | Lang::Fr => ClauseView {
                 number: c.number,
                 title: c.title_en,
                 rule: c.rule_en,
