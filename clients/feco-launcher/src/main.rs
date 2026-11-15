@@ -13,7 +13,7 @@
 mod icons;
 
 use eframe::egui;
-use feco_launcher::auth::{Auth, AuthError, KeyringStore, Session};
+use feco_launcher::auth::{Auth, AuthError, KeyringStore, PurchaseError, Session, WalletInfo};
 use feco_launcher::broker::{Broker, Issuer};
 use feco_launcher::i18n::{self, t, tf, Language};
 use feco_launcher::launch::{command, LaunchEnv};
@@ -36,6 +36,109 @@ const SYNC_OFFLINE: Duration = Duration::from_secs(5 * 60);
 /// Thời điểm tiến trình bắt đầu, để đo thời gian khởi động (tasks.md 15.2).
 static STARTED: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
+/// Logo của F-Launcher (assets/logos), nhúng trong tệp chạy.
+const LAUNCHER_LOGO: &[u8] = include_bytes!("../../../assets/logos/f-launcher-256.png");
+
+/// Ảnh PNG giải mã thành RGBA 8 bit: (rộng, cao, điểm ảnh).
+fn decode_png(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    let mut reader = decoder.read_info().ok()?;
+    let mut buf = vec![0; reader.output_buffer_size()?];
+    let info = reader.next_frame(&mut buf).ok()?;
+    let px = &buf[..info.buffer_size()];
+    let rgba: Vec<u8> = match info.color_type {
+        png::ColorType::Rgba => px.to_vec(),
+        png::ColorType::Rgb => px.chunks(3).flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
+        png::ColorType::GrayscaleAlpha => px
+            .chunks(2)
+            .flat_map(|c| [c[0], c[0], c[0], c[1]])
+            .collect(),
+        png::ColorType::Grayscale => px.iter().flat_map(|g| [*g, *g, *g, 255]).collect(),
+        png::ColorType::Indexed => return None,
+    };
+    (rgba.len() == (info.width * info.height * 4) as usize).then_some((
+        info.width,
+        info.height,
+        rgba,
+    ))
+}
+
+/// Biểu tượng cửa sổ (thanh tác vụ, Alt+Tab) từ logo F-Launcher.
+fn window_icon() -> Option<Arc<egui::IconData>> {
+    let (width, height, rgba) = decode_png(LAUNCHER_LOGO)?;
+    Some(Arc::new(egui::IconData {
+        rgba,
+        width,
+        height,
+    }))
+}
+
+/// Ảnh logo theo mã app (PNG). Logo app lấy từ metadata TUF đã ký khi đồng bộ.
+fn icon_sources() -> &'static std::sync::Mutex<std::collections::HashMap<String, Arc<Vec<u8>>>> {
+    static SOURCES: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, Arc<Vec<u8>>>>,
+    > = std::sync::OnceLock::new();
+    SOURCES.get_or_init(|| {
+        let mut m = std::collections::HashMap::new();
+        m.insert("f-launcher".to_owned(), Arc::new(LAUNCHER_LOGO.to_vec()));
+        std::sync::Mutex::new(m)
+    })
+}
+
+/// Ghi nhận logo của các app trong danh mục (base64 trong metadata TUF).
+fn register_icons(entries: &[CatalogEntry]) {
+    use base64::Engine;
+    let mut sources = icon_sources().lock().expect("khóa");
+    for e in entries {
+        if sources.contains_key(&e.app) {
+            continue;
+        }
+        if let Some(bytes) = e
+            .info
+            .icon
+            .as_deref()
+            .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok())
+        {
+            sources.insert(e.app.clone(), Arc::new(bytes));
+        }
+    }
+}
+
+/// Texture logo của app (giải mã một lần, giữ trong bộ nhớ của egui).
+fn icon_texture(ctx: &egui::Context, app_id: &str) -> Option<egui::TextureHandle> {
+    let id = egui::Id::unique(("app-icon", app_id));
+    if let Some(cached) = ctx.data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
+        return cached;
+    }
+    let bytes = icon_sources().lock().expect("khóa").get(app_id).cloned()?;
+    let texture = decode_png(&bytes).map(|(w, h, rgba)| {
+        let image = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
+        ctx.load_texture(
+            format!("app-icon-{app_id}"),
+            image,
+            egui::TextureOptions::LINEAR,
+        )
+    });
+    ctx.data_mut(|d| d.insert_temp(id, texture.clone()));
+    texture
+}
+
+/// Vị trí để cửa sổ cỡ `size` nằm giữa màn hình hiện tại (None nếu chưa biết cỡ màn hình).
+fn centered_position(ctx: &egui::Context, size: egui::Vec2) -> Option<egui::Pos2> {
+    let monitor = ctx.input(|i| i.viewport().monitor_size)?;
+    centered_in(monitor, size)
+}
+
+fn centered_in(monitor: egui::Vec2, size: egui::Vec2) -> Option<egui::Pos2> {
+    (monitor.x > 0.0 && monitor.y > 0.0).then(|| {
+        egui::pos2(
+            ((monitor.x - size.x) / 2.0).max(0.0).round(),
+            ((monitor.y - size.y) / 2.0).max(0.0).round(),
+        )
+    })
+}
+
 fn main() -> eframe::Result {
     STARTED.get_or_init(Instant::now);
     let config = match Config::from_env() {
@@ -45,11 +148,17 @@ fn main() -> eframe::Result {
             std::process::exit(2);
         }
     };
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("F-Launcher")
+        .with_inner_size([1100.0, 720.0])
+        .with_min_inner_size([720.0, 480.0]);
+    if let Some(icon) = window_icon() {
+        viewport = viewport.with_icon(icon);
+    }
+    // Cửa sổ chính xuất hiện ở giữa màn hình.
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("F-Launcher")
-            .with_inner_size([1100.0, 720.0])
-            .with_min_inner_size([720.0, 480.0]),
+        viewport,
+        centered: true,
         ..Default::default()
     };
     eframe::run_native(
@@ -180,6 +289,10 @@ impl Identity {
 struct Shared {
     /// Trung tâm thông báo (lấy từ máy chủ khi đồng bộ).
     notifications: std::sync::Mutex<Vec<feco_launcher::auth::Notification>>,
+    /// Ví F-Coin của người đang đăng nhập (fcoin-wallet-and-marketplace).
+    wallet: std::sync::Mutex<Option<WalletInfo>>,
+    /// Giá F-Coin của app có giá (danh mục công khai).
+    prices: std::sync::Mutex<std::collections::HashMap<String, i64>>,
     config: Config,
     launcher: tokio::sync::Mutex<Launcher>,
     identity: Arc<Identity>,
@@ -199,6 +312,8 @@ struct View {
     sign_in: Option<SignIn>,
     last_sync: Option<Timestamp>,
     notifications: Vec<feco_launcher::auth::Notification>,
+    wallet: Option<WalletInfo>,
+    prices: std::collections::HashMap<String, i64>,
 }
 
 async fn snapshot(shared: &Shared) -> View {
@@ -213,7 +328,104 @@ async fn snapshot(shared: &Shared) -> View {
         sign_in: Some(*shared.identity.sign_in.lock().expect("khóa")),
         last_sync: l.state().last_sync,
         notifications: shared.notifications.lock().expect("khóa").clone(),
+        wallet: shared.wallet.lock().expect("khóa").clone(),
+        prices: shared.prices.lock().expect("khóa").clone(),
     }
+}
+
+/// Nút chính cho app chưa cài (fcoin-wallet-and-marketplace, "Mua app trước khi cài").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Acquire {
+    /// Miễn phí hoặc đã mua.
+    Install,
+    /// App có giá, chưa mua.
+    Buy(i64),
+    /// App có giá, chưa đăng nhập.
+    SignInToBuy(i64),
+}
+
+fn acquire(view: &View, app: &str) -> Acquire {
+    let signed_in = matches!(view.sign_in, Some(SignIn::SignedIn) | Some(SignIn::Offline));
+    let price = view
+        .wallet
+        .as_ref()
+        .map(|w| w.price(app))
+        .filter(|p| *p > 0)
+        .or_else(|| view.prices.get(app).copied())
+        .unwrap_or(0);
+    if price <= 0 {
+        return Acquire::Install;
+    }
+    match &view.wallet {
+        Some(w) if w.owns(app) => Acquire::Install,
+        Some(_) if signed_in => Acquire::Buy(price),
+        _ if signed_in => Acquire::Buy(price),
+        _ => Acquire::SignInToBuy(price),
+    }
+}
+
+/// Một bản cập nhật nên gợi ý cho người dùng.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UpdateSuggestion {
+    app: String,
+    title: String,
+    from: String,
+    to: String,
+    notes: Option<String>,
+}
+
+impl UpdateSuggestion {
+    fn key(&self) -> String {
+        format!("{}@{}", self.app, self.to)
+    }
+}
+
+/// App đã cài có bản mới hơn trong danh mục, trừ phiên bản người dùng đã bỏ qua.
+fn update_suggestions(
+    apps: &[MyApp],
+    skipped: &std::collections::BTreeMap<String, String>,
+) -> Vec<UpdateSuggestion> {
+    let mut out: Vec<UpdateSuggestion> = apps
+        .iter()
+        .filter_map(|a| {
+            let u = a.update.as_ref()?;
+            if skipped.get(&a.app) == Some(&u.version) {
+                return None;
+            }
+            Some(UpdateSuggestion {
+                app: a.app.clone(),
+                title: a.title.clone(),
+                from: a.version.clone(),
+                to: u.version.clone(),
+                notes: u.info.release_notes.clone(),
+            })
+        })
+        .collect();
+    out.sort_by_key(|a| a.title.to_lowercase());
+    out
+}
+
+/// Số F-Coin còn thiếu để mua (None: đủ).
+fn shortfall(balance: i64, price: i64) -> Option<i64> {
+    (balance < price).then_some(price - balance)
+}
+
+/// "1.250 F-Coin" theo ngôn ngữ giao diện.
+fn coins(n: i64) -> String {
+    let digits = n.unsigned_abs().to_string();
+    let sep = if i18n::language() == Language::Vi {
+        '.'
+    } else {
+        ','
+    };
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push(sep);
+        }
+        out.push(c);
+    }
+    format!("{}{out} F-Coin", if n < 0 { "-" } else { "" })
 }
 
 struct Done {
@@ -228,6 +440,14 @@ enum Action {
     Sync,
     AskInstall(Box<CatalogEntry>),
     Install(Box<CatalogEntry>),
+    /// Hỏi xác nhận mua app có giá (giá F-Coin).
+    AskBuy(Box<CatalogEntry>, i64),
+    /// Mua bằng F-Coin rồi cài ngay.
+    Buy(Box<CatalogEntry>, i64),
+    /// Mở hộp thoại gợi ý cập nhật.
+    ShowUpdates,
+    /// Không gợi ý phiên bản này của app nữa.
+    SkipUpdate(String, String),
     Update(String),
     UpdateAll,
     Rollback(String),
@@ -274,6 +494,16 @@ struct LauncherApp {
     busy: Option<String>,
     notice: Option<(bool, String)>,
     confirm_install: Option<CatalogEntry>,
+    /// Vị trí giữa màn hình đã tính cho từng cửa sổ con.
+    child_positions: std::collections::HashMap<egui::ViewportId, egui::Pos2>,
+    /// Cửa sổ chính đang được focus (để chuyển focus sang cửa sổ con đang chặn).
+    root_focused: bool,
+    /// Hộp thoại gợi ý cập nhật đang mở.
+    update_prompt: bool,
+    /// Bản cập nhật đã gợi ý trong phiên này (`app@phiên bản`), để không hỏi lại mỗi lần đồng bộ.
+    prompted: std::collections::BTreeSet<String>,
+    /// Hộp thoại mua app (app, giá F-Coin).
+    confirm_buy: Option<(CatalogEntry, i64)>,
     confirm_uninstall: Option<(MyApp, bool)>,
     next_sync: Instant,
     /// Đã vẽ khung hình đầu tiên.
@@ -333,6 +563,8 @@ impl LauncherApp {
             .map_err(|e| tf("không mở được API cục bộ: {}", &[&e]))?;
         let shared = Arc::new(Shared {
             notifications: std::sync::Mutex::new(Vec::new()),
+            wallet: std::sync::Mutex::new(None),
+            prices: std::sync::Mutex::new(Default::default()),
             config,
             launcher: tokio::sync::Mutex::new(launcher),
             identity,
@@ -340,6 +572,7 @@ impl LauncherApp {
             broker_url: format!("http://{addr}/"),
         });
         let view = rt.block_on(snapshot(&shared));
+        register_icons(&view.catalog);
         let (tx, rx) = mpsc::channel();
         let mut app = Self {
             rt,
@@ -363,6 +596,11 @@ impl LauncherApp {
             busy: None,
             notice: None,
             confirm_install: None,
+            child_positions: Default::default(),
+            root_focused: false,
+            confirm_buy: None,
+            update_prompt: false,
+            prompted: Default::default(),
             confirm_uninstall: None,
             next_sync: Instant::now() + SYNC_OFFLINE,
             probed: false,
@@ -397,6 +635,7 @@ impl LauncherApp {
         while let Ok(done) = self.rx.try_recv() {
             self.busy = None;
             self.view = done.view;
+            register_icons(&self.view.catalog);
             match done.result {
                 Ok(text) if text.is_empty() => {}
                 Ok(text) => self.notice = Some((false, text)),
@@ -409,6 +648,7 @@ impl LauncherApp {
                     } else {
                         SYNC_OFFLINE
                     };
+                self.maybe_prompt_updates();
             }
         }
     }
@@ -440,6 +680,7 @@ impl LauncherApp {
                 s.identity.auth.logout().await.map_err(|e| e.to_string())?;
                 *s.identity.session.lock().await = None;
                 s.identity.set(SignIn::SignedOut);
+                *s.wallet.lock().expect("khóa") = None;
                 s.launcher
                     .lock()
                     .await
@@ -449,6 +690,51 @@ impl LauncherApp {
             }),
             Action::Sync => self.run(t("Đang đồng bộ..."), true, sync),
             Action::AskInstall(entry) => self.confirm_install = Some(*entry),
+            Action::AskBuy(entry, price) => self.confirm_buy = Some((*entry, price)),
+            Action::Buy(entry, price) => {
+                self.confirm_buy = None;
+                self.run(
+                    &tf("Đang mua {}...", &[&entry.title]),
+                    false,
+                    move |s| async move {
+                        let token = s.identity.access_token().await.map_err(|e| e.to_string())?;
+                        let balance = s
+                            .identity
+                            .auth
+                            .purchase(&token, &entry.app, price)
+                            .await
+                            .map_err(|e| match e {
+                                PurchaseError::Api { code, .. } if code == "insufficient_funds" => {
+                                    t("Không đủ F-Coin. Hãy nạp thêm trong Ví F-Coin.").to_owned()
+                                }
+                                PurchaseError::Api { code, .. } if code == "price_changed" => {
+                                    t("Giá app vừa thay đổi. Hãy đồng bộ rồi thử lại.").to_owned()
+                                }
+                                PurchaseError::Api { code, .. } if code == "wallet_frozen" => {
+                                    t("Ví F-Coin của bạn đang bị khóa.").to_owned()
+                                }
+                                other => other.to_string(),
+                            })?;
+                        if let Some(w) = s.wallet.lock().expect("khóa").as_mut() {
+                            w.balance = balance;
+                            if !w.owns(&entry.app) {
+                                w.owned.push(entry.app.clone());
+                            }
+                        }
+                        s.launcher
+                            .lock()
+                            .await
+                            .install(&entry, Timestamp::now())
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        report_install(&s, &entry.app, &entry.version).await;
+                        Ok(tf(
+                            "Đã mua và cài {} {}. Số dư: {}",
+                            &[&entry.title, &entry.version, &coins(balance)],
+                        ))
+                    },
+                )
+            }
             Action::Install(entry) => {
                 self.confirm_install = None;
                 self.run(
@@ -542,6 +828,7 @@ impl LauncherApp {
                     if self.dialog_viewport == d.viewport() {
                         self.dialog_viewport = egui::ViewportId::ROOT;
                         self.confirm_install = None;
+                        self.confirm_buy = None;
                         self.confirm_uninstall = None;
                     }
                 }
@@ -557,7 +844,19 @@ impl LauncherApp {
             }
             Action::CloseDialog => {
                 self.confirm_install = None;
+                self.confirm_buy = None;
                 self.confirm_uninstall = None;
+                self.update_prompt = false;
+            }
+            Action::ShowUpdates => self.update_prompt = true,
+            Action::SkipUpdate(app, version) => {
+                self.prefs.skipped_updates.insert(app, version);
+                if let Err(e) = self.prefs.save(&self.prefs_path) {
+                    self.notice = Some((true, e.to_string()));
+                }
+                if update_suggestions(&self.view.my_apps, &self.prefs.skipped_updates).is_empty() {
+                    self.update_prompt = false;
+                }
             }
         }
     }
@@ -602,6 +901,86 @@ impl LauncherApp {
         });
     }
 
+    /// Sau mỗi lần đồng bộ: có bản mới chưa gợi ý thì mở hộp thoại gợi ý cập nhật (trừ khi đang
+    /// bật tự động cập nhật, khi đó launcher tự cập nhật).
+    fn maybe_prompt_updates(&mut self) {
+        if self.view.auto_update {
+            return;
+        }
+        let suggestions = update_suggestions(&self.view.my_apps, &self.prefs.skipped_updates);
+        let fresh = suggestions
+            .iter()
+            .any(|s| !self.prompted.contains(&s.key()));
+        if fresh {
+            self.update_prompt = true;
+            self.prompted
+                .extend(suggestions.iter().map(UpdateSuggestion::key));
+        }
+    }
+
+    /// Hộp thoại "Có bản cập nhật mới".
+    fn update_dialog(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        if !self.update_prompt || self.open_child().is_some() {
+            return;
+        }
+        let suggestions = update_suggestions(&self.view.my_apps, &self.prefs.skipped_updates);
+        if suggestions.is_empty() {
+            self.update_prompt = false;
+            return;
+        }
+        let idle = self.busy.is_none() && self.view.online;
+        egui::Modal::new(egui::Id::unique("update-suggestions")).show(ctx, |ui| {
+            ui.set_max_width(560.0);
+            ui.heading(t("Có bản cập nhật mới"));
+            ui.weak(t(
+                "Bản mới được F-Eco ký và kiểm tra trước khi cài. Dữ liệu của app được giữ nguyên.",
+            ));
+            ui.add_space(6.0);
+            egui::ScrollArea::vertical()
+                .max_height(360.0)
+                .show(ui, |ui| {
+                    for s in &suggestions {
+                        ui.horizontal(|ui| {
+                            app_icon(ui, &s.app, &s.title, 32.0);
+                            ui.vertical(|ui| {
+                                ui.strong(&s.title);
+                                ui.label(format!("{} \u{2192} {}", s.from, s.to));
+                            });
+                        });
+                        if let Some(notes) = &s.notes {
+                            ui.weak(notes);
+                        }
+                        ui.horizontal(|ui| {
+                            if primary_button(ui, &self.prefs, idle, Icon::ArrowUp, t("Cập nhật"))
+                            {
+                                actions.push(Action::Update(s.app.clone()));
+                            }
+                            if ui.button(t("Bỏ qua bản này")).clicked() {
+                                actions.push(Action::SkipUpdate(s.app.clone(), s.to.clone()));
+                            }
+                        });
+                        ui.separator();
+                    }
+                });
+            ui.horizontal(|ui| {
+                if suggestions.len() > 1
+                    && primary_button(
+                        ui,
+                        &self.prefs,
+                        idle,
+                        Icon::ArrowUp,
+                        &tf("Cập nhật tất cả ({})", &[&suggestions.len()]),
+                    )
+                {
+                    actions.push(Action::UpdateAll);
+                }
+                if ui.button(t("Để sau")).clicked() {
+                    actions.push(Action::CloseDialog);
+                }
+            });
+        });
+    }
+
     fn dialogs(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         if let Some(entry) = &self.confirm_install {
             egui::Modal::new(egui::Id::unique("confirm-install")).show(ctx, |ui| {
@@ -629,6 +1008,68 @@ impl LauncherApp {
                         actions.push(Action::CloseDialog);
                     }
                 });
+            });
+        }
+        if let Some((entry, price)) = &self.confirm_buy {
+            let balance = self.view.wallet.as_ref().map(|w| w.balance).unwrap_or(0);
+            let wallet_url = self
+                .view
+                .wallet
+                .as_ref()
+                .and_then(|w| w.wallet_url.clone())
+                .unwrap_or_else(|| {
+                    self.shared
+                        .config
+                        .server
+                        .join("wallet")
+                        .map(|u| u.to_string())
+                        .unwrap_or_default()
+                });
+            egui::Modal::new(egui::Id::unique("confirm-buy")).show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    app_icon(ui, &entry.app, &entry.title, 40.0);
+                    ui.heading(tf("Mua {}?", &[&entry.title]));
+                });
+                egui::Grid::new("buy-grid").num_columns(2).show(ui, |ui| {
+                    ui.label(t("Giá"));
+                    ui.strong(coins(*price));
+                    ui.end_row();
+                    ui.label(t("Số dư hiện tại"));
+                    ui.label(coins(balance));
+                    ui.end_row();
+                    if shortfall(balance, *price).is_none() {
+                        ui.label(t("Số dư sau khi mua"));
+                        ui.label(coins(balance - price));
+                        ui.end_row();
+                    }
+                });
+                match shortfall(balance, *price) {
+                    Some(short) => {
+                        ui.colored_label(warn_color(ui), tf("Còn thiếu {}", &[&coins(short)]));
+                        ui.horizontal(|ui| {
+                            if primary_button(ui, &self.prefs, true, Icon::Wallet, t("Nạp F-Coin"))
+                            {
+                                actions.push(Action::OpenLink(wallet_url.clone()));
+                            }
+                            if ui.button(t("Hủy")).clicked() {
+                                actions.push(Action::CloseDialog);
+                            }
+                        });
+                    }
+                    None => {
+                        ui.weak(t(
+                            "Mua xong, app được cài ngay. Quyền sử dụng gắn với tài khoản của bạn.",
+                        ));
+                        ui.horizontal(|ui| {
+                            if primary_button(ui, &self.prefs, true, Icon::Coin, t("Mua")) {
+                                actions.push(Action::Buy(Box::new(entry.clone()), *price));
+                            }
+                            if ui.button(t("Hủy")).clicked() {
+                                actions.push(Action::CloseDialog);
+                            }
+                        });
+                    }
+                }
             });
         }
         let server = self.shared.config.server.clone();
@@ -701,6 +1142,9 @@ impl eframe::App for LauncherApp {
         if self.dialog_viewport == egui::ViewportId::ROOT {
             self.dialogs(&ctx, &mut actions);
         }
+        self.update_dialog(&ctx, &mut actions);
+        // Cửa sổ con là cửa sổ chặn: cửa sổ chính không nhận thao tác cho tới khi nó đóng.
+        self.modal_block(&ctx);
         self.settings_window(&ctx, &mut actions);
         self.detail_windows(&ctx, &mut actions);
         // Thao tác có thể mở hoặc đóng cửa sổ: vẽ lại ngay, không chờ sự kiện tiếp theo.
@@ -714,6 +1158,63 @@ impl eframe::App for LauncherApp {
 }
 
 impl LauncherApp {
+    /// Cửa sổ con đang mở (cửa sổ chi tiết mới nhất, hoặc Cài đặt).
+    fn open_child(&self) -> Option<egui::ViewportId> {
+        self.details
+            .last()
+            .map(Detail::viewport)
+            .or(self.settings_open.then(settings_viewport))
+    }
+
+    /// Vị trí giữa màn hình cho cửa sổ con, tính một lần khi cửa sổ mở (sau đó người dùng kéo
+    /// đi đâu thì để đó).
+    fn child_position(
+        &mut self,
+        ctx: &egui::Context,
+        id: egui::ViewportId,
+        size: egui::Vec2,
+    ) -> Option<egui::Pos2> {
+        if let Some(pos) = self.child_positions.get(&id) {
+            return Some(*pos);
+        }
+        let pos = centered_position(ctx, size)?;
+        self.child_positions.insert(id, pos);
+        Some(pos)
+    }
+
+    /// Lớp phủ chặn cửa sổ chính khi có cửa sổ con: bấm vào thì đưa cửa sổ con lên trước; cửa
+    /// sổ chính được bấm chọn (focus) thì cũng chuyển focus sang cửa sổ con.
+    fn modal_block(&mut self, ctx: &egui::Context) {
+        let Some(child) = self.open_child() else {
+            self.root_focused = false;
+            return;
+        };
+        let focused = ctx.input(|i| i.viewport().focused.unwrap_or(false));
+        if focused && !self.root_focused {
+            ctx.send_viewport_cmd_to(child, egui::ViewportCommand::Focus);
+        }
+        self.root_focused = focused;
+        let screen = ctx.content_rect();
+        egui::Area::new(egui::Id::unique("modal-block"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(screen.min)
+            .show(ctx, |ui| {
+                let response = ui.allocate_rect(screen, egui::Sense::click_and_drag());
+                ui.painter()
+                    .rect_filled(screen, 0.0, egui::Color32::from_black_alpha(120));
+                ui.painter().text(
+                    screen.center(),
+                    egui::Align2::CENTER_CENTER,
+                    t("Đang mở cửa sổ khác. Đóng cửa sổ đó để tiếp tục."),
+                    egui::FontId::proportional(16.0),
+                    egui::Color32::WHITE,
+                );
+                if response.clicked() || response.drag_started() {
+                    ctx.send_viewport_cmd_to(child, egui::ViewportCommand::Focus);
+                }
+            });
+    }
+
     /// Thanh trạng thái dưới cùng: việc đang làm hoặc kết quả gần nhất.
     fn status_panel(&self, ui: &mut egui::Ui, id: &'static str) {
         egui::Panel::bottom(id).show(ui, |ui| {
@@ -737,10 +1238,12 @@ impl LauncherApp {
 
     /// Hộp thoại xác nhận hiện ở cửa sổ nơi người dùng bấm Cài hoặc Gỡ.
     fn route_dialogs(&mut self, viewport: egui::ViewportId, actions: &[Action]) {
-        if actions
-            .iter()
-            .any(|a| matches!(a, Action::AskInstall(_) | Action::AskUninstall(_)))
-        {
+        if actions.iter().any(|a| {
+            matches!(
+                a,
+                Action::AskInstall(_) | Action::AskBuy(..) | Action::AskUninstall(_)
+            )
+        }) {
             self.dialog_viewport = viewport;
         }
     }
@@ -750,10 +1253,17 @@ impl LauncherApp {
         if !self.settings_open {
             return;
         }
-        let builder = egui::ViewportBuilder::default()
+        let size = egui::vec2(760.0, 700.0);
+        let mut builder = egui::ViewportBuilder::default()
             .with_title(format!("{} · F-Launcher", t("Cài đặt")))
-            .with_inner_size([760.0, 700.0])
+            .with_inner_size(size)
             .with_min_inner_size([520.0, 420.0]);
+        if let Some(pos) = self.child_position(ctx, settings_viewport(), size) {
+            builder = builder.with_position(pos);
+        }
+        if let Some(icon) = window_icon() {
+            builder = builder.with_icon(icon);
+        }
         let mut local = Vec::new();
         let close = ctx.show_viewport_immediate(settings_viewport(), builder, |ui, _| {
             egui::CentralPanel::default().show(ui, |ui| self.settings_page(ui, &mut local));
@@ -772,10 +1282,17 @@ impl LauncherApp {
     fn detail_windows(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         for detail in self.details.clone() {
             let id = detail.viewport();
-            let builder = egui::ViewportBuilder::default()
+            let size = egui::vec2(840.0, 720.0);
+            let mut builder = egui::ViewportBuilder::default()
                 .with_title(format!("{} · F-Launcher", self.title_of(&detail.app)))
-                .with_inner_size([840.0, 720.0])
+                .with_inner_size(size)
                 .with_min_inner_size([560.0, 420.0]);
+            if let Some(pos) = self.child_position(ctx, id, size) {
+                builder = builder.with_position(pos);
+            }
+            if let Some(icon) = window_icon() {
+                builder = builder.with_icon(icon);
+            }
             let mut local = Vec::new();
             let close = ctx.show_viewport_immediate(id, builder, |ui, _| {
                 self.status_panel(ui, "detail-status");
@@ -817,8 +1334,11 @@ struct Filter {
 fn role_label(role: &str) -> &'static str {
     match role {
         "admin" => t("Quản trị viên"),
-        "developer" => t("Lập trình viên"),
-        _ => t("Người sử dụng ứng dụng"),
+        "developer" => t("Lập trình viên cá nhân"),
+        "dev_company" => t("Công ty phát triển phần mềm"),
+        "customer" => t("Khách hàng cá nhân"),
+        "business_customer" => t("Khách hàng doanh nghiệp"),
+        _ => t("Người dùng phổ thông"),
     }
 }
 
@@ -1070,6 +1590,12 @@ fn motif_band(ui: &mut egui::Ui, style: UiStyle, width: f32, height: f32) {
 fn app_icon(ui: &mut egui::Ui, app_id: &str, title: &str, size: f32) -> egui::Response {
     // Không nhận chuột: bấm vào biểu tượng là bấm vào ô hoặc hàng chứa nó.
     let (rect, response) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+    if let Some(texture) = icon_texture(ui.ctx(), app_id) {
+        egui::Image::new((texture.id(), egui::vec2(size, size)))
+            .corner_radius(size * 0.22)
+            .paint_at(ui, rect);
+        return response;
+    }
     let [r, g, b] = library::tile_color(app_id);
     let painter = ui.painter();
     painter.rect_filled(rect, size * 0.22, egui::Color32::from_rgb(r, g, b));
@@ -1216,6 +1742,26 @@ impl LauncherApp {
                 if icons::button(ui, Icon::Sync, t("Đồng bộ"), false, idle).clicked() {
                     actions.push(Action::Sync);
                 }
+                // Tính năng tài khoản trên web (đồng bộ tính năng launcher và web).
+                let server = self.shared.config.server.clone();
+                let web = icons::button(ui, Icon::Globe, t("F-Eco trên web"), false, true);
+                egui::Popup::menu(&web).show(|ui| {
+                    for (label, path) in [
+                        (t("Hồ sơ và vai trò"), ""),
+                        (t("Ví F-Coin"), "wallet"),
+                        (t("Ứng dụng của tôi"), "library"),
+                        (t("Dự án phần mềm"), "projects"),
+                        (t("Đơn xây app"), "orders"),
+                        (t("Thông báo"), "notifications"),
+                    ] {
+                        if ui.button(label).clicked() {
+                            if let Ok(url) = server.join(path) {
+                                actions.push(Action::OpenLink(url.to_string()));
+                            }
+                            ui.close();
+                        }
+                    }
+                });
                 if signed_in {
                     if let Some(role) = &self.view.role {
                         if role.is_admin() {
@@ -1248,6 +1794,29 @@ impl LauncherApp {
                     }
                 }
             });
+            if signed_in {
+                if let Some(w) = &self.view.wallet {
+                    let url = w.wallet_url.clone().unwrap_or_else(|| {
+                        self.shared
+                            .config
+                            .server
+                            .join("wallet")
+                            .map(|u| u.to_string())
+                            .unwrap_or_default()
+                    });
+                    let label = coins(w.balance);
+                    if icons::labeled(ui, Icon::Wallet, &label, false, width)
+                        .on_hover_text(if w.frozen {
+                            t("Ví F-Coin đang bị khóa")
+                        } else {
+                            t("Số dư F-Coin · bấm để nạp hoặc rút")
+                        })
+                        .clicked()
+                    {
+                        actions.push(Action::OpenLink(url));
+                    }
+                }
+            }
             ui.separator();
             match self.view.sign_in {
                 Some(SignIn::SignedIn) | Some(SignIn::Offline) => {
@@ -1574,6 +2143,26 @@ impl LauncherApp {
     }
 
     fn library_page(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let pending = update_suggestions(&self.view.my_apps, &self.prefs.skipped_updates);
+        if !pending.is_empty() {
+            egui::Frame::group(ui.style())
+                .stroke(egui::Stroke::new(1.0, accent(&self.prefs)))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
+                        icons::paint(ui.painter(), rect, Icon::ArrowUp, accent(&self.prefs));
+                        ui.label(tf(
+                            "Có {} bản cập nhật mới cho app của bạn",
+                            &[&pending.len()],
+                        ));
+                        if ui.button(t("Xem")).clicked() {
+                            actions.push(Action::ShowUpdates);
+                        }
+                    });
+                });
+            ui.add_space(6.0);
+        }
         self.toolbar(ui, actions);
         if self.view.my_apps.is_empty() {
             ui.add_space(24.0);
@@ -1678,6 +2267,10 @@ impl LauncherApp {
     /// Nút chính của một app trong Cửa hàng: Cài, Cập nhật, hoặc nhãn "Đã cài".
     fn store_button(&self, ui: &mut egui::Ui, entry: &CatalogEntry, actions: &mut Vec<Action>) {
         let installed = self.view.my_apps.iter().find(|a| a.app == entry.app);
+        if installed.is_none() {
+            self.acquire_button(ui, entry, self.busy.is_none() && self.view.online, actions);
+            return;
+        }
         let label = match installed {
             Some(a) if a.version == entry.version => None,
             Some(_) => Some((Icon::ArrowUp, t("Cập nhật"))),
@@ -1697,6 +2290,41 @@ impl LauncherApp {
             }
             None => {
                 ui.weak(t("Đã cài"));
+            }
+        }
+    }
+
+    /// Nút Cài, Mua · N F-Coin, hoặc Đăng nhập để mua cho app chưa cài.
+    fn acquire_button(
+        &self,
+        ui: &mut egui::Ui,
+        entry: &CatalogEntry,
+        enabled: bool,
+        actions: &mut Vec<Action>,
+    ) {
+        match acquire(&self.view, &entry.app) {
+            Acquire::Install => {
+                if primary_button(ui, &self.prefs, enabled, Icon::Download, t("Cài")) {
+                    actions.push(Action::AskInstall(Box::new(entry.clone())));
+                }
+            }
+            Acquire::Buy(price) => {
+                let label = format!("{} · {}", t("Mua"), coins(price));
+                if primary_button(ui, &self.prefs, enabled, Icon::Coin, &label) {
+                    actions.push(Action::AskBuy(Box::new(entry.clone()), price));
+                }
+            }
+            Acquire::SignInToBuy(price) => {
+                ui.weak(coins(price));
+                if primary_button(
+                    ui,
+                    &self.prefs,
+                    enabled,
+                    Icon::SignIn,
+                    t("Đăng nhập để mua"),
+                ) {
+                    actions.push(Action::Login);
+                }
             }
         }
     }
@@ -2211,15 +2839,12 @@ impl LauncherApp {
                                 }
                                 None => {
                                     if let Some(e) = &entry {
-                                        if primary_button(
+                                        self.acquire_button(
                                             ui,
-                                            &self.prefs,
+                                            e,
                                             idle && self.view.online,
-                                            Icon::Download,
-                                            t("Cài"),
-                                        ) {
-                                            actions.push(Action::AskInstall(Box::new(e.clone())));
-                                        }
+                                            actions,
+                                        );
                                     }
                                 }
                             }
@@ -2437,6 +3062,11 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
         Err(LauncherError::Offline(_)) => return Ok(String::new()),
         Err(e) => return Err(e.to_string()),
     }
+    // Giá F-Coin công khai (hiện giá cả khi chưa đăng nhập); lỗi thì giữ lần trước.
+    match s.identity.auth.catalog_prices().await {
+        Ok(p) => *s.prices.lock().expect("khóa") = p,
+        Err(e) => eprintln!("không lấy được giá app: {e}"),
+    }
     // App riêng tư (bản build của đơn xây app): chỉ hiện những app máy chủ liệt kê cho người
     // dùng đang đăng nhập; chưa đăng nhập thì ẩn hết. Không hỏi được thì giữ danh sách cũ.
     match s.identity.access_token().await {
@@ -2451,6 +3081,11 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
                 Ok(n) => *s.notifications.lock().expect("khóa") = n,
                 Err(e) => eprintln!("không lấy được thông báo: {e}"),
             }
+            // Ví F-Coin: số dư, app đã mua, giá; không hỏi được thì giữ lần trước.
+            match s.identity.auth.wallet(&token).await {
+                Ok(w) => *s.wallet.lock().expect("khóa") = Some(w),
+                Err(e) => eprintln!("không lấy được ví F-Coin: {e}"),
+            }
             // Vai trò nền tảng; không hỏi được thì giữ lần trước.
             match s.identity.auth.account_role(&token).await {
                 Ok(role) => {
@@ -2463,6 +3098,7 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
         Err(_) => {
             let _ = l.set_private_apps(Default::default());
             s.notifications.lock().expect("khóa").clear();
+            *s.wallet.lock().expect("khóa") = None;
         }
     }
     // Phát hành dần: hỏi máy chủ thiết bị này được nhận bản nào của từng app đã cài.
@@ -2544,6 +3180,143 @@ async fn open_app(s: &Shared, app: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn wallet_view(balance: i64, owned: &[&str], signed_in: bool) -> View {
+        let body = serde_json::json!({
+            "balance": balance, "rate_vnd": 1000, "frozen": false,
+            "owned": owned, "prices": {"so-tay-pro": 49, "free-app": 0},
+            "wallet_url": "http://127.0.0.1:8080/wallet"
+        });
+        View {
+            sign_in: Some(if signed_in {
+                SignIn::SignedIn
+            } else {
+                SignIn::SignedOut
+            }),
+            wallet: signed_in.then(|| WalletInfo::from_json(&body)),
+            prices: [("so-tay-pro".to_owned(), 49)].into_iter().collect(),
+            ..Default::default()
+        }
+    }
+
+    /// Scenario "Mua rồi cài": app có giá chưa mua thì nút chính là Mua; đủ F-Coin thì không thiếu.
+    #[test]
+    fn paid_app_needs_purchase_before_install() {
+        let v = wallet_view(120, &[], true);
+        assert_eq!(acquire(&v, "so-tay-pro"), Acquire::Buy(49));
+        assert_eq!(acquire(&v, "free-app"), Acquire::Install);
+        assert_eq!(acquire(&v, "khong-co"), Acquire::Install);
+        assert_eq!(shortfall(120, 49), None);
+        assert_eq!(120 - 49, 71, "số dư sau khi mua");
+        let owned = wallet_view(71, &["so-tay-pro"], true);
+        assert_eq!(acquire(&owned, "so-tay-pro"), Acquire::Install);
+        let anon = wallet_view(0, &[], false);
+        assert_eq!(acquire(&anon, "so-tay-pro"), Acquire::SignInToBuy(49));
+        assert_eq!(
+            v.wallet.as_ref().unwrap().wallet_url.as_deref(),
+            Some("http://127.0.0.1:8080/wallet")
+        );
+    }
+
+    fn my_app(app: &str, version: &str, update: Option<&str>) -> MyApp {
+        let entry = |v: &str| CatalogEntry {
+            app: app.into(),
+            title: app.to_uppercase(),
+            version: v.into(),
+            platform: "windows-x64".into(),
+            target: format!("{app}-{v}.zip"),
+            length: 1,
+            sha256: String::new(),
+            entry: "bin/app.exe".into(),
+            client_id: None,
+            private: false,
+            info: feco_launcher::AppInfo {
+                release_notes: Some(format!("Ghi chú bản {v}")),
+                ..Default::default()
+            },
+            platforms: Vec::new(),
+        };
+        MyApp {
+            app: app.into(),
+            title: app.to_uppercase(),
+            version: version.into(),
+            previous_version: None,
+            status: AppStatus::Ready,
+            update: update.map(entry),
+            info: Default::default(),
+            installed_at: Timestamp::UNIX_EPOCH,
+            last_opened: None,
+        }
+    }
+
+    /// Scenario "Phát hiện bản mới" và "Bỏ qua phiên bản": gợi ý app có bản mới, trừ bản đã bỏ qua.
+    #[test]
+    fn suggests_updates_except_skipped_versions() {
+        let apps = vec![
+            my_app("kibi", "0.3.2", Some("0.3.3")),
+            my_app("bottom", "0.10.2", None),
+            my_app("f-notes", "1.5.0", Some("1.6.0")),
+        ];
+        let s = update_suggestions(&apps, &Default::default());
+        assert_eq!(
+            s.iter()
+                .map(|u| (u.app.as_str(), u.from.as_str(), u.to.as_str()))
+                .collect::<Vec<_>>(),
+            [("f-notes", "1.5.0", "1.6.0"), ("kibi", "0.3.2", "0.3.3")]
+        );
+        assert_eq!(s[1].notes.as_deref(), Some("Ghi chú bản 0.3.3"));
+        let skipped = [("kibi".to_owned(), "0.3.3".to_owned())]
+            .into_iter()
+            .collect();
+        let s = update_suggestions(&apps, &skipped);
+        assert_eq!(s.len(), 1, "bỏ qua kibi 0.3.3");
+        // Có bản mới hơn bản đã bỏ qua thì gợi ý lại.
+        let newer = vec![my_app("kibi", "0.3.2", Some("0.3.4"))];
+        assert_eq!(update_suggestions(&newer, &skipped).len(), 1);
+    }
+
+    /// Scenario "Cửa sổ ở giữa màn hình".
+    #[test]
+    fn child_windows_are_centered() {
+        assert_eq!(
+            centered_in(egui::vec2(1920.0, 1080.0), egui::vec2(760.0, 700.0)),
+            Some(egui::pos2(580.0, 190.0))
+        );
+        assert_eq!(
+            centered_in(egui::vec2(800.0, 600.0), egui::vec2(840.0, 720.0)),
+            Some(egui::pos2(0.0, 0.0)),
+            "màn hình nhỏ hơn cửa sổ: đặt ở góc trên"
+        );
+        assert_eq!(
+            centered_in(egui::vec2(0.0, 0.0), egui::vec2(10.0, 10.0)),
+            None
+        );
+    }
+
+    /// Logo F-Launcher và logo app (PNG trong metadata TUF) giải mã được.
+    #[test]
+    fn logos_decode() {
+        let (w, h, rgba) = decode_png(LAUNCHER_LOGO).expect("logo F-Launcher");
+        assert_eq!((w, h, rgba.len()), (256, 256, 256 * 256 * 4));
+        assert!(window_icon().is_some());
+        use base64::Engine;
+        let kibi = include_bytes!("../../../assets/logos/kibi-128.png");
+        let mut entry = my_app("kibi", "0.3.3", Some("0.3.3")).update.unwrap();
+        entry.info.icon = Some(base64::engine::general_purpose::STANDARD.encode(kibi));
+        register_icons(&[entry]);
+        let bytes = icon_sources().lock().unwrap().get("kibi").cloned().unwrap();
+        assert_eq!(decode_png(&bytes).unwrap().0, 128);
+        assert!(decode_png(b"not a png").is_none());
+    }
+
+    /// Scenario "Không đủ F-Coin trong launcher": còn thiếu 39 F-Coin.
+    #[test]
+    fn shortfall_when_balance_is_low() {
+        assert_eq!(shortfall(10, 49), Some(39));
+        i18n::set_language(Language::Vi);
+        assert_eq!(coins(1250), "1.250 F-Coin");
+        assert_eq!(tf("Còn thiếu {}", &[&coins(39)]), "Còn thiếu 39 F-Coin");
+    }
 
     /// Scenario "Ô lưới đều nhau": các ô cùng chiều rộng, lấp đầy hàng, không hẹp hơn cỡ đã chọn.
     #[test]

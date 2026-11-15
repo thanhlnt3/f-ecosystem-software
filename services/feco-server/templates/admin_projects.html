@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("admin.nav.projects") }}{% endblock %}
+{% block page %}
+<div class="admin-shell">
+  <aside class="admin-side">
+    <div class="admin-who">
+      <strong>{{ i18n.t("admin.title") }}</strong>
+      <span class="muted" id="admin-me">{{ me }} · {{ roles }}</span>
+    </div>
+    <nav id="admin-nav" aria-label="{{ i18n.t("admin.title") }}">
+      <a href="/admin">{{ i18n.t("admin.nav.home") }}</a>
+      {% for n in nav %}<a href="{{ n.href }}"{% if n.current %} aria-current="page"{% endif %}>{{ n.label }}</a>{% endfor %}
+    </nav>
+  </aside>
+  <main class="admin-main">
+{% if dev_no_passkey %}<div class="msg warn" role="alert">{{ i18n.t("admin.dev_no_passkey") }}</div>{% endif %}
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<h1>{{ i18n.t("admin.nav.projects") }}</h1>
+{% match detail %}
+{% when Some with (d) %}
+<section class="card" id="admin-project" data-status="{{ d.p.status }}">
+  <h2>{{ d.p.code }} · {{ d.p.title }} <span class="badge brand">{{ i18n.t(d.status_label) }}</span></h2>
+  <p class="muted">{{ d.p.customer_email }} → {{ d.p.provider_email }} · {{ i18n.t("proj.agreed") }}: {{ d.price }} · {{ i18n.t("proj.escrow") }}: <strong id="admin-escrow">{{ d.escrow }}</strong></p>
+  <div style="white-space:pre-wrap">{{ d.p.description }}</div>
+  {% if d.p.status == "disputed" %}
+  <h3>{{ i18n.t("ap.resolve") }}</h3>
+  <form method="post" action="/admin/projects/{{ d.p.id }}/resolve" id="resolve-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <div><input type="radio" name="mode" value="release" id="mode-release"> <label for="mode-release" style="display:inline;font-weight:400">{{ i18n.t("ap.release") }}</label></div>
+    <div><input type="radio" name="mode" value="refund" id="mode-refund"> <label for="mode-refund" style="display:inline;font-weight:400">{{ i18n.t("ap.refund") }}</label></div>
+    <div><input type="radio" name="mode" value="split" id="mode-split" checked> <label for="mode-split" style="display:inline;font-weight:400">{{ i18n.t("ap.split") }}</label></div>
+    <label for="to-provider">{{ i18n.t("ap.to_provider") }}</label>
+    <input type="text" inputmode="numeric" name="to_provider" id="to-provider" value="0">
+    <label for="resolve-note">{{ i18n.t("wallet.note") }}</label>
+    <input type="text" name="note" id="resolve-note" required>
+    <button type="submit">{{ i18n.t("ap.resolve") }}</button>
+  </form>
+  {% endif %}
+  <h3>{{ i18n.t("proj.messages") }}</h3>
+  <table>{% for m in d.messages_list %}<tr><td><strong>{{ i18n.t(m.side) }}</strong> <span class="muted">{{ m.at }}</span><div style="white-space:pre-wrap">{{ m.body }}</div></td></tr>{% endfor %}</table>
+  <h3>{{ i18n.t("proj.history") }}</h3>
+  <table>{% for e in d.events %}<tr><td>{{ i18n.t(e.status) }}{% if !e.note.is_empty() %} · {{ e.note }}{% endif %}<br><span class="muted">{{ e.actor }} · {{ e.at }}</span></td></tr>{% endfor %}</table>
+</section>
+{% when None %}{% endmatch %}
+{% if projects.is_empty() %}<p class="muted">{{ i18n.t("proj.none") }}</p>{% endif %}
+<table id="admin-project-list">
+{% for p in projects %}<tr class="project" data-code="{{ p.code }}" data-status="{{ p.status }}"><td><a href="/admin/projects/{{ p.id }}"><strong>{{ p.code }}</strong> · {{ p.title }}</a><br><span class="muted">{{ p.other }} · {{ p.updated }}</span></td><td>{{ p.price }}</td><td>{{ i18n.t(p.status_label) }}</td></tr>{% endfor %}
+</table>
+  </main>
+</div>
+{% endblock %}

@@ -115,6 +115,8 @@ struct AppPage {
     crashes_30d: i64,
     rating: String,
     distribution: Vec<(String, i64)>,
+    /// Giá trên F-Store (F-Coin), nhà phát triển đặt (thay đổi fcoin-wallet-and-marketplace).
+    price_coin: i64,
 }
 
 fn html(
@@ -183,7 +185,8 @@ fn status_label(lang: Lang, status: &str) -> String {
 }
 
 fn ok_message(lang: Lang, key: Option<&str>) -> Vec<Msg> {
-    const KEYS: [&str; 12] = [
+    const KEYS: [&str; 13] = [
+        "price",
         "role_requested",
         "appealed",
         "registered",
@@ -392,6 +395,13 @@ async fn render_app(
                 None => "—".into(),
             },
             distribution: metrics.versions,
+            price_coin: sqlx::query_scalar(
+                "SELECT price_coin FROM developer_apps WHERE app_id = $1",
+            )
+            .bind(app_id)
+            .fetch_optional(&state.db)
+            .await?
+            .unwrap_or(0),
         })
     }
     .await;
@@ -820,6 +830,34 @@ pub async fn app_action(
             "delete" => {
                 dev::delete_app(&state, &m, &app).await?;
                 Ok("deleted")
+            }
+            "price" => {
+                if !m.role.can_edit() {
+                    return Err(DevError::Problem(Problem {
+                        status: StatusCode::FORBIDDEN,
+                        code: "forbidden",
+                        vi: "Vai trò của bạn không sửa được app.".into(),
+                        en: "Your role can't edit apps.".into(),
+                    }));
+                }
+                let price = form.get("price").trim().parse::<i64>().unwrap_or(-1);
+                crate::wallet::set_app_price(&state, &app.app_id, m.subject, price)
+                    .await
+                    .map_err(|e| match e {
+                        crate::orders::OrderError::Problem {
+                            status,
+                            code,
+                            vi,
+                            en,
+                        } => DevError::Problem(Problem {
+                            status,
+                            code,
+                            vi,
+                            en,
+                        }),
+                        crate::orders::OrderError::Db(e) => DevError::from(e),
+                    })?;
+                Ok("price")
             }
             _ => {
                 return Err(DevError::Problem(Problem {

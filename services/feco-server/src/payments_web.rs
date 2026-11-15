@@ -96,7 +96,7 @@ struct PayPage {
     messages: Vec<Msg>,
     csrf: String,
     request: String,
-    order_id: String,
+    back: String,
     order_code: String,
     order_title: String,
     what: String,
@@ -132,7 +132,7 @@ async fn render_pay(
             messages,
             csrf: token,
             request: request.to_string(),
-            order_id: c.order_id.to_string(),
+            back: c.back(),
             what: match c.milestone {
                 Some(p) => format!(
                     "{} {p}: {}",
@@ -252,7 +252,8 @@ struct ReturnPage {
     i18n: Lang,
     status: &'static str,
     label: String,
-    order_id: String,
+    back: String,
+    back_key: &'static str,
 }
 
 /// GET /payments/return: không tin `status` hay `checksum` trên URL; truy vấn cổng rồi hiện kết quả.
@@ -279,19 +280,25 @@ pub async fn return_page(
         tracing::warn!(error = %e, gateway_ref, "không truy vấn được giao dịch khi khách quay về");
     }
     let t = payments::transaction(&state, t.id).await.unwrap_or(t);
-    let order_id: Option<Uuid> =
-        sqlx::query_scalar("SELECT order_id FROM payment_requests WHERE id = $1")
+    let owner: Option<(Option<Uuid>, bool)> =
+        sqlx::query_as("SELECT order_id, topup_id IS NOT NULL FROM payment_requests WHERE id = $1")
             .bind(t.request_id)
             .fetch_optional(&state.db)
             .await
             .ok()
             .flatten();
+    let (back, back_key) = match owner {
+        Some((_, true)) => ("/wallet".to_owned(), "pay.back_to_wallet"),
+        Some((Some(o), false)) => (format!("/orders/{o}"), "pay.back_to_order"),
+        _ => (String::new(), "pay.back_to_order"),
+    };
     html(
         ReturnPage {
             i18n: lang,
             status: t.status.as_str(),
             label: t.label(vi).to_owned(),
-            order_id: order_id.map(|o| o.to_string()).unwrap_or_default(),
+            back,
+            back_key,
         },
         lang,
         StatusCode::OK,

@@ -290,6 +290,19 @@ pub fn css() -> &'static str {
     })
 }
 
+/// GET /favicon.svg: logo F-Launcher / F-Eco (assets/logos/f-launcher.svg), dùng làm biểu tượng
+/// trang và logo trên thanh trên cùng.
+pub async fn favicon() -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "image/svg+xml"),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        include_str!("../../../assets/logos/f-launcher.svg"),
+    )
+        .into_response()
+}
+
 /// GET /ui.css
 pub async fn stylesheet() -> Response {
     (

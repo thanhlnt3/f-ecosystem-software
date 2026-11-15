@@ -101,6 +101,9 @@ pub struct PaymentsConfig {
     /// `FECO_PUBLIC_URL`). Dùng khi máy chủ chạy sau tunnel hoặc proxy khác địa chỉ đăng nhập.
     pub callback_base: Option<Url>,
     pub misa: Option<MisaConfig>,
+    /// `FECO_WALLET_WITHDRAWALS=false`: tắt việc tạo lệnh rút F-Coin mới (thay đổi
+    /// fcoin-wallet-and-marketplace, design R5). Mặc định bật.
+    pub withdrawals_disabled: bool,
 }
 
 /// Nhà cung cấp thử thách chống bot (spec account-identity, "Chống dò mật khẩu").
@@ -389,6 +392,17 @@ impl Config {
         )
         .transpose()?;
 
+        let withdrawals_disabled = match get("FECO_WALLET_WITHDRAWALS") {
+            None | Some("true" | "1" | "") => false,
+            Some("false" | "0") => true,
+            Some(v) => {
+                return Err(ConfigError::Invalid {
+                    var: "FECO_WALLET_WITHDRAWALS",
+                    reason: format!("cần true hoặc false, nhận {v:?}"),
+                })
+            }
+        };
+
         let auth = auth_config(environment, &get)?;
         let security = security_config(environment, &get)?;
         let developer = developer_config(environment, &get)?;
@@ -406,6 +420,7 @@ impl Config {
                 zalopay,
                 callback_base,
                 misa,
+                withdrawals_disabled,
             },
         };
         config.validate()?;

@@ -411,6 +411,8 @@ pub mod testing {
         pub refunds: HashMap<String, (String, i64)>,
         /// Số thẻ khách nhập trên trang của cổng (chỉ cổng giữ, không bao giờ gửi cho F-Eco).
         pub cards: Vec<String>,
+        /// Cổng từ chối mọi lệnh hoàn (kiểm thử "Cổng từ chối hoàn").
+        pub reject_refunds: bool,
         next_zp: i64,
     }
 
@@ -539,7 +541,7 @@ pub mod testing {
             .map(|(_, a)| a)
             .sum();
         let amount: i64 = g("amount").parse().unwrap_or(0);
-        if paid == 0 || already + amount > paid {
+        if inner.reject_refunds || paid == 0 || already + amount > paid {
             return Json(
                 json!({"return_code": 2, "sub_return_code": -13, "sub_return_message": "Số tiền hoàn không hợp lệ"}),
             );
@@ -645,6 +647,11 @@ pub mod testing {
             if let Some(o) = self.inner.lock().unwrap().orders.get_mut(app_trans_id) {
                 o.failed = true;
             }
+        }
+
+        /// Bật hoặc tắt việc từ chối mọi lệnh hoàn.
+        pub fn reject_refunds(&self, on: bool) {
+            self.inner.lock().unwrap().reject_refunds = on;
         }
 
         /// Tổng đã hoàn cho một giao dịch.

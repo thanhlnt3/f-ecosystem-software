@@ -169,7 +169,8 @@
 {% if role_requests.is_empty() %}<p class="muted" id="role-requests-empty">{{ i18n.t("role.requests_empty") }}</p>{% endif %}
 {% for r in role_requests %}
 <div class="card role-request" data-request="{{ r.id }}">
-  <p><strong>{{ r.email }}</strong> · {{ r.created }}</p>
+  <p><strong>{{ r.email }}</strong> · <span class="badge brand request-role">{{ r.role }}</span> · {{ r.created }}</p>
+  {% if !r.organization.is_empty() %}<p class="request-org">{{ r.organization }}</p>{% endif %}
   {% if !r.note.is_empty() %}<p>{{ r.note }}</p>{% endif %}
   <form method="post" action="/admin/members/requests/{{ r.id }}/approve" style="display:inline">
     <input type="hidden" name="feco_csrf" value="{{ csrf }}">

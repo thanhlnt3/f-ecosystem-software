@@ -423,6 +423,89 @@ impl Auth {
         Ok(AccountRole::from_json(&body))
     }
 
+    /// Giá F-Coin của các app có giá, từ danh mục công khai (`GET /v1/catalog`), để hiện giá cả
+    /// khi chưa đăng nhập.
+    pub async fn catalog_prices(&self) -> Result<HashMap<String, i64>, AuthError> {
+        let url = self.server.join("v1/catalog").expect("URL máy chủ hợp lệ");
+        let res = self
+            .http
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        if !res.status().is_success() {
+            return Err(AuthError::Failed(format!(
+                "/v1/catalog trả {}",
+                res.status()
+            )));
+        }
+        let body: Value = res
+            .json()
+            .await
+            .map_err(|e| AuthError::Failed(e.to_string()))?;
+        Ok(parse_catalog_prices(&body))
+    }
+
+    /// Ví F-Coin của người dùng (`GET /v1/wallet`, chỉ token của launcher).
+    pub async fn wallet(&self, access: &str) -> Result<WalletInfo, AuthError> {
+        let url = self.server.join("v1/wallet").expect("URL máy chủ hợp lệ");
+        let res = self
+            .http
+            .get(url)
+            .bearer_auth(access)
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        match res.status() {
+            s if s.is_success() => {}
+            reqwest::StatusCode::UNAUTHORIZED => return Err(AuthError::Expired),
+            s => return Err(AuthError::Failed(format!("/v1/wallet trả {s}"))),
+        }
+        let body: Value = res
+            .json()
+            .await
+            .map_err(|e| AuthError::Failed(e.to_string()))?;
+        Ok(WalletInfo::from_json(&body))
+    }
+
+    /// Mua app bằng F-Coin (`POST /v1/wallet/purchases`). Trả số dư sau khi mua; lỗi nghiệp vụ
+    /// (không đủ F-Coin, giá đổi...) trả mã lỗi của máy chủ.
+    pub async fn purchase(
+        &self,
+        access: &str,
+        app_id: &str,
+        expected_price: i64,
+    ) -> Result<i64, PurchaseError> {
+        let url = self
+            .server
+            .join("v1/wallet/purchases")
+            .expect("URL máy chủ hợp lệ");
+        let res = self
+            .http
+            .post(url)
+            .bearer_auth(access)
+            .json(&serde_json::json!({ "app_id": app_id, "expected_price": expected_price }))
+            .send()
+            .await
+            .map_err(|e| PurchaseError::Auth(AuthError::Offline(e.to_string())))?;
+        let status = res.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(PurchaseError::Auth(AuthError::Expired));
+        }
+        let body: Value = res.json().await.unwrap_or(Value::Null);
+        if status.is_success() {
+            return Ok(body["balance"].as_i64().unwrap_or(0));
+        }
+        Err(PurchaseError::Api {
+            code: body["error"].as_str().unwrap_or("unknown").to_owned(),
+            message: body["message_vi"]
+                .as_str()
+                .or(body["message"].as_str())
+                .unwrap_or_default()
+                .to_owned(),
+        })
+    }
+
     /// App riêng tư của người dùng (ví dụ bản build bàn giao của đơn xây app).
     pub async fn private_apps(&self, access: &str) -> Result<Vec<String>, AuthError> {
         let url = self
@@ -574,7 +657,7 @@ pub struct Notification {
 /// viên. Chỉ để hiển thị và gợi lối tắt; mọi kiểm soát quyền nằm ở máy chủ.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AccountRole {
-    /// `user`, `developer` hoặc `admin`.
+    /// `user`, `customer`, `business_customer`, `developer`, `dev_company` hoặc `admin`.
     pub role: String,
     #[serde(default)]
     pub developer_portal: Option<String>,
@@ -585,7 +668,9 @@ pub struct AccountRole {
 impl AccountRole {
     pub fn from_json(body: &Value) -> Self {
         let role = match body["role"].as_str() {
-            Some(r @ ("developer" | "admin")) => r.to_owned(),
+            Some(
+                r @ ("customer" | "business_customer" | "developer" | "dev_company" | "admin"),
+            ) => r.to_owned(),
             _ => "user".to_owned(),
         };
         let https_or_local = |v: &Value| {
@@ -601,12 +686,85 @@ impl AccountRole {
     }
 
     pub fn can_develop(&self) -> bool {
-        matches!(self.role.as_str(), "developer" | "admin")
+        matches!(self.role.as_str(), "developer" | "dev_company" | "admin")
     }
 
     pub fn is_admin(&self) -> bool {
         self.role == "admin"
     }
+}
+
+/// Giá F-Coin (> 0) theo app từ `GET /v1/catalog`.
+pub fn parse_catalog_prices(body: &Value) -> HashMap<String, i64> {
+    body["apps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| {
+            let price = a["price_coin"].as_i64().filter(|p| *p > 0)?;
+            Some((a["id"].as_str()?.to_owned(), price))
+        })
+        .collect()
+}
+
+/// Ví F-Coin như máy chủ trả về (thay đổi fcoin-wallet-and-marketplace).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WalletInfo {
+    pub balance: i64,
+    /// Số đồng cho 1 F-Coin.
+    pub rate_vnd: i64,
+    pub frozen: bool,
+    /// App đã mua bằng F-Coin.
+    pub owned: Vec<String>,
+    /// Giá các app có giá (F-Coin).
+    pub prices: HashMap<String, i64>,
+    /// Trang ví trên web (nạp, rút).
+    pub wallet_url: Option<String>,
+}
+
+impl WalletInfo {
+    pub fn from_json(body: &Value) -> Self {
+        WalletInfo {
+            balance: body["balance"].as_i64().unwrap_or(0),
+            rate_vnd: body["rate_vnd"].as_i64().unwrap_or(0),
+            frozen: body["frozen"].as_bool().unwrap_or(false),
+            owned: body["owned"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect(),
+            prices: body["prices"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter_map(|(k, v)| Some((k.clone(), v.as_i64().filter(|p| *p > 0)?)))
+                .collect(),
+            wallet_url: body["wallet_url"]
+                .as_str()
+                .filter(|u| u.starts_with("https://") || u.starts_with("http://127.0.0.1"))
+                .map(str::to_owned),
+        }
+    }
+
+    /// Giá của app (0: miễn phí hoặc không có trong danh sách).
+    pub fn price(&self, app: &str) -> i64 {
+        self.prices.get(app).copied().unwrap_or(0)
+    }
+
+    pub fn owns(&self, app: &str) -> bool {
+        self.owned.iter().any(|a| a == app)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PurchaseError {
+    #[error(transparent)]
+    Auth(AuthError),
+    /// Lỗi nghiệp vụ của máy chủ: `insufficient_funds`, `already_owned`, `price_changed`,
+    /// `wallet_frozen`...
+    #[error("{message}")]
+    Api { code: String, message: String },
 }
 
 pub fn parse_notifications(body: &Value) -> Vec<Notification> {

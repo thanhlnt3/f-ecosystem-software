@@ -94,6 +94,14 @@
 {% endfor %}
 
 {% if can_edit %}
+<h2 id="price-title">{{ i18n.t("dev.price") }}</h2>
+<form method="post" action="/developer/apps/{{ app.app_id }}/price" id="price-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="price">{{ i18n.t("dev.price_label") }}</label>
+  <input type="text" inputmode="numeric" name="price" id="price" value="{{ price_coin }}">
+  <p class="muted">{{ i18n.t("dev.price_note") }}</p>
+  <button type="submit" class="secondary">{{ i18n.t("pay.save") }}</button>
+</form>
 <h2>{{ i18n.t("dev.new_version") }}</h2>
 <form method="post" action="/developer/apps/{{ app.app_id }}/manifest" id="manifest-form">
   <input type="hidden" name="feco_csrf" value="{{ csrf }}">

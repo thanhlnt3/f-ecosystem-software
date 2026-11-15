@@ -693,3 +693,39 @@ async fn removed_app_leaves_the_catalog_without_a_revocation() {
         .await
         .is_err());
 }
+
+/// Logo của app được ký cùng target: launcher đọc được qua `TargetMeta::icon` sau khi xác minh;
+/// tệp không phải PNG hoặc quá lớn bị từ chối (thay đổi launcher-logos-and-updates).
+#[tokio::test]
+async fn app_icon_is_signed_with_its_targets() {
+    let fixture = Fixture::new().await;
+    fixture
+        .publish(SOUNDLAB, "soundlab", "1.2.0", b"SoundLab 1.2.0")
+        .await;
+    let other = "notes-1.0.0-windows-x64.zip";
+    fixture.publish(other, "notes", "1.0.0", b"Notes").await;
+    let png = include_bytes!("../../../assets/logos/kibi-128.png");
+    let icon = feco_tuf::repo::icon_from_png(png).unwrap();
+    assert!(feco_tuf::repo::icon_from_png(b"GIF89a").is_err());
+    let mut big = png.to_vec();
+    big.resize(feco_tuf::repo::MAX_ICON_BYTES + 1, 0);
+    assert!(feco_tuf::repo::icon_from_png(&big).is_err());
+    let n = fixture
+        .repo
+        .set_icon(
+            "soundlab",
+            &icon,
+            &fixture.release_keys(),
+            Expiry::default(),
+            Timestamp::now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(n, 1);
+    let client = fixture.client("launcher").await;
+    let state = client.sync().await.unwrap();
+    let meta = state.targets[SOUNDLAB].meta.as_ref().unwrap();
+    assert_eq!(meta.icon.as_deref(), Some(icon.as_str()));
+    assert_eq!(meta.version, "1.2.0", "thông tin khác giữ nguyên");
+    assert!(state.targets[other].meta.as_ref().unwrap().icon.is_none());
+}

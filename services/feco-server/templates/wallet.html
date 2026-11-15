@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("wallet.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("wallet.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+{% match frozen %}{% when Some with (why) %}<div class="msg error" role="alert" id="wallet-frozen">{{ i18n.t("wallet.frozen") }} {{ why }}</div>{% when None %}{% endmatch %}
+
+<div class="stats">
+  <div class="stat"><span class="stat-value" id="balance">{{ balance }}</span><span class="stat-label">{{ i18n.t("wallet.balance") }}</span></div>
+  <div class="stat"><span class="stat-value" id="rate">{{ rate }}</span><span class="stat-label">{{ i18n.t("wallet.rate") }}</span></div>
+  <a class="stat" href="/wallet/stats" id="link-stats"><span class="stat-value">📊</span><span class="stat-label">{{ i18n.t("wallet.stats") }}</span></a>
+</div>
+<p class="muted">{{ i18n.t("wallet.intro") }}</p>
+
+<div class="profile-grid">
+<section class="card" id="topup">
+  <h2>{{ i18n.t("wallet.topup") }}</h2>
+  {% if gateway_ready %}
+  <form method="post" action="/wallet/topup" id="topup-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label for="topup-coins">{{ i18n.t("wallet.coins") }} ({{ min_topup }}–{{ max_topup }})</label>
+    <input type="text" inputmode="numeric" name="coins" id="topup-coins" value="100" required data-rate="{{ rate_vnd }}">
+    <p class="muted" id="topup-hint">{{ i18n.t("wallet.topup_hint") }}</p>
+    <button type="submit">{{ i18n.t("wallet.topup_go") }}</button>
+  </form>
+  {% else %}
+  <p class="muted" id="topup-unavailable">{{ i18n.t("pay.unavailable") }}</p>
+  {% endif %}
+</section>
+
+<section class="card" id="withdraw">
+  <h2>{{ i18n.t("wallet.withdraw") }}</h2>
+  {% if withdrawals_enabled %}
+  <form method="post" action="/wallet/withdraw" id="withdraw-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label for="wd-coins">{{ i18n.t("wallet.coins") }} (≥ {{ min_withdrawal }})</label>
+    <input type="text" inputmode="numeric" name="coins" id="wd-coins" required>
+    <label>{{ i18n.t("wallet.method") }}</label>
+    {% if !sources.is_empty() %}
+    <div><input type="radio" name="method" value="source" id="m-source" checked> <label for="m-source" style="display:inline;font-weight:400">{{ i18n.t("wallet.method.source") }}</label></div>
+    <select name="source" id="wd-source" aria-label="{{ i18n.t("wallet.method.source") }}">{% for s in sources %}<option value="{{ s.id }}">{{ s.label }}</option>{% endfor %}</select>
+    {% endif %}
+    <div><input type="radio" name="method" value="bank" id="m-bank"{% if sources.is_empty() %} checked{% endif %}> <label for="m-bank" style="display:inline;font-weight:400">{{ i18n.t("wallet.method.bank") }}</label></div>
+    <label for="wd-bank">{{ i18n.t("wallet.bank") }}</label>
+    <input type="text" name="bank" id="wd-bank" maxlength="100">
+    <label for="wd-holder">{{ i18n.t("wallet.holder") }}</label>
+    <input type="text" name="holder" id="wd-holder" maxlength="100">
+    <label for="wd-number">{{ i18n.t("wallet.number") }}</label>
+    <input type="text" inputmode="numeric" name="number" id="wd-number" maxlength="30" autocomplete="off">
+    <label for="wd-note">{{ i18n.t("wallet.note") }}</label>
+    <input type="text" name="note" id="wd-note" maxlength="500">
+    <p class="muted">{{ i18n.t("wallet.withdraw_hint") }}</p>
+    <button type="submit" class="secondary">{{ i18n.t("wallet.withdraw_go") }}</button>
+  </form>
+  {% else %}
+  <p class="muted" id="withdraw-disabled">{{ i18n.t("wallet.withdraw_disabled") }}</p>
+  {% endif %}
+</section>
+</div>
+
+{% if !topups.is_empty() %}
+<h2>{{ i18n.t("wallet.topups") }}</h2>
+<table id="topups">
+{% for t in topups %}<tr class="topup" data-code="{{ t.code }}" data-status="{{ t.status }}"><td><strong>{{ t.code }}</strong> · {{ t.coins }} · {{ t.amount }}<br><span class="muted">{{ t.at }}</span></td><td>{{ i18n.t(t.status_label) }}</td><td class="row-actions">{% if !t.pay.is_empty() %}<a href="{{ t.pay }}">{{ i18n.t("wallet.pay_now") }}</a>{% endif %}</td></tr>{% endfor %}
+</table>
+{% endif %}
+
+{% if !withdrawals.is_empty() %}
+<h2 id="withdrawals">{{ i18n.t("wallet.withdrawals") }}</h2>
+<table>
+{% for w in withdrawals %}<tr class="withdrawal" data-code="{{ w.code }}" data-status="{{ w.status }}"><td><strong>{{ w.code }}</strong> · {{ w.coins }} · {{ w.amount }} · {{ w.method }}<br><span class="muted">{{ w.at }}{% if !w.note.is_empty() %} · {{ w.note }}{% endif %}</span></td><td>{{ i18n.t(w.status_label) }}</td>
+<td class="row-actions">{% if w.cancellable %}<form method="post" action="/wallet/withdrawals/{{ w.id }}/cancel"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit">{{ i18n.t("wallet.cancel") }}</button></form>{% endif %}</td></tr>{% endfor %}
+</table>
+{% endif %}
+
+<h2 id="history-title">{{ i18n.t("wallet.history") }}</h2>
+<form method="get" action="/wallet" class="filters" id="history-filter">
+  <select name="kind" aria-label="{{ i18n.t("wallet.filter") }}">
+    <option value="">{{ i18n.t("wallet.all_kinds") }}</option>
+    {% for k in kinds %}<option value="{{ k.code }}"{% if k.selected %} selected{% endif %}>{{ i18n.t(k.label) }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="secondary">{{ i18n.t("wallet.filter") }}</button>
+</form>
+{% if lines.is_empty() %}<p class="muted" id="no-lines">{{ i18n.t("wallet.no_history") }}</p>{% endif %}
+<table id="history">
+{% for l in lines %}<tr class="line" data-code="{{ l.code }}"><td><strong>{{ i18n.t(l.label) }}</strong> · <code>{{ l.code }}</code><br><span class="muted">{{ l.at }} · {{ l.memo }}</span></td><td class="amount" style="text-align:right;white-space:nowrap;color:{% if l.positive %}var(--ok){% else %}var(--fg){% endif %}">{{ l.amount }}<br><span class="muted">{{ l.balance }}</span></td></tr>{% endfor %}
+</table>
+<div class="links">
+  {% match prev %}{% when Some with (p) %}<a href="/wallet?kind={{ kind }}&amp;page={{ p }}">← {{ i18n.t("wallet.newer") }}</a>{% when None %}{% endmatch %}
+  {% match next %}{% when Some with (p) %}<a href="/wallet?kind={{ kind }}&amp;page={{ p }}" id="older">{{ i18n.t("wallet.older") }} →</a>{% when None %}{% endmatch %}
+</div>
+<div class="links"><a href="/projects">{{ i18n.t("nav.projects") }}</a><a href="/store">{{ i18n.t("nav.store") }}</a><a href="/payments">{{ i18n.t("pay.history") }}</a></div>
+<script>
+(function () {
+  var i = document.getElementById('topup-coins'), h = document.getElementById('topup-hint');
+  if (!i || !h) return;
+  var rate = Number(i.dataset.rate), base = h.textContent;
+  function show() { var n = Math.floor(Number(i.value)); h.textContent = n > 0 ? base + ' ≈ ' + (n * rate).toLocaleString('vi-VN') + ' ₫' : base; }
+  i.addEventListener('input', show); show();
+})();
+</script>
+{% endblock %}

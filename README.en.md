@@ -52,7 +52,8 @@ An open platform for third-party developers to publish **sub-apps** through a sh
   - [9. Try build-to-order requests](#9-try-build-to-order-requests)
   - [10. Try ZaloPay payments](#10-try-zalopay-payments)
   - [11. Try the Admin Console and notifications](#11-try-the-admin-console-and-notifications)
-  - [12. Stop and wipe data](#12-stop-and-wipe-data)
+  - [12. Try the F-Coin wallet, roles and projects](#12-try-the-f-coin-wallet-roles-and-projects)
+  - [13. Stop and wipe data](#13-stop-and-wipe-data)
 - [Service addresses](#service-addresses)
 - [Configuration](#configuration)
 - [Testing](#testing)
@@ -464,7 +465,37 @@ Without ZaloPay keys the payment page reports that the gateway is not configured
 4. Add the VNPAY and MoMo gateways and MISA e-invoicing through environment variables (your own sandbox keys, never written into the repo): `FECO_VNPAY_TMN_CODE`, `FECO_VNPAY_HASH_SECRET`, `FECO_VNPAY_PAYMENT_URL`; `FECO_MOMO_PARTNER_CODE`, `FECO_MOMO_ACCESS_KEY`, `FECO_MOMO_SECRET_KEY`, `FECO_MOMO_ENDPOINT`; `FECO_MISA_CLIENT_ID`, `FECO_MISA_CLIENT_SECRET`, `FECO_MISA_TAX_CODE`, `FECO_MISA_USERNAME`, `FECO_MISA_PASSWORD`, `FECO_MISA_INV_SERIES`, `FECO_MISA_VAT_RATE`. The gateways call back to `FECO_PAYMENT_CALLBACK_BASE` (a public address, for example a tunnel).
 5. Check the email-sending domain: `cargo run -p feco-server --bin feco-catalog -- mail-dns <domain> <DKIM selector>`. Production accepts only an `FECO_SMTP_URL` of the form `smtps://` or `smtp://...?tls=starttls`.
 
-### 12. Stop and wipe data
+### 12. Try the F-Coin wallet, roles and projects
+
+F-Coin is a payment unit used only inside F-Eco. The initial rate is 1 F-Coin = 1,000 VND; a Finance administrator can change it.
+
+1. **Wallet**: open http://127.0.0.1:8080/wallet.
+   - Top up: enter an amount of F-Coin (10–50,000) and choose a payment gateway (configure the ZaloPay, VNPAY or MoMo sandbox from steps 10 and 11). The F-Coin is added when the gateway confirms the payment.
+   - On a dev machine without a gateway: record the payment with `feco-catalog` or the manual payment page.
+   - Withdraw: refund to an earlier top-up (through the gateway) or bank transfer. The F-Coin is held at once and waits for Finance to approve. `FECO_WALLET_WITHDRAWALS=false` stops new withdrawal requests.
+   - See the transaction history (filter by type) and monthly income and spending at http://127.0.0.1:8080/wallet/stats.
+2. **Buy apps**: paid apps on F-Store and in F-Launcher show **Buy · N F-Coin**. Developers set the price on the app page of the Developer Portal.
+3. **Roles**: http://127.0.0.1:8080/account/role to request Individual customer, Business customer, Individual developer or Software company. A System administrator approves at `/admin/members`, or assigns directly:
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- role-set <email> customer "Try projects"
+   ```
+
+4. **Projects**: http://127.0.0.1:8080/projects.
+   - Developers and companies turn on a provider profile.
+   - Customers find a provider, send a request and negotiate the price.
+   - A business or company draws up a contract, and both sides sign.
+   - The customer funds escrow in F-Coin, receives the delivery, and accepting it pays the provider.
+   - A Project manager resolves disputes at `/admin/projects`.
+5. **Wallet admin**: http://127.0.0.1:8080/admin/wallet (Finance, System administrator) shows F-Coin totals, rate, fees, withdrawal approvals, wallet freezing and transaction lookup. Check the ledger:
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- wallet-check
+   ```
+
+6. **My apps**: http://127.0.0.1:8080/library lists apps installed through F-Launcher and apps you bought, with an "Update available" label. F-Launcher suggests updates after every sync.
+
+### 13. Stop and wipe data
 
 - Stop `feco-server` and the sample app with `Ctrl+C`.
 - Option A: `docker compose -f infra/docker-compose.yml down`. This stops everything and deletes all dev data, because the compose file uses no volumes.
@@ -500,6 +531,11 @@ The main `feco-server` APIs:
 | `/policy/content` | Content policy (the clauses cited when rejecting a version) |
 | `POST /v1/apps/crashes` | An app reports a runtime crash (`{"version"}`, the app's access token); used only for aggregate metrics |
 | `POST /v1/launch-codes/exchange` | Sub-app: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → an `authorization_code` to exchange for a token at Hydra with PKCE. Only re-issues scopes the user has already consented to; if not yet consented it returns `consent_required` |
+| `/wallet`, `/wallet/stats`, `POST /wallet/topup`, `POST /wallet/withdraw` | F-Coin wallet: balance, top-up, withdrawal, history, statistics |
+| `GET /v1/wallet`, `POST /v1/wallet/purchases` | F-Launcher token only: balance, owned apps, prices; buy an app `{"app_id", "expected_price"}` |
+| `/account/role`, `/projects`, `/projects/{id}`, `/library` | Role requests, software projects, my apps |
+| `/admin/wallet`, `/admin/projects` | F-Coin wallet admin (Finance) and projects (Project manager) |
+| `GET /store/{id}/icon.png`, `GET /favicon.svg` | App logos and the F-Launcher logo |
 | `GET /v1/me` | User data according to the access token's scopes (`Authorization: Bearer …`); `?fields=email,phone_number` selects fields. Errors return JSON `{error, message, message_vi, request_id}` |
 
 ## Configuration
@@ -529,6 +565,7 @@ The main `feco-server` APIs:
 | `FECO_ADMIN_PASSKEY_OPTIONAL` | `false` | `true`: the Admin Console does not require a passkey. Can be set only when `FECO_ENV=dev`; other environments refuse to start |
 | `FECO_LAUNCHER_CLIENT_ID` | not set | The F-Launcher client ID in Hydra. If set, it enables sub-app launch codes (`/v1/launch-codes`) and the launcher does not have to go through the consent screen |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | not set | Dev/staging may only point to the payment gateway's sandbox |
+| `FECO_WALLET_WITHDRAWALS` | `true` | `false`: stop accepting new F-Coin withdrawals (pending ones are still processed) |
 | `RUST_LOG` | `info` | Log level, for example `debug` |
 
 All secrets (database password, keys) are printed to the log as `***`. Do not commit real secrets to the repository; CI has a secret-scanning step.

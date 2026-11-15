@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("admin.nav.wallet") }}{% endblock %}
+{% block page %}
+<div class="admin-shell">
+  <aside class="admin-side">
+    <div class="admin-who">
+      <strong>{{ i18n.t("admin.title") }}</strong>
+      <span class="muted" id="admin-me">{{ me }} · {{ roles }}</span>
+    </div>
+    <nav id="admin-nav" aria-label="{{ i18n.t("admin.title") }}">
+      <a href="/admin">{{ i18n.t("admin.nav.home") }}</a>
+      {% for n in nav %}<a href="{{ n.href }}"{% if n.current %} aria-current="page"{% endif %}>{{ n.label }}</a>{% endfor %}
+    </nav>
+  </aside>
+  <main class="admin-main">
+{% if dev_no_passkey %}<div class="msg warn" role="alert">{{ i18n.t("admin.dev_no_passkey") }}</div>{% endif %}
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<h1>{{ i18n.t("admin.nav.wallet") }}</h1>
+<div class="kpis" id="wallet-kpis">
+  <div class="kpi" id="kpi-circulation"><span class="kpi-label">{{ i18n.t("aw.circulation") }}</span><span class="kpi-value">{{ circulation }}</span></div>
+  <div class="kpi" id="kpi-escrow"><span class="kpi-label">{{ i18n.t("aw.escrow") }}</span><span class="kpi-value">{{ escrow }}</span></div>
+  <div class="kpi{% if open_withdrawals > 0 %} attention{% endif %}" id="kpi-pending"><span class="kpi-label">{{ i18n.t("aw.pending") }}</span><span class="kpi-value">{{ pending }}</span><span class="kpi-note">{{ open_withdrawals }} {{ i18n.t("aw.orders") }}</span></div>
+  <div class="kpi" id="kpi-fees"><span class="kpi-label">{{ i18n.t("aw.fees") }}</span><span class="kpi-value">{{ fees }}</span></div>
+  <div class="kpi" id="kpi-topup"><span class="kpi-label">{{ i18n.t("aw.topup30") }}</span><span class="kpi-value" style="font-size:1.1rem">{{ topup }}</span></div>
+  <div class="kpi" id="kpi-withdraw"><span class="kpi-label">{{ i18n.t("aw.withdraw30") }}</span><span class="kpi-value" style="font-size:1.1rem">{{ withdraw }}</span></div>
+</div>
+<section class="card chart" id="wallet-chart">
+  <h2>{{ i18n.t("aw.chart") }}</h2>
+  <p class="muted"><span style="color:var(--ok)">■</span> {{ i18n.t("wallet.topup") }} · <span style="color:var(--accent)">■</span> {{ i18n.t("wallet.withdraw") }}</p>
+  <div class="bars" role="img" aria-label="{{ i18n.t("aw.chart") }}">
+  {% for d in days %}<div class="bar" title="{{ d.label }}: +{{ d.topup }} / −{{ d.withdraw }}"><div style="display:flex;gap:1px;align-items:flex-end;width:100%;height:100%"><span style="height:{{ d.topup_pct }}%;background:var(--ok)"></span><span style="height:{{ d.withdraw_pct }}%"></span></div><small>{{ d.label }}</small></div>{% endfor %}
+  </div>
+</section>
+
+<h2 id="withdrawal-queue">{{ i18n.t("aw.queue") }}</h2>
+{% match revealed %}{% when Some with (r) %}<div class="msg info" id="revealed">{{ r.0 }}: <code>{{ r.1 }}</code></div>{% when None %}{% endmatch %}
+{% if withdrawals.is_empty() %}<p class="muted" id="queue-empty">{{ i18n.t("aw.queue_empty") }}</p>{% endif %}
+{% for w in withdrawals %}
+<div class="card admin-withdrawal" data-code="{{ w.code }}" data-status="{{ w.status }}" style="margin-top:12px">
+  <p><strong>{{ w.code }}</strong> · {{ w.email }} · {{ w.coins }} · <strong>{{ w.amount }}</strong> · {{ i18n.t(w.status_label) }}</p>
+  <p class="muted">{{ w.method }} · {{ w.at }}{% if !w.note.is_empty() %} · {{ w.note }}{% endif %} · {{ i18n.t("aw.approvals") }}: {{ w.approvals }} ({{ w.needed }})</p>
+  {% if finance %}
+  {% if w.status == "pending" %}
+  <form method="post" action="/admin/wallet/withdrawals/{{ w.id }}/approve" style="display:inline"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit">{{ i18n.t("aw.approve") }}</button></form>
+  {% endif %}
+  {% if w.bank %}
+  <form method="post" action="/admin/wallet/withdrawals/{{ w.id }}/reveal" style="display:inline"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit" class="secondary">{{ i18n.t("aw.reveal") }}</button></form>
+  {% endif %}
+  {% if w.status == "approved" && w.bank %}
+  <form method="post" action="/admin/wallet/withdrawals/{{ w.id }}/paid"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="text" name="reference" placeholder="{{ i18n.t("aw.reference") }}" required><button type="submit">{{ i18n.t("aw.paid") }}</button></form>
+  {% endif %}
+  {% if w.status == "pending" || (w.status == "approved" && w.bank) %}
+  <form method="post" action="/admin/wallet/withdrawals/{{ w.id }}/reject"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="text" name="reason" placeholder="{{ i18n.t("role.decision_note") }}" required><button type="submit" class="danger">{{ i18n.t("aw.reject") }}</button></form>
+  {% endif %}
+  {% endif %}
+</div>
+{% endfor %}
+
+<div class="profile-grid" style="margin-top:16px">
+<section class="card" id="rate-card">
+  <h2>{{ i18n.t("wallet.rate") }}: <span id="current-rate">{{ rate }}</span></h2>
+  {% if finance %}
+  <form method="post" action="/admin/wallet/rate" id="rate-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label for="rate-input">{{ i18n.t("aw.rate_new") }}</label>
+    <input type="text" inputmode="numeric" name="rate" id="rate-input" value="{{ rate_vnd }}" required>
+    <label for="rate-reason">{{ i18n.t("role.reason") }}</label>
+    <input type="text" name="reason" id="rate-reason" required>
+    <button type="submit">{{ i18n.t("aw.save_rate") }}</button>
+  </form>
+  {% endif %}
+  <table id="rate-history">{% for r in rates %}<tr><td>{{ r.rate }}</td><td class="muted">{{ r.reason }}<br>{{ r.by }} · {{ r.at }}</td></tr>{% endfor %}</table>
+</section>
+<section class="card" id="fees-card">
+  <h2>{{ i18n.t("aw.fees_title") }}</h2>
+  <p class="muted">{{ i18n.t("aw.fees_note") }}</p>
+  <form method="post" action="/admin/wallet/fees" id="fees-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label for="app-bps">{{ i18n.t("aw.app_fee") }}</label>
+    <input type="text" inputmode="numeric" name="app_bps" id="app-bps" value="{{ app_fee }}"{% if !finance %} disabled{% endif %}>
+    <label for="project-bps">{{ i18n.t("aw.project_fee") }}</label>
+    <input type="text" inputmode="numeric" name="project_bps" id="project-bps" value="{{ project_fee }}"{% if !finance %} disabled{% endif %}>
+    {% if finance %}<button type="submit" class="secondary">{{ i18n.t("pay.save") }}</button>{% endif %}
+  </form>
+</section>
+<section class="card" id="freeze-card">
+  <h2>{{ i18n.t("aw.freeze_title") }}</h2>
+  <form method="post" action="/admin/wallet/freeze" id="freeze-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label for="freeze-email">{{ i18n.t("admin.email") }}</label>
+    <input type="email" name="email" id="freeze-email" required>
+    <label for="freeze-reason">{{ i18n.t("role.reason") }}</label>
+    <input type="text" name="reason" id="freeze-reason" required>
+    <button type="submit" class="danger">{{ i18n.t("aw.freeze") }}</button>
+    <button type="submit" class="secondary" formaction="/admin/wallet/unfreeze">{{ i18n.t("aw.unfreeze") }}</button>
+  </form>
+</section>
+</div>
+
+<h2>{{ i18n.t("aw.search") }}</h2>
+<form method="get" action="/admin/wallet" class="filters" id="txn-search">
+  <input type="search" name="q" value="{{ query }}" placeholder="GD-000001 · email">
+  <button type="submit">{{ i18n.t("store.search") }}</button>
+</form>
+<table id="admin-lines">
+{% for l in lines %}<tr class="admin-line" data-code="{{ l.code }}"><td><code>{{ l.code }}</code> · {{ i18n.t(l.kind) }}<br><span class="muted">{{ l.at }} · {{ l.memo }}</span></td><td>{{ l.account }}</td><td style="text-align:right">{{ l.amount }}</td></tr>{% endfor %}
+</table>
+  </main>
+</div>
+{% endblock %}

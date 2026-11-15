@@ -52,7 +52,8 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
   - [9. Dùng thử đơn xây app](#9-dùng-thử-đơn-xây-app)
   - [10. Dùng thử thanh toán ZaloPay](#10-dùng-thử-thanh-toán-zalopay)
   - [11. Dùng thử bảng quản trị và thông báo](#11-dùng-thử-bảng-quản-trị-và-thông-báo)
-  - [12. Dừng và xóa dữ liệu](#12-dừng-và-xóa-dữ-liệu)
+  - [12. Dùng thử ví F-Coin, vai trò và dự án](#12-dùng-thử-ví-f-coin-vai-trò-và-dự-án)
+  - [13. Dừng và xóa dữ liệu](#13-dừng-và-xóa-dữ-liệu)
 - [Địa chỉ các dịch vụ](#địa-chỉ-các-dịch-vụ)
 - [Cấu hình](#cấu-hình)
 - [Kiểm thử](#kiểm-thử)
@@ -464,7 +465,37 @@ Không có khóa ZaloPay thì trang thanh toán báo chưa cấu hình cổng; �
 4. Thêm cổng VNPAY, MoMo và hóa đơn điện tử MISA bằng biến môi trường (khóa sandbox của chính bạn, không ghi vào repo): `FECO_VNPAY_TMN_CODE`, `FECO_VNPAY_HASH_SECRET`, `FECO_VNPAY_PAYMENT_URL`; `FECO_MOMO_PARTNER_CODE`, `FECO_MOMO_ACCESS_KEY`, `FECO_MOMO_SECRET_KEY`, `FECO_MOMO_ENDPOINT`; `FECO_MISA_CLIENT_ID`, `FECO_MISA_CLIENT_SECRET`, `FECO_MISA_TAX_CODE`, `FECO_MISA_USERNAME`, `FECO_MISA_PASSWORD`, `FECO_MISA_INV_SERIES`, `FECO_MISA_VAT_RATE`. Cổng gọi callback về `FECO_PAYMENT_CALLBACK_BASE` (địa chỉ công khai, ví dụ tunnel).
 5. Kiểm tên miền gửi email: `cargo run -p feco-server --bin feco-catalog -- mail-dns <tên miền> <selector DKIM>`. Production chỉ nhận `FECO_SMTP_URL` dạng `smtps://` hoặc `smtp://...?tls=starttls`.
 
-### 12. Dừng và xóa dữ liệu
+### 12. Dùng thử ví F-Coin, vai trò và dự án
+
+F-Coin là đơn vị thanh toán chỉ dùng trong F-Eco. Tỷ giá ban đầu là 1 F-Coin = 1.000 ₫; quản trị viên Tài chính đổi được tỷ giá.
+
+1. **Ví**: mở http://127.0.0.1:8080/wallet.
+   - Nạp: nhập số F-Coin (10–50.000), chọn cổng thanh toán (cần cấu hình ZaloPay, VNPAY hoặc MoMo sandbox ở bước 10 và 11). Cổng xác nhận đã thu thì F-Coin vào ví.
+   - Ở máy dev chưa có cổng: dùng `feco-catalog` hoặc trang thanh toán thủ công để ghi nhận.
+   - Rút: hoàn về một lần nạp (qua cổng) hoặc chuyển khoản ngân hàng. F-Coin bị giữ ngay và chờ Tài chính duyệt. Biến `FECO_WALLET_WITHDRAWALS=false` tắt việc tạo lệnh rút mới.
+   - Xem lịch sử giao dịch (lọc theo loại) và thống kê thu chi theo tháng ở http://127.0.0.1:8080/wallet/stats.
+2. **Mua app**: app có giá trên F-Store và trong F-Launcher có nút **Mua · N F-Coin**. Nhà phát triển đặt giá ở trang app trong Cổng nhà phát triển.
+3. **Vai trò**: http://127.0.0.1:8080/account/role để xin vai trò Khách hàng cá nhân, Khách hàng doanh nghiệp, Lập trình viên cá nhân hoặc Công ty phát triển phần mềm. Quản trị hệ thống duyệt ở `/admin/members`, hoặc gán thẳng:
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- role-set <email> customer "Dùng thử dự án"
+   ```
+
+4. **Dự án**: http://127.0.0.1:8080/projects.
+   - Lập trình viên hoặc công ty bật hồ sơ nhận việc.
+   - Khách hàng tìm người nhận việc, gửi yêu cầu, thương lượng giá.
+   - Doanh nghiệp hoặc công ty lập hợp đồng, hai bên ký.
+   - Khách ký quỹ F-Coin, nhận bàn giao, chấp nhận thì F-Coin chuyển cho người nhận việc.
+   - Tranh chấp do Quản lý dự án xử lý ở `/admin/projects`.
+5. **Quản trị ví**: http://127.0.0.1:8080/admin/wallet (Tài chính, Quản trị hệ thống) gồm tổng F-Coin, tỷ giá, phí, duyệt lệnh rút, khóa ví, tra giao dịch. Kiểm tra sổ cái:
+
+   ```bash
+   cargo run -p feco-server --bin feco-catalog -- wallet-check
+   ```
+
+6. **Ứng dụng của tôi**: http://127.0.0.1:8080/library hiện app đã cài qua F-Launcher và app đã mua, kèm nhãn "Có bản mới". F-Launcher tự gợi ý cập nhật sau mỗi lần đồng bộ.
+
+### 13. Dừng và xóa dữ liệu
 
 - Dừng `feco-server` và app mẫu bằng `Ctrl+C`.
 - Cách A: `docker compose -f infra/docker-compose.yml down`. Lệnh này dừng và xóa mọi dữ liệu dev, vì compose không dùng volume.
@@ -500,6 +531,11 @@ Các API chính của `feco-server`:
 | `/policy/content` | Chính sách nội dung (các điều khoản dùng khi từ chối phiên bản) |
 | `POST /v1/apps/crashes` | App báo một lần lỗi khi chạy (`{"version"}`, access token của app); chỉ dùng cho số liệu tổng hợp |
 | `POST /v1/launch-codes/exchange` | App con: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → `authorization_code` để đổi lấy token tại Hydra bằng PKCE. Chỉ cấp lại scope người dùng đã đồng ý; chưa đồng ý thì trả `consent_required` |
+| `/wallet`, `/wallet/stats`, `POST /wallet/topup`, `POST /wallet/withdraw` | Ví F-Coin: số dư, nạp, rút, lịch sử, thống kê |
+| `GET /v1/wallet`, `POST /v1/wallet/purchases` | Chỉ token của F-Launcher: số dư, app đã mua, giá; mua app `{"app_id", "expected_price"}` |
+| `/account/role`, `/projects`, `/projects/{id}`, `/library` | Xin vai trò, dự án phần mềm, ứng dụng của tôi |
+| `/admin/wallet`, `/admin/projects` | Quản trị ví F-Coin (Tài chính) và dự án (Quản lý dự án) |
+| `GET /store/{id}/icon.png`, `GET /favicon.svg` | Logo app và logo F-Launcher |
 | `GET /v1/me` | Dữ liệu người dùng theo scope của access token (`Authorization: Bearer …`); `?fields=email,phone_number` để chọn trường. Lỗi trả JSON `{error, message, message_vi, request_id}` |
 
 ## Cấu hình
@@ -529,6 +565,7 @@ Các API chính của `feco-server`:
 | `FECO_ADMIN_PASSKEY_OPTIONAL` | `false` | `true`: bảng quản trị không bắt buộc passkey. Chỉ được đặt khi `FECO_ENV=dev`; môi trường khác từ chối khởi động |
 | `FECO_LAUNCHER_CLIENT_ID` | không đặt | Client ID của F-Launcher trong Hydra. Có thì bật mã khởi chạy app con (`/v1/launch-codes`) và launcher không phải qua màn hình đồng ý |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |
+| `FECO_WALLET_WITHDRAWALS` | `true` | `false`: tạm ngừng nhận lệnh rút F-Coin mới (lệnh đang chờ vẫn xử lý) |
 | `RUST_LOG` | `info` | Mức nhật ký, ví dụ `debug` |
 
 Mọi bí mật (mật khẩu CSDL, khóa) được in ra nhật ký dưới dạng `***`. Không commit bí mật thật vào kho mã; CI có bước quét bí mật.

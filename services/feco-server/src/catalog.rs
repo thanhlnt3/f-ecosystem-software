@@ -92,6 +92,10 @@ pub struct Listing {
     pub summary: String,
     pub category: String,
     pub price_vnd: u64,
+    /// Giá bằng F-Coin (0: miễn phí).
+    pub price_coin: u64,
+    /// Có logo (lấy ở `/store/{id}/icon.png`).
+    pub has_icon: bool,
     pub platforms: Vec<String>,
     pub latest_version: String,
     #[serde(with = "time::serde::rfc3339")]
@@ -166,6 +170,8 @@ pub struct AppInput {
     pub price_vnd: u64,
     pub license: String,
     pub screenshots: Vec<String>,
+    /// Logo PNG mã hóa base64 (không có thì giữ logo cũ).
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -216,6 +222,8 @@ type AppRow = (
     String,
     i64,
     OffsetDateTime,
+    i64,
+    bool,
 );
 
 type ReviewRow = (
@@ -240,7 +248,7 @@ type ReportRow = (
 );
 
 const APP_COLUMNS: &str = "a.id, a.client_id, a.name, a.developer, a.developer_verified, \
-     a.first_party, a.summary, a.category, a.price_vnd, a.updated_at";
+     a.first_party, a.summary, a.category, a.price_vnd, a.updated_at, a.price_coin, a.icon IS NOT NULL";
 
 /// Điều kiện "đang hiện trong danh mục". App riêng tư (bản build bàn giao của đơn xây app, spec
 /// custom-build-orders) không hiện công khai: chỉ khách hàng của đơn thấy qua [`private_for`].
@@ -292,6 +300,8 @@ async fn decorate(db: &Db, rows: Vec<AppRow>) -> sqlx::Result<Vec<Listing>> {
                 summary: r.6,
                 category: r.7,
                 price_vnd: r.8.max(0) as u64,
+                price_coin: r.10.max(0) as u64,
+                has_icon: r.11,
                 platforms,
                 rating_avg,
                 rating_count,
@@ -316,7 +326,7 @@ pub async fn search(db: &Db, f: &Filters) -> sqlx::Result<Vec<Listing>> {
            AND ($2::text IS NULL OR a.category = $2)
            AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM catalog_versions v
                 WHERE v.app_id = a.id AND v.status = 'released' AND v.platform LIKE $3 || '%'))
-           AND ($4::bool IS NULL OR (a.price_vnd = 0) = $4)
+           AND ($4::bool IS NULL OR (a.price_coin = 0) = $4)
            AND (NOT $5 OR a.developer_verified)
          ORDER BY a.first_party DESC, a.name"
     );
@@ -400,6 +410,19 @@ pub async fn detail(db: &Db, id: &str) -> sqlx::Result<Option<Detail>> {
     }))
 }
 
+/// Logo PNG của một app đang niêm yết (byte).
+pub async fn icon(db: &Db, id: &str) -> sqlx::Result<Option<Vec<u8>>> {
+    use base64::Engine;
+    let b64: Option<Option<String>> =
+        sqlx::query_scalar("SELECT icon FROM catalog_apps WHERE id = $1 AND status = 'listed'")
+            .bind(id)
+            .fetch_optional(db)
+            .await?;
+    Ok(b64
+        .flatten()
+        .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s).ok()))
+}
+
 /// Thêm hoặc cập nhật app (trạng thái giữ nguyên nếu đã có).
 pub async fn upsert_app(db: &Db, cache: &Cache, a: &AppInput) -> sqlx::Result<()> {
     let search_text = normalize(&format!(
@@ -408,12 +431,14 @@ pub async fn upsert_app(db: &Db, cache: &Cache, a: &AppInput) -> sqlx::Result<()
     ));
     sqlx::query(
         "INSERT INTO catalog_apps (id, client_id, name, developer, developer_verified, owner_subject,
-             first_party, summary, description, category, price_vnd, license, screenshots, search_text)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+             first_party, summary, description, category, price_vnd, license, screenshots, search_text, icon, price_coin)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+             coalesce((SELECT price_coin FROM developer_apps WHERE app_id = $1 AND price_coin > 0), ($11 + 999) / 1000))
          ON CONFLICT (id) DO UPDATE SET client_id = $2, name = $3, developer = $4,
              developer_verified = $5, owner_subject = $6, first_party = $7, summary = $8,
              description = $9, category = $10, price_vnd = $11, license = $12, screenshots = $13,
-             search_text = $14, updated_at = now()",
+             search_text = $14, updated_at = now(), icon = coalesce($15, catalog_apps.icon),
+             price_coin = coalesce((SELECT price_coin FROM developer_apps WHERE app_id = $1 AND price_coin > 0), ($11 + 999) / 1000)",
     )
     .bind(&a.id)
     .bind(&a.client_id)
@@ -429,6 +454,7 @@ pub async fn upsert_app(db: &Db, cache: &Cache, a: &AppInput) -> sqlx::Result<()
     .bind(&a.license)
     .bind(&a.screenshots)
     .bind(search_text)
+    .bind(&a.icon)
     .execute(db)
     .await?;
     cache.clear();
@@ -539,6 +565,89 @@ pub async fn record_install(
     .await?
     .rows_affected();
     Ok(n > 0 || has_installed(db, subject, app).await?)
+}
+
+/// Một app trong "Ứng dụng của tôi" trên web: đã cài qua F-Launcher hoặc đã mua bằng F-Coin.
+#[derive(Debug, Clone, Serialize)]
+pub struct LibraryItem {
+    pub id: String,
+    pub name: String,
+    pub has_icon: bool,
+    pub installed: bool,
+    pub installed_version: Option<String>,
+    pub purchased: bool,
+    pub latest: Option<String>,
+}
+
+impl LibraryItem {
+    /// Bản đã cài cũ hơn bản mới nhất đang phát hành.
+    pub fn update_available(&self) -> bool {
+        match (&self.installed_version, &self.latest) {
+            (Some(i), Some(l)) => newer(l, i),
+            _ => false,
+        }
+    }
+}
+
+/// `a` mới hơn `b` theo từng phần số của phiên bản (1.10.0 > 1.9.2; 1.0.0 > 1.0.0-beta).
+pub fn newer(a: &str, b: &str) -> bool {
+    fn parts(v: &str) -> (Vec<u64>, bool) {
+        let (core, pre) = match v.split_once('-') {
+            Some((c, _)) => (c, true),
+            None => (v, false),
+        };
+        (
+            core.split('.').map(|p| p.parse().unwrap_or(0)).collect(),
+            pre,
+        )
+    }
+    let ((mut x, xp), (mut y, yp)) = (parts(a), parts(b));
+    let n = x.len().max(y.len());
+    x.resize(n, 0);
+    y.resize(n, 0);
+    match x.cmp(&y) {
+        std::cmp::Ordering::Greater => true,
+        std::cmp::Ordering::Less => false,
+        std::cmp::Ordering::Equal => !xp && yp,
+    }
+}
+
+/// App đã cài hoặc đã mua của một người dùng, kèm phiên bản mới nhất đang phát hành.
+pub async fn library(db: &Db, subject: Uuid) -> sqlx::Result<Vec<LibraryItem>> {
+    type Row = (
+        String,
+        String,
+        bool,
+        bool,
+        Option<String>,
+        bool,
+        Option<String>,
+    );
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT a.id, a.name, a.icon IS NOT NULL, i.subject IS NOT NULL, i.version, p.buyer IS NOT NULL,
+                (SELECT v.version FROM catalog_versions v WHERE v.app_id = a.id AND v.status = 'released'
+                 ORDER BY v.released_at DESC LIMIT 1)
+         FROM catalog_apps a
+         LEFT JOIN catalog_installs i ON i.app_id = a.id AND i.subject = $1
+         LEFT JOIN app_purchases p ON p.app_id = a.id AND p.buyer = $1
+         WHERE a.status = 'listed' AND (i.subject IS NOT NULL OR p.buyer IS NOT NULL)
+         ORDER BY lower(a.name)",
+    )
+    .bind(subject)
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| LibraryItem {
+            id: r.0,
+            name: r.1,
+            has_icon: r.2,
+            installed: r.3,
+            installed_version: r.4,
+            purchased: r.5,
+            latest: r.6,
+        })
+        .collect())
 }
 
 pub async fn has_installed(db: &Db, subject: Uuid, app: &str) -> sqlx::Result<bool> {

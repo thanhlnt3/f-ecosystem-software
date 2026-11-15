@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ p.code }} · {{ p.title }}{% endblock %}
+{% block content %}
+<p><a href="/projects">← {{ i18n.t("nav.projects") }}</a></p>
+<h1>{{ p.code }} · {{ p.title }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<p><span class="badge brand" id="project-status" data-status="{{ p.status }}">{{ i18n.t(status_label) }}</span> <span class="muted">{{ i18n.t(side) }}</span></p>
+<div class="stats">
+  <div class="stat"><span class="stat-value" id="project-price">{{ price }}</span><span class="stat-label">{{ i18n.t("proj.agreed") }}</span></div>
+  <div class="stat"><span class="stat-value">{{ budget }}</span><span class="stat-label">{{ i18n.t("proj.budget") }}</span></div>
+  <div class="stat"><span class="stat-value" id="project-escrow">{{ escrow }}</span><span class="stat-label">{{ i18n.t("proj.escrow") }}</span></div>
+  {% if customer %}<a class="stat" href="/wallet"><span class="stat-value" id="my-balance">{{ balance }}</span><span class="stat-label">{{ i18n.t("wallet.balance") }}</span></a>{% endif %}
+</div>
+<p class="muted">{{ p.customer_email }} → {{ p.provider_email }}</p>
+<div class="card" style="white-space:pre-wrap" id="project-description">{{ p.description }}</div>
+
+{% match p.delivery_note %}{% when Some with (d) %}
+<h2>{{ i18n.t("proj.delivery") }}</h2>
+<div class="card" id="delivery" style="white-space:pre-wrap">{{ d }}{% match p.delivery_link %}{% when Some with (l) %}
+<a href="{{ l }}" rel="noopener noreferrer">{{ l }}</a>{% when None %}{% endmatch %}</div>
+{% when None %}{% endmatch %}
+
+<h2>{{ i18n.t("proj.offers") }}</h2>
+{% if offers.is_empty() %}<p class="muted">{{ i18n.t("proj.no_offers") }}</p>{% endif %}
+<table id="offers">
+{% for o in offers %}<tr class="offer" data-status="{{ o.status }}"><td><strong>{{ o.price }}</strong> · {{ o.days }} {{ i18n.t("proj.days") }} · {{ i18n.t(o.side) }}<br><span class="muted">{{ o.at }}{% if !o.note.is_empty() %} · {{ o.note }}{% endif %}</span></td>
+<td class="row-actions">{% if o.acceptable %}<form method="post" action="/projects/{{ p.id }}/accept-offer"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="hidden" name="offer" value="{{ o.id }}"><button type="submit">{{ i18n.t("proj.accept_offer") }}</button></form>{% endif %}</td></tr>{% endfor %}
+</table>
+
+<div class="profile-grid" style="margin-top:16px">
+{% if p.status == "requested" || p.status == "negotiating" %}
+<section class="card" id="offer-card">
+  <h2>{{ i18n.t("proj.make_offer") }}</h2>
+  <form method="post" action="/projects/{{ p.id }}/offer" id="offer-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label for="of-price">{{ i18n.t("proj.price") }} (F-Coin)</label>
+    <input type="text" inputmode="numeric" name="price" id="of-price" required>
+    <label for="of-days">{{ i18n.t("proj.days_label") }}</label>
+    <input type="text" inputmode="numeric" name="days" id="of-days" required>
+    <label for="of-note">{{ i18n.t("wallet.note") }}</label>
+    <input type="text" name="note" id="of-note" maxlength="2000">
+    <button type="submit">{{ i18n.t("proj.send_offer") }}</button>
+  </form>
+</section>
+{% endif %}
+
+{% if p.status == "agreed" && customer %}
+<section class="card" id="fund-card">
+  <h2>{{ i18n.t("proj.fund") }}</h2>
+  <p class="muted">{{ i18n.t("proj.fund_note") }}</p>
+  {% if contract_blocks_funding %}<p class="msg info" id="contract-blocks">{{ i18n.t("proj.contract_first") }}</p>{% endif %}
+  <form method="post" action="/projects/{{ p.id }}/fund" id="fund-form"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit">{{ i18n.t("proj.fund_go") }} · {{ price }}</button></form>
+  <p><a href="/wallet#topup">{{ i18n.t("wallet.topup") }}</a></p>
+</section>
+{% endif %}
+
+{% if p.status == "in_progress" && !customer %}
+<section class="card" id="deliver-card">
+  <h2>{{ i18n.t("proj.deliver") }}</h2>
+  <form method="post" action="/projects/{{ p.id }}/deliver" id="deliver-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label for="dl-note">{{ i18n.t("proj.delivery_note") }}</label>
+    <textarea name="note" id="dl-note" required></textarea>
+    <label for="dl-link">{{ i18n.t("proj.delivery_link") }}</label>
+    <input type="text" name="link" id="dl-link" maxlength="500">
+    <button type="submit">{{ i18n.t("proj.deliver_go") }}</button>
+  </form>
+  <form method="post" action="/projects/{{ p.id }}/withdraw" id="withdraw-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="text" name="reason" placeholder="{{ i18n.t("role.reason") }}">
+    <button type="submit" class="secondary">{{ i18n.t("proj.withdraw") }}</button>
+  </form>
+</section>
+{% endif %}
+
+{% if p.status == "delivered" && customer %}
+<section class="card" id="review-card">
+  <h2>{{ i18n.t("proj.review_delivery") }}</h2>
+  <form method="post" action="/projects/{{ p.id }}/accept" id="accept-form"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit">{{ i18n.t("proj.accept_delivery") }} · {{ escrow }}</button></form>
+  <form method="post" action="/projects/{{ p.id }}/revise" id="revise-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="text" name="reason" placeholder="{{ i18n.t("proj.revise_reason") }}" required>
+    <button type="submit" class="secondary">{{ i18n.t("proj.revise") }}</button>
+  </form>
+</section>
+{% endif %}
+
+{% if p.status == "in_progress" || p.status == "delivered" %}
+<section class="card" id="dispute-card">
+  <h2>{{ i18n.t("proj.dispute") }}</h2>
+  <form method="post" action="/projects/{{ p.id }}/dispute" id="dispute-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="text" name="reason" placeholder="{{ i18n.t("role.reason") }}" required>
+    <button type="submit" class="danger">{{ i18n.t("proj.dispute_go") }}</button>
+  </form>
+</section>
+{% endif %}
+
+{% if p.status == "requested" || p.status == "negotiating" || p.status == "agreed" %}
+<section class="card" id="cancel-card">
+  <h2>{% if customer %}{{ i18n.t("proj.cancel") }}{% else %}{{ i18n.t("proj.decline") }}{% endif %}</h2>
+  <form method="post" action="/projects/{{ p.id }}/cancel" id="cancel-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="text" name="reason" placeholder="{{ i18n.t("role.reason") }}">
+    <button type="submit" class="secondary">{% if customer %}{{ i18n.t("proj.cancel") }}{% else %}{{ i18n.t("proj.decline") }}{% endif %}</button>
+  </form>
+</section>
+{% endif %}
+</div>
+
+<h2 id="contract-title">{{ i18n.t("proj.contract") }}</h2>
+{% match contract %}
+{% when Some with (c) %}
+<div class="card" id="contract" data-status="{{ c.status }}">
+  <p><strong>{{ c.number }}</strong> · {% if c.status == "signed" %}<span class="badge ok">{{ i18n.t("proj.contract_signed") }}</span>{% else %}<span class="badge warn">{{ i18n.t("proj.contract_draft") }}</span>{% endif %}</p>
+  <p class="muted">SHA-256 <code id="contract-hash">{{ c.sha256 }}</code></p>
+  <p class="muted">{{ c.customer_name }}: {% if c.customer_signed.is_empty() %}—{% else %}{{ c.customer_signed }}{% endif %} · {{ c.provider_name }}: {% if c.provider_signed.is_empty() %}—{% else %}{{ c.provider_signed }}{% endif %}</p>
+  <details><summary>{{ i18n.t("proj.contract_read") }}</summary><pre style="white-space:pre-wrap" id="contract-body">{{ c.body }}</pre></details>
+  {% if c.my_turn %}
+  <form method="post" action="/projects/{{ p.id }}/sign" id="sign-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <div><input type="checkbox" name="agree" id="sign-agree" required> <label for="sign-agree" style="display:inline;font-weight:400">{{ i18n.t("proj.sign_agree") }}</label></div>
+    <label for="sign-name">{{ i18n.t("proj.sign_name") }}: <em>{{ c.my_name }}</em></label>
+    <input type="text" name="name" id="sign-name" required>
+    <button type="submit">{{ i18n.t("proj.sign") }}</button>
+  </form>
+  {% endif %}
+</div>
+{% when None %}<p class="muted" id="no-contract">{{ i18n.t("proj.no_contract") }}</p>
+{% endmatch %}
+{% if can_contract %}
+<details id="contract-create"><summary>{{ i18n.t("proj.contract_create") }}</summary>
+<form method="post" action="/projects/{{ p.id }}/contract" id="contract-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="ct-customer">{{ i18n.t("proj.party_a") }}</label>
+  <input type="text" name="customer_name" id="ct-customer" value="{{ default_customer_name }}" required>
+  <label for="ct-provider">{{ i18n.t("proj.party_b") }}</label>
+  <input type="text" name="provider_name" id="ct-provider" value="{{ default_provider_name }}" required>
+  <label for="ct-extra">{{ i18n.t("proj.extra_terms") }}</label>
+  <textarea name="extra" id="ct-extra"></textarea>
+  <button type="submit">{{ i18n.t("proj.contract_create") }}</button>
+</form>
+</details>
+{% endif %}
+
+<h2>{{ i18n.t("proj.messages") }}</h2>
+<table id="project-messages">{% for m in messages_list %}<tr><td><strong>{{ i18n.t(m.side) }}</strong> <span class="muted">{{ m.at }}</span><div style="white-space:pre-wrap">{{ m.body }}</div></td></tr>{% endfor %}</table>
+<form method="post" action="/projects/{{ p.id }}/message" id="message-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <textarea name="body" maxlength="5000" required aria-label="{{ i18n.t("proj.messages") }}"></textarea>
+  <button type="submit" class="secondary">{{ i18n.t("proj.send_message") }}</button>
+</form>
+
+<h2>{{ i18n.t("proj.history") }}</h2>
+<table id="project-events">{% for e in events %}<tr><td>{{ i18n.t(e.status) }}{% if !e.note.is_empty() %} · {{ e.note }}{% endif %}<br><span class="muted">{{ e.actor }} · {{ e.at }}</span></td></tr>{% endfor %}</table>
+{% endblock %}

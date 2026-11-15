@@ -6229,7 +6229,7 @@ async fn admin_console_end_to_end() {
     assert!(page.contains("đang chờ duyệt"), "{page}");
     wait_mail(
         ADMIN_EMAIL,
-        &format!("{cust_email} yêu cầu quyền Lập trình viên"),
+        &format!("{cust_email} yêu cầu vai trò Lập trình viên cá nhân"),
     )
     .await;
     let members = get(&pm, "/admin/members").await;
@@ -7102,7 +7102,7 @@ async fn profile_page_and_french() {
     };
     assert_eq!(text("#email"), email);
     assert_eq!(text(".avatar"), "LH");
-    assert_eq!(text("#platform-role"), "Người sử dụng ứng dụng");
+    assert_eq!(text("#platform-role"), "Người dùng phổ thông");
     assert_eq!(text("#stat-apps .stat-value"), "1");
     assert_eq!(text("#stat-orders .stat-value"), "0");
     assert!(text("#stat-sessions .stat-value").parse::<u32>().unwrap() >= 1);
@@ -7256,4 +7256,1301 @@ async fn admin_user_count_is_cached() {
         n,
     ));
     assert_eq!(feco_server::admin::user_count(&state).await.unwrap(), n + 1);
+}
+
+// ---------- Thay đổi fcoin-wallet-and-marketplace ----------
+
+async fn balance_of(db: &feco_server::store::Db, subject: uuid::Uuid) -> i64 {
+    feco_server::wallet::summary(db, subject)
+        .await
+        .unwrap()
+        .balance
+}
+
+/// Nạp F-Coin qua giao dịch "manual" (dev): tạo lệnh nạp rồi ghi nhận đã thu.
+async fn topup_manual(state: &AppState, subject: uuid::Uuid, email: &str, coins: i64) {
+    let t = feco_server::wallet::create_topup(state, subject, email, coins)
+        .await
+        .unwrap();
+    feco_server::payments::record_manual(state, t.request, time::OffsetDateTime::now_utc())
+        .await
+        .unwrap();
+}
+
+/// Access token của F-Launcher cho người dùng đang đăng nhập trong `user`.
+async fn launcher_token_for(user: &reqwest::Client) -> String {
+    let launcher = LAUNCHER.get().unwrap().clone();
+    let a = authorize(user, &launcher, "openid offline_access profile").await;
+    exchange(&launcher, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
+/// App có giá trong danh mục, có một phiên bản đã phát hành, chủ là `owner`.
+async fn priced_app(
+    state: &AppState,
+    id: &str,
+    name: &str,
+    price_coin: u64,
+    owner: Option<uuid::Uuid>,
+) {
+    let mut a = catalog_app(id, &format!("client-{id}"), name);
+    a.price_vnd = price_coin * 1000;
+    a.owner_subject = owner;
+    feco_server::catalog::upsert_app(&state.db, &state.catalog, &a)
+        .await
+        .unwrap();
+    feco_server::catalog::release_version(
+        &state.db,
+        &state.catalog,
+        id,
+        &version("1.0.0", "windows-x64"),
+    )
+    .await
+    .unwrap();
+}
+
+async fn wallet_api(token: &str) -> (u16, Value) {
+    let res = reqwest::Client::new()
+        .get(format!("{BASE}/v1/wallet"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap();
+    (
+        res.status().as_u16(),
+        res.json().await.unwrap_or(Value::Null),
+    )
+}
+
+async fn buy_api(token: &str, app: &str, price: i64) -> (u16, Value) {
+    let res = reqwest::Client::new()
+        .post(format!("{BASE}/v1/wallet/purchases"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({"app_id": app, "expected_price": price}))
+        .send()
+        .await
+        .unwrap();
+    (
+        res.status().as_u16(),
+        res.json().await.unwrap_or(Value::Null),
+    )
+}
+
+/// Spec fcoin-wallet, admin-console (Ví F-Coin), payments (nạp, hoàn của lệnh rút), app-catalog
+/// (giá F-Coin), launcher (API ví): ví, tỷ giá, nạp, rút, mua app, phí, khóa ví, thống kê.
+#[tokio::test]
+async fn fcoin_wallet_end_to_end() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::{admin::Role, wallet};
+    let state = local_state();
+    let db = state.db.clone();
+    let fake = ZALOPAY.get().unwrap().clone();
+    wallet::set_rate(&state, "e2e", 1000, "Đặt lại tỷ giá cho kiểm thử")
+        .await
+        .unwrap();
+    wallet::set_fees(&state, "e2e", wallet::Fees::default())
+        .await
+        .unwrap();
+
+    let (email, password) = unique("vi-fcoin");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Minh Ví").await;
+    let subject = subject_of(&email).await;
+    let (dev_email, dev_password) = unique("ban-app");
+    let dev_browser = app_browser();
+    register_in(&dev_browser, &dev_email, &dev_password, "Lan Bán App").await;
+    let dev = subject_of(&dev_email).await;
+
+    // Scenario "Tỷ giá ban đầu".
+    let page = get(&user, "/wallet").await;
+    assert!(page.contains("1 F-Coin = 1.000 ₫"), "{page}");
+    assert_eq!(text_of(&page, "#balance"), "0 F-Coin");
+
+    // Scenario "Ngoài giới hạn".
+    let (status, page) = post(&user, "/wallet/topup", &csrf_of(&page), &[("coins", "5")]).await;
+    assert_eq!(status, 400);
+    assert!(
+        page.contains("Số F-Coin nạp phải từ 10 đến 50.000."),
+        "{page}"
+    );
+
+    // Scenario "Trang thanh toán của lệnh nạp" + "Nạp thành công" + "Callback lặp lại".
+    let res = user
+        .post(format!("{BASE}/wallet/topup"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("feco_csrf={}&coins=50", csrf_of(&page)))
+        .send()
+        .await
+        .unwrap();
+    let pay_url = res.url().clone();
+    let pay_page = res.text().await.unwrap();
+    assert!(pay_url.path().ends_with("/pay"), "{pay_url}");
+    assert!(
+        pay_page.contains("Nạp 50 F-Coin") && pay_page.contains("50.000 ₫"),
+        "{pay_page}"
+    );
+    assert!(pay_page.contains("zalopay:vietqr"), "{pay_page}");
+    let request: uuid::Uuid = pay_url.path().split('/').nth(2).unwrap().parse().unwrap();
+    let gateway_ref = start_payment(&user, request, "zalopay:vietqr").await;
+    let callback = fake.pay(&gateway_ref, 38, None);
+    assert_eq!(zp_callback(&callback).await["return_code"], 1);
+    assert_eq!(balance_of(&db, subject).await, 50);
+    assert_eq!(zp_callback(&callback).await["return_code"], 1);
+    assert_eq!(
+        balance_of(&db, subject).await,
+        50,
+        "callback lặp lại không cộng thêm"
+    );
+    let page = get(&user, "/wallet").await;
+    assert!(
+        page.contains(r#"data-status="succeeded""#),
+        "lệnh nạp thành công: {page}"
+    );
+    assert!(
+        page.contains("+50 F-Coin"),
+        "lịch sử có dòng Nạp +50: {page}"
+    );
+    wait_mail(&email, "Đã nạp 50 F-Coin").await;
+
+    // Scenario "Trang app có giá" + "Mua app".
+    let app = format!("so-tay-pro-{}", &subject.simple().to_string()[..8]);
+    priced_app(&state, &app, "So Tay Pro", 49, Some(dev)).await;
+    let store = get(&user, &format!("/store/{app}")).await;
+    assert!(
+        store.contains("49 F-Coin") && store.contains("≈ 49.000 ₫"),
+        "{store}"
+    );
+    assert!(store.contains("Mua · 49 F-Coin"), "{store}");
+    let (status, page) = post(
+        &user,
+        &format!("/store/{app}/buy"),
+        &csrf_of(&store),
+        &[("expected_price", "49")],
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert!(
+        page.contains("Đã mua app.") && page.contains(r#"id="owned""#),
+        "{page}"
+    );
+    assert_eq!(balance_of(&db, subject).await, 1);
+    assert_eq!(balance_of(&db, dev).await, 49);
+    let source: String = sqlx::query_scalar(
+        "SELECT source FROM entitlements WHERE client_id = $1 AND subject = $2 AND kind = 'license'",
+    )
+    .bind(format!("client-{app}"))
+    .bind(subject)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(source.starts_with("fcoin:GD-"), "{source}");
+
+    // Scenario "Mua lại".
+    let token = launcher_token_for(&user).await;
+    let (status, body) = buy_api(&token, &app, 49).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (409, Some("already_owned"))
+    );
+    assert_eq!(balance_of(&db, subject).await, 1);
+
+    // Scenario "Không đủ F-Coin" (API launcher).
+    let other_app = format!("{app}-2");
+    priced_app(&state, &other_app, "So Tay Plus", 49, Some(dev)).await;
+    let (status, body) = buy_api(&token, &other_app, 49).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (402, Some("insufficient_funds")),
+        "{body}"
+    );
+    assert!(
+        body["message_vi"]
+            .as_str()
+            .unwrap()
+            .contains("còn thiếu 48 F-Coin"),
+        "{body}"
+    );
+
+    // GET /v1/wallet: số dư, app đã mua, giá.
+    let (status, w) = wallet_api(&token).await;
+    assert_eq!(status, 200, "{w}");
+    assert_eq!(w["balance"], 1);
+    assert_eq!(w["rate_vnd"], 1000);
+    assert!(
+        w["owned"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a == app.as_str()),
+        "{w}"
+    );
+    assert_eq!(w["prices"][&other_app], 49);
+
+    // Scenario "Token của app khác".
+    let scopes = serde_json::json!({"profile": {"required": true, "purpose_vi": "Tên", "purpose_en": "Name"}});
+    let other_client = create_app("WalletSnoop", scopes).await;
+    let a = authorize(&user, &other_client, "openid profile").await;
+    let a = answer_consent(&user, a, "accept", &[]).await;
+    let other_token = exchange(&other_client, &a).await["access_token"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (status, body) = wallet_api(&other_token).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (403, Some("launcher_only"))
+    );
+
+    // Scenario "Rút quá số dư".
+    let page = get(&user, "/wallet").await;
+    let (status, page) = post(
+        &user,
+        "/wallet/withdraw",
+        &csrf_of(&page),
+        &[
+            ("coins", "40"),
+            ("method", "bank"),
+            ("bank", "Vietcombank"),
+            ("holder", "MINH VI"),
+            ("number", "0123456789"),
+        ],
+    )
+    .await;
+    assert_eq!(status, 402, "{page}");
+    assert!(page.contains("Không đủ F-Coin"), "{page}");
+    assert_eq!(balance_of(&db, subject).await, 1);
+
+    // Nạp thêm 100 qua ZaloPay để rút hoàn về giao dịch nạp.
+    let t = wallet::create_topup(&state, subject, &email, 100)
+        .await
+        .unwrap();
+    let gateway_ref = start_payment(&user, t.request, "zalopay:vietqr").await;
+    zp_callback(&fake.pay(&gateway_ref, 38, None)).await;
+    assert_eq!(balance_of(&db, subject).await, 101);
+
+    let (finance, finance_email) = admin_with_passkey(&state, "tai-chinh", &[Role::Finance]).await;
+
+    // Scenario "Rút hoàn về giao dịch nạp".
+    let page = get(&user, "/wallet").await;
+    let source_tx = Regex::new(r#"<option value="([0-9a-f-]{36})">NAP-"#)
+        .unwrap()
+        .captures(&page)
+        .expect("có giao dịch nạp để hoàn")[1]
+        .to_owned();
+    let (status, page) = post(
+        &user,
+        "/wallet/withdraw",
+        &csrf_of(&page),
+        &[
+            ("coins", "20"),
+            ("method", "source"),
+            ("source", &source_tx),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert_eq!(balance_of(&db, subject).await, 81);
+    let wd: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM wallet_withdrawals WHERE subject = $1 AND method = 'source'",
+    )
+    .bind(subject)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    let admin_page = get(&finance, "/admin/wallet").await;
+    let (status, page) = post(
+        &finance,
+        &format!("/admin/wallet/withdrawals/{wd}/approve"),
+        &csrf_of(&admin_page),
+        &[],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    let w = wallet::withdrawal(&db, wd).await.unwrap();
+    assert_eq!(w.status, "paid", "{w:?}");
+    let zp_trans: String =
+        sqlx::query_scalar("SELECT gateway_trans_id FROM payment_transactions WHERE id = $1::uuid")
+            .bind(&source_tx)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(
+        fake.refunded(&zp_trans),
+        20_000,
+        "cổng nhận lệnh hoàn 20.000 ₫"
+    );
+    assert_eq!(balance_of(&db, subject).await, 81);
+
+    // Scenario "Rút chuyển khoản ngân hàng" + "Tài chính duyệt lệnh rút".
+    let page = get(&user, "/wallet").await;
+    let (status, _) = post(
+        &user,
+        "/wallet/withdraw",
+        &csrf_of(&page),
+        &[
+            ("coins", "60"),
+            ("method", "bank"),
+            ("bank", "Vietcombank"),
+            ("holder", "MINH VI"),
+            ("number", "0123 4567 89"),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(balance_of(&db, subject).await, 21);
+    let wd: uuid::Uuid = sqlx::query_scalar("SELECT id FROM wallet_withdrawals WHERE subject = $1 AND method = 'bank' AND status = 'pending'")
+        .bind(subject).fetch_one(&db).await.unwrap();
+    let stored: String =
+        sqlx::query_scalar("SELECT account_enc FROM wallet_withdrawals WHERE id = $1")
+            .bind(wd)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert!(!stored.contains("0123456789"), "số tài khoản phải mã hóa");
+    let admin_page = get(&finance, "/admin/wallet").await;
+    assert!(
+        admin_page.contains("···6789") && !admin_page.contains("0123456789"),
+        "{admin_page}"
+    );
+    let pending_before = wallet::overview(&db, time::OffsetDateTime::now_utc())
+        .await
+        .unwrap()
+        .withdrawals_pending;
+    post(
+        &finance,
+        &format!("/admin/wallet/withdrawals/{wd}/approve"),
+        &csrf_of(&admin_page),
+        &[],
+    )
+    .await;
+    let (_, page) = post(
+        &finance,
+        &format!("/admin/wallet/withdrawals/{wd}/reveal"),
+        &csrf_of(&admin_page),
+        &[],
+    )
+    .await;
+    assert!(page.contains("0123456789"), "Hiện số tài khoản: {page}");
+    let (status, _) = post(
+        &finance,
+        &format!("/admin/wallet/withdrawals/{wd}/paid"),
+        &csrf_of(&admin_page),
+        &[("reference", "FT2611150001")],
+    )
+    .await;
+    assert_eq!(status, 200);
+    let w = wallet::withdrawal(&db, wd).await.unwrap();
+    assert_eq!(
+        (w.status.as_str(), w.payout_ref.as_deref()),
+        ("paid", Some("FT2611150001"))
+    );
+    let pending_after = wallet::overview(&db, time::OffsetDateTime::now_utc())
+        .await
+        .unwrap()
+        .withdrawals_pending;
+    assert_eq!(pending_before - pending_after, 60);
+    let actions = audit_actions(&w.code).await;
+    for a in [
+        "wallet.withdrawal_approve",
+        "wallet.withdrawal_paid",
+        "wallet.withdrawal_reveal",
+    ] {
+        assert!(actions.iter().any(|x| x == a), "thiếu {a}: {actions:?}");
+    }
+
+    // Scenario "Bị từ chối".
+    let page = get(&user, "/wallet").await;
+    post(
+        &user,
+        "/wallet/withdraw",
+        &csrf_of(&page),
+        &[
+            ("coins", "20"),
+            ("method", "bank"),
+            ("bank", "ACB"),
+            ("holder", "MINH VI"),
+            ("number", "99887766"),
+        ],
+    )
+    .await;
+    assert_eq!(balance_of(&db, subject).await, 1);
+    let wd: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM wallet_withdrawals WHERE subject = $1 AND status = 'pending'",
+    )
+    .bind(subject)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    let admin_page = get(&finance, "/admin/wallet").await;
+    post(
+        &finance,
+        &format!("/admin/wallet/withdrawals/{wd}/reject"),
+        &csrf_of(&admin_page),
+        &[("reason", "Sai tên chủ tài khoản")],
+    )
+    .await;
+    assert_eq!(balance_of(&db, subject).await, 21);
+    wait_mail(&email, "không được duyệt").await;
+
+    // Scenario "Kiểm duyệt viên mở trang Ví" + "Không phải Tài chính".
+    let (reviewer, _) = admin_with_passkey(&state, "kiem-duyet-vi", &[Role::Reviewer]).await;
+    assert_eq!(
+        reviewer
+            .get(format!("{BASE}/admin/wallet"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        403
+    );
+    let (status, _) = post(
+        &reviewer,
+        "/admin/wallet/rate",
+        "x",
+        &[("rate", "5"), ("reason", "thử")],
+    )
+    .await;
+    assert!(status == 403, "{status}");
+    assert_eq!(wallet::rate(&db).await.unwrap(), 1000);
+
+    // Scenario "Đổi tỷ giá".
+    let admin_page = get(&finance, "/admin/wallet").await;
+    let (status, page) = post(
+        &finance,
+        "/admin/wallet/rate",
+        &csrf_of(&admin_page),
+        &[("rate", "1200"), ("reason", "Điều chỉnh quý I")],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert!(
+        page.contains("1.200 ₫") && page.contains("Điều chỉnh quý I"),
+        "{page}"
+    );
+    let t = wallet::create_topup(&state, subject, &email, 10)
+        .await
+        .unwrap();
+    assert_eq!(t.amount_vnd, 12_000);
+    wallet::set_rate(&state, &finance_email, 1000, "Trả lại tỷ giá sau kiểm thử")
+        .await
+        .unwrap();
+
+    // Scenario "Phí bán app": phí 10% → nhà phát triển nhận 45, phí 4.
+    let (status, _) = post(
+        &finance,
+        "/admin/wallet/fees",
+        &csrf_of(&admin_page),
+        &[("app_bps", "1000"), ("project_bps", "0")],
+    )
+    .await;
+    assert_eq!(status, 200);
+    let fees_before = wallet::overview(&db, time::OffsetDateTime::now_utc())
+        .await
+        .unwrap()
+        .fees;
+    topup_manual(&state, subject, &email, 100).await;
+    let dev_before = balance_of(&db, dev).await;
+    let (status, body) = buy_api(&token, &other_app, 49).await;
+    assert_eq!(status, 201, "{body}");
+    assert_eq!(balance_of(&db, dev).await - dev_before, 45);
+    let fees_after = wallet::overview(&db, time::OffsetDateTime::now_utc())
+        .await
+        .unwrap()
+        .fees;
+    assert_eq!(fees_after - fees_before, 4);
+    wallet::set_fees(&state, "e2e", wallet::Fees::default())
+        .await
+        .unwrap();
+
+    // Scenario "Ví bị khóa".
+    let admin_page = get(&finance, "/admin/wallet").await;
+    let (status, _) = post(
+        &finance,
+        "/admin/wallet/freeze",
+        &csrf_of(&admin_page),
+        &[("email", &email), ("reason", "Nghi gian lận")],
+    )
+    .await;
+    assert_eq!(status, 200);
+    let third = format!("{app}-3");
+    priced_app(&state, &third, "So Tay Max", 5, Some(dev)).await;
+    let before = balance_of(&db, subject).await;
+    let (status, body) = buy_api(&token, &third, 5).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (423, Some("wallet_frozen"))
+    );
+    assert_eq!(balance_of(&db, subject).await, before);
+    assert!(get(&user, "/wallet").await.contains("wallet-frozen"));
+    wallet::set_frozen(&state, &finance_email, &email, false, "Đã xác minh")
+        .await
+        .unwrap();
+
+    // Scenario "Lệnh lớn cần hai người duyệt": 12.000 F-Coin = 12.000.000 ₫.
+    topup_manual(&state, subject, &email, 12_000).await;
+    let wd = wallet::create_withdrawal(
+        &state,
+        subject,
+        &email,
+        12_000,
+        wallet::Payout::Bank {
+            bank: "BIDV".into(),
+            holder: "MINH VI".into(),
+            number: "11112222".into(),
+        },
+        "",
+    )
+    .await
+    .unwrap();
+    let w = wallet::approve_withdrawal(&state, wd, &finance_email)
+        .await
+        .unwrap();
+    assert_eq!((w.status.as_str(), w.approvals.len()), ("pending", 1));
+    let again = wallet::approve_withdrawal(&state, wd, &finance_email).await;
+    assert!(matches!(
+        again,
+        Err(feco_server::orders::OrderError::Problem {
+            code: "second_approver_required",
+            ..
+        })
+    ));
+    wallet::reject_withdrawal(&state, wd, &finance_email, "Dọn kiểm thử")
+        .await
+        .unwrap();
+
+    // Scenario "Cổng từ chối hoàn".
+    let t = wallet::create_topup(&state, subject, &email, 30)
+        .await
+        .unwrap();
+    let gateway_ref = start_payment(&user, t.request, "zalopay:vietqr").await;
+    zp_callback(&fake.pay(&gateway_ref, 38, None)).await;
+    let src: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM payment_transactions WHERE gateway_ref = $1")
+            .bind(&gateway_ref)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    let before = balance_of(&db, subject).await;
+    fake.reject_refunds(true);
+    let wd =
+        wallet::create_withdrawal(&state, subject, &email, 20, wallet::Payout::Source(src), "")
+            .await
+            .unwrap();
+    wallet::approve_withdrawal(&state, wd, &finance_email)
+        .await
+        .unwrap();
+    fake.reject_refunds(false);
+    assert_eq!(wallet::withdrawal(&db, wd).await.unwrap().status, "failed");
+    assert_eq!(balance_of(&db, subject).await, before, "F-Coin về lại ví");
+    let alert: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM admin_alerts WHERE kind = 'withdrawal_failed' AND details->>'withdrawal' = $1)")
+        .bind(wd.to_string()).fetch_one(&db).await.unwrap();
+    assert!(alert, "quản trị viên nhận cảnh báo");
+
+    // Scenario "Hai lần trừ song song": ví 100, hai lệnh trừ 80 cùng lúc.
+    let (p_email, p_password) = unique("song-song");
+    let p_user = app_browser();
+    register_in(&p_user, &p_email, &p_password, "Song Song").await;
+    let p = subject_of(&p_email).await;
+    topup_manual(&state, p, &p_email, 100).await;
+    let s1 = std::sync::Arc::new(local_state());
+    let bank = || wallet::Payout::Bank {
+        bank: "ACB".into(),
+        holder: "SONG SONG".into(),
+        number: "12345678".into(),
+    };
+    let (a, b) = tokio::join!(
+        wallet::create_withdrawal(&s1, p, &p_email, 80, bank(), ""),
+        wallet::create_withdrawal(&s1, p, &p_email, 80, bank(), "")
+    );
+    assert_eq!(
+        [a.is_ok(), b.is_ok()].iter().filter(|x| **x).count(),
+        1,
+        "{a:?} {b:?}"
+    );
+    assert_eq!(balance_of(&db, p).await, 20);
+
+    // Scenario "Thống kê chi tiêu": nạp 100, mua hai app tổng 60 trong tháng.
+    let (c_email, c_password) = unique("thong-ke");
+    let c_user = app_browser();
+    register_in(&c_user, &c_email, &c_password, "Thống Kê").await;
+    let c = subject_of(&c_email).await;
+    topup_manual(&state, c, &c_email, 100).await;
+    let small = format!("{app}-11");
+    priced_app(&state, &small, "Ghi Chú Nhỏ", 11, Some(dev)).await;
+    wallet::purchase(&state, c, &c_email, &other_app, Some(49))
+        .await
+        .unwrap();
+    wallet::purchase(&state, c, &c_email, &small, Some(11))
+        .await
+        .unwrap();
+    let stats = get(&c_user, "/wallet/stats").await;
+    assert_eq!(text_of(&stats, "#month-income"), "100 F-Coin", "{stats}");
+    assert_eq!(text_of(&stats, "#month-spend"), "60 F-Coin", "{stats}");
+    assert!(stats.contains(r#"data-cat="wallet.cat.apps""#), "{stats}");
+
+    // Scenario "Bất biến sổ cái".
+    let check = wallet::check_ledger(&db).await.unwrap();
+    assert!(check.ok(), "{check:?}");
+}
+
+/// Spec app-catalog "Nhà phát triển đặt giá".
+#[tokio::test]
+async fn developer_sets_app_price() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let state = local_state();
+    let app_id = format!("gia-{}", &uuid::Uuid::new_v4().simple().to_string()[..8]);
+    let (dev, _, _) = developer_with_app("dat-gia", "Lan Studio", &app_id).await;
+    let page = get(&dev, &format!("/developer/apps/{app_id}")).await;
+    assert!(page.contains(r#"id="price-form""#), "{page}");
+    let (status, page) = post(
+        &dev,
+        &format!("/developer/apps/{app_id}/price"),
+        &csrf_of(&page),
+        &[("price", "99")],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert!(page.contains("Đã lưu giá."), "{page}");
+    // Lần niêm yết sau (phát hành) lấy giá nhà phát triển đặt.
+    let client: String =
+        sqlx::query_scalar("SELECT client_id FROM developer_apps WHERE app_id = $1")
+            .bind(&app_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap();
+    priced_app(&state, &app_id, "SoundLab", 0, None).await;
+    let _ = client;
+    let price: i64 = sqlx::query_scalar("SELECT price_coin FROM catalog_apps WHERE id = $1")
+        .bind(&app_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap();
+    assert_eq!(price, 99);
+    assert!(!catalog_ids("price=free").await.contains(&app_id));
+    assert!(catalog_ids("price=paid").await.contains(&app_id));
+    let store = get(&app_browser(), &format!("/store/{app_id}")).await;
+    assert!(store.contains("99 F-Coin"), "{store}");
+}
+
+/// Spec account-identity (sáu vai trò, xin vai trò) và admin-console (duyệt yêu cầu vai trò).
+#[tokio::test]
+async fn six_roles_and_role_requests() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::{
+        admin::Role,
+        roles::{self, PlatformRole},
+    };
+    let state = local_state();
+    let db = state.db.clone();
+
+    // Scenario "Lập trình viên có từ trước": mã `developer` giữ nguyên, tên mới.
+    let (lan, lan_email) = developer_user("lap-trinh-cu", "Lan").await;
+    assert_eq!(
+        roles::role_of(&db, subject_of(&lan_email).await)
+            .await
+            .unwrap(),
+        PlatformRole::Developer
+    );
+    let home = get(&lan, "/").await;
+    assert_eq!(text_of(&home, "#platform-role"), "Lập trình viên cá nhân");
+    assert!(get(&lan, "/developer").await.contains("register-form"));
+
+    // Scenario "Thiếu mã số thuế" + "Xin vai trò Khách hàng doanh nghiệp".
+    let (email, password) = unique("doanh-nghiep");
+    let minh = app_browser();
+    register_in(&minh, &email, &password, "Minh An").await;
+    let page = get(&minh, "/account/role").await;
+    assert_eq!(text_of(&page, "#current-role"), "Người dùng phổ thông");
+    let (status, page) = post(
+        &minh,
+        "/account/role",
+        &csrf_of(&page),
+        &[("role", "dev_company"), ("note", "Công ty phần mềm")],
+    )
+    .await;
+    assert_eq!(status, 400);
+    assert!(page.contains("mã số thuế hợp lệ"), "{page}");
+    let (status, page) = post(
+        &minh,
+        "/account/role",
+        &csrf_of(&page),
+        &[
+            ("role", "business_customer"),
+            ("legal_name", "Công ty TNHH Minh An"),
+            ("tax_code", "0101234567"),
+            ("note", "Đặt làm app nội bộ"),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert!(page.contains("role-pending"), "{page}");
+    let (sysadmin, _) = admin_with_passkey(&state, "he-thong-vt", &[Role::Sysadmin]).await;
+    let members = get(&sysadmin, "/admin/members").await;
+    assert!(
+        members.contains("Khách hàng doanh nghiệp")
+            && members.contains("Công ty TNHH Minh An · MST 0101234567"),
+        "{members}"
+    );
+    let id = roles::pending_requests(&db)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.email == email)
+        .unwrap()
+        .id;
+    let (status, _) = post(
+        &sysadmin,
+        &format!("/admin/members/requests/{id}/approve"),
+        &csrf_of(&members),
+        &[("note", "")],
+    )
+    .await;
+    assert_eq!(status, 200);
+    let minh_subject = subject_of(&email).await;
+    assert_eq!(
+        roles::role_of(&db, minh_subject).await.unwrap(),
+        PlatformRole::BusinessCustomer
+    );
+    wait_mail(&email, "Đã được cấp vai trò Khách hàng doanh nghiệp").await;
+
+    // Scenario "Duyệt yêu cầu Công ty" + "Công ty vào Cổng nhà phát triển".
+    let (c_email, c_password) = unique("cong-ty");
+    let co = app_browser();
+    register_in(&co, &c_email, &c_password, "Lan Co").await;
+    verify_email(&co, &c_email).await;
+    enable_totp(&co).await;
+    let page = get(&co, "/account/role").await;
+    post(
+        &co,
+        "/account/role",
+        &csrf_of(&page),
+        &[
+            ("role", "dev_company"),
+            ("legal_name", "Công ty CP Lan Soft"),
+            ("tax_code", "0312345678"),
+        ],
+    )
+    .await;
+    let id = roles::pending_requests(&db)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.email == c_email)
+        .unwrap()
+        .id;
+    let members = get(&sysadmin, "/admin/members").await;
+    post(
+        &sysadmin,
+        &format!("/admin/members/requests/{id}/approve"),
+        &csrf_of(&members),
+        &[("note", "")],
+    )
+    .await;
+    let co_subject = subject_of(&c_email).await;
+    assert_eq!(
+        roles::role_of(&db, co_subject).await.unwrap(),
+        PlatformRole::DevCompany
+    );
+    assert!(audit_actions(&co_subject.to_string())
+        .await
+        .iter()
+        .any(|a| a == "role.set"));
+    let dev_page = get(&co, "/developer").await;
+    assert!(dev_page.contains("register-form"), "{dev_page}");
+}
+
+/// Spec software-projects và admin-console (trang Dự án).
+#[tokio::test]
+async fn software_projects_end_to_end() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::{
+        admin::Role,
+        projects,
+        roles::{self, PlatformRole},
+        wallet,
+    };
+    let state = local_state();
+    let db = state.db.clone();
+    wallet::set_fees(&state, "e2e", wallet::Fees::default())
+        .await
+        .unwrap();
+    let by = roles::ChangedBy {
+        subject: None,
+        name: "e2e".into(),
+    };
+
+    // Lan (Lập trình viên cá nhân) bật hồ sơ nhận việc.
+    let (lan, lan_email) = developer_user("lan-nhan-viec", "Lan").await;
+    let lan_subject = subject_of(&lan_email).await;
+    let page = get(&lan, "/projects").await;
+    let tag = &lan_subject.simple().to_string()[..6];
+    let name = format!("Lan Mobile {tag}");
+    let (status, _) = post(
+        &lan,
+        "/projects/profile",
+        &csrf_of(&page),
+        &[
+            ("display_name", &name),
+            ("headline", "App di động"),
+            ("skills", "Flutter, Dart"),
+            ("accepting", "on"),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // Scenario "Người dùng phổ thông gửi yêu cầu".
+    let (u_email, u_password) = unique("pho-thong");
+    let plain = app_browser();
+    register_in(&plain, &u_email, &u_password, "Phổ Thông").await;
+    let page = get(&plain, &format!("/projects/new?provider={lan_subject}")).await;
+    assert!(
+        page.contains("need-customer") && !page.contains("new-project"),
+        "{page}"
+    );
+
+    // Khách hàng doanh nghiệp.
+    let (b_email, b_password) = unique("dn-dat-hang");
+    let biz = app_browser();
+    register_in(&biz, &b_email, &b_password, "Minh An").await;
+    let biz_subject = subject_of(&b_email).await;
+    roles::set_role(
+        &db,
+        biz_subject,
+        &b_email,
+        PlatformRole::BusinessCustomer,
+        &[],
+        &by,
+        "Kiểm thử",
+    )
+    .await
+    .unwrap();
+
+    // Scenario "Khách hàng tìm người nhận việc".
+    let page = get(&biz, "/projects/providers?q=flutter").await;
+    assert!(
+        page.contains(&name) && page.contains("Lập trình viên cá nhân"),
+        "{page}"
+    );
+    assert!(!page.contains(&lan_email), "không lộ email");
+
+    // Gửi yêu cầu ngân sách 500.
+    let page = get(&biz, &format!("/projects/new?provider={lan_subject}")).await;
+    let res = biz
+        .post(format!("{BASE}/projects/new"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(
+            form_urlencoded::Serializer::new(String::new())
+                .append_pair("feco_csrf", &csrf_of(&page))
+                .append_pair("provider", &lan_subject.to_string())
+                .append_pair("title", "App bán hàng")
+                .append_pair("description", "Ứng dụng bán hàng cho cửa hàng nhỏ")
+                .append_pair("budget", "500")
+                .finish(),
+        )
+        .send()
+        .await
+        .unwrap();
+    let id: uuid::Uuid = res
+        .url()
+        .path()
+        .trim_start_matches("/projects/")
+        .parse()
+        .unwrap();
+    wait_mail(&lan_email, "Yêu cầu làm phần mềm mới: App bán hàng").await;
+
+    // Scenario "Thương lượng hai vòng" + "Tự chấp nhận đề nghị của mình".
+    let page = get(&lan, &format!("/projects/{id}")).await;
+    post(
+        &lan,
+        &format!("/projects/{id}/offer"),
+        &csrf_of(&page),
+        &[("price", "800"), ("days", "20")],
+    )
+    .await;
+    let page = get(&biz, &format!("/projects/{id}")).await;
+    post(
+        &biz,
+        &format!("/projects/{id}/offer"),
+        &csrf_of(&page),
+        &[("price", "650"), ("days", "20")],
+    )
+    .await;
+    let own: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM project_offers WHERE project_id = $1 AND status = 'open'",
+    )
+    .bind(id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    let (status, page) = post(
+        &biz,
+        &format!("/projects/{id}/accept-offer"),
+        &csrf_of(&page),
+        &[("offer", &own.to_string())],
+    )
+    .await;
+    assert_eq!(status, 403, "{page}");
+    let page = get(&lan, &format!("/projects/{id}")).await;
+    post(
+        &lan,
+        &format!("/projects/{id}/accept-offer"),
+        &csrf_of(&page),
+        &[("offer", &own.to_string())],
+    )
+    .await;
+    let p = projects::get(&db, id).await.unwrap();
+    assert_eq!(
+        (p.status.as_str(), p.price_coin, p.days),
+        ("agreed", Some(650), Some(20))
+    );
+
+    // Scenario "Doanh nghiệp lập và hai bên ký" + "Ký quỹ khi hợp đồng chưa ký đủ".
+    let page = get(&biz, &format!("/projects/{id}")).await;
+    assert!(page.contains("contract-form"), "{page}");
+    let (status, page) = post(
+        &biz,
+        &format!("/projects/{id}/contract"),
+        &csrf_of(&page),
+        &[
+            ("customer_name", "Công ty TNHH Minh An"),
+            ("provider_name", "Trần Thị Lan"),
+            ("extra", "Bảo hành 3 tháng."),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    post(
+        &biz,
+        &format!("/projects/{id}/sign"),
+        &csrf_of(&page),
+        &[("agree", "on"), ("name", "công ty tnhh minh an")],
+    )
+    .await;
+    wallet_topup_for(&state, biz_subject, &b_email, 700).await;
+    let page = get(&biz, &format!("/projects/{id}")).await;
+    let (status, page) = post(&biz, &format!("/projects/{id}/fund"), &csrf_of(&page), &[]).await;
+    assert_eq!(status, 409, "{page}");
+    assert!(page.contains("chưa được hai bên ký đủ"), "{page}");
+    assert_eq!(balance_of(&db, biz_subject).await, 700);
+    let page = get(&lan, &format!("/projects/{id}")).await;
+    let (status, page) = post(
+        &lan,
+        &format!("/projects/{id}/sign"),
+        &csrf_of(&page),
+        &[("agree", "on"), ("name", "Trần Thị Lan")],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    let c = projects::contract(&db, id).await.unwrap().unwrap();
+    assert_eq!(c.status, "signed");
+    assert_eq!(c.sha256, projects::sha256_hex(&c.body));
+    assert!(page.contains(&c.sha256), "{page}");
+
+    // Scenario "Trả tiền sau khi nhận bàn giao" + "Yêu cầu sửa".
+    let page = get(&biz, &format!("/projects/{id}")).await;
+    let (status, _) = post(&biz, &format!("/projects/{id}/fund"), &csrf_of(&page), &[]).await;
+    assert_eq!(status, 200);
+    assert_eq!(balance_of(&db, biz_subject).await, 50);
+    let page = get(&lan, &format!("/projects/{id}")).await;
+    post(
+        &lan,
+        &format!("/projects/{id}/deliver"),
+        &csrf_of(&page),
+        &[("note", "Bản 1"), ("link", "https://example.com/build1")],
+    )
+    .await;
+    let page = get(&biz, &format!("/projects/{id}")).await;
+    post(
+        &biz,
+        &format!("/projects/{id}/revise"),
+        &csrf_of(&page),
+        &[("reason", "Thiếu màn hình đăng nhập")],
+    )
+    .await;
+    let p = projects::get(&db, id).await.unwrap();
+    assert_eq!((p.status.as_str(), p.escrow_coin), ("in_progress", 650));
+    let page = get(&lan, &format!("/projects/{id}")).await;
+    post(
+        &lan,
+        &format!("/projects/{id}/deliver"),
+        &csrf_of(&page),
+        &[("note", "Bản 2 có đăng nhập")],
+    )
+    .await;
+    let lan_before = balance_of(&db, lan_subject).await;
+    let page = get(&biz, &format!("/projects/{id}")).await;
+    post(
+        &biz,
+        &format!("/projects/{id}/accept"),
+        &csrf_of(&page),
+        &[],
+    )
+    .await;
+    let p = projects::get(&db, id).await.unwrap();
+    assert_eq!((p.status.as_str(), p.escrow_coin), ("completed", 0));
+    assert_eq!(balance_of(&db, lan_subject).await - lan_before, 650);
+    assert_eq!(balance_of(&db, biz_subject).await, 50);
+
+    // Khách hàng cá nhân: scenario "Khách hàng cá nhân lập hợp đồng", "Không đủ F-Coin để ký quỹ",
+    // "Chia ký quỹ".
+    let (i_email, i_password) = unique("ca-nhan");
+    let ind = app_browser();
+    register_in(&ind, &i_email, &i_password, "Cá Nhân").await;
+    let ind_subject = subject_of(&i_email).await;
+    roles::set_role(
+        &db,
+        ind_subject,
+        &i_email,
+        PlatformRole::Customer,
+        &[],
+        &by,
+        "Kiểm thử",
+    )
+    .await
+    .unwrap();
+    let i_ref = i_email.as_str();
+    let agreed = |title: &'static str| {
+        let state = &state;
+        let i_email = i_ref;
+        async move {
+            let pid = projects::create(
+                state,
+                ind_subject,
+                i_email,
+                lan_subject,
+                title,
+                "Mô tả đủ dài cho dự án",
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+            projects::offer(state, pid, lan_subject, 650, 10, "")
+                .await
+                .unwrap();
+            let offer: uuid::Uuid = sqlx::query_scalar(
+                "SELECT id FROM project_offers WHERE project_id = $1 AND status = 'open'",
+            )
+            .bind(pid)
+            .fetch_one(&state.db)
+            .await
+            .unwrap();
+            projects::accept_offer(state, pid, ind_subject, offer)
+                .await
+                .unwrap();
+            pid
+        }
+    };
+    let split = agreed("App lịch hẹn").await;
+    let page = get(&ind, &format!("/projects/{split}")).await;
+    assert!(!page.contains("contract-form"));
+    let (status, page) = post(
+        &ind,
+        &format!("/projects/{split}/contract"),
+        &csrf_of(&page),
+        &[("customer_name", "Cá Nhân"), ("provider_name", "Lan")],
+    )
+    .await;
+    assert_eq!(status, 403);
+    assert!(
+        page.contains("Cần vai trò Khách hàng doanh nghiệp hoặc Công ty"),
+        "{page}"
+    );
+    wallet_topup_for(&state, ind_subject, &i_email, 100).await;
+    let (status, page) = post(
+        &ind,
+        &format!("/projects/{split}/fund"),
+        &csrf_of(&page),
+        &[],
+    )
+    .await;
+    assert_eq!(status, 402);
+    assert!(page.contains("còn thiếu 550 F-Coin"), "{page}");
+    assert_eq!(projects::get(&db, split).await.unwrap().status, "agreed");
+    wallet_topup_for(&state, ind_subject, &i_email, 1300).await;
+    projects::fund(&state, split, ind_subject).await.unwrap();
+    projects::dispute(&state, split, ind_subject, "Chậm tiến độ")
+        .await
+        .unwrap();
+    let (lan_before, ind_before) = (
+        balance_of(&db, lan_subject).await,
+        balance_of(&db, ind_subject).await,
+    );
+    projects::resolve(&state, split, "pm@f-eco.test", 400, "Đã làm được một phần")
+        .await
+        .unwrap();
+    assert_eq!(balance_of(&db, lan_subject).await - lan_before, 400);
+    assert_eq!(balance_of(&db, ind_subject).await - ind_before, 250);
+    assert_eq!(projects::get(&db, split).await.unwrap().status, "resolved");
+
+    // Scenario "Xử lý tranh chấp" trên trang Dự án của bảng quản trị.
+    let refund = agreed("App ghi chú").await;
+    projects::fund(&state, refund, ind_subject).await.unwrap();
+    projects::dispute(&state, refund, lan_subject, "Khách không phản hồi")
+        .await
+        .unwrap();
+    let (pm, _) = admin_with_passkey(&state, "quan-ly-du-an", &[Role::ProjectManager]).await;
+    let page = get(&pm, &format!("/admin/projects/{refund}")).await;
+    assert!(page.contains("resolve-form"), "{page}");
+    let ind_before = balance_of(&db, ind_subject).await;
+    let (status, page) = post(
+        &pm,
+        &format!("/admin/projects/{refund}/resolve"),
+        &csrf_of(&page),
+        &[("mode", "refund"), ("note", "Hoàn toàn bộ")],
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    assert_eq!(balance_of(&db, ind_subject).await - ind_before, 650);
+    assert_eq!(projects::get(&db, refund).await.unwrap().status, "resolved");
+    wait_mail(&i_email, "Tranh chấp dự án").await;
+    assert!(
+        audit_actions(&projects::get(&db, refund).await.unwrap().code)
+            .await
+            .iter()
+            .any(|a| a == "project.resolve")
+    );
+    assert!(wallet::check_ledger(&db).await.unwrap().ok());
+}
+
+async fn wallet_topup_for(state: &AppState, subject: uuid::Uuid, email: &str, coins: i64) {
+    topup_manual(state, subject, email, coins).await;
+}
+
+/// Thay đổi launcher-logos-and-updates: logo app trên F-Store, biểu tượng trang, trang "Ứng dụng
+/// của tôi" trên web báo bản mới như Thư viện của F-Launcher.
+#[tokio::test]
+async fn app_logos_and_web_library() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use base64::Engine;
+    let state = local_state();
+    let tag = &uuid::Uuid::new_v4().simple().to_string()[..8];
+    let png = include_bytes!("../../../assets/logos/kibi-128.png");
+
+    // Scenario "Logo app trên F-Store".
+    let app = format!("logo-{tag}");
+    let mut a = catalog_app(&app, &format!("client-{app}"), "Logo App");
+    a.icon = Some(base64::engine::general_purpose::STANDARD.encode(png));
+    feco_server::catalog::upsert_app(&state.db, &state.catalog, &a)
+        .await
+        .unwrap();
+    feco_server::catalog::release_version(
+        &state.db,
+        &state.catalog,
+        &app,
+        &version("1.0.0", "windows-x64"),
+    )
+    .await
+    .unwrap();
+    let res = reqwest::get(format!("{BASE}/store/{app}/icon.png"))
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 200);
+    assert_eq!(res.headers()["content-type"], "image/png");
+    assert_eq!(res.bytes().await.unwrap().as_ref(), png.as_slice());
+    let browser = app_browser();
+    let page = get(&browser, &format!("/store/{app}")).await;
+    assert!(
+        page.contains(&format!(r#"src="/store/{app}/icon.png""#)),
+        "{page}"
+    );
+    // Cập nhật thông tin không kèm logo thì giữ logo cũ.
+    a.icon = None;
+    feco_server::catalog::upsert_app(&state.db, &state.catalog, &a)
+        .await
+        .unwrap();
+    assert!(feco_server::catalog::icon(&state.db, &app)
+        .await
+        .unwrap()
+        .is_some());
+    // App không có logo: chữ cái đầu, và icon.png trả 404.
+    let plain = format!("plain-{tag}");
+    feco_server::catalog::upsert_app(
+        &state.db,
+        &state.catalog,
+        &catalog_app(&plain, &format!("client-{plain}"), "Plain App"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        reqwest::get(format!("{BASE}/store/{plain}/icon.png"))
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        404
+    );
+    // Biểu tượng trang là logo F-Launcher.
+    let fav = reqwest::get(format!("{BASE}/favicon.svg")).await.unwrap();
+    assert_eq!(fav.headers()["content-type"], "image/svg+xml");
+    assert!(fav.text().await.unwrap().contains("F-Launcher"));
+    assert!(page.contains(r#"href="/favicon.svg""#));
+
+    // Scenario "Ứng dụng của tôi trên web": cài 1.0.0 qua launcher, có bản 1.1.0 → báo bản mới.
+    let (email, password) = unique("thu-vien-web");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Thư Viện").await;
+    let token = launcher_token_for(&user).await;
+    let res = reqwest::Client::new()
+        .post(format!("{BASE}/v1/catalog/installs"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"app_id": app, "version": "1.0.0"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 204);
+    let lib = get(&user, "/library").await;
+    assert!(
+        lib.contains(&format!(r#"data-app="{app}" data-update="false""#)),
+        "{lib}"
+    );
+    feco_server::catalog::release_version(
+        &state.db,
+        &state.catalog,
+        &app,
+        &version("1.1.0", "windows-x64"),
+    )
+    .await
+    .unwrap();
+    let lib = get(&user, "/library").await;
+    assert!(
+        lib.contains(&format!(r#"data-app="{app}" data-update="true""#)),
+        "{lib}"
+    );
+    assert!(
+        lib.contains("updates-banner") && lib.contains("Mở F-Launcher để cập nhật."),
+        "{lib}"
+    );
+    // App đã mua mà chưa cài cũng có trong danh sách.
+    let paid = format!("mua-{tag}");
+    priced_app(&state, &paid, "Mua Rồi", 5, None).await;
+    let subject = subject_of(&email).await;
+    topup_manual(&state, subject, &email, 10).await;
+    feco_server::wallet::purchase(&state, subject, &email, &paid, Some(5))
+        .await
+        .unwrap();
+    let lib = get(&user, "/library").await;
+    assert!(
+        lib.contains(&format!(r#"data-app="{paid}""#)) && lib.contains("Đã mua"),
+        "{lib}"
+    );
 }

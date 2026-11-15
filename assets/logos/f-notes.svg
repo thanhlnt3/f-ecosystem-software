@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ghi chú">
+  <title>Ghi chú (f-notes)</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffc107"/>
+      <stop offset="1" stop-color="#f57c00"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <path d="M136 96h176l64 64v256a16 16 0 0 1-16 16H136a16 16 0 0 1-16-16V112a16 16 0 0 1 16-16z" fill="#fffdf6"/>
+  <path d="M312 96v48a16 16 0 0 0 16 16h48z" fill="#ffe0a3"/>
+  <rect x="168" y="208" width="176" height="20" rx="10" fill="#c9c2b3"/>
+  <rect x="168" y="264" width="176" height="20" rx="10" fill="#c9c2b3"/>
+  <rect x="168" y="320" width="120" height="20" rx="10" fill="#c9c2b3"/>
+  <path d="M330 382l70-70 26 26-70 70-34 8z" fill="#2f3b52"/>
+</svg>

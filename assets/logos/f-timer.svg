@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Bấm giờ">
+  <title>Bấm giờ (f-timer)</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#26a69a"/>
+      <stop offset="1" stop-color="#00695c"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <rect x="226" y="92" width="60" height="36" rx="10" fill="#ffffff"/>
+  <rect x="340" y="140" width="40" height="28" rx="8" fill="#ffffff" transform="rotate(40 360 154)"/>
+  <circle cx="256" cy="288" r="140" fill="#ffffff"/>
+  <circle cx="256" cy="288" r="112" fill="#e0f2f1"/>
+  <path d="M256 288V196" stroke="#00695c" stroke-width="22" stroke-linecap="round"/>
+  <path d="M256 288l62 38" stroke="#f37021" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="256" cy="288" r="16" fill="#00695c"/>
+</svg>

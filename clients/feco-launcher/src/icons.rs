@@ -31,11 +31,17 @@ pub enum Icon {
     Trash,
     Undo,
     ArrowUp,
+    /// Ví F-Coin.
+    Wallet,
+    /// Đồng F-Coin (nút Mua).
+    Coin,
 }
 
 #[cfg(test)]
 impl Icon {
-    pub const ALL: [Icon; 21] = [
+    pub const ALL: [Icon; 23] = [
+        Icon::Wallet,
+        Icon::Coin,
         Icon::Library,
         Icon::Store,
         Icon::Bell,
@@ -234,6 +240,34 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
                 s,
                 &[(0.18, 0.66), (0.18, 0.84), (0.82, 0.84), (0.82, 0.66)],
             );
+        }
+        Icon::Wallet => {
+            // Thân ví và nắp cài có chấm tròn.
+            p.rect_stroke(
+                Rect::from_min_max(at(r, 0.14, 0.26), at(r, 0.86, 0.82)),
+                2.0,
+                s,
+                egui::StrokeKind::Middle,
+            );
+            p.rect_stroke(
+                Rect::from_min_max(at(r, 0.56, 0.44), at(r, 0.86, 0.64)),
+                1.0,
+                s,
+                egui::StrokeKind::Middle,
+            );
+            p.circle_filled(at(r, 0.68, 0.54), r.width() * 0.035, color);
+            line(p, r, s, &[(0.22, 0.26), (0.66, 0.14), (0.72, 0.26)]);
+        }
+        Icon::Coin => {
+            // Đồng xu: vòng ngoài, vòng trong và chữ F.
+            p.circle_stroke(at(r, 0.5, 0.5), r.width() * 0.36, s);
+            p.circle_stroke(
+                at(r, 0.5, 0.5),
+                r.width() * 0.25,
+                Stroke::new(w * 0.6, color),
+            );
+            line(p, r, s, &[(0.56, 0.37), (0.45, 0.37), (0.45, 0.64)]);
+            line(p, r, s, &[(0.45, 0.5), (0.54, 0.5)]);
         }
         Icon::ArrowUp => {
             line(p, r, s, &[(0.5, 0.84), (0.5, 0.2)]);

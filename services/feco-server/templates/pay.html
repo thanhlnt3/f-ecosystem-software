@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ i18n.t("pay.title") }}{% endblock %}
 {% block content %}
-<p><a href="/orders/{{ order_id }}">← {{ order_code }}</a></p>
+<p><a href="{{ back }}">← {{ order_code }}</a></p>
 <h1>{{ i18n.t("pay.title") }}</h1>
 {% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
 <div class="facts">

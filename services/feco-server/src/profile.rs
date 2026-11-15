@@ -104,7 +104,7 @@ pub async fn load(state: &AppState, lang: Lang, session: &Value) -> Profile {
     let id = identity["id"].as_str().unwrap_or_default().to_owned();
     let subject: Uuid = id.parse().unwrap_or_default();
 
-    let (role, apps, sessions, orders, unread, full) = tokio::join!(
+    let (role, apps, sessions, orders, unread, full, wallet) = tokio::join!(
         crate::roles::role_of(&state.db, subject),
         state.hydra.consent_sessions(&id),
         state.kratos.identity_sessions(&id),
@@ -117,6 +117,7 @@ pub async fn load(state: &AppState, lang: Lang, session: &Value) -> Profile {
         .bind(subject)
         .fetch_one(&state.db),
         state.kratos.has_second_factor(&id),
+        crate::wallet::summary(&state.db, subject),
     );
     let role = role.unwrap_or_else(|e| {
         tracing::warn!(error = %e, "không đọc được vai trò");
@@ -125,6 +126,18 @@ pub async fn load(state: &AppState, lang: Lang, session: &Value) -> Profile {
     // Xác thực hai lớp: danh tính có TOTP, khóa bảo mật hoặc mã khôi phục.
     let two_factor = full.ok().flatten();
     let stats = vec![
+        Stat {
+            id: "stat-wallet",
+            label: lang.t("profile.stat.wallet"),
+            value: match wallet {
+                Ok(w) => crate::wallet::coin(w.balance, lang),
+                Err(e) => {
+                    tracing::warn!(error = %e, "không đọc được ví");
+                    "—".into()
+                }
+            },
+            href: "/wallet",
+        },
         Stat {
             id: "stat-apps",
             label: lang.t("profile.stat.apps"),
@@ -164,7 +177,7 @@ pub async fn load(state: &AppState, lang: Lang, session: &Value) -> Profile {
             .unwrap_or_default(),
         two_factor,
         stats,
-        developer: matches!(role, PlatformRole::Developer | PlatformRole::Admin),
+        developer: role.can_develop(),
         admin: role == PlatformRole::Admin,
     }
 }

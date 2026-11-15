@@ -261,7 +261,7 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     và một app eframe tối giản. wgpu (DirectX 12, Vulkan hoặc Metal) vẽ đúng. Cái giá là tệp chạy
     lớn hơn và nhiều thư viện phụ thuộc hơn (đều MIT hoặc Apache-2.0). Chủ dự án đồng ý phát hành
     bản vá: 1.0.1 (nhánh `release/1.0`) chỉ gồm bản sửa renderer và giờ địa phương.
-72. **Biểu tượng app.** Launcher dùng ô chữ cái đầu có màu theo mã app. Icon do nhà phát triển tải
+72. **Biểu tượng app** (đã xử lý 15/11/2026: logo PNG tối đa 64 KB được ký trong metadata TUF và lưu trong danh mục, thay đổi launcher-logos-and-updates). Launcher dùng ô chữ cái đầu có màu theo mã app. Icon do nhà phát triển tải
     lên cần thêm một target TUF đã ký cho mỗi icon, và quy định kích thước, định dạng, kiểm duyệt.
     Có làm ở thay đổi sau không?
 73. **App mã nguồn mở do người khác đóng gói.** Spec yêu cầu kèm giấy phép gốc. Chưa có quy định về
@@ -311,3 +311,35 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 84. **Kiểm thử tải trên máy chủ thật.** Biên bản ngày 15/11/2026 đo trên một máy dev (máy tạo tải
     và máy chủ chung một máy, Kratos và Hydra dùng SQLite). Cần chạy lại trên hạ tầng staging giống
     production trước khi ra mắt.
+
+## Thay đổi fcoin-wallet-and-marketplace và launcher-logos-and-updates (bản 1.6.0)
+
+85. **Pháp lý của F-Coin.** F-Coin không phải tiền mã hóa hay tài sản số; đó là số dư trả trước chỉ
+    dùng trong F-Eco. Nhưng F-Coin rút được ra tiền thật (hoàn về giao dịch nạp, hoặc chuyển khoản).
+    Vì vậy cần luật sư xác nhận trước khi mở cho người dùng thật:
+    - có cần giấy phép dịch vụ trung gian thanh toán hoặc ví điện tử không (Nghị định 52/2024/NĐ-CP
+      về thanh toán không dùng tiền mặt), hay phải giới hạn F-Coin là "điểm" không đổi ngược ra tiền;
+    - xuất hóa đơn lúc nạp hay lúc dùng F-Coin; thuế của tiền bán app và tiền dự án trả cho lập
+      trình viên;
+    - nghĩa vụ phòng chống rửa tiền: giới hạn nạp, rút (hiện 10–50.000 F-Coin mỗi lần nạp, rút từ
+      10 F-Coin, từ 10.000.000 ₫ cần hai người duyệt), định danh khách hàng (KYC).
+
+    Trong lúc chờ, đặt `FECO_WALLET_WITHDRAWALS=false` để tắt việc tạo lệnh rút mới.
+86. **Chi hộ qua cổng thanh toán.** Rút về ví MoMo hoặc ZaloPay của người dùng (không phải hoàn về
+    giao dịch nạp) cần hợp đồng dịch vụ chi hộ với cổng. Hiện cách "chuyển khoản ngân hàng" do bộ
+    phận Tài chính tự chuyển rồi ghi mã chuyển khoản. Có ký hợp đồng chi hộ với MoMo hoặc ZaloPay
+    không?
+87. **Hợp đồng dự án.** Hợp đồng hiện là thỏa thuận điện tử có lưu vết: nội dung, SHA-256, người ký
+    (đánh dấu đồng ý và nhập họ tên), thời điểm ký. Cần luật sư xác nhận hai việc:
+    - giá trị pháp lý theo Luật Giao dịch điện tử 2023, và doanh nghiệp có cần chữ ký số có chứng
+      thư (CA) không;
+    - rà soát mẫu hợp đồng: phạm vi, nghiệm thu, sở hữu mã nguồn, tranh chấp.
+88. **Ví của tổ chức.** Ví F-Coin gắn với từng tài khoản người dùng. Tiền bán app của một công ty vào
+    ví của chủ (owner) tài khoản nhà phát triển. Có cần ví riêng cho tổ chức, nhiều người cùng quản lý
+    và phân quyền chi tiêu không?
+89. **Logo F-Launcher dựa trên nhận diện FPT.** Theo yêu cầu, logo F-Launcher là chữ F nghiêng ghép
+    từ ba thanh cam, xanh lá, xanh dương, lấy cảm hứng từ bộ ba màu của Tập đoàn FPT. Logo không
+    chép hình hay chữ của logo FPT. Dùng yếu tố nhận diện của FPT trong sản phẩm cần bộ phận thương
+    hiệu của FPT đồng ý trước khi phát hành thương mại. Ai sẽ xin ý kiến này?
+90. **Phí nền tảng.** Phí bán app và phí dự án đã làm xong nhưng đang đặt 0%. Chủ dự án muốn mức
+    phí nào khi ra mắt, và phí có tính trên tiền chia khi xử lý tranh chấp không (hiện có)?

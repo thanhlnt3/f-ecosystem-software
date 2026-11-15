@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("wallet.stats") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("wallet.stats") }}</h1>
+<div class="stats">
+  <div class="stat"><span class="stat-value" id="stat-balance">{{ balance }}</span><span class="stat-label">{{ i18n.t("wallet.balance") }}</span></div>
+  <div class="stat"><span class="stat-value" id="month-income">{{ month_income }}</span><span class="stat-label">{{ i18n.t("wallet.month_income") }}</span></div>
+  <div class="stat"><span class="stat-value" id="month-spend">{{ month_spend }}</span><span class="stat-label">{{ i18n.t("wallet.month_spend") }}</span></div>
+</div>
+<section class="card chart" id="monthly-chart">
+  <h2>{{ i18n.t("wallet.by_month") }}</h2>
+  <p class="muted"><span style="color:var(--ok)">■</span> {{ i18n.t("wallet.income") }} · <span style="color:var(--accent)">■</span> {{ i18n.t("wallet.spend") }}</p>
+  <div class="bars" role="img" aria-label="{{ i18n.t("wallet.by_month") }}">
+  {% for b in bars %}<div class="bar" title="{{ b.label }}: +{{ b.income }} / −{{ b.spend }}"><div style="display:flex;gap:2px;align-items:flex-end;width:100%;height:100%"><span style="height:{{ b.income_pct }}%;background:var(--ok)"></span><span style="height:{{ b.spend_pct }}%"></span></div><small>{{ b.label }}</small></div>{% endfor %}
+  </div>
+</section>
+<div class="profile-grid" style="margin-top:16px">
+<section class="card" id="income-by-kind">
+  <h2>{{ i18n.t("wallet.income") }}</h2>
+  {% if income.is_empty() %}<p class="muted">—</p>{% endif %}
+  <ul class="menu">{% for c in income %}<li data-cat="{{ c.label }}"><span>{{ i18n.t(c.label) }}</span><strong>{{ c.amount }}</strong></li>{% endfor %}</ul>
+</section>
+<section class="card" id="spend-by-kind">
+  <h2>{{ i18n.t("wallet.spend") }}</h2>
+  {% if spend.is_empty() %}<p class="muted">—</p>{% endif %}
+  <ul class="menu">{% for c in spend %}<li data-cat="{{ c.label }}"><span>{{ i18n.t(c.label) }}</span><strong>{{ c.amount }}</strong></li>{% endfor %}</ul>
+</section>
+</div>
+<p class="muted">{{ i18n.t("wallet.stats_note") }}</p>
+<div class="links"><a href="/wallet">{{ i18n.t("wallet.title") }}</a></div>
+{% endblock %}

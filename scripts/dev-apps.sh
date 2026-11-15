@@ -6,11 +6,14 @@
 #   scripts/dev-apps.sh github <owner/repo> <tag-hoặc-commit> --id ID --name TÊN --bin FILE \
 #       --license SPDX [--summary MÔ-TẢ] [--category NHÓM] [--developer TÊN] [--terminal] \
 #       [--description GIỚI-THIỆU] [--features "A|B|C"] [--website URL] [--notes GHI-CHÚ]
+#       [--icon LOGO.png]
 #                                   # tải mã nguồn đúng tag/commit, dựng, đóng gói kèm giấy phép
 #                                   # gốc, ký TUF, ghi danh mục (xem docs/github-apps.md)
 #   scripts/dev-apps.sh opensource  # ba app mã nguồn mở của danh mục dev: kibi, bottom,
 #                                   # eframe template
 #   scripts/dev-apps.sh all         # samples + opensource
+#   scripts/dev-apps.sh icons       # đặt logo (assets/logos/<id>-128.png) cho app đã có trong kho
+#                                   # TUF và danh mục dev
 #
 # Mã nguồn tải về và bản dựng nằm ngoài repo, trong $FECO_EXT_DIR (mặc định ~/.feco-dev-ext), để
 # Cargo không coi chúng là một phần workspace của F-Eco. Chỉ dùng cho dev: bản phát hành thật đi
@@ -49,7 +52,7 @@ EOF
 json_str() { "$PY" -I -c 'import json,sys; print(json.dumps(sys.argv[1], ensure_ascii=False))' "$1"; }
 
 # Nội dung trang chi tiết của app sắp phát hành (đặt trước khi gọi publish_app).
-DESCRIPTION="" FEATURES="" WEBSITE="" NOTES=""
+DESCRIPTION="" FEATURES="" WEBSITE="" NOTES="" ICON=""
 
 # publish_app ID TÊN VERSION THƯ-MỤC-GÓI FILE-CHẠY CLIENT-ID-TUF SUMMARY CATEGORY DEVELOPER LICENSE \
 #             SOURCE TERMINAL CATALOG-CLIENT-ID
@@ -78,6 +81,7 @@ publish_app() {
   [[ -n "$FEATURES" ]] && args+=(--features "$FEATURES")
   [[ -n "$WEBSITE" ]] && args+=(--website "$WEBSITE")
   [[ -n "$NOTES" ]] && args+=(--release-notes "$NOTES")
+  [[ -n "$ICON" ]] && args+=(--icon "$ICON")
   [[ -n "$tuf_client" ]] && args+=(--client-id "$tuf_client")
   [[ -n "$source_url" ]] && args+=(--source "$source_url")
   [[ "$terminal" == "true" ]] && args+=(--terminal true)
@@ -93,7 +97,7 @@ catalog_entry() {
  "developer":$(json_str "$developer"),"developer_verified":false,"first_party":false,
  "summary":$(json_str "$summary"),
  "description":$(json_str "${DESCRIPTION:-$summary}${source_url:+ Mã nguồn: $source_url}"),
- "category":"$category","price_vnd":0,"license":$(json_str "$license"),"screenshots":[]}
+ "category":"$category","price_vnd":0,"license":$(json_str "$license"),"screenshots":[]${ICON:+,"icon_file":$(json_str "$(cygpath -m "$ICON" 2>/dev/null || echo "$ICON")")}}
 EOF
   catalog add-app "$json"
   catalog release "$id" "$version" "$plat" "$(wc -c < "$zipfile" | tr -d ' ')" "$zipname" \
@@ -126,6 +130,7 @@ samples() {
     cp "$exe" "$pkg/bin/"
     cp "$ROOT/LICENSE-MIT" "$ROOT/LICENSE-APACHE" "$pkg/"
     WEBSITE="https://github.com/thanhlnt3/f-ecosystem-software/tree/main/examples/apps/$id"
+    ICON="$ROOT/assets/logos/$id-128.png"
     NOTES="Bản dựng dev lúc $(date '+%H:%M %d/%m/%Y') từ mã nguồn hiện tại của examples/apps/$id."
     case "$id" in
       f-notes)
@@ -146,7 +151,7 @@ github() {
   local repo="${1:?cần owner/repo}" ref="${2:?cần tag hoặc commit}"
   shift 2
   local id="" name="" bin="" license="" summary="" category="other" developer="" terminal="false"
-  DESCRIPTION="" FEATURES="" WEBSITE="" NOTES=""
+  DESCRIPTION="" FEATURES="" WEBSITE="" NOTES="" ICON=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --id) id="$2"; shift 2 ;;
@@ -161,6 +166,7 @@ github() {
       --features) FEATURES="$2"; shift 2 ;;
       --website) WEBSITE="$2"; shift 2 ;;
       --notes) NOTES="$2"; shift 2 ;;
+      --icon) ICON="$2"; shift 2 ;;
       *) echo "tham số lạ: $1" >&2; exit 2 ;;
     esac
   done
@@ -207,19 +213,19 @@ github() {
 }
 
 opensource() {
-  github ilai-deutel/kibi v0.3.3 --id kibi --name "kibi" --bin kibi --license "MIT OR Apache-2.0" \
+  github ilai-deutel/kibi v0.3.3 --id kibi --icon "$ROOT/assets/logos/kibi-128.png" --name "kibi" --bin kibi --license "MIT OR Apache-2.0" \
     --summary "Trình soạn thảo văn bản siêu nhỏ chạy trong terminal (dưới 1.024 dòng mã)." \
     --category tools --developer "Ilaï Deutel" --terminal \
     --description "kibi là trình soạn thảo văn bản trong terminal, viết bằng Rust với chưa tới 1.024 dòng mã, lấy cảm hứng từ kilo. Bản trong F-Eco dựng từ mã nguồn gốc tại tag v0.3.3, không sửa đổi." \
     --features "Tô màu cú pháp cho hơn 30 ngôn ngữ|Tìm kiếm tăng dần|Sao chép, cắt, dán, nhân đôi dòng|Chạy lệnh ngoài và dán kết quả vào văn bản|Cấu hình qua tệp config.ini|Chạy trên Windows, macOS, Linux" \
     --notes "Bản 0.3.3 của dự án gốc: thêm Ctrl+/ để chú thích hoặc bỏ chú thích dòng; bật bảo vệ ngăn xếp cho bản phát hành. Chi tiết trong CHANGELOG.md của kho ilai-deutel/kibi."
-  github ClementTsang/bottom 0.15.0 --id bottom --name "bottom" --bin btm --license "MIT" \
+  github ClementTsang/bottom 0.15.0 --id bottom --icon "$ROOT/assets/logos/bottom-128.png" --name "bottom" --bin btm --license "MIT" \
     --summary "Theo dõi CPU, bộ nhớ, mạng, ổ đĩa và tiến trình ngay trong terminal." \
     --category system --developer "Clement Tsang" --terminal --website "https://bottom.pages.dev/stable" \
     --description "bottom (lệnh btm) là công cụ theo dõi hệ thống đa nền tảng trong terminal, lấy cảm hứng từ gtop, gotop và htop. Bản trong F-Eco dựng từ mã nguồn gốc tại tag 0.15.0, không sửa đổi." \
     --features "Biểu đồ CPU, bộ nhớ, mạng theo thời gian|Danh sách tiến trình: lọc, sắp xếp, dừng tiến trình|Dung lượng và tốc độ đọc ghi ổ đĩa|Nhiệt độ cảm biến và pin|Giao diện tùy chỉnh bằng tệp cấu hình|Điều khiển bằng bàn phím và chuột" \
     --notes "Bản 0.15.0 của dự án gốc: hỗ trợ GPU Intel trên Linux, thanh dạng khối, đơn vị dung lượng nhị phân cho ổ đĩa, cột swap của tiến trình trên Linux; bật thanh cuộn mặc định; sửa lỗi khởi động trên Windows 7 và 8. Chi tiết trong CHANGELOG.md của kho ClementTsang/bottom."
-  github emilk/eframe_template f108546a2b9f2fc6a82543ceae1625a3893305cb --id eframe-template \
+  github emilk/eframe_template f108546a2b9f2fc6a82543ceae1625a3893305cb --id eframe-template --icon "$ROOT/assets/logos/eframe-template-128.png" \
     --name "eframe template" --bin eframe_template --license "MIT OR Apache-2.0" \
     --summary "App cửa sổ mẫu viết bằng egui/eframe, điểm khởi đầu cho app đồ họa bằng Rust." \
     --category development --developer "Emil Ernerfeldt" --website "https://www.egui.rs" \
@@ -228,8 +234,30 @@ opensource() {
     --notes "Bản tại commit f108546 của dự án gốc, dùng egui và eframe 0.36."
 }
 
+# Đặt logo cho các app đã phát hành trong môi trường dev (kho TUF và danh mục F-Store).
+icons() {
+  need_repo
+  build
+  local id json
+  for id in f-notes f-timer kibi bottom eframe-template; do
+    [[ -f "$DEV/catalog-$id.json" ]] || continue
+    "$TUF" set-icon --repo "$REPO" --app "$id" --icon "$ROOT/assets/logos/$id-128.png" \
+      --sign "$(RELEASE_KEYS)"
+    json="$DEV/catalog-$id.json"
+    "$PY" -I - "$json" "$(cygpath -m "$ROOT/assets/logos/$id-128.png" 2>/dev/null || echo "$ROOT/assets/logos/$id-128.png")" <<'PYEOF'
+import json, sys
+path, icon = sys.argv[1:3]
+data = json.load(open(path, encoding="utf-8"))
+data["icon_file"] = icon
+json.dump(data, open(path, "w", encoding="utf-8"), ensure_ascii=False)
+PYEOF
+    catalog add-app "$json"
+  done
+}
+
 case "${1:-}" in
   samples) samples ;;
+  icons) icons ;;
   github) shift; github "$@" ;;
   opensource) opensource ;;
   all) samples; opensource ;;

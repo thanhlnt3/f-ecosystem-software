@@ -1,9 +1,10 @@
-//! Vai trò nền tảng của tài khoản (thay đổi OpenSpec platform-roles; design R1–R3):
-//! Người sử dụng ứng dụng (mặc định), Lập trình viên, Quản trị viên.
+//! Vai trò nền tảng của tài khoản (thay đổi OpenSpec platform-roles; fcoin-wallet-and-marketplace
+//! design R1): Người dùng phổ thông (mặc định), Khách hàng cá nhân, Khách hàng doanh nghiệp,
+//! Lập trình viên cá nhân, Công ty phát triển phần mềm, Quản trị viên.
 //!
 //! - Quản trị viên: có dòng trong `admin_members` (kèm vai trò con của bảng quản trị).
-//! - Lập trình viên: có dòng `role_grants` với `role = 'developer'`.
-//! - Còn lại: Người sử dụng ứng dụng.
+//! - Bốn vai trò giữa: một dòng `role_grants` với `role` là mã vai trò.
+//! - Còn lại: Người dùng phổ thông.
 //!
 //! Đổi vai trò chỉ qua [`set_role`]: bắt buộc lý do, ghi nhật ký kiểm toán, không tự đổi vai trò
 //! của mình, không bỏ Quản trị hệ thống cuối cùng.
@@ -25,23 +26,56 @@ use crate::{
 #[serde(rename_all = "snake_case")]
 pub enum PlatformRole {
     User,
+    Customer,
+    BusinessCustomer,
     Developer,
+    DevCompany,
     Admin,
 }
 
 impl PlatformRole {
-    pub const ALL: [PlatformRole; 3] = [
+    pub const ALL: [PlatformRole; 6] = [
         PlatformRole::User,
+        PlatformRole::Customer,
+        PlatformRole::BusinessCustomer,
         PlatformRole::Developer,
+        PlatformRole::DevCompany,
         PlatformRole::Admin,
+    ];
+
+    /// Vai trò người dùng tự xin được (trang Vai trò).
+    pub const REQUESTABLE: [PlatformRole; 4] = [
+        PlatformRole::Customer,
+        PlatformRole::BusinessCustomer,
+        PlatformRole::Developer,
+        PlatformRole::DevCompany,
     ];
 
     pub fn as_str(self) -> &'static str {
         match self {
             PlatformRole::User => "user",
+            PlatformRole::Customer => "customer",
+            PlatformRole::BusinessCustomer => "business_customer",
             PlatformRole::Developer => "developer",
+            PlatformRole::DevCompany => "dev_company",
             PlatformRole::Admin => "admin",
         }
+    }
+
+    /// Mã lưu trong `role_grants` (None: mặc định hoặc Quản trị viên).
+    pub fn grant_code(self) -> Option<&'static str> {
+        match self {
+            PlatformRole::User | PlatformRole::Admin => None,
+            r => Some(r.as_str()),
+        }
+    }
+
+    /// Vai trò tổ chức: phải khai tên pháp lý và mã số thuế khi xin.
+    pub fn is_organization(self) -> bool {
+        matches!(
+            self,
+            PlatformRole::BusinessCustomer | PlatformRole::DevCompany
+        )
     }
 
     pub fn parse(s: &str) -> Option<PlatformRole> {
@@ -51,14 +85,41 @@ impl PlatformRole {
     pub fn label(self, lang: Lang) -> &'static str {
         lang.t(match self {
             PlatformRole::User => "role.user",
+            PlatformRole::Customer => "role.customer",
+            PlatformRole::BusinessCustomer => "role.business_customer",
             PlatformRole::Developer => "role.developer",
+            PlatformRole::DevCompany => "role.dev_company",
             PlatformRole::Admin => "role.admin",
         })
     }
 
-    /// Được vào Cổng nhà phát triển và dùng `f-dev`.
+    /// Được vào Cổng nhà phát triển, gửi app mới lên kho và dùng `f-dev`.
     pub fn can_develop(self) -> bool {
-        matches!(self, PlatformRole::Developer | PlatformRole::Admin)
+        matches!(
+            self,
+            PlatformRole::Developer | PlatformRole::DevCompany | PlatformRole::Admin
+        )
+    }
+
+    /// Nhận yêu cầu làm phần mềm (hồ sơ nhận việc).
+    pub fn can_take_projects(self) -> bool {
+        matches!(self, PlatformRole::Developer | PlatformRole::DevCompany)
+    }
+
+    /// Gửi yêu cầu làm phần mềm cho người nhận việc.
+    pub fn can_commission(self) -> bool {
+        matches!(
+            self,
+            PlatformRole::Customer | PlatformRole::BusinessCustomer
+        )
+    }
+
+    /// Lập hợp đồng cho dự án.
+    pub fn can_sign_contracts(self) -> bool {
+        matches!(
+            self,
+            PlatformRole::BusinessCustomer | PlatformRole::DevCompany
+        )
     }
 }
 
@@ -78,6 +139,10 @@ pub enum RoleError {
     AlreadyDeveloper,
     #[error("không tìm thấy yêu cầu đang chờ")]
     RequestNotFound,
+    #[error("vai trò này không xin được")]
+    NotRequestable,
+    #[error("cần tên pháp lý và mã số thuế hợp lệ")]
+    LegalInfoRequired,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -93,6 +158,8 @@ impl RoleError {
             RoleError::AlreadyPending => "role.err.pending",
             RoleError::AlreadyDeveloper => "role.err.already",
             RoleError::RequestNotFound => "role.err.request",
+            RoleError::NotRequestable => "role.err.not_requestable",
+            RoleError::LegalInfoRequired => "role.err.legal",
             RoleError::Db(_) => "error.generic",
         }
     }
@@ -108,17 +175,15 @@ pub async fn role_of(db: &Db, subject: Uuid) -> sqlx::Result<PlatformRole> {
     if admin {
         return Ok(PlatformRole::Admin);
     }
-    let developer: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM role_grants WHERE subject = $1 AND role = 'developer')",
-    )
-    .bind(subject)
-    .fetch_one(db)
-    .await?;
-    Ok(if developer {
-        PlatformRole::Developer
-    } else {
-        PlatformRole::User
-    })
+    let granted: Option<String> =
+        sqlx::query_scalar("SELECT role FROM role_grants WHERE subject = $1")
+            .bind(subject)
+            .fetch_optional(db)
+            .await?;
+    Ok(granted
+        .as_deref()
+        .and_then(PlatformRole::parse)
+        .unwrap_or(PlatformRole::User))
 }
 
 /// Vai trò con của quản trị viên (rỗng nếu không phải quản trị viên).
@@ -202,19 +267,23 @@ pub async fn set_role(
                 .execute(&mut *tx)
                 .await?;
         }
-        PlatformRole::Developer => {
+        PlatformRole::Customer
+        | PlatformRole::BusinessCustomer
+        | PlatformRole::Developer
+        | PlatformRole::DevCompany => {
             sqlx::query("DELETE FROM admin_members WHERE subject = $1")
                 .bind(target)
                 .execute(&mut *tx)
                 .await?;
             sqlx::query(
-                "INSERT INTO role_grants (subject, role, email, granted_by, reason) VALUES ($1, 'developer', $2, $3, $4)
-                 ON CONFLICT (subject) DO UPDATE SET email = $2, granted_by = $3, reason = $4, granted_at = now()",
+                "INSERT INTO role_grants (subject, role, email, granted_by, reason) VALUES ($1, $5, $2, $3, $4)
+                 ON CONFLICT (subject) DO UPDATE SET role = $5, email = $2, granted_by = $3, reason = $4, granted_at = now()",
             )
             .bind(target)
             .bind(&email)
             .bind(&by.name)
             .bind(reason)
+            .bind(role.as_str())
             .execute(&mut *tx)
             .await?;
         }
@@ -232,18 +301,18 @@ pub async fn set_role(
             .await?;
         }
     }
-    // Yêu cầu đang chờ không còn ý nghĩa khi đã có quyền.
-    if role.can_develop() {
-        sqlx::query(
-            "UPDATE role_requests SET status = 'approved', decided_by = $2, decided_at = now(), decision_note = $3
-             WHERE subject = $1 AND status = 'pending'",
-        )
-        .bind(target)
-        .bind(&by.name)
-        .bind(reason)
-        .execute(&mut *tx)
-        .await?;
-    }
+    // Yêu cầu đang chờ đúng vai trò vừa cấp không còn ý nghĩa (Quản trị viên có mọi quyền
+    // Lập trình viên nên cũng đóng yêu cầu Lập trình viên).
+    sqlx::query(
+        "UPDATE role_requests SET status = 'approved', decided_by = $2, decided_at = now(), decision_note = $3
+         WHERE subject = $1 AND status = 'pending' AND (role = $4 OR ($4 = 'admin' AND role = 'developer'))",
+    )
+    .bind(target)
+    .bind(&by.name)
+    .bind(reason)
+    .bind(role.as_str())
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
     audit::record(
         db,
@@ -267,23 +336,24 @@ async fn role_of_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     subject: Uuid,
 ) -> sqlx::Result<PlatformRole> {
-    let (admin, developer): (bool, bool) = sqlx::query_as(
+    let (admin, granted): (bool, Option<String>) = sqlx::query_as(
         "SELECT EXISTS (SELECT 1 FROM admin_members WHERE subject = $1),
-                EXISTS (SELECT 1 FROM role_grants WHERE subject = $1 AND role = 'developer')",
+                (SELECT role FROM role_grants WHERE subject = $1)",
     )
     .bind(subject)
     .fetch_one(&mut **tx)
     .await?;
     Ok(if admin {
         PlatformRole::Admin
-    } else if developer {
-        PlatformRole::Developer
     } else {
-        PlatformRole::User
+        granted
+            .as_deref()
+            .and_then(PlatformRole::parse)
+            .unwrap_or(PlatformRole::User)
     })
 }
 
-/// Một yêu cầu quyền Lập trình viên.
+/// Một yêu cầu vai trò.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Request {
     pub id: Uuid,
@@ -293,14 +363,26 @@ pub struct Request {
     pub status: String,
     pub created_at: time::OffsetDateTime,
     pub decision_note: Option<String>,
+    pub role: String,
+    pub legal_name: Option<String>,
+    pub tax_code: Option<String>,
 }
+
+impl Request {
+    pub fn platform_role(&self) -> PlatformRole {
+        PlatformRole::parse(&self.role).unwrap_or(PlatformRole::Developer)
+    }
+}
+
+const REQUEST_COLUMNS: &str =
+    "id, subject, email, note, status, created_at, decision_note, role, legal_name, tax_code";
 
 /// Yêu cầu gần nhất của một người (đang chờ hoặc đã xử lý).
 pub async fn latest_request(db: &Db, subject: Uuid) -> sqlx::Result<Option<Request>> {
-    sqlx::query_as(
-        "SELECT id, subject, email, note, status, created_at, decision_note FROM role_requests
-         WHERE subject = $1 ORDER BY created_at DESC LIMIT 1",
-    )
+    sqlx::query_as(&format!(
+        "SELECT {REQUEST_COLUMNS} FROM role_requests
+         WHERE subject = $1 ORDER BY created_at DESC LIMIT 1"
+    ))
     .bind(subject)
     .fetch_optional(db)
     .await
@@ -313,18 +395,58 @@ pub async fn request_developer(
     email: &str,
     note: &str,
 ) -> Result<Uuid, RoleError> {
-    if role_of(&state.db, subject).await?.can_develop() {
+    request_role(state, subject, email, PlatformRole::Developer, note, None).await
+}
+
+/// Thông tin tổ chức khi xin vai trò doanh nghiệp hoặc công ty.
+#[derive(Debug, Clone, Default)]
+pub struct Organization {
+    pub legal_name: String,
+    pub tax_code: String,
+}
+
+/// Gửi yêu cầu một vai trò (trang Vai trò). Vai trò tổ chức bắt buộc tên pháp lý và mã số thuế.
+pub async fn request_role(
+    state: &AppState,
+    subject: Uuid,
+    email: &str,
+    role: PlatformRole,
+    note: &str,
+    org: Option<&Organization>,
+) -> Result<Uuid, RoleError> {
+    if !PlatformRole::REQUESTABLE.contains(&role) {
+        return Err(RoleError::NotRequestable);
+    }
+    let current = role_of(&state.db, subject).await?;
+    if current == role || (role == PlatformRole::Developer && current.can_develop()) {
         return Err(RoleError::AlreadyDeveloper);
     }
+    let (legal_name, tax_code) = if role.is_organization() {
+        let org = org.ok_or(RoleError::LegalInfoRequired)?;
+        let name = org.legal_name.trim();
+        let tax = org.tax_code.trim();
+        if name.is_empty() || !crate::payments::valid_tax_code(tax) {
+            return Err(RoleError::LegalInfoRequired);
+        }
+        (
+            Some(name.chars().take(200).collect::<String>()),
+            Some(tax.to_owned()),
+        )
+    } else {
+        (None, None)
+    };
     let id = Uuid::new_v4();
     let inserted = sqlx::query(
-        "INSERT INTO role_requests (id, subject, email, note) VALUES ($1, $2, $3, $4)
+        "INSERT INTO role_requests (id, subject, email, note, role, legal_name, tax_code) VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (subject) WHERE status = 'pending' DO NOTHING",
     )
     .bind(id)
     .bind(subject)
     .bind(email.trim().to_ascii_lowercase())
     .bind(note.trim().chars().take(1000).collect::<String>())
+    .bind(role.as_str())
+    .bind(&legal_name)
+    .bind(&tax_code)
     .execute(&state.db)
     .await?
     .rows_affected();
@@ -337,14 +459,14 @@ pub async fn request_developer(
         "role.request",
         Some(&subject.to_string()),
         None,
-        json!({ "role": "developer" }),
+        json!({ "role": role.as_str(), "legal_name": legal_name, "tax_code": tax_code }),
     )
     .await;
     crate::review::admin_alert(
         state,
         "role_request",
-        &format!("{email} yêu cầu quyền Lập trình viên"),
-        json!({ "email": email, "note": note.trim(), "request": id }),
+        &format!("{email} yêu cầu vai trò {}", role.label(Lang::Vi)),
+        json!({ "email": email, "role": role.as_str(), "note": note.trim(), "request": id }),
     )
     .await;
     Ok(id)
@@ -352,10 +474,10 @@ pub async fn request_developer(
 
 /// Yêu cầu đang chờ, cũ nhất trước.
 pub async fn pending_requests(db: &Db) -> sqlx::Result<Vec<Request>> {
-    sqlx::query_as(
-        "SELECT id, subject, email, note, status, created_at, decision_note FROM role_requests
-         WHERE status = 'pending' ORDER BY created_at",
-    )
+    sqlx::query_as(&format!(
+        "SELECT {REQUEST_COLUMNS} FROM role_requests
+         WHERE status = 'pending' ORDER BY created_at"
+    ))
     .fetch_all(db)
     .await
 }
@@ -368,31 +490,24 @@ pub async fn decide(
     by: &ChangedBy,
     note: &str,
 ) -> Result<(), RoleError> {
-    let r: Request = sqlx::query_as(
-        "SELECT id, subject, email, note, status, created_at, decision_note FROM role_requests
-         WHERE id = $1 AND status = 'pending'",
-    )
+    let r: Request = sqlx::query_as(&format!(
+        "SELECT {REQUEST_COLUMNS} FROM role_requests
+         WHERE id = $1 AND status = 'pending'"
+    ))
     .bind(request)
     .fetch_optional(&state.db)
     .await?
     .ok_or(RoleError::RequestNotFound)?;
     let note = note.trim();
+    let role = r.platform_role();
     if approve {
+        let default_reason = format!("Duyệt yêu cầu vai trò {}", role.label(Lang::Vi));
         let reason = if note.is_empty() {
-            "Duyệt yêu cầu quyền Lập trình viên"
+            default_reason.as_str()
         } else {
             note
         };
-        set_role(
-            &state.db,
-            r.subject,
-            &r.email,
-            PlatformRole::Developer,
-            &[],
-            by,
-            reason,
-        )
-        .await?;
+        set_role(&state.db, r.subject, &r.email, role, &[], by, reason).await?;
     } else {
         if note.is_empty() {
             return Err(RoleError::ReasonRequired);
@@ -416,26 +531,40 @@ pub async fn decide(
         )
         .await;
     }
-    let message = if approve {
-        Note::vi(
+    let (vi_name, en_name) = (role.label(Lang::Vi), role.label(Lang::En));
+    let link = if role.can_develop() {
+        "/developer"
+    } else {
+        "/account/role"
+    };
+    let message = match (approve, role) {
+        (true, PlatformRole::Developer) => Note::vi(
             "Đã được cấp quyền Lập trình viên",
             "Bạn đã được cấp quyền Lập trình viên trên F-Eco. Mở Cổng nhà phát triển để tạo tài khoản nhà phát triển và app đầu tiên.",
-            "/developer",
+            link,
         )
         .en(
             "Developer access granted",
             "You now have Developer access on F-Eco. Open the developer portal to create your developer account and first app.",
-        )
-    } else {
-        Note::vi(
-            "Yêu cầu quyền Lập trình viên chưa được duyệt",
-            format!("Yêu cầu quyền Lập trình viên của bạn chưa được duyệt. Lý do: {note}"),
-            "/developer",
+        ),
+        (true, _) => Note::vi(
+            format!("Đã được cấp vai trò {vi_name}"),
+            format!("Bạn đã được cấp vai trò {vi_name} trên F-Eco."),
+            link,
         )
         .en(
-            "Developer access request declined",
-            format!("Your request for Developer access was declined. Reason: {note}"),
+            format!("{en_name} role granted"),
+            format!("You now have the {en_name} role on F-Eco."),
+        ),
+        (false, _) => Note::vi(
+            format!("Yêu cầu vai trò {vi_name} chưa được duyệt"),
+            format!("Yêu cầu vai trò {vi_name} của bạn chưa được duyệt. Lý do: {note}"),
+            link,
         )
+        .en(
+            format!("{en_name} role request declined"),
+            format!("Your request for the {en_name} role was declined. Reason: {note}"),
+        ),
     };
     notifications::notify(
         state,
@@ -462,9 +591,9 @@ pub async fn holders(db: &Db) -> sqlx::Result<Vec<Holder>> {
         sqlx::query_as("SELECT subject, email, roles FROM admin_members ORDER BY email")
             .fetch_all(db)
             .await?;
-    let developers: Vec<(Uuid, String)> = sqlx::query_as(
-        "SELECT subject, email FROM role_grants WHERE role = 'developer'
-         AND subject NOT IN (SELECT subject FROM admin_members) ORDER BY email",
+    let developers: Vec<(Uuid, String, String)> = sqlx::query_as(
+        "SELECT subject, email, role FROM role_grants
+         WHERE subject NOT IN (SELECT subject FROM admin_members) ORDER BY role, email",
     )
     .fetch_all(db)
     .await?;
@@ -477,10 +606,10 @@ pub async fn holders(db: &Db) -> sqlx::Result<Vec<Holder>> {
             admin_roles: roles,
         })
         .collect();
-    out.extend(developers.into_iter().map(|(subject, email)| Holder {
+    out.extend(developers.into_iter().map(|(subject, email, role)| Holder {
         subject,
         email,
-        role: PlatformRole::Developer,
+        role: PlatformRole::parse(&role).unwrap_or(PlatformRole::Developer),
         admin_roles: Vec::new(),
     }));
     Ok(out)
@@ -498,6 +627,29 @@ mod tests {
         }
         assert!(!PlatformRole::User.can_develop());
         assert!(PlatformRole::Developer.can_develop());
+        assert!(PlatformRole::DevCompany.can_develop());
+        assert!(!PlatformRole::Customer.can_develop());
+        // Ma trận quyền (design R1).
+        let pick = |f: fn(PlatformRole) -> bool| -> Vec<PlatformRole> {
+            PlatformRole::ALL.into_iter().filter(|r| f(*r)).collect()
+        };
+        assert_eq!(
+            pick(PlatformRole::can_take_projects),
+            [PlatformRole::Developer, PlatformRole::DevCompany]
+        );
+        assert_eq!(
+            pick(PlatformRole::can_commission),
+            [PlatformRole::Customer, PlatformRole::BusinessCustomer]
+        );
+        assert_eq!(
+            pick(PlatformRole::can_sign_contracts),
+            [PlatformRole::BusinessCustomer, PlatformRole::DevCompany]
+        );
+        for r in PlatformRole::REQUESTABLE {
+            assert!(r.grant_code().is_some());
+        }
+        assert_eq!(PlatformRole::User.grant_code(), None);
+        assert_eq!(PlatformRole::Admin.grant_code(), None);
         assert!(
             PlatformRole::Admin.can_develop(),
             "quản trị viên có quyền Lập trình viên"

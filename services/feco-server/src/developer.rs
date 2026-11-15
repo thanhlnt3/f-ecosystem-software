@@ -1340,6 +1340,7 @@ pub async fn release(
             price_vnd: 0,
             license: manifest.license.clone(),
             screenshots: Vec::new(),
+            icon: None,
         },
     )
     .await?;
@@ -1451,6 +1452,16 @@ async fn sign_target(
         release_notes: manifest.release_notes.clone(),
         license: some(&manifest.license),
         released_at: Some(jiff::Timestamp::now().to_string()),
+        // Logo đã có trong danh mục (nếu có) được ký cùng target để launcher hiển thị.
+        icon: sqlx::query_scalar::<_, Option<String>>(
+            "SELECT icon FROM catalog_apps WHERE id = $1",
+        )
+        .bind(&app.app_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .flatten(),
     };
     let signers: Vec<_> = tuf.sign_keys.iter().map(feco_tuf::keys::source).collect();
     let repo = feco_tuf::Repo::open(&tuf.repo);

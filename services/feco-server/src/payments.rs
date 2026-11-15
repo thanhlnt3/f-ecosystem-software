@@ -188,6 +188,19 @@ pub struct Charge {
     pub amount_vnd: i64,
     pub status: String,
     pub reason: String,
+    /// Khoản phải thu của một lệnh nạp F-Coin (khi đó `order_id`, `order_code` là của lệnh nạp).
+    pub topup: bool,
+}
+
+impl Charge {
+    /// Trang quay về sau khi thanh toán.
+    pub fn back(&self) -> String {
+        if self.topup {
+            "/wallet".to_owned()
+        } else {
+            format!("/orders/{}", self.order_id)
+        }
+    }
 }
 
 type ChargeRow = (
@@ -202,12 +215,16 @@ type ChargeRow = (
     i64,
     String,
     String,
+    bool,
 );
 
 pub async fn charge(state: &AppState, request: Uuid) -> OrderResult<Charge> {
     let row: Option<ChargeRow> = sqlx::query_as(
-        "SELECT r.id, o.id, o.code, o.title, o.customer, o.customer_email, m.position, m.title, r.amount_vnd, r.status, r.reason
-         FROM payment_requests r JOIN orders o ON o.id = r.order_id LEFT JOIN order_milestones m ON m.id = r.milestone_id
+        "SELECT r.id, coalesce(o.id, w.id), coalesce(o.code, w.code), coalesce(o.title, r.reason),
+                coalesce(o.customer, w.subject), coalesce(o.customer_email, w.email), m.position, m.title,
+                r.amount_vnd, r.status, r.reason, r.topup_id IS NOT NULL
+         FROM payment_requests r LEFT JOIN orders o ON o.id = r.order_id
+         LEFT JOIN wallet_topups w ON w.id = r.topup_id LEFT JOIN order_milestones m ON m.id = r.milestone_id
          WHERE r.id = $1 AND r.kind = 'charge'",
     )
     .bind(request)
@@ -233,6 +250,7 @@ pub async fn charge(state: &AppState, request: Uuid) -> OrderResult<Charge> {
         amount_vnd: r.8,
         status: r.9,
         reason: r.10,
+        topup: r.11,
     })
 }
 
@@ -379,8 +397,9 @@ pub async fn transactions_of_request(
 /// Khách hàng của một giao dịch: (id, email, mã đơn).
 async fn owner(state: &AppState, tx: Uuid) -> OrderResult<(Uuid, String, String)> {
     Ok(sqlx::query_as(
-        "SELECT o.customer, o.customer_email, o.code FROM payment_transactions t
-         JOIN payment_requests r ON r.id = t.request_id JOIN orders o ON o.id = r.order_id WHERE t.id = $1",
+        "SELECT coalesce(o.customer, w.subject), coalesce(o.customer_email, w.email), coalesce(o.code, w.code)
+         FROM payment_transactions t JOIN payment_requests r ON r.id = t.request_id
+         LEFT JOIN orders o ON o.id = r.order_id LEFT JOIN wallet_topups w ON w.id = r.topup_id WHERE t.id = $1",
     )
     .bind(tx)
     .fetch_one(&state.db)
@@ -484,6 +503,7 @@ pub async fn start(
     .await?;
     db.commit().await?;
     let description = match c.milestone {
+        _ if c.topup => format!("F-Eco - {} - {}", c.order_code, c.reason),
         Some(p) => format!(
             "F-Eco - Đơn {} - mốc {p}: {}",
             c.order_code, c.milestone_title
@@ -631,6 +651,16 @@ pub async fn settle(
         )
         .await;
         return Ok(Settled::Refunded(refund));
+    }
+    let topup: bool =
+        sqlx::query_scalar("SELECT topup_id IS NOT NULL FROM payment_requests WHERE id = $1")
+            .bind(t.request_id)
+            .fetch_one(&state.db)
+            .await?;
+    if topup {
+        // Lệnh nạp F-Coin: cộng F-Coin (đã idempotent), ví tự gửi thông báo.
+        crate::wallet::topup_settled(state, t.request_id, now).await?;
+        return Ok(Settled::Recorded);
     }
     if request_status == "pending" {
         orders::payment_settled(state, t.request_id, true, now).await?;
@@ -1261,7 +1291,11 @@ pub async fn approve_refund(state: &AppState, id: Uuid, admin: &str) -> OrderRes
 }
 
 /// Gửi lệnh hoàn tới cổng, về đúng giao dịch (và phương thức) ban đầu.
-async fn execute_refund(state: &AppState, id: Uuid, now: OffsetDateTime) -> OrderResult<()> {
+pub(crate) async fn execute_refund(
+    state: &AppState,
+    id: Uuid,
+    now: OffsetDateTime,
+) -> OrderResult<()> {
     let r = refund(state, id).await?;
     let t = transaction(state, r.transaction_id).await?;
     if t.provider == "manual" {
@@ -1328,8 +1362,20 @@ async fn finish_refund(
         return Ok(());
     }
     let (customer, email, code) = owner(state, r.transaction_id).await?;
+    let withdrawal = r.kind == "withdrawal";
     match status {
         RefundStatus::Processing => Ok(()),
+        RefundStatus::Failed(why) if withdrawal => {
+            sqlx::query(
+                "UPDATE refunds SET status = 'failed', failure = $2, settled_at = $3 WHERE id = $1",
+            )
+            .bind(id)
+            .bind(&why)
+            .bind(now)
+            .execute(&state.db)
+            .await?;
+            crate::wallet::refund_finished(state, id, false, None, &why, now).await
+        }
         RefundStatus::Failed(why) => {
             sqlx::query(
                 "UPDATE refunds SET status = 'failed', failure = $2, settled_at = $3 WHERE id = $1",
@@ -1368,6 +1414,17 @@ async fn finish_refund(
                 .execute(&mut *db)
                 .await?;
             db.commit().await?;
+            if withdrawal {
+                let gateway_ref: Option<String> =
+                    sqlx::query_scalar("SELECT gateway_ref FROM refunds WHERE id = $1")
+                        .bind(id)
+                        .fetch_one(&state.db)
+                        .await?;
+                crate::wallet::refund_finished(state, id, true, gateway_ref.as_deref(), "", now)
+                    .await?;
+                adjustment_invoice(state, id).await;
+                return Ok(());
+            }
             mail(
                 state,
                 customer,

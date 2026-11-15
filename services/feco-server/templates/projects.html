@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("nav.projects") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("nav.projects") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<nav class="chips" aria-label="{{ i18n.t("nav.projects") }}">
+  <a class="btn{% if section != "mine" %} secondary{% endif %}" href="/projects">{{ i18n.t("proj.mine") }}</a>
+  <a class="btn{% if section != "providers" %} secondary{% endif %}" href="/projects/providers" id="link-providers">{{ i18n.t("proj.providers") }}</a>
+</nav>
+
+{% if section == "mine" %}
+<p class="muted">{{ i18n.t("role.current") }}: <span class="badge brand">{{ role }}</span> · <a href="/account/role">{{ i18n.t("role.page") }}</a></p>
+{% if projects.is_empty() %}<p class="muted" id="no-projects">{{ i18n.t("proj.none") }}</p>{% endif %}
+<table id="project-list">
+{% for p in projects %}<tr class="project" data-code="{{ p.code }}" data-status="{{ p.status }}"><td><a href="/projects/{{ p.id }}"><strong>{{ p.code }}</strong> · {{ p.title }}</a><br><span class="muted">{{ i18n.t(p.side) }} · {{ p.other }} · {{ p.updated }}</span></td><td>{{ p.price }}</td><td>{{ i18n.t(p.status_label) }}</td></tr>{% endfor %}
+</table>
+
+{% if can_take %}
+<section class="card" id="provider-profile" style="margin-top:16px">
+  <h2>{{ i18n.t("proj.profile") }}</h2>
+  <p class="muted">{{ i18n.t("proj.profile_note") }}</p>
+  <form method="post" action="/projects/profile" id="profile-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label for="pf-name">{{ i18n.t("proj.display_name") }}</label>
+    <input type="text" name="display_name" id="pf-name" value="{{ profile_name }}" maxlength="100" required>
+    <label for="pf-headline">{{ i18n.t("proj.headline") }}</label>
+    <input type="text" name="headline" id="pf-headline" value="{{ profile_headline }}" maxlength="300">
+    <label for="pf-skills">{{ i18n.t("proj.skills") }}</label>
+    <input type="text" name="skills" id="pf-skills" value="{{ profile_skills }}" maxlength="300" placeholder="Rust, Flutter, React">
+    <div><input type="checkbox" name="accepting" id="pf-accepting"{% if profile_accepting %} checked{% endif %}> <label for="pf-accepting" style="display:inline;font-weight:400">{{ i18n.t("proj.accepting") }}</label></div>
+    <button type="submit">{{ i18n.t("pay.save") }}</button>
+  </form>
+</section>
+{% endif %}
+{% if !can_take && !can_commission %}<p class="muted" id="need-role">{{ i18n.t("proj.need_role") }} <a href="/account/role">{{ i18n.t("role.page") }}</a></p>{% endif %}
+{% endif %}
+
+{% if section == "providers" %}
+<form method="get" action="/projects/providers" class="filters" id="provider-search">
+  <input type="search" name="q" value="{{ query }}" placeholder="{{ i18n.t("proj.search") }}">
+  <button type="submit">{{ i18n.t("store.search") }}</button>
+</form>
+{% if providers.is_empty() %}<p class="muted" id="no-providers">{{ i18n.t("proj.no_providers") }}</p>{% endif %}
+<div class="grid" id="providers">
+{% for p in providers %}
+  <div class="app provider" data-provider="{{ p.id }}">
+    <h3>{{ p.name }}</h3>
+    <p><span class="badge brand">{{ i18n.t(p.kind) }}</span></p>
+    {% if !p.headline.is_empty() %}<p>{{ p.headline }}</p>{% endif %}
+    {% if !p.skills.is_empty() %}<p class="muted">{{ p.skills }}</p>{% endif %}
+    {% if can_commission %}<a class="btn" href="/projects/new?provider={{ p.id }}">{{ i18n.t("proj.request") }}</a>{% endif %}
+  </div>
+{% endfor %}
+</div>
+{% if !can_commission %}<p class="muted" id="need-customer">{{ i18n.t("proj.need_customer") }} <a href="/account/role">{{ i18n.t("role.page") }}</a></p>{% endif %}
+{% endif %}
+
+{% if section == "new" %}
+<h2>{{ i18n.t("proj.request") }}</h2>
+{% if !can_commission %}
+<p class="msg error" id="need-customer">{{ i18n.t("proj.need_customer") }} <a href="/account/role">{{ i18n.t("role.page") }}</a></p>
+{% else %}
+{% match provider %}
+{% when Some with (pv) %}
+<p>{{ i18n.t("proj.to") }} <strong id="to-provider">{{ pv.name }}</strong> · {{ i18n.t(pv.kind) }}</p>
+<form method="post" action="/projects/new" id="new-project">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <input type="hidden" name="provider" value="{{ pv.id }}">
+  <label for="np-title">{{ i18n.t("proj.title") }}</label>
+  <input type="text" name="title" id="np-title" value="{{ title }}" maxlength="200" required>
+  <label for="np-desc">{{ i18n.t("proj.description") }}</label>
+  <textarea name="description" id="np-desc" maxlength="10000" required>{{ description }}</textarea>
+  <label for="np-budget">{{ i18n.t("proj.budget") }} (F-Coin)</label>
+  <input type="text" inputmode="numeric" name="budget" id="np-budget" value="{{ budget }}">
+  <label for="np-days">{{ i18n.t("proj.wanted_days") }}</label>
+  <input type="text" inputmode="numeric" name="days" id="np-days" value="{{ days }}">
+  <button type="submit">{{ i18n.t("proj.send") }}</button>
+</form>
+{% when None %}
+<p class="muted">{{ i18n.t("proj.pick_provider") }} <a href="/projects/providers">{{ i18n.t("proj.providers") }}</a></p>
+{% endmatch %}
+{% endif %}
+{% endif %}
+<div class="links"><a href="/wallet">{{ i18n.t("wallet.title") }}</a><a href="/">{{ i18n.t("home.title") }}</a></div>
+{% endblock %}

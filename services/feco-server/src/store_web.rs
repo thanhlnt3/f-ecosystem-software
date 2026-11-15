@@ -43,6 +43,8 @@ pub struct CatalogQuery {
     pub verified: Option<String>,
     /// Thông báo sau khi gửi biểu mẫu (khóa cố định, không phản chiếu nội dung người dùng).
     pub ok: Option<String>,
+    /// Kết quả mua bằng F-Coin (`ok` hoặc mã lỗi), xem [`crate::wallet_web::buy`].
+    pub buy: Option<String>,
 }
 
 impl CatalogQuery {
@@ -69,6 +71,10 @@ impl CatalogQuery {
 
 pub struct Card {
     pub id: String,
+    /// Có logo riêng; không có thì hiện chữ cái đầu.
+    pub has_icon: bool,
+    pub monogram: String,
+    pub tint: String,
     pub name: String,
     pub developer: String,
     pub verified: bool,
@@ -132,6 +138,10 @@ struct AppPage {
     messages: Vec<Msg>,
     signed_in: bool,
     is_owner: bool,
+    /// Giá F-Coin, số tiền quy đổi, đã mua chưa (thay đổi fcoin-wallet-and-marketplace).
+    price_coin: u64,
+    price_note: String,
+    owned: bool,
     csrf: String,
     reasons: Vec<(String, String)>,
 }
@@ -188,23 +198,37 @@ fn size_label(bytes: i64) -> String {
     format!("{:.1} MB", bytes.max(0) as f64 / 1_048_576.0)
 }
 
-fn price_label(lang: Lang, vnd: u64) -> String {
-    if vnd == 0 {
+fn price_label(lang: Lang, price_coin: u64) -> String {
+    if price_coin == 0 {
         lang.t("store.price_free").to_owned()
     } else {
-        feco_core::Vnd::new(vnd).to_string()
+        crate::wallet::coin(price_coin as i64, lang)
     }
 }
 
 fn card(lang: Lang, l: &Listing) -> Card {
     Card {
+        has_icon: l.has_icon,
+        monogram: l
+            .name
+            .split_whitespace()
+            .filter_map(|w| w.chars().next())
+            .take(2)
+            .collect::<String>()
+            .to_uppercase(),
+        tint: format!(
+            "hsl({} 55% 42%)",
+            l.id.bytes()
+                .fold(0u32, |h, b| h.wrapping_mul(31).wrapping_add(b as u32))
+                % 360
+        ),
         id: l.id.clone(),
         name: l.name.clone(),
         developer: l.developer.clone(),
         verified: l.developer_verified,
         first_party: l.first_party,
         summary: l.summary.clone(),
-        price: price_label(lang, l.price_vnd),
+        price: price_label(lang, l.price_coin),
         rating: match l.rating_avg {
             Some(avg) => format!("★ {avg:.1} ({})", l.rating_count),
             None => lang.t("store.no_ratings").to_owned(),
@@ -325,7 +349,7 @@ async fn app_page(
     let viewer = viewer(state, headers).await;
     let app = AppInfo::from_client(&client);
     let (token, set_cookie) = csrf::issue(headers, state.public_url.scheme() == "https");
-    let page = page_from(
+    let mut page = page_from(
         lang,
         &detail,
         &app,
@@ -334,6 +358,15 @@ async fn app_page(
         token,
         messages,
     );
+    if page.price_coin > 0 {
+        let rate = crate::wallet::rate(&state.db).await.unwrap_or(1000);
+        page.price_note = format!("≈ {}", crate::orders::vnd(page.price_coin as i64 * rate));
+        if let Some((subject, _)) = &viewer {
+            page.owned = crate::wallet::owns(&state.db, *subject, id)
+                .await
+                .unwrap_or(false);
+        }
+    }
     let mut res = html(page, lang, status);
     if let Some(c) = set_cookie {
         res.headers_mut().append(header::SET_COOKIE, c);
@@ -377,6 +410,9 @@ fn page_from(
         messages,
         signed_in: viewer.is_some(),
         is_owner: viewer.is_some() && viewer == d.owner_subject,
+        price_coin: d.listing.price_coin,
+        price_note: String::new(),
+        owned: false,
         csrf,
         reasons: catalog::REPORT_REASONS
             .iter()
@@ -398,6 +434,17 @@ pub async fn show(
         Some("reply") => vec![Msg::success(lang.t("store.ok_reply"))],
         Some("report") => vec![Msg::success(lang.t("store.ok_report"))],
         _ => vec![],
+    };
+    let messages = match q.buy.as_deref() {
+        None => messages,
+        Some("ok") => vec![Msg::success(lang.t("wallet.buy.ok"))],
+        Some(code) => vec![Msg::error(lang.t(match code {
+            "insufficient_funds" => "wallet.buy.insufficient_funds",
+            "already_owned" => "wallet.buy.already_owned",
+            "price_changed" => "wallet.buy.price_changed",
+            "wallet_frozen" => "wallet.buy.wallet_frozen",
+            _ => "wallet.buy.failed",
+        }))],
     };
     app_page(&state, lang, &headers, &id, messages, StatusCode::OK).await
 }
@@ -592,6 +639,90 @@ pub async fn api_list(
     }
 }
 
+pub struct LibraryRow {
+    pub id: String,
+    pub name: String,
+    pub has_icon: bool,
+    pub monogram: String,
+    pub installed: String,
+    pub latest: String,
+    pub purchased: bool,
+    pub update: bool,
+}
+
+#[derive(Template)]
+#[template(path = "library.html")]
+struct LibraryPage {
+    i18n: Lang,
+    rows: Vec<LibraryRow>,
+    updates: usize,
+}
+
+/// GET /library: "Ứng dụng của tôi" trên web, cùng nội dung với Thư viện của F-Launcher (app đã
+/// cài, app đã mua, bản mới).
+pub async fn library(
+    State(state): State<Arc<AppState>>,
+    lang: Lang,
+    headers: HeaderMap,
+) -> Response {
+    let subject = match current_subject(&state, lang, &headers, "/library").await {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    let items = match catalog::library(&state.db, subject).await {
+        Ok(i) => i,
+        Err(e) => return unavailable(lang, e),
+    };
+    let rows: Vec<LibraryRow> = items
+        .iter()
+        .map(|i| LibraryRow {
+            update: i.update_available(),
+            id: i.id.clone(),
+            monogram: i
+                .name
+                .split_whitespace()
+                .filter_map(|w| w.chars().next())
+                .take(2)
+                .collect::<String>()
+                .to_uppercase(),
+            name: i.name.clone(),
+            has_icon: i.has_icon,
+            installed: match (&i.installed_version, i.installed) {
+                (Some(v), _) => v.clone(),
+                (None, true) => "?".into(),
+                (None, false) => String::new(),
+            },
+            latest: i.latest.clone().unwrap_or_default(),
+            purchased: i.purchased,
+        })
+        .collect();
+    html(
+        LibraryPage {
+            i18n: lang,
+            updates: rows.iter().filter(|r| r.update).count(),
+            rows,
+        },
+        lang,
+        StatusCode::OK,
+    )
+}
+
+/// GET /store/{id}/icon.png: logo của app (PNG đã kiểm khi lưu).
+pub async fn icon(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
+    match catalog::icon(&state.db, &id).await {
+        Ok(Some(bytes)) => (
+            [
+                (header::CONTENT_TYPE, "image/png"),
+                (header::CACHE_CONTROL, "public, max-age=3600"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => api_unavailable(e),
+    }
+}
+
 /// GET /v1/catalog/{id}
 pub async fn api_detail(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
     let detail = match catalog::detail(&state.db, &id).await {
@@ -692,6 +823,7 @@ mod tests {
             verified: Some("on".into()),
             category: Some("".into()),
             ok: None,
+            buy: None,
         };
         let f = q.filters();
         assert_eq!(f.q.as_deref(), Some("so tay"));
@@ -701,6 +833,11 @@ mod tests {
         assert_eq!(platform_label("windows-x64"), "Windows (x64)");
         assert_eq!(platform_label("macos-arm64"), "macOS (arm64)");
         assert_eq!(price_label(Lang::Vi, 0), "Miễn phí");
-        assert_eq!(price_label(Lang::Vi, 49_000), "49.000 ₫");
+        assert_eq!(price_label(Lang::Vi, 49), "49 F-Coin");
+        assert!(catalog::newer("1.10.0", "1.9.2"));
+        assert!(catalog::newer("0.3.3", "0.3.2"));
+        assert!(catalog::newer("1.0.0", "1.0.0-beta.1"));
+        assert!(!catalog::newer("1.0.0", "1.0.0"));
+        assert!(!catalog::newer("1.6.0-dev.2026", "1.6.0"));
     }
 }

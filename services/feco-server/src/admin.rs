@@ -374,6 +374,9 @@ pub struct RoleRequestRow {
     pub email: String,
     pub note: String,
     pub created: String,
+    /// Vai trò xin (tên hiển thị) và thông tin tổ chức nếu có.
+    pub role: &'static str,
+    pub organization: String,
 }
 
 pub struct RoleOption {
@@ -626,20 +629,41 @@ struct AdminPage {
     dev_no_passkey: bool,
 }
 
+/// Mục điều hướng của bảng quản trị theo vai trò con. Ví F-Coin cho Tài chính và Quản trị hệ
+/// thống, Dự án cho Quản lý dự án (thay đổi fcoin-wallet-and-marketplace).
+pub fn nav(lang: Lang, admin: &Admin, section: &str) -> Vec<NavItem> {
+    let mut nav: Vec<NavItem> = Role::ALL
+        .into_iter()
+        .filter(|r| admin.has(*r))
+        .map(|r| {
+            let (href, key) = r.section();
+            NavItem {
+                href,
+                label: lang.t(key),
+                current: href.ends_with(section),
+            }
+        })
+        .collect();
+    if admin.has(Role::Finance) || admin.has(Role::Sysadmin) {
+        nav.push(NavItem {
+            href: "/admin/wallet",
+            label: lang.t("admin.nav.wallet"),
+            current: section == "wallet",
+        });
+    }
+    if admin.has(Role::ProjectManager) {
+        nav.push(NavItem {
+            href: "/admin/projects",
+            label: lang.t("admin.nav.projects"),
+            current: section == "projects",
+        });
+    }
+    nav
+}
+
 impl AdminPage {
     fn new(lang: Lang, admin: &Admin, section: &'static str) -> Self {
-        let nav = Role::ALL
-            .into_iter()
-            .filter(|r| admin.has(*r))
-            .map(|r| {
-                let (href, key) = r.section();
-                NavItem {
-                    href,
-                    label: lang.t(key),
-                    current: href.ends_with(section),
-                }
-            })
-            .collect();
+        let nav = nav(lang, admin, section);
         AdminPage {
             i18n: lang,
             messages: Vec::new(),
@@ -1726,6 +1750,11 @@ async fn render_members(
         .unwrap_or_default()
         .into_iter()
         .map(|r| RoleRequestRow {
+            role: r.platform_role().label(lang),
+            organization: match (&r.legal_name, &r.tax_code) {
+                (Some(n), Some(t)) => format!("{n} · MST {t}"),
+                _ => String::new(),
+            },
             id: r.id.to_string(),
             email: r.email,
             note: r.note,

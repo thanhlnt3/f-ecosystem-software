@@ -92,6 +92,12 @@
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; margin-top:16px; }
   .app { border:1px solid var(--line); border-radius:var(--card-radius); padding:14px; }
   .app h3 { margin:0 0 4px; font-size:1.05rem; }
+  .app-head { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+  .app-head h1, .app-head h3 { margin:0; }
+  .app-logo { width:48px; height:48px; border-radius:12px; flex:none; object-fit:cover; }
+  .app-logo.mono { display:grid; place-items:center; color:#fff; font-weight:700; font-size:1.1rem; }
+  .app-head.big .app-logo { width:72px; height:72px; border-radius:18px; font-size:1.6rem; }
+  .brand-logo { width:28px; height:28px; display:block; }
   .badge { display:inline-block; font-size:.8rem; padding:1px 8px; border-radius:999px; border:1px solid currentColor; margin-left:6px; }
   .badge.ok { color:var(--ok); }
   .badge.brand { color:var(--accent); }
@@ -134,13 +140,17 @@
   .row-actions button { width:auto; margin:0; padding:6px 10px; background:transparent; color:var(--accent); border:1px solid currentColor; }
 </style>
 <link rel="stylesheet" href="/ui.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="/"><span class="logo">F</span>F-Eco</a>
+  <a class="brand" href="/"><img class="brand-logo" src="/favicon.svg" alt="" width="28" height="28">F-Eco</a>
   <nav class="mainnav" aria-label="F-Eco">
     <a href="/">{{ i18n.t("nav.account") }}</a>
+    <a href="/library" id="nav-library">{{ i18n.t("nav.library") }}</a>
     <a href="/store">{{ i18n.t("nav.store") }}</a>
+    <a href="/wallet" id="nav-wallet">{{ i18n.t("nav.wallet") }}</a>
+    <a href="/projects" id="nav-projects">{{ i18n.t("nav.projects") }}</a>
     <a href="/orders">{{ i18n.t("nav.orders") }}</a>
     <a href="/notifications">{{ i18n.t("nav.notifications") }}</a>
     <a href="/developer">{{ i18n.t("nav.developer") }}</a>

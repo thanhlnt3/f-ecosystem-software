@@ -20,6 +20,8 @@ feco-tuf: quản lý kho TUF của F-Eco
                    [--summary MÔ-TẢ] [--category NHÓM] [--developer TÊN] [--source URL]
                    [--terminal true] [--description TEXT] [--features A|B|C] [--website URL]
                    [--release-notes TEXT] [--license SPDX] [--released-at RFC3339]
+                   [--icon LOGO.png]
+  feco-tuf set-icon --repo DIR --app A --icon LOGO.png --sign T,S,TS   đặt logo cho mọi phiên bản
   feco-tuf revoke --repo DIR --name N --reason TEXT --sign T,S,TS
   feco-tuf remove --repo DIR --app A --sign T,S,TS   gỡ mọi phiên bản của app khỏi danh mục
                                              (không thu hồi: máy đã cài vẫn mở được)
@@ -187,6 +189,10 @@ async fn run(raw: &[String]) -> Result<(), String> {
                         .cloned()
                         .unwrap_or_else(|| now.to_string()),
                 ),
+                icon: match args.flags.get("icon") {
+                    Some(path) => Some(read_icon(path)?),
+                    None => None,
+                },
             };
             let name = args.get("name")?;
             args.repo()?
@@ -201,6 +207,16 @@ async fn run(raw: &[String]) -> Result<(), String> {
                 .await
                 .map_err(e)?;
             println!("đã ký target {name}");
+        }
+        "set-icon" => {
+            let app = args.get("app")?;
+            let icon = read_icon(args.get("icon")?)?;
+            let n = args
+                .repo()?
+                .set_icon(app, &icon, &args.signers()?, expiry, now)
+                .await
+                .map_err(e)?;
+            println!("đã đặt logo cho {n} target của {app}");
         }
         "revoke" => {
             let revocation = args
@@ -330,4 +346,10 @@ fn print_state(state: &SyncState) {
             r.target, r.revoked_at, r.reason
         );
     }
+}
+
+/// Đọc tệp PNG làm logo và mã hóa base64 (kiểm định dạng và kích thước).
+fn read_icon(path: &str) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("không đọc được logo {path}: {e}"))?;
+    feco_tuf::repo::icon_from_png(&bytes).map_err(|e| e.to_string())
 }

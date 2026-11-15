@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="F-Launcher">
+  <title>F-Launcher</title>
+  <!-- Logo F-Launcher (F-Eco tự thiết kế). Chữ F nghiêng tạo từ ba thanh cam, xanh lá, xanh dương,
+       gợi chuyển động "khởi chạy"; chỉ lấy cảm hứng từ bộ ba màu, không dùng hình logo nào khác. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#123565"/>
+      <stop offset="1" stop-color="#081a33"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <polygon points="142,404 202,404 262,108 202,108" fill="#1e88e5"/>
+  <polygon points="210,108 408,108 396,170 198,170" fill="#f37021"/>
+  <polygon points="186,228 344,228 332,288 174,288" fill="#2fb34b"/>
+  <polygon points="418,74 454,64 444,100 432,88" fill="#f37021"/>
+</svg>

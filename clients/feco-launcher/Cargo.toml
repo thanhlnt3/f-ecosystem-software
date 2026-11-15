@@ -23,6 +23,7 @@ reqwest = { version = "0.13.5", default-features = false, features = ["json", "r
 zip = { version = "9.5.0", default-features = false, features = ["deflate"] }
 sha2 = "0.11.0"
 base64 = "0.23.1"
+png = "0.18"
 getrandom = "0.4.3"
 hex = "0.4"
 semver = "1.0.28"

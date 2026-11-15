@@ -41,6 +41,8 @@ pub mod pairwise;
 pub mod payments;
 pub mod payments_web;
 pub mod profile;
+pub mod projects;
+pub mod projects_web;
 pub mod ratelimit;
 pub mod status;
 pub mod ui_prefs;
@@ -54,6 +56,8 @@ pub mod store_web;
 pub mod throttle;
 pub mod views;
 pub mod vnpay;
+pub mod wallet;
+pub mod wallet_web;
 pub mod webhooks;
 pub mod zalopay;
 
@@ -129,6 +133,8 @@ pub struct AppState {
     pub misa: Option<misa::Misa>,
     /// Gốc địa chỉ cổng thanh toán gọi callback (mặc định `public_url`).
     pub payment_callback_base: Url,
+    /// Cho phép tạo lệnh rút F-Coin mới (`FECO_WALLET_WITHDRAWALS`).
+    pub withdrawals_enabled: bool,
 }
 
 /// Ngưỡng giới hạn tần suất (yêu cầu mỗi phút).
@@ -212,6 +218,7 @@ impl AppState {
                 .callback_base
                 .clone()
                 .unwrap_or_else(|| a.public_url.clone()),
+            withdrawals_enabled: !config.payments.withdrawals_disabled,
         })
     }
 }
@@ -375,6 +382,45 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/payments/vnpay/ipn", get(payments_web::vnpay_ipn))
         .route("/v1/payments/momo/ipn", post(payments_web::momo_ipn))
         .route("/v1/catalog/private", get(store_web::api_private))
+        .route("/wallet", get(wallet_web::page))
+        .route("/wallet/topup", post(wallet_web::topup))
+        .route("/wallet/withdraw", post(wallet_web::withdraw))
+        .route(
+            "/wallet/withdrawals/{id}/cancel",
+            post(wallet_web::cancel_withdrawal),
+        )
+        .route("/wallet/stats", get(wallet_web::stats))
+        .route("/v1/wallet", get(wallet_web::api_wallet))
+        .route("/v1/wallet/purchases", post(wallet_web::api_purchase))
+        .route("/store/{id}/buy", post(wallet_web::buy))
+        .route("/store/{id}/icon.png", get(store_web::icon))
+        .route("/library", get(store_web::library))
+        .route("/favicon.svg", get(ui_prefs::favicon))
+        .route("/admin/wallet", get(wallet_web::admin_page))
+        .route("/admin/wallet/{action}", post(wallet_web::admin_action))
+        .route(
+            "/admin/wallet/withdrawals/{id}/{action}",
+            post(wallet_web::admin_withdrawal_action),
+        )
+        .route(
+            "/account/role",
+            get(projects_web::role_page).post(projects_web::role_request),
+        )
+        .route("/projects", get(projects_web::list))
+        .route("/projects/providers", get(projects_web::providers))
+        .route(
+            "/projects/new",
+            get(projects_web::new_form).post(projects_web::create),
+        )
+        .route("/projects/profile", post(projects_web::save_profile))
+        .route("/projects/{id}", get(projects_web::show))
+        .route("/projects/{id}/{action}", post(projects_web::action))
+        .route("/admin/projects", get(projects_web::admin_list))
+        .route("/admin/projects/{id}", get(projects_web::admin_detail))
+        .route(
+            "/admin/projects/{id}/resolve",
+            post(projects_web::admin_resolve),
+        )
         .route("/store", get(store_web::list))
         .route("/store/{id}", get(store_web::show))
         .route("/store/{id}/reviews", post(store_web::submit_review))
@@ -454,6 +500,7 @@ mod tests {
             momo: None,
             misa: None,
             payment_callback_base: Url::parse("http://127.0.0.1:8080/").unwrap(),
+            withdrawals_enabled: true,
         }
     }
 

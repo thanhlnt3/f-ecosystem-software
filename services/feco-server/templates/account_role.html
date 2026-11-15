@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("role.page") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("role.page") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<p>{{ i18n.t("role.current") }}: <span class="badge brand" id="current-role" data-role="{{ role_code }}">{{ role }}</span></p>
+<p class="muted">{{ i18n.t("role.page_intro") }}</p>
+<ul class="menu" id="role-matrix">
+  <li><span>{{ i18n.t("role.user") }}</span><span class="muted">{{ i18n.t("role.cap.user") }}</span></li>
+  <li><span>{{ i18n.t("role.customer") }}</span><span class="muted">{{ i18n.t("role.cap.customer") }}</span></li>
+  <li><span>{{ i18n.t("role.business_customer") }}</span><span class="muted">{{ i18n.t("role.cap.business_customer") }}</span></li>
+  <li><span>{{ i18n.t("role.developer") }}</span><span class="muted">{{ i18n.t("role.cap.developer") }}</span></li>
+  <li><span>{{ i18n.t("role.dev_company") }}</span><span class="muted">{{ i18n.t("role.cap.dev_company") }}</span></li>
+</ul>
+{% if is_admin %}
+<p class="muted" id="admin-note">{{ i18n.t("role.admin_note") }}</p>
+{% else %}
+{% match pending %}
+{% when Some with (r) %}<div class="msg info" id="role-pending">{{ i18n.t("role.pending") }}: {{ r }}</div>
+{% when None %}
+{% match last_decision %}{% when Some with (n) %}<div class="msg error" id="role-rejected">{{ i18n.t("role.rejected") }} {{ n }}</div>{% when None %}{% endmatch %}
+<form method="post" action="/account/role" id="role-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="role-select">{{ i18n.t("role.want") }}</label>
+  <select name="role" id="role-select">{% for c in choices %}<option value="{{ c.code }}" data-org="{{ c.organization }}">{{ c.label }}</option>{% endfor %}</select>
+  <div id="org-fields">
+    <label for="legal-name">{{ i18n.t("role.legal_name") }}</label>
+    <input type="text" name="legal_name" id="legal-name" maxlength="200">
+    <label for="tax-code">{{ i18n.t("pay.tax_code") }}</label>
+    <input type="text" name="tax_code" id="tax-code" placeholder="0101234567">
+    <p class="muted">{{ i18n.t("role.org_note") }}</p>
+  </div>
+  <label for="role-note">{{ i18n.t("role.note") }}</label>
+  <textarea name="note" id="role-note" maxlength="1000"></textarea>
+  <button type="submit">{{ i18n.t("role.send") }}</button>
+</form>
+<script>
+(function () {
+  var s = document.getElementById('role-select'), o = document.getElementById('org-fields');
+  if (!s || !o) return;
+  function show() { o.hidden = s.selectedOptions[0].dataset.org !== 'true'; }
+  s.addEventListener('change', show); show();
+})();
+</script>
+{% endmatch %}
+{% endif %}
+<div class="links"><a href="/">{{ i18n.t("home.title") }}</a><a href="/projects">{{ i18n.t("nav.projects") }}</a><a href="/wallet">{{ i18n.t("wallet.title") }}</a></div>
+{% endblock %}

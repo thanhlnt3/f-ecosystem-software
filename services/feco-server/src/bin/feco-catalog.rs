@@ -77,7 +77,8 @@ Thanh toán (quản trị viên ghi tên bằng FECO_REVIEWER):
   feco-catalog refund-approve <refund-id>          phê duyệt (từ 10.000.000 ₫ cần hai người khác nhau)
   feco-catalog payments-due                        chạy ngay truy vấn giao dịch quá 15 phút, lệnh hoàn
   feco-catalog reconcile [yyyy-mm-dd]              đối soát một ngày (mặc định hôm qua)
-  feco-catalog role-set <email> user|developer|admin:<vai trò con,...> <lý do>
+  feco-catalog role-set <email> user|customer|business_customer|developer|dev_company|admin:<vai trò con,...> <lý do>
+  feco-catalog wallet-check              kiểm tra sổ cái F-Coin (tổng bằng 0, số dư khớp các dòng)
                                                    đổi vai trò nền tảng (Người sử dụng ứng dụng,
                                                    Lập trình viên, Quản trị viên)
   feco-catalog role-requests                       yêu cầu quyền Lập trình viên đang chờ
@@ -120,9 +121,24 @@ async fn run(args: Vec<String>) -> Result<(), String> {
     let reviewer = std::env::var("FECO_REVIEWER").unwrap_or_else(|_| "admin".into());
     match command.as_str() {
         "add-app" => {
-            let json = std::fs::read_to_string(arg(&args, 1)?).map_err(|e| e.to_string())?;
-            let input: catalog::AppInput =
+            let path = std::path::PathBuf::from(arg(&args, 1)?);
+            let json = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            let mut value: serde_json::Value =
                 serde_json::from_str(&json).map_err(|e| format!("app.json không hợp lệ: {e}"))?;
+            // "icon_file": đường dẫn tới logo PNG (tương đối với app.json), đổi thành base64.
+            if let Some(file) = value["icon_file"].as_str().map(str::to_owned) {
+                let file = path
+                    .parent()
+                    .unwrap_or(std::path::Path::new("."))
+                    .join(file);
+                let bytes = std::fs::read(&file)
+                    .map_err(|e| format!("không đọc được logo {}: {e}", file.display()))?;
+                value["icon"] = feco_tuf::repo::icon_from_png(&bytes)
+                    .map_err(|e| e.to_string())?
+                    .into();
+            }
+            let input: catalog::AppInput =
+                serde_json::from_value(value).map_err(|e| format!("app.json không hợp lệ: {e}"))?;
             catalog::upsert_app(&state.db, &state.catalog, &input)
                 .await
                 .map_err(e)?;
@@ -601,8 +617,28 @@ Bản ghi gợi ý:"
                 .await
                 .map_err(|e| e.to_string())?
             {
-                println!("{}	{}	{}	{}", r.id, r.email, r.created_at, r.note);
+                println!(
+                    "{}	{}	{}	{}	{}",
+                    r.id, r.email, r.role, r.created_at, r.note
+                );
             }
+        }
+        "wallet-check" => {
+            let c = feco_server::wallet::check_ledger(&state.db)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!(
+                "tài khoản: {}, bút toán: {}, tổng số dư: {}, lệch: {}, không cân: {}",
+                c.accounts,
+                c.txns,
+                c.total,
+                c.mismatched.len(),
+                c.unbalanced.len()
+            );
+            if !c.ok() {
+                return Err("sổ cái F-Coin không khớp".into());
+            }
+            println!("đạt");
         }
         "role-decide" => {
             let id: uuid::Uuid = arg(&args, 1)?

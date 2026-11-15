@@ -59,6 +59,9 @@ pub struct AppInfo {
     /// Thời điểm phát hành (RFC 3339).
     #[serde(default)]
     pub released_at: Option<String>,
+    /// Logo PNG mã hóa base64, từ metadata TUF đã ký.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 impl AppInfo {
@@ -85,6 +88,7 @@ impl AppInfo {
             release_notes: clean(&meta.release_notes),
             license: clean(&meta.license),
             released_at: clean(&meta.released_at),
+            icon: clean(&meta.icon),
         }
     }
 }

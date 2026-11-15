@@ -1,5 +1,66 @@
 # Nhật ký thay đổi
 
+## 1.6.0 (15/11/2026)
+
+Gồm hai thay đổi OpenSpec: `fcoin-wallet-and-marketplace` và `launcher-logos-and-updates`.
+
+### F-Coin và chợ phần mềm
+
+- **Sáu vai trò nền tảng**:
+  - Người dùng phổ thông;
+  - Khách hàng cá nhân;
+  - Khách hàng doanh nghiệp;
+  - Lập trình viên cá nhân (lập trình viên có từ trước giữ nguyên quyền);
+  - Công ty phát triển phần mềm;
+  - Quản trị viên.
+
+  Trang Vai trò (`/account/role`) để xin vai trò. Vai trò doanh nghiệp và công ty khai tên pháp lý và mã số thuế. Quản trị hệ thống duyệt ở trang Phân quyền.
+- **Ví F-Coin** cho mọi tài khoản:
+  - sổ cái ghi kép, số dư không âm, idempotent; lệnh `feco-catalog wallet-check` kiểm sổ cái;
+  - tỷ giá do Tài chính đặt, kèm lý do và lịch sử; ban đầu 1 F-Coin = 1.000 ₫;
+  - nạp qua ZaloPay, VNPAY, MoMo;
+  - rút về giao dịch nạp (qua cổng) hoặc chuyển khoản ngân hàng: F-Coin bị giữ ngay, lệnh từ 10.000.000 ₫ cần hai người duyệt, số tài khoản được mã hóa;
+  - lịch sử có lọc và phân trang; thống kê thu chi 12 tháng.
+- **Mua app bằng F-Coin**:
+  - nhà phát triển đặt giá ở Cổng nhà phát triển;
+  - F-Store hiện giá F-Coin kèm số tiền quy đổi;
+  - người mua nhận quyền sử dụng `license`; người bán nhận F-Coin trừ phí nền tảng (mặc định 0).
+- **Dự án phần mềm**:
+  - hồ sơ nhận việc, khách hàng gửi yêu cầu, thương lượng giá và thời hạn;
+  - ký quỹ F-Coin, bàn giao, yêu cầu sửa, chấp nhận thì chuyển F-Coin cho người nhận việc;
+  - tranh chấp do Quản lý dự án giải ngân, hoàn hoặc chia;
+  - hợp đồng: doanh nghiệp hoặc công ty lập từ mẫu, hai bên ký bằng họ tên, lưu SHA-256; dự án có hợp đồng thì phải ký đủ mới ký quỹ được.
+- **Bảng quản trị**:
+  - trang Ví F-Coin: số liệu, biểu đồ 30 ngày, tỷ giá, phí, hàng đợi lệnh rút, khóa ví, tra giao dịch;
+  - trang Dự án;
+  - yêu cầu vai trò hiện vai trò xin và thông tin doanh nghiệp.
+- **F-Launcher**:
+  - số dư F-Coin ở thanh bên (bấm vào thì mở trang ví);
+  - nút "Mua · N F-Coin" cho app có giá, hộp thoại xác nhận (số dư sau khi mua, hoặc số còn thiếu kèm nút Nạp F-Coin), mua xong cài ngay;
+  - tên sáu vai trò.
+- **API mới**: `GET /v1/wallet`, `POST /v1/wallet/purchases` (chỉ token của launcher); mã lỗi `insufficient_funds`, `wallet_frozen`, `price_changed`, `already_owned`...
+
+### Logo, cửa sổ, đồng bộ tính năng, gợi ý cập nhật
+
+- **Logo**:
+  - logo F-Launcher mới: chữ F nghiêng ba màu, dùng cho biểu tượng cửa sổ, thanh bên và biểu tượng trang web;
+  - logo app được ký trong metadata TUF (`feco-tuf publish --icon`, `feco-tuf set-icon`) và hiện trong launcher và F-Store (`/store/{id}/icon.png`);
+  - logo bottom, kibi, eframe template lấy từ repo gốc; logo Ghi chú và Bấm giờ do F-Eco thiết kế.
+- **Cửa sổ**: launcher mở giữa màn hình. Cài đặt và chi tiết app mở giữa màn hình và là cửa sổ chặn: cửa sổ chính bị phủ mờ, bấm vào thì đưa cửa sổ con lên trước.
+- **Gợi ý cập nhật**:
+  - sau mỗi lần đồng bộ, launcher báo bản mới của app đã cài: phiên bản cũ → mới, ghi chú phát hành;
+  - các nút Cập nhật, Bỏ qua bản này, Cập nhật tất cả, Để sau;
+  - Thư viện có băng nhắc.
+- **Đồng bộ launcher và web**:
+  - web có trang "Ứng dụng của tôi" (`/library`, báo bản mới);
+  - launcher có menu "F-Eco trên web" (hồ sơ, ví, ứng dụng của tôi, dự án, đơn xây app, thông báo).
+
+### Ghi chú nâng cấp
+
+- Migration `0015_fcoin.sql` và `0016_app_icons.sql` chạy tự động khi máy chủ khởi động.
+- Gắn logo cho app dev: `scripts/dev-apps.sh icons`.
+- Rút F-Coin đổi được ra tiền thật, cần ý kiến pháp lý trước khi mở cho người dùng thật (QUESTIONS.md 85). `FECO_WALLET_WITHDRAWALS=false` tắt việc tạo lệnh rút mới.
+
 ## 1.5.0 (15/11/2026)
 
 Thay đổi OpenSpec `launcher-windows-and-web-profile`, cùng nhóm task 15 (yêu cầu chung và ra mắt).

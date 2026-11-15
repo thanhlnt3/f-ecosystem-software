@@ -162,6 +162,9 @@ pub struct Prefs {
     pub language: Language,
     /// Phong cách giao diện (launcher-personalization).
     pub style: UiStyle,
+    /// Phiên bản người dùng chọn "Bỏ qua bản này" khi được gợi ý cập nhật (mã app → phiên bản).
+    #[serde(default)]
+    pub skipped_updates: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for Prefs {
@@ -179,6 +182,7 @@ impl Default for Prefs {
             store_sort: SortKey::Name,
             language: Language::Vi,
             style: UiStyle::Plain,
+            skipped_updates: Default::default(),
         }
     }
 }
@@ -217,6 +221,7 @@ impl Prefs {
             store_sort: field(map, "store_sort", d.store_sort),
             language: field(map, "language", d.language),
             style: field(map, "style", d.style),
+            skipped_updates: field(map, "skipped_updates", d.skipped_updates),
         };
         prefs.sanitized()
     }

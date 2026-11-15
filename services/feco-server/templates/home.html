@@ -11,7 +11,7 @@
       <h1>{% if u.name.is_empty() %}{{ u.email }}{% else %}{{ u.name }}{% endif %}</h1>
       <p class="line"><strong id="email">{{ u.email }}</strong>
         {% if u.verified %}<span class="badge ok">{{ i18n.t("profile.verified") }}</span>{% endif %}</p>
-      <p class="line"><span class="badge brand" id="platform-role" data-role="{{ u.role_code }}">{{ u.role }}</span>
+      <p class="line"><span class="badge brand" id="platform-role" data-role="{{ u.role_code }}">{{ u.role }}</span> <a href="/account/role" id="link-role">{{ i18n.t("role.page") }}</a>
         {% if !u.member_since.is_empty() %}<span class="muted">{{ i18n.t("profile.member_since") }} {{ u.member_since }}</span>{% endif %}</p>
     </div>
     <div class="head-actions">
@@ -52,6 +52,8 @@
       <h2>{{ i18n.t("profile.shopping") }}</h2>
       <ul class="menu">
         <li><a href="/store">{{ i18n.t("nav.store") }}</a></li>
+        <li><a href="/wallet" id="link-wallet">{{ i18n.t("wallet.title") }}</a></li>
+        <li><a href="/projects" id="link-projects">{{ i18n.t("nav.projects") }}</a></li>
         <li><a href="/orders">{{ i18n.t("home.orders") }}</a></li>
         <li><a href="/payments">{{ i18n.t("home.payments") }}</a></li>
       </ul>

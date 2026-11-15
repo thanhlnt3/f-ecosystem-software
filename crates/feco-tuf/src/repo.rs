@@ -99,6 +99,29 @@ pub struct TargetMeta {
     /// Thời điểm phát hành (RFC 3339, UTC).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub released_at: Option<String>,
+    /// Logo của app: ảnh PNG mã hóa base64 (tối đa [`MAX_ICON_BYTES`]), ký cùng target nên
+    /// launcher tin được mà không cần tải thêm tệp (thay đổi fcoin-wallet-and-marketplace).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
+/// Kích thước tối đa của logo (byte, trước khi mã hóa base64).
+pub const MAX_ICON_BYTES: usize = 64 * 1024;
+
+/// Kiểm tra một tệp PNG làm logo và trả về chuỗi base64 để ghi vào [`TargetMeta::icon`].
+pub fn icon_from_png(bytes: &[u8]) -> Result<String> {
+    use base64::Engine;
+    const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+    if !bytes.starts_with(SIGNATURE) {
+        return Err(Error::Invalid("logo phải là ảnh PNG".into()));
+    }
+    if bytes.len() > MAX_ICON_BYTES {
+        return Err(Error::Invalid(format!(
+            "logo lớn {} byte, tối đa {MAX_ICON_BYTES} byte",
+            bytes.len()
+        )));
+    }
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
 /// Một bản ghi thu hồi trong [`REVOCATIONS_TARGET`].
@@ -386,6 +409,41 @@ impl Repo {
         }
         self.finish(editor, signers).await?;
         Ok(names.iter().map(|n| n.raw().to_owned()).collect())
+    }
+
+    /// Đặt logo cho mọi phiên bản đang có của một app (ký lại targets, snapshot, timestamp).
+    pub async fn set_icon(
+        &self,
+        app: &str,
+        icon: &str,
+        signers: &[Box<dyn KeySource>],
+        expiry: Expiry,
+        now: Timestamp,
+    ) -> Result<usize> {
+        let repo = self.load().await?;
+        let items: Vec<(TargetName, Target)> = repo
+            .targets()
+            .signed
+            .targets
+            .iter()
+            .filter(|(name, t)| {
+                name.raw() != REVOCATIONS_TARGET && target_meta(t).is_some_and(|m| m.app == app)
+            })
+            .map(|(name, t)| (name.clone(), t.clone()))
+            .collect();
+        if items.is_empty() {
+            return Err(Error::Invalid(format!("không có target nào của app {app}")));
+        }
+        let mut editor = self.editor_from(repo, None, expiry, now).await?;
+        for (name, mut target) in items.iter().cloned() {
+            target
+                .custom
+                .insert("icon".to_owned(), Value::String(icon.to_owned()));
+            editor.remove_target(&name)?;
+            editor.add_target(name, target)?;
+        }
+        self.finish(editor, signers).await?;
+        Ok(items.len())
     }
 
     /// Ký lại snapshot và timestamp bằng khóa trực tuyến (không cần khóa targets). Máy chủ chạy
