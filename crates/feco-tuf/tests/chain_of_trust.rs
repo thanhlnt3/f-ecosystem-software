@@ -806,3 +806,151 @@ async fn web_app_url_is_signed_and_checked() {
         Some("http://localhost:3000/auth/feco")
     );
 }
+
+/// Thu hồi khẩn cấp một target đã gỡ khỏi danh mục (`remove`) vẫn ghi vào danh sách thu hồi, để
+/// launcher đã cài nó chặn mở; thu hồi lần hai và tên không hợp lệ bị từ chối.
+#[tokio::test]
+async fn revoking_a_removed_target_still_blocks_it() {
+    use feco_tuf::TargetStatus;
+    let fixture = Fixture::new().await;
+    fixture
+        .publish(SOUNDLAB, "soundlab", "1.2.0", b"SoundLab 1.2.0")
+        .await;
+    let client = fixture.client("launcher").await;
+    assert!(client.sync().await.unwrap().targets.contains_key(SOUNDLAB));
+    assert!(matches!(
+        fixture.repo.target_status(SOUNDLAB).await.unwrap(),
+        TargetStatus::Published(Some(m)) if m.app == "soundlab" && m.version == "1.2.0"
+    ));
+    fixture
+        .repo
+        .remove_app(
+            "soundlab",
+            &fixture.release_keys(),
+            Expiry::default(),
+            Timestamp::now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        fixture.repo.target_status(SOUNDLAB).await.unwrap(),
+        TargetStatus::Absent
+    );
+
+    let revocation = fixture
+        .repo
+        .revoke(
+            SOUNDLAB,
+            "Phát hiện mã độc",
+            &fixture.release_keys(),
+            Expiry::default(),
+            Timestamp::now(),
+        )
+        .await
+        .expect("thu hồi target đã gỡ");
+    assert_eq!(revocation.target, SOUNDLAB);
+    let state = client.sync().await.unwrap();
+    assert_eq!(
+        state.revocation(SOUNDLAB).map(|r| r.reason.as_str()),
+        Some("Phát hiện mã độc")
+    );
+    assert_eq!(
+        fixture.repo.target_status(SOUNDLAB).await.unwrap(),
+        TargetStatus::Revoked
+    );
+    for (name, why) in [
+        (SOUNDLAB, "đã thu hồi rồi"),
+        ("../soundlab.zip", "tên không hợp lệ"),
+        (feco_tuf::REVOCATIONS_TARGET, "danh sách thu hồi"),
+    ] {
+        fixture
+            .repo
+            .revoke(
+                name,
+                "lần hai",
+                &fixture.release_keys(),
+                Expiry::default(),
+                Timestamp::now(),
+            )
+            .await
+            .expect_err(why);
+    }
+}
+
+/// Các thao tác ghi chạy cùng lúc trên một kho (như máy chủ và CLI, mỗi bên một `Repo`) đều có
+/// mặt trong metadata cuối cùng nhờ khóa tệp của kho.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn concurrent_mutations_are_serialized() {
+    let fixture = Fixture::new().await;
+    fixture
+        .publish(SOUNDLAB, "soundlab", "1.2.0", b"SoundLab 1.2.0")
+        .await;
+    let dir = fixture.repo.dir().to_path_buf();
+    let keys = [
+        fixture.targets.clone(),
+        fixture.snapshot.clone(),
+        fixture.timestamp.clone(),
+    ];
+    let names: Vec<String> = (0..4)
+        .map(|i| format!("notes-1.0.{i}-windows-x64.zip"))
+        .collect();
+    let mut tasks = Vec::new();
+    for (i, name) in names.iter().enumerate() {
+        let file = fixture.package(name, name.as_bytes()).await;
+        let (repo, name, keys) = (Repo::open(&dir), name.clone(), keys.clone());
+        tasks.push(tokio::spawn(async move {
+            repo.publish(
+                &file,
+                &name,
+                &meta("notes", &format!("1.0.{i}")),
+                &signers(&[&keys[0], &keys[1], &keys[2]]),
+                Expiry::default(),
+                Timestamp::now(),
+            )
+            .await
+        }));
+    }
+    let (repo, revoke_keys) = (Repo::open(&dir), keys.clone());
+    tasks.push(tokio::spawn(async move {
+        repo.revoke(
+            SOUNDLAB,
+            "Phát hiện mã độc",
+            &signers(&[&revoke_keys[0], &revoke_keys[1], &revoke_keys[2]]),
+            Expiry::default(),
+            Timestamp::now(),
+        )
+        .await
+        .map(|_| ())
+    }));
+    for task in tasks {
+        task.await.unwrap().expect("thao tác ghi");
+    }
+    let state = fixture.client("launcher").await.sync().await.unwrap();
+    for name in &names {
+        assert!(state.targets.contains_key(name), "{name}");
+    }
+    assert!(!state.targets.contains_key(SOUNDLAB));
+    assert!(state.revocation(SOUNDLAB).is_some());
+}
+
+/// Ảnh PNG khai kích thước khổng lồ (hoặc 0) trong IHDR bị từ chối làm logo.
+#[test]
+fn icon_with_huge_dimensions_is_rejected() {
+    use feco_tuf::repo::{icon_from_png, png_dimensions};
+    fn png(w: u32, h: u32) -> Vec<u8> {
+        let mut b = b"\x89PNG\r\n\x1a\n".to_vec();
+        b.extend_from_slice(&13u32.to_be_bytes());
+        b.extend_from_slice(b"IHDR");
+        b.extend_from_slice(&w.to_be_bytes());
+        b.extend_from_slice(&h.to_be_bytes());
+        b.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+        b
+    }
+    assert_eq!(png_dimensions(&png(65535, 65535)), Some((65535, 65535)));
+    for (w, h) in [(65535, 65535), (1025, 16), (16, 0), (0, 16)] {
+        let err = icon_from_png(&png(w, h)).unwrap_err();
+        assert!(err.to_string().contains("pixel"), "{err}");
+    }
+    assert!(icon_from_png(b"\x89PNG\r\n\x1a\n").is_err(), "thiếu IHDR");
+    assert!(icon_from_png(&png(1024, 64)).is_ok());
+}

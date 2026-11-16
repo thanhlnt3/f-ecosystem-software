@@ -6,7 +6,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
-rust-version.workspace = true
+# Khóa tệp của kho TUF dùng `File::lock` (ổn định từ 1.89).
+rust-version = "1.89"
 
 [dependencies]
 aws-lc-rs = "1"

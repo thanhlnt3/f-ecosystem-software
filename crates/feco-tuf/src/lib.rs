@@ -34,7 +34,8 @@ pub mod repo;
 pub use client::{Client, SyncState, TargetInfo};
 pub use error::{Error, Result};
 pub use repo::{
-    Expiry, InitKeys, Repo, Revocation, RootChange, RootDraft, TargetMeta, REVOCATIONS_TARGET,
+    Expiry, InitKeys, Repo, Revocation, RootChange, RootDraft, TargetMeta, TargetStatus,
+    REVOCATIONS_TARGET,
 };
 pub use tough::schema::key::Key;
 pub use tough::schema::RoleType;
