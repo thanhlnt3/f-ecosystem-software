@@ -48,6 +48,7 @@ pub const CODES: &[(&str, u16, &str, &str)] = &[
     ("already_appealed", 409, "Mỗi lần từ chối chỉ được kháng nghị một lần.", "Each rejection can be appealed once."),
     ("no_open_appeal", 409, "Không có kháng nghị đang mở.", "There is no open appeal."),
     ("not_in_manual_review", 409, "Phiên bản không ở hàng chờ duyệt thủ công.", "The version is not in the manual review queue."),
+    ("reviewer_is_developer", 403, "Người duyệt là thành viên của nhà phát triển app nên không được tự duyệt.", "The reviewer is a member of the app's developer account and can't approve it."),
     ("csrf", 403, "Biểu mẫu hết hạn; tải lại trang.", "The form expired; reload the page."),
 ];
 
