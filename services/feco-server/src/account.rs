@@ -383,10 +383,39 @@ pub fn is_privileged(session: &Value, now: SystemTime) -> bool {
         .is_some_and(|age| age <= PRIVILEGED_MAX_AGE)
 }
 
-/// Người dùng còn đơn xây app chưa hoàn tất không. Đơn hàng có từ nhóm task 12;
-/// tới lúc đó hàm này luôn trả `false`.
-async fn has_open_orders(_state: &AppState, _identity_id: &str) -> bool {
-    false
+/// Trạng thái cuối của đơn xây app (migration 0008).
+const ORDER_FINAL: &[&str] = &["completed", "cancelled"];
+/// Trạng thái cuối của dự án phần mềm (migration 0015).
+const PROJECT_FINAL: &[&str] = &["completed", "resolved", "cancelled", "refunded"];
+/// Lệnh rút F-Coin còn đang xử lý (migration 0015).
+const WITHDRAWAL_OPEN: &[&str] = &["pending", "approved", "processing"];
+
+/// Người dùng còn việc dở dang không, nếu có thì chưa được xóa tài khoản: đơn xây app chưa
+/// xong, dự án (khách hoặc người nhận việc) chưa xong hoặc còn ký quỹ, ví còn F-Coin, lệnh rút
+/// đang xử lý. Lỗi CSDL coi như còn (không xóa nhầm).
+async fn has_open_orders(state: &AppState, identity_id: &str) -> bool {
+    let Ok(subject) = identity_id.parse::<uuid::Uuid>() else {
+        return true;
+    };
+    let open: Result<bool, sqlx::Error> = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM orders WHERE customer = $1 AND status <> ALL($2))
+             OR EXISTS (SELECT 1 FROM projects WHERE (customer = $1 OR provider = $1)
+                        AND (escrow_coin > 0 OR status <> ALL($3)))
+             OR EXISTS (SELECT 1 FROM wallet_accounts WHERE kind = 'user' AND subject = $1
+                        AND balance > 0)
+             OR EXISTS (SELECT 1 FROM wallet_withdrawals WHERE subject = $1
+                        AND status = ANY($4))",
+    )
+    .bind(subject)
+    .bind(ORDER_FINAL)
+    .bind(PROJECT_FINAL)
+    .bind(WITHDRAWAL_OPEN)
+    .fetch_one(&state.db)
+    .await;
+    open.unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "không kiểm được việc dở dang trước khi xóa tài khoản");
+        true
+    })
 }
 
 async fn require_privileged(
@@ -649,5 +678,29 @@ mod tests {
             &json!({"metadata_admin": null}),
             at + DELETION_GRACE * 2
         ));
+    }
+
+    /// Danh sách trạng thái dùng khi chặn xóa tài khoản phải khớp ràng buộc CHECK trong migration.
+    #[test]
+    fn open_work_statuses_match_migrations() {
+        let orders = include_str!("../migrations/0008_custom_orders.sql");
+        let fcoin = include_str!("../migrations/0015_fcoin.sql");
+        let check = |sql: &str, table: &str, statuses: &[&str]| {
+            let start = sql.find(&format!("CREATE TABLE {table} (")).unwrap();
+            let body = &sql[start..start + sql[start..].find(");").unwrap()];
+            let line = body
+                .find("status ")
+                .map(|i| &body[i..i + body[i..].find("),").unwrap_or(body.len() - i)])
+                .unwrap();
+            for s in statuses {
+                assert!(line.contains(&format!("'{s}'")), "{table}: thiếu {s}");
+            }
+        };
+        check(orders, "orders", ORDER_FINAL);
+        check(fcoin, "projects", PROJECT_FINAL);
+        check(fcoin, "wallet_withdrawals", WITHDRAWAL_OPEN);
+        // Trạng thái chưa xong không được nằm trong danh sách trạng thái cuối.
+        assert!(!ORDER_FINAL.contains(&"disputed") && !ORDER_FINAL.contains(&"draft"));
+        assert!(!PROJECT_FINAL.contains(&"disputed") && !PROJECT_FINAL.contains(&"delivered"));
     }
 }
