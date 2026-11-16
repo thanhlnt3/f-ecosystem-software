@@ -265,6 +265,7 @@ pub async fn revoke(
     State(state): State<Arc<AppState>>,
     lang: Lang,
     Path(id): Path<String>,
+    client: crate::kratos::ClientInfo,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
@@ -280,7 +281,7 @@ pub async fn revoke(
     let actor = current_actor(&state, &headers).await;
     match state.kratos.revoke_session(cookie(&headers), &id).await {
         Ok(true) => {
-            audit_revoke(&state, actor, "session.revoked", &id, &headers).await;
+            audit_revoke(&state, actor, "session.revoked", &id, &client).await;
             sessions_page(
                 &state,
                 lang,
@@ -306,6 +307,7 @@ pub async fn revoke(
 pub async fn revoke_others(
     State(state): State<Arc<AppState>>,
     lang: Lang,
+    client: crate::kratos::ClientInfo,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
@@ -321,7 +323,7 @@ pub async fn revoke_others(
     let actor = current_actor(&state, &headers).await;
     match state.kratos.revoke_other_sessions(cookie(&headers)).await {
         Ok(true) => {
-            audit_revoke(&state, actor, "session.revoked_others", "all", &headers).await;
+            audit_revoke(&state, actor, "session.revoked_others", "all", &client).await;
             sessions_page(
                 &state,
                 lang,
@@ -355,12 +357,9 @@ async fn audit_revoke(
     actor: Option<uuid::Uuid>,
     action: &str,
     target: &str,
-    headers: &HeaderMap,
+    client: &crate::kratos::ClientInfo,
 ) {
-    let ip = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.split(',').next().unwrap_or_default().trim().to_owned());
+    let ip = client.ip.clone();
     let actor = actor
         .map(crate::audit::Actor::User)
         .unwrap_or(crate::audit::Actor::Anonymous);

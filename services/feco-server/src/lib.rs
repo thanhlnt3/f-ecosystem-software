@@ -135,6 +135,8 @@ pub struct AppState {
     pub payment_callback_base: Url,
     /// Cho phép tạo lệnh rút F-Coin mới (`FECO_WALLET_WITHDRAWALS`).
     pub withdrawals_enabled: bool,
+    /// Proxy được tin `X-Forwarded-For` (`FECO_TRUSTED_PROXIES`).
+    pub trusted_proxies: Vec<std::net::IpAddr>,
 }
 
 /// Ngưỡng giới hạn tần suất (yêu cầu mỗi phút).
@@ -219,6 +221,7 @@ impl AppState {
                 .clone()
                 .unwrap_or_else(|| a.public_url.clone()),
             withdrawals_enabled: !config.payments.withdrawals_disabled,
+            trusted_proxies: config.security.trusted_proxies.clone(),
         })
     }
 }
@@ -501,6 +504,7 @@ mod tests {
             misa: None,
             payment_callback_base: Url::parse("http://127.0.0.1:8080/").unwrap(),
             withdrawals_enabled: true,
+            trusted_proxies: Vec::new(),
         }
     }
 
@@ -599,6 +603,8 @@ mod tests {
     async fn ip_rate_limit_returns_429_with_retry_after() {
         let mut s = state(Environment::Dev);
         s.limits.ip_per_min = 3;
+        // Yêu cầu đi qua proxy tin cậy 10.0.0.1, IP thật nằm trong X-Forwarded-For.
+        s.trusted_proxies = vec!["10.0.0.1".parse().unwrap()];
         let app = router(Arc::new(s));
         let call = |ip: &'static str| {
             let app = app.clone();
@@ -606,6 +612,10 @@ mod tests {
                 app.oneshot(
                     Request::get("/khong-co")
                         .header("x-forwarded-for", ip)
+                        .extension(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+                            [10, 0, 0, 1],
+                            40000,
+                        ))))
                         .body(Body::empty())
                         .unwrap(),
                 )
@@ -629,6 +639,33 @@ mod tests {
             404,
             "IP khác không bị ảnh hưởng"
         );
+    }
+
+    /// X-Forwarded-For tự khai từ kết nối không qua proxy tin cậy không được dùng để né giới hạn.
+    #[tokio::test]
+    async fn spoofed_forwarded_for_does_not_bypass_ip_rate_limit() {
+        let mut s = state(Environment::Dev);
+        s.limits.ip_per_min = 2;
+        let app = router(Arc::new(s));
+        let mut statuses = Vec::new();
+        for fake in ["203.0.113.1", "203.0.113.2", "203.0.113.3"] {
+            let res = app
+                .clone()
+                .oneshot(
+                    Request::get("/khong-co")
+                        .header("x-forwarded-for", fake)
+                        .extension(axum::extract::ConnectInfo(std::net::SocketAddr::from((
+                            [198, 51, 100, 20],
+                            40000,
+                        ))))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            statuses.push(res.status().as_u16());
+        }
+        assert_eq!(statuses, [404, 404, 429]);
     }
 
     #[tokio::test]
