@@ -607,7 +607,8 @@ Bản ghi gợi ý:"
                     Vec::new(),
                 ),
             };
-            let target = subject_by_email(&state, email).await?;
+            // Cấp vai trò chỉ cho tài khoản đã xác minh email.
+            let target = feco_server::admin::subject_by_email(&state, email).await?;
             let by = feco_server::roles::ChangedBy {
                 subject: None,
                 name: reviewer.clone(),
@@ -657,6 +658,9 @@ Bản ghi gợi ý:"
                 other => return Err(format!("phải là approve hoặc reject: {other}")),
             };
             let note = args.get(3..).map(|r| r.join(" ")).unwrap_or_default();
+            if approve && !feco_server::admin::requester_email_verified(&state, id).await? {
+                return Err("người xin chưa xác minh email, chưa duyệt được".into());
+            }
             let by = feco_server::roles::ChangedBy {
                 subject: None,
                 name: reviewer.clone(),
