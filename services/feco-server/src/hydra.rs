@@ -86,6 +86,8 @@ impl HydraClient {
         challenge: &str,
         subject: &str,
         pairwise_subject: &str,
+        acr: Option<&str>,
+        amr: &[String],
     ) -> Result<String, HydraError> {
         let url = self.url(&format!(
             "admin/oauth2/auth/requests/login/accept?login_challenge={}",
@@ -93,11 +95,18 @@ impl HydraClient {
         ));
         // remember=false: Hydra luôn hỏi lại feco-server, nên phiên Kratos (đăng xuất,
         // thu hồi thiết bị) luôn là nguồn sự thật.
-        let body = json!({
+        let mut body = json!({
             "subject": subject,
             "remember": false,
             "force_subject_identifier": pairwise_subject,
         });
+        // acr/amr của phiên Kratos để app biết mức xác thực (ID token).
+        if let Some(acr) = acr {
+            body["acr"] = json!(acr);
+        }
+        if !amr.is_empty() {
+            body["amr"] = json!(amr);
+        }
         let v = Self::json(self.http.put(url).json(&body).send().await?).await?;
         Ok(v["redirect_to"].as_str().unwrap_or_default().to_owned())
     }

@@ -465,7 +465,7 @@ async fn authorize_headless(
     let pairwise = state.pairwise.subject(&req.client_id, &subject.to_string());
     let next = state
         .hydra
-        .accept_login(&login_challenge, &subject.to_string(), &pairwise)
+        .accept_login(&login_challenge, &subject.to_string(), &pairwise, None, &[])
         .await
         .map_err(upstream)?;
 
