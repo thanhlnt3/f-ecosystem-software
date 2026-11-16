@@ -60,6 +60,9 @@ pub struct ChallengeBox {
     pub field: &'static str,
     pub value: &'static str,
     pub label: &'static str,
+    /// Site key Turnstile: có thì hiện widget thay cho ô đánh dấu.
+    pub site_key: Option<String>,
+    pub script: &'static str,
 }
 
 #[derive(Template)]
@@ -191,6 +194,8 @@ fn flow_page_with(
         field: challenge::FIELD,
         value: state.challenge.test_value(),
         label: state.challenge.label(lang),
+        site_key: state.challenge.site_key().map(str::to_owned),
+        script: challenge::TURNSTILE_SCRIPT,
     });
     let mut view = flow_view(lang, kind, flow);
     if kind == FlowKind::Registration {
@@ -364,7 +369,12 @@ pub async fn submit_flow(
         .flatten();
     if let Some(ident) = &identifier {
         let status = state.throttle.status(ident, Instant::now());
-        if status.challenge_required && !state.challenge.verify(challenge_answer.as_deref()).await {
+        if status.challenge_required
+            && !state
+                .challenge
+                .verify(challenge_answer.as_deref(), client.ip.as_deref())
+                .await
+        {
             return match state.kratos.get_flow(kind, &id, cookie).await {
                 Ok(r) if r.status == StatusCode::OK => {
                     let mut flow = r.body;

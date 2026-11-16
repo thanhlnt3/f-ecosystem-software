@@ -28,10 +28,15 @@
     {% for m in f.messages %}<div class="field-msg {{ m.kind }}">{{ m.text }}</div>{% endfor %}
   {% endfor %}
   {% if form.group == "password" %}{% if let Some(c) = challenge %}
+    {% match c.site_key %}{% when Some with (k) %}
+    <div class="challenge"><div class="cf-turnstile" data-sitekey="{{ k }}" data-response-field-name="{{ c.field }}"></div></div>
+    <script src="{{ c.script }}" async defer></script>
+    {% when None %}
     <div class="challenge">
       <input id="f-challenge" type="checkbox" name="{{ c.field }}" value="{{ c.value }}">
       <label for="f-challenge" style="margin:0;font-weight:400">{{ c.label }}</label>
     </div>
+    {% endmatch %}
   {% endif %}{% endif %}
   {% for b in form.buttons %}<button type="{{ b.button_type }}" name="{{ b.name }}" value="{{ b.value }}"{% if !b.onclick.is_empty() %} onclick="{{ b.onclick }}"{% endif %}>{{ b.label }}</button>{% endfor %}
 </form>
