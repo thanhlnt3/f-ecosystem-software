@@ -1089,6 +1089,9 @@ pub fn inspect_package(zip_path: &std::path::Path, os: &str, entry: &str) -> Dev
             format!("The package is not a valid zip file: {e}"),
         )
     })?;
+    // Quá nhiều mục, đường dẫn không an toàn, hoặc hai mục ghi đè nhau khi giải nén trên
+    // NTFS/APFS (tệp được quét có thể không phải tệp được chạy).
+    crate::scan::check_layout(&mut zip).map_err(|p| package_problem(p.vi(), p.en()))?;
     let names: Vec<String> = zip
         .file_names()
         .filter_map(|n| n.ok().map(|c| c.into_owned()))
@@ -1470,7 +1473,7 @@ async fn sign_target(
     let repo = feco_tuf::Repo::open(&tuf.repo);
     // Một lần ký tại một thời điểm: metadata TUF được đọc, sửa rồi ghi lại.
     let _guard = state.tuf_lock.lock().await;
-    match repo
+    let published = repo
         .publish(
             std::path::Path::new(path),
             target,
@@ -1479,13 +1482,40 @@ async fn sign_target(
             feco_tuf::Expiry::default(),
             jiff::Timestamp::now(),
         )
-        .await
-    {
-        Ok(()) => Ok(()),
-        // Đã ký từ lần phát hành trước (ví dụ sau khi tạm dừng rồi phát hành lại).
-        Err(feco_tuf::Error::Invalid(msg)) if msg.contains("đã tồn tại") => Ok(()),
-        Err(e) => Err(DevError::Upstream(format!("không ký được target TUF: {e}"))),
+        .await;
+    let Err(e) = published else {
+        return Ok(());
+    };
+    match repo.target_status(target).await {
+        // Đã ký từ lần phát hành trước (ví dụ sau khi tạm dừng rồi phát hành lại): chỉ nhận khi
+        // target đang có đúng app, phiên bản, nền tảng này (tên `{app}-{version}-{platform}.zip`
+        // có thể trùng giữa các app vì mã app được chứa '.' và '-').
+        Ok(feco_tuf::TargetStatus::Published(Some(existing)))
+            if same_release(&existing, &meta) =>
+        {
+            Ok(())
+        }
+        Ok(feco_tuf::TargetStatus::Revoked) => Err(problem(
+            StatusCode::CONFLICT,
+            "target_revoked",
+            format!("Gói {target} đã bị thu hồi, không phát hành lại được. Hãy phát hành phiên bản mới."),
+            format!("Package {target} has been revoked and cannot be released again. Release a new version."),
+        )),
+        Ok(feco_tuf::TargetStatus::Published(_)) => Err(problem(
+            StatusCode::CONFLICT,
+            "target_conflict",
+            format!("Tên gói {target} đã được dùng cho app hoặc phiên bản khác."),
+            format!("The package name {target} is already used by another app or version."),
+        )),
+        _ => Err(DevError::Upstream(format!("không ký được target TUF: {e}"))),
     }
+}
+
+/// Target đã ký thuộc đúng app, phiên bản và nền tảng của `meta`.
+fn same_release(existing: &feco_tuf::TargetMeta, meta: &feco_tuf::TargetMeta) -> bool {
+    existing.app == meta.app
+        && existing.version == meta.version
+        && existing.platform == meta.platform
 }
 
 /// Dừng phát hành dần: launcher chưa nhận bản này sẽ không nhận nữa.
@@ -1788,5 +1818,61 @@ mod tests {
         assert!(
             message(inspect_package(not_notarized.path(), "macos", entry)).contains("notarize")
         );
+    }
+
+    /// Tên target `{app}-{version}-{platform}.zip` có thể trùng giữa hai app ("x-1.0.0" bản
+    /// 1.0.0 và "x" bản 1.0.0-1.0.0): target đã có chỉ được coi là của lần phát hành này khi khớp
+    /// metadata.
+    #[test]
+    fn existing_target_must_match_release() {
+        let meta = |app: &str, version: &str| feco_tuf::TargetMeta {
+            app: app.into(),
+            version: version.into(),
+            platform: "windows-x64".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            target_name("x-1.0.0", "1.0.0", "windows-x64"),
+            target_name("x", "1.0.0-1.0.0", "windows-x64")
+        );
+        assert!(same_release(
+            &meta("x-1.0.0", "1.0.0"),
+            &meta("x-1.0.0", "1.0.0")
+        ));
+        assert!(!same_release(
+            &meta("x", "1.0.0-1.0.0"),
+            &meta("x-1.0.0", "1.0.0")
+        ));
+        let mut mac = meta("x-1.0.0", "1.0.0");
+        mac.platform = "macos-arm64".into();
+        assert!(!same_release(&mac, &meta("x-1.0.0", "1.0.0")));
+    }
+
+    /// Gói có hai mục ghi đè nhau trên NTFS (khác hoa thường, `./`) bị từ chối khi tải lên, dù
+    /// tệp chạy khai báo đã được ký.
+    #[test]
+    fn packages_with_colliding_entries_are_rejected() {
+        use crate::codesign::fixtures;
+        for other in ["soundlab.exe", "./SoundLab.exe", "SOUNDLAB.EXE."] {
+            let zip = zip_with(&[
+                ("SoundLab.exe", fixtures::pe(true)),
+                (other, fixtures::pe(false)),
+            ]);
+            let msg = message(inspect_package(zip.path(), "windows", "SoundLab.exe"));
+            // Trên Windows, `zip` coi tên có dấu chấm cuối là đường dẫn không an toàn.
+            assert!(
+                msg.contains("trùng đường dẫn") || msg.contains("không an toàn"),
+                "{other}: {msg}"
+            );
+        }
+        let names: Vec<String> = (0..=crate::scan::MAX_ENTRIES)
+            .map(|i| format!("f{i}.txt"))
+            .collect();
+        let mut files: Vec<(&str, Vec<u8>)> =
+            names.iter().map(|n| (n.as_str(), Vec::new())).collect();
+        files.push(("SoundLab.exe", fixtures::pe(true)));
+        let many = zip_with(&files);
+        let msg = message(inspect_package(many.path(), "windows", "SoundLab.exe"));
+        assert!(msg.contains("tối đa 10000"), "{msg}");
     }
 }
