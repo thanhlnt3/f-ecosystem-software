@@ -867,4 +867,5 @@ pub const FR: &[(&str, &str)] = &[
     ("aw.transfer_done", "F-Coin transférés (transaction {code})."),
     ("aw.grant_pending", "Demande d’octroi {code} créée ; elle doit être approuvée par un autre administrateur Finances."),
     ("aw.grants", "Demandes d’octroi de F-Coin en attente"),
+    ("role.err.unverified", "Cet utilisateur n’a pas encore vérifié son adresse e-mail. Attendez qu’il la vérifie avant d’approuver ou d’attribuer un rôle."),
 ];

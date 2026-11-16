@@ -1036,6 +1036,7 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "aw.transfer_done" => ("Đã chuyển F-Coin (giao dịch {code}).", "F-Coin transferred (transaction {code})."),
         "aw.grant_pending" => ("Đã tạo yêu cầu cấp {code}, chờ một quản trị viên Tài chính khác duyệt.", "Grant request {code} created; it needs another Finance administrator's approval."),
         "aw.grants" => ("Yêu cầu cấp F-Coin chờ duyệt", "F-Coin grant requests awaiting approval"),
+        "role.err.unverified" => ("Người dùng này chưa xác minh email. Hãy đợi họ xác minh rồi mới duyệt hoặc cấp vai trò.", "This user has not verified their email yet. Wait until they verify it before approving or granting a role."),
         _ => {
             tracing::warn!(key, "thiếu bản dịch");
             ("", "")

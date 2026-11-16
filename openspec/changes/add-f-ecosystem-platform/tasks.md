@@ -6,8 +6,8 @@
   - Đã xác minh: workspace `crates/feco-core`, `crates/feco-config`, `services/feco-server`, `tools/feco-license-check`; `cargo fmt`, `clippy -D warnings`, `cargo test --workspace` (34 test) đạt trên Ubuntu và Windows trong CI (lượt 42584296446).
 - [x] 1.2 CI kiểm tra license (`cargo-deny` cho crate Rust, `third_party/native.toml` cho dịch vụ và ảnh container) theo danh sách cho phép và file ngoại lệ có người duyệt; xác minh bằng PR thử thêm gói AGPL thì CI thất bại
   - Đã xác minh: `cargo-deny check` (license, bans, sources, advisories) và `feco-license-check` (5 ảnh container) đạt trong CI. Trường hợp thất bại được xác minh bằng unit test của `feco-license-check` (thành phần AGPL, ngoại lệ thiếu người duyệt, ảnh chưa khai báo) thay cho một PR thử.
-- [ ] 1.3 CI quét bí mật và lỗ hổng phụ thuộc; xác minh bằng PR thử chứa khóa giả thì CI thất bại
-  - Trạng thái: gitleaks và `cargo-deny` advisories chạy trong CI, lượt hiện tại sạch. Chưa làm bước xác minh bằng PR thử chứa khóa giả.
+- [x] 1.3 CI quét bí mật và lỗ hổng phụ thuộc; xác minh bằng PR thử chứa khóa giả thì CI thất bại
+  - Xác minh: gitleaks và `cargo-deny` advisories chạy trong CI. Thay cho PR thử, bước "gitleaks phải bắt được khóa giả" trong job `secrets` tạo một kho có token GitHub giả (sinh lúc chạy, không nằm trong repo) và yêu cầu gitleaks báo rò rỉ ở mỗi lượt CI (change production-readiness).
 - [ ] 1.4 Hạ tầng dev, staging, production bằng IaC: PostgreSQL có sao lưu PITR, Valkey, kho đối tượng kèm CDN, kho bí mật; xác minh bằng cách tạo staging từ đầu bằng một lệnh
   - Trạng thái: hạ tầng dev xong (`infra/docker-compose.yml`: PostgreSQL, Valkey, Mailpit, Ory Kratos, Ory Hydra), CI khởi động được và các endpoint sức khỏe đạt. Staging và production chờ chọn nhà cung cấp đám mây (câu hỏi mở trong design.md).
 - [x] 1.5 Kiểm tra cấu hình lúc khởi động (staging không được chứa khóa production của cổng thanh toán); xác minh bằng test cấu hình

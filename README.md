@@ -468,7 +468,12 @@ Không có khóa ZaloPay thì trang thanh toán báo chưa cấu hình cổng; �
 
 ### 11. Dùng thử bảng quản trị và thông báo
 
-1. Cho tài khoản của bạn vai trò quản trị (reviewer, support, project_manager, finance, sysadmin):
+1. **Tài khoản quản trị viên mặc định** luôn có sẵn: máy chủ tạo hoặc khôi phục nó mỗi lần khởi động và mỗi 10 phút, đủ năm vai trò, không hạ vai trò hay xóa được.
+   - Ở dev, email là `admin@f-eco.local`; mật khẩu ngẫu nhiên được sinh vào `.dev/admin-password` (không commit) ở lần chạy đầu.
+   - Ở staging và production, phải đặt `FECO_ADMIN_EMAIL` và `FECO_ADMIN_PASSWORD_FILE` (tệp bí mật, mật khẩu tối thiểu 12 ký tự); thiếu thì máy chủ không khởi động.
+   - Như mọi quản trị viên, phải thêm passkey trước khi vào bảng quản trị (bước 2).
+
+   Muốn cấp vai trò quản trị cho tài khoản của bạn (email phải đã xác minh):
 
    ```bash
    cargo run -p feco-server --bin feco-catalog -- admin-set <email> project_manager,finance,sysadmin
@@ -503,7 +508,11 @@ F-Coin là đơn vị thanh toán chỉ dùng trong F-Eco. Tỷ giá ban đầu 
    - Doanh nghiệp hoặc công ty lập hợp đồng, hai bên ký.
    - Khách ký quỹ F-Coin, nhận bàn giao, chấp nhận thì F-Coin chuyển cho người nhận việc.
    - Tranh chấp do Quản lý dự án xử lý ở `/admin/projects`.
-5. **Quản trị ví**: http://127.0.0.1:8080/admin/wallet (Tài chính, Quản trị hệ thống) gồm tổng F-Coin, tỷ giá, phí, duyệt lệnh rút, khóa ví, tra giao dịch. Kiểm tra sổ cái:
+5. **Quản trị ví**: http://127.0.0.1:8080/admin/wallet (Tài chính, Quản trị hệ thống) gồm tổng F-Coin, tỷ giá (mỗi lần đổi tối đa 20%), phí, duyệt lệnh rút, khóa ví, tra giao dịch.
+   - **Chuyển F-Coin** (Tài chính): nhập email người nhận (đã xác minh), số F-Coin, lý do, chọn nguồn **Ví của tôi** hoặc **Quỹ nền tảng**. Cấp từ quỹ nền tảng từ 1.000.000 ₫ trở lên chờ một quản trị viên Tài chính khác duyệt ở mục "Yêu cầu cấp F-Coin chờ duyệt".
+   - Quản trị viên không duyệt hay đánh dấu đã chuyển lệnh rút của chính mình. Lệnh rút cần hai người duyệt khi tổng rút trong 24 giờ từ 10.000.000 ₫.
+
+   Kiểm tra sổ cái:
 
    ```bash
    cargo run -p feco-server --bin feco-catalog -- wallet-check
@@ -583,6 +592,8 @@ Các API chính của `feco-server`:
 | `FECO_ADMIN_PASSKEY_OPTIONAL` | `false` | `true`: bảng quản trị không bắt buộc passkey. Chỉ được đặt khi `FECO_ENV=dev`; môi trường khác từ chối khởi động |
 | `FECO_LAUNCHER_CLIENT_ID` | không đặt | Client ID của F-Launcher trong Hydra. Có thì bật mã khởi chạy app con (`/v1/launch-codes`) và launcher không phải qua màn hình đồng ý |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |
+| `FECO_ADMIN_EMAIL` | dev: `admin@f-eco.local` | Email tài khoản quản trị viên mặc định; bắt buộc ngoài dev |
+| `FECO_ADMIN_PASSWORD_FILE` | dev: `.dev/admin-password` (tự sinh) | Tệp bí mật chứa mật khẩu ban đầu (≥ 12 ký tự), chỉ dùng khi tạo tài khoản; bắt buộc ngoài dev |
 | `FECO_WALLET_WITHDRAWALS` | `true` | `false`: tạm ngừng nhận lệnh rút F-Coin mới (lệnh đang chờ vẫn xử lý) |
 | `RUST_LOG` | `info` | Mức nhật ký, ví dụ `debug` |
 

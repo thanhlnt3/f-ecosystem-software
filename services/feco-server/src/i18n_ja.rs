@@ -867,4 +867,5 @@ pub const JA: &[(&str, &str)] = &[
     ("aw.transfer_done", "F-Coin を送付しました(取引 {code})。"),
     ("aw.grant_pending", "付与リクエスト {code} を作成しました。別の財務管理者の承認待ちです。"),
     ("aw.grants", "承認待ちの F-Coin 付与リクエスト"),
+    ("role.err.unverified", "このユーザーはまだメールアドレスを確認していません。確認が済んでから承認またはロールを付与してください。"),
 ];

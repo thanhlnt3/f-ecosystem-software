@@ -1,5 +1,76 @@
 # Nhật ký thay đổi
 
+## 1.9.0 (16/11/2026)
+
+Thay đổi OpenSpec `production-readiness`: chuẩn bị phát hành production.
+
+### Tài khoản quản trị viên mặc định
+
+- Máy chủ luôn bảo đảm tài khoản `FECO_ADMIN_EMAIL` tồn tại, hoạt động, email đã xác minh, đủ năm vai trò quản trị. Việc kiểm chạy lúc khởi động và mỗi 10 phút.
+- Tài khoản này không bị hạ vai trò, bỏ vai trò Quản trị hệ thống, hay xóa.
+- Mật khẩu ban đầu lấy từ tệp `FECO_ADMIN_PASSWORD_FILE` (tối thiểu 12 ký tự). Dev tự sinh vào `.dev/admin-password`. Production thiếu biến thì không khởi động.
+
+### Quản trị viên chuyển F-Coin
+
+- Ở trang Ví F-Coin của bảng quản trị, vai trò Tài chính chuyển F-Coin cho một người dùng đã xác minh email. Có hai nguồn:
+  - **Ví của tôi**;
+  - **Quỹ nền tảng**: phát hành thêm F-Coin; từ 1.000.000 ₫ cần một quản trị viên Tài chính khác duyệt.
+- Bắt buộc lý do; không chuyển cho chính mình; gửi lại biểu mẫu không chuyển hai lần.
+- Người nhận có thông báo và email; nhật ký kiểm toán ghi mọi lần chuyển. Hai loại bút toán mới `admin_transfer`, `admin_grant` (migration 0018).
+
+### Sửa lỗi bảo mật và chức năng (rà soát trước production)
+
+Rà soát ba vùng: xác thực và web, luồng tiền, launcher và chuỗi tin cậy TUF.
+
+- **Xác thực và web**:
+  - liên kết bàn giao dự án chỉ nhận http/https (chặn XSS `javascript:`);
+  - thao tác tài khoản nhà phát triển kiểm vai trò nền tảng;
+  - chỉ tin `X-Forwarded-For` từ proxy khai báo ở `FECO_TRUSTED_PROXIES`;
+  - chặn chuyển hướng mở qua ký tự điều khiển;
+  - chặn xóa tài khoản khi còn đơn, dự án, ký quỹ, số dư hoặc lệnh rút;
+  - OAuth tôn trọng `prompt=login`, `max_age` và gửi `acr`/`amr`;
+  - chỉ cấp hoặc duyệt vai trò cho email đã xác minh;
+  - cookie CSRF dùng tiền tố `__Host-` trên https;
+  - kiểm duyệt viên không tự duyệt app của tài khoản mình là thành viên;
+  - API chỉ nhận access token, không nhận refresh token;
+  - thêm thử thách chống bot Cloudflare Turnstile (`FECO_CHALLENGE_PROVIDER=turnstile`), nhờ đó production khởi động được.
+- **Luồng tiền**:
+  - lệnh hoàn chưa rõ kết quả (lỗi đường truyền, chữ ký phản hồi sai) không bị coi là thất bại;
+  - chuyển trạng thái hoàn tiền có điều kiện, không gửi hay kết thúc hai lần;
+  - quản trị viên không tự duyệt lệnh rút của mình, và lệnh của ví đã khóa không được duyệt;
+  - ngưỡng hai người duyệt tính theo tổng rút 24 giờ;
+  - mỗi lần đổi tỷ giá tối đa 20%;
+  - lệnh nạp hết hạn sau 30 phút hoặc khi tỷ giá đổi;
+  - callback lặp lại làm nốt việc cộng F-Coin hoặc bắt đầu đơn nếu lần trước dừng giữa chừng;
+  - giao dịch nạp chỉ hoàn qua lệnh rút;
+  - chấp nhận báo giá một lần;
+  - bên của dự án không xử lý tranh chấp;
+  - không xuất hóa đơn dịch vụ xây app cho lệnh nạp.
+- **Launcher và TUF**:
+  - thu hồi khẩn cấp được cả target đã gỡ; ký TUF trước khi đổi cơ sở dữ liệu;
+  - khóa tệp khi ghi kho TUF;
+  - logo PNG tối đa 1024 px;
+  - chặn gói zip có hai mục trùng tên trên NTFS;
+  - tệp chạy chỉ gồm `[A-Za-z0-9._/-]`, đổi tệp chạy hay chế độ terminal thì phải duyệt thủ công;
+  - mã khởi chạy chỉ cấp cho app người dùng được dùng (đã mua, app riêng của mình);
+  - quét gói mở zip một lần, tối đa 10.000 mục và 256 MB mỗi tệp;
+  - chưa đồng bộ quá 7 ngày thì không mở app;
+  - kiểm trùng tên target;
+  - so địa chỉ bằng `Url`;
+  - callback OAuth bỏ qua `state` sai;
+  - launcher bản release bắt buộc `FECO_LAUNCHER_SERVER` và `FECO_LAUNCHER_HYDRA`.
+
+### Khác
+
+- CI tự kiểm gitleaks bắt được khóa giả (task 1.3); task 2.4 đã xác minh.
+
+### Ghi chú nâng cấp
+
+- Đặt `FECO_ADMIN_EMAIL`, `FECO_ADMIN_PASSWORD_FILE` ở staging và production.
+- Production cần `FECO_CHALLENGE_PROVIDER=turnstile` cùng `FECO_TURNSTILE_SITE_KEY`, `FECO_TURNSTILE_SECRET_KEY`. Nếu chạy sau reverse proxy, đặt `FECO_TRUSTED_PROXIES`.
+- Launcher bản release cần `FECO_LAUNCHER_SERVER` và `FECO_LAUNCHER_HYDRA`.
+- Migration 0018 chạy tự động.
+
 ## 1.8.0 (16/11/2026)
 
 Thay đổi OpenSpec `role-at-registration`.

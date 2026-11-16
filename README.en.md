@@ -469,7 +469,12 @@ Without ZaloPay keys the payment page reports that the gateway is not configured
 
 ### 11. Try the Admin Console and notifications
 
-1. Give your account admin roles (reviewer, support, project_manager, finance, sysadmin):
+1. **The default administrator account** is always there: the server creates or restores it at every start and every 10 minutes, with all five roles; it cannot be demoted or deleted.
+   - In dev, the email is `admin@f-eco.local`; a random password is generated into `.dev/admin-password` (not committed) on the first run.
+   - In staging and production, set `FECO_ADMIN_EMAIL` and `FECO_ADMIN_PASSWORD_FILE` (a secret file, password of at least 12 characters); without them the server does not start.
+   - Like every administrator, add a passkey before entering the admin console (step 2).
+
+   To give admin roles to your own account (the email must be verified):
 
    ```bash
    cargo run -p feco-server --bin feco-catalog -- admin-set <email> project_manager,finance,sysadmin
@@ -504,7 +509,11 @@ F-Coin is a payment unit used only inside F-Eco. The initial rate is 1 F-Coin = 
    - A business or company draws up a contract, and both sides sign.
    - The customer funds escrow in F-Coin, receives the delivery, and accepting it pays the provider.
    - A Project manager resolves disputes at `/admin/projects`.
-5. **Wallet admin**: http://127.0.0.1:8080/admin/wallet (Finance, System administrator) shows F-Coin totals, rate, fees, withdrawal approvals, wallet freezing and transaction lookup. Check the ledger:
+5. **Wallet admin**: http://127.0.0.1:8080/admin/wallet (Finance, System administrator) shows F-Coin totals, rate (each change limited to 20%), fees, withdrawal approvals, wallet freezing and transaction lookup.
+   - **Transfer F-Coin** (Finance): enter the recipient's (verified) email, the amount and a reason, and choose **My wallet** or **Platform fund**. Platform-fund grants of 1,000,000 VND or more wait for another Finance administrator under "F-Coin grant requests awaiting approval".
+   - Administrators cannot approve or mark as paid their own withdrawals. A withdrawal needs two approvals when the user's withdrawals in 24 hours total 10,000,000 VND or more.
+
+   Check the ledger:
 
    ```bash
    cargo run -p feco-server --bin feco-catalog -- wallet-check
@@ -584,6 +593,8 @@ The main `feco-server` APIs:
 | `FECO_ADMIN_PASSKEY_OPTIONAL` | `false` | `true`: the Admin Console does not require a passkey. Can be set only when `FECO_ENV=dev`; other environments refuse to start |
 | `FECO_LAUNCHER_CLIENT_ID` | not set | The F-Launcher client ID in Hydra. If set, it enables sub-app launch codes (`/v1/launch-codes`) and the launcher does not have to go through the consent screen |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | not set | Dev/staging may only point to the payment gateway's sandbox |
+| `FECO_ADMIN_EMAIL` | dev: `admin@f-eco.local` | Email of the default administrator account; required outside dev |
+| `FECO_ADMIN_PASSWORD_FILE` | dev: `.dev/admin-password` (generated) | Secret file with the initial password (≥ 12 characters), used only when the account is created; required outside dev |
 | `FECO_WALLET_WITHDRAWALS` | `true` | `false`: stop accepting new F-Coin withdrawals (pending ones are still processed) |
 | `RUST_LOG` | `info` | Log level, for example `debug` |
 

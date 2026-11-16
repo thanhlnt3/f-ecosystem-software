@@ -7971,6 +7971,7 @@ async fn six_roles_and_role_requests() {
     let (email, password) = unique("doanh-nghiep");
     let minh = app_browser();
     register_in(&minh, &email, &password, "Minh An").await;
+    verify_email(&minh, &email).await;
     let page = get(&minh, "/account/role").await;
     assert_eq!(text_of(&page, "#current-role"), "Người dùng phổ thông");
     let (status, page) = post(
@@ -8925,6 +8926,23 @@ async fn role_chosen_at_registration() {
             && card.contains("Công ty TNHH Hoa Mai · MST 0312345678"),
         "{card}"
     );
+    // Email chưa xác minh thì chưa duyệt được (rà soát trước production).
+    let (status, body) = post(
+        &sysadmin,
+        &format!("/admin/members/requests/{}/approve", req.id),
+        &csrf_of(&members),
+        &[("note", "")],
+    )
+    .await;
+    assert_eq!(status, 409, "{body}");
+    assert!(body.contains("chưa xác minh email"), "{body}");
+    assert_eq!(
+        roles::role_of(&db, mai_subject).await.unwrap(),
+        PlatformRole::User
+    );
+    verify_email(&mai, &mai_email).await;
+    let members = get(&sysadmin, "/admin/members").await;
+    assert!(members.contains("Email đã xác minh"), "{members}");
     let (status, _) = post(
         &sysadmin,
         &format!("/admin/members/requests/{}/approve", req.id),

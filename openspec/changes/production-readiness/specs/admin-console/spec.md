@@ -64,3 +64,11 @@ Lý do MUST bắt buộc. Người nhận MUST khác người gửi, MUST có t�
 #### Scenario: Chuyển cho chính mình
 - **WHEN** quản trị viên cấp F-Coin từ "Quỹ nền tảng" cho chính email của mình
 - **THEN** thao tác bị từ chối và không bút toán nào được ghi
+
+### Requirement: Vai trò chỉ cấp cho email đã xác minh
+Cấp vai trò theo email (bảng quản trị, `feco-catalog role-set`, `admin-set`) và duyệt yêu cầu vai trò MUST chỉ thực hiện khi tài khoản có email đã xác minh. Từ chối yêu cầu thì vẫn được.
+
+#### Scenario: Duyệt khi email chưa xác minh
+- **GIVEN** Mai chọn vai trò Khách hàng doanh nghiệp khi đăng ký và chưa xác minh email
+- **WHEN** quản trị hệ thống bấm Duyệt
+- **THEN** thao tác bị từ chối với thông báo người dùng chưa xác minh email; sau khi Mai xác minh email thì duyệt được

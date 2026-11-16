@@ -43,9 +43,8 @@ Không có.
 
 ### Modified Capabilities
 
-- `admin-console`: tài khoản quản trị viên mặc định; chuyển F-Coin.
-- `fcoin-wallet`: bút toán chuyển và cấp F-Coin của quản trị viên.
-- `platform-security`: các sửa lỗi bảo mật.
+- `admin-console`: tài khoản quản trị viên mặc định; chuyển F-Coin (gồm hai loại bút toán mới của ví F-Coin).
+- `platform-security`: các quy tắc rút ra từ rà soát bảo mật.
 
 ## Impact
 

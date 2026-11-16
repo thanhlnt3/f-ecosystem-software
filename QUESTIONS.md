@@ -368,3 +368,30 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     vẫn cho duyệt yêu cầu của email chưa xác minh. Có nên chặn duyệt cho tới khi email được xác
     minh không? Có cần kiểm mã số thuế với cơ quan thuế (tra cứu mã số thuế doanh nghiệp) trước khi
     duyệt Khách hàng doanh nghiệp và Công ty phát triển phần mềm không?
+
+## Thay đổi production-readiness (bản 1.9.0)
+
+95. **Cảnh báo refresh token bị dùng lại (task 2.5).** Launcher đổi refresh token trực tiếp với
+    Hydra, nên F-Eco không biết khi nào Hydra phát hiện token bị dùng lại. Cần một trong hai:
+    - Hydra phát sự kiện (bản Ory Network có event stream);
+    - hoặc đưa việc đổi token qua feco-server.
+
+    Chọn cách nào?
+96. **API công khai của Kratos ở production.** Giới hạn đăng nhập sai, thử thách chống bot và
+    trang "đã gửi email" giống nhau chỉ nằm trong feco-server. Gọi thẳng `/self-service/*/api` của
+    Kratos thì bỏ qua được các lớp này. Khi dựng hạ tầng production (task 1.4), reverse proxy chỉ
+    được mở các đường `/self-service/*/browser` và các trang chuyển hướng của Kratos. Bộ đếm đăng
+    nhập sai cũng nên chuyển sang Valkey khi chạy nhiều máy chủ.
+97. **Gói của app có giá và app riêng tư.** Mã khởi chạy đã chỉ cấp cho người được dùng app. Nhưng
+    kho TUF vẫn phục vụ gói của mọi app cho bất kỳ ai, kể cả app có giá và bản build riêng của khách
+    hàng. Có cần phục vụ các gói này qua đường có xác thực, hoặc mã hóa theo quyền dùng không?
+98. **Lệnh hoàn chưa rõ kết quả.** Khi cổng không trả lời hoặc chữ ký phản hồi sai, lệnh hoàn giữ
+    trạng thái "đang xử lý" và quản trị viên nhận cảnh báo đối chiếu. Hiện chưa có nút "đánh dấu
+    thất bại, trả F-Coin" trên trang quản trị. Lệnh hoàn VNPAY trả mã 94 cũng chưa được hỏi lại kết
+    quả. Có cần thêm thao tác này cho Tài chính không?
+99. **Quỹ nền tảng.** Cấp F-Coin từ quỹ nền tảng là phát hành thêm F-Coin không có tiền thật đối
+    ứng. Cần kế toán xác nhận cách hạch toán (chi phí khuyến mại) và có đặt hạn mức cấp mỗi tháng
+    không.
+100. **Đăng xuất từ app con.** Bấm đăng xuất trong một app dùng đăng nhập F-Eco chỉ kết thúc phiên
+     của app đó; phiên F-Eco trên trình duyệt vẫn còn, nên lần đăng nhập OIDC sau không hỏi mật
+     khẩu. Trên máy dùng chung, có nên hỏi "Đăng xuất cả F-Eco?" và kết thúc luôn phiên F-Eco không?
