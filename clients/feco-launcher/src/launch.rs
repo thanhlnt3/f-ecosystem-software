@@ -130,6 +130,7 @@ mod tests {
             data_dir: "data".into(),
             client_id: None,
             terminal: false,
+            web_url: None,
         };
         let cmd = command(&plan, &LaunchEnv::default());
         assert_eq!(cmd.get_program(), "notes-bin");

@@ -264,6 +264,9 @@ pub fn neighbors<'a>(order: &'a [String], app: &str) -> (Option<&'a str>, Option
 
 /// Tên dễ đọc của một nền tảng: `windows-x64` → "Windows (x64)".
 pub fn platform_label(platform: &str) -> String {
+    if platform == feco_tuf::repo::WEB_PLATFORM {
+        return t("Trình duyệt web").to_owned();
+    }
     let (os, arch) = platform.split_once('-').unwrap_or((platform, ""));
     let os = match os {
         "windows" => "Windows",
@@ -532,6 +535,7 @@ mod tests {
         assert_eq!(platform_label("macos-x64"), "macOS (Intel)");
         assert_eq!(platform_label("linux-x64"), "Linux (x64)");
         assert_eq!(platform_label("freebsd"), "freebsd");
+        assert_eq!(platform_label("web"), t("Trình duyệt web"));
         // Giữa trưa UTC: cùng ngày ở mọi múi giờ từ -11 tới +11.
         assert_eq!(
             release_date("2026-11-13T12:00:00Z").as_deref(),

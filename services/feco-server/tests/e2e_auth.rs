@@ -8554,3 +8554,238 @@ async fn app_logos_and_web_library() {
         "{lib}"
     );
 }
+
+// ============ launcher-sidebar-and-web-apps: app web trên F-Store, đăng nhập phía máy chủ ============
+
+/// Địa chỉ chuyển hướng của backend ThesisAI trong môi trường dev.
+const WEB_APP_CALLBACK: &str = "http://localhost:8000/api/auth/feco/callback";
+
+/// Trình duyệt dừng khi được chuyển về app (callback của app desktop ở cổng 9999, của backend app
+/// web ở cổng 8000).
+fn web_app_browser() -> reqwest::Client {
+    reqwest::Client::builder()
+        .cookie_store(true)
+        .user_agent(UA_WINDOWS_CHROME)
+        .redirect(reqwest::redirect::Policy::custom(|a| {
+            if matches!(a.url().port(), Some(9999) | Some(8000)) {
+                a.stop()
+            } else {
+                a.follow()
+            }
+        }))
+        .timeout(Duration::from_secs(30))
+        .build()
+        .unwrap()
+}
+
+async fn authorize_to(
+    c: &reqwest::Client,
+    client_id: &str,
+    scope: &str,
+    redirect_uri: &str,
+) -> Authorize {
+    let (verifier, challenge) = pkce();
+    let mut url = url::Url::parse(&format!("{HYDRA_PUBLIC}/oauth2/auth")).unwrap();
+    url.query_pairs_mut()
+        .append_pair("client_id", client_id)
+        .append_pair("response_type", "code")
+        .append_pair("scope", scope)
+        .append_pair("redirect_uri", redirect_uri)
+        .append_pair("state", "trang-thai-cua-thesisai")
+        .append_pair("nonce", "nonce-cua-thesisai")
+        .append_pair("code_challenge", &challenge)
+        .append_pair("code_challenge_method", "S256");
+    let res = c.get(url).send().await.unwrap();
+    finish(res, verifier).await
+}
+
+/// Backend app web đổi mã lấy token bằng client secret (`client_secret_basic`).
+async fn exchange_with_secret(
+    client_id: &str,
+    secret: &str,
+    redirect_uri: &str,
+    a: &Authorize,
+) -> (u16, Value) {
+    let cb = a.callback.as_ref().expect("phải về callback");
+    let code = query(cb, "code").unwrap_or_else(|| panic!("không có code: {cb}"));
+    let body = form_urlencoded::Serializer::new(String::new())
+        .append_pair("grant_type", "authorization_code")
+        .append_pair("code", &code)
+        .append_pair("redirect_uri", redirect_uri)
+        .append_pair("code_verifier", &a.verifier)
+        .finish();
+    let res = reqwest::Client::new()
+        .post(format!("{HYDRA_PUBLIC}/oauth2/token"))
+        .basic_auth(client_id, Some(secret))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+    (res.status().as_u16(), res.json().await.unwrap())
+}
+
+/// Spec app-catalog "App web trên F-Store" và "Đăng nhập bằng F-Eco cho app web".
+#[tokio::test]
+async fn web_apps_and_server_side_login() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let state = local_state();
+    let tag = &uuid::Uuid::new_v4().simple().to_string()[..8];
+    let app = format!("web-{tag}");
+    let url = "http://localhost:3000/auth/feco";
+
+    // --- Scenario "Trang app web".
+    let mut a = catalog_app(&app, &format!("client-{app}"), "ThesisAI");
+    a.web_url = Some(url.into());
+    feco_server::catalog::upsert_app(&state.db, &state.catalog, &a)
+        .await
+        .unwrap();
+    feco_server::catalog::release_version(
+        &state.db,
+        &state.catalog,
+        &app,
+        &version("0.1.0", "web"),
+    )
+    .await
+    .unwrap();
+    let page = get(&app_browser(), &format!("/store/{app}")).await;
+    assert!(
+        page.contains(&format!(
+            r#"<p id="open-web"><a class="button" href="{url}""#
+        )) && page.contains("Mở ứng dụng web"),
+        "{page}"
+    );
+    assert!(page.contains("<span>Web</span>"), "{page}");
+    assert!(!page.contains(r#"id="install""#), "{page}");
+    // Địa chỉ không an toàn bị bỏ qua, địa chỉ cũ giữ nguyên.
+    a.web_url = Some("http://example.com/app".into());
+    feco_server::catalog::upsert_app(&state.db, &state.catalog, &a)
+        .await
+        .unwrap();
+    let d = feco_server::catalog::detail(&state.db, &app)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(d.listing.web_url.as_deref(), Some(url));
+
+    // --- Scenario "Lọc theo Windows".
+    for os in ["windows", "macos", "linux"] {
+        let found = feco_server::catalog::search(
+            &state.db,
+            &feco_server::catalog::Filters {
+                os: Some(os.into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert!(found.iter().any(|l| l.id == app), "{os}");
+    }
+    let found = feco_server::catalog::search(
+        &state.db,
+        &feco_server::catalog::Filters {
+            q: Some("thesisai".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let listed = found
+        .iter()
+        .find(|l| l.id == app)
+        .expect("có trong danh mục");
+    assert_eq!(listed.web_url.as_deref(), Some(url));
+    assert_eq!(listed.platforms, ["web"]);
+    let json = serde_json::to_value(listed).unwrap();
+    assert_eq!(json["web_url"], url);
+
+    // --- Scenario "Ứng dụng của tôi".
+    let (email, password) = unique("thesisai");
+    let user = web_app_browser();
+    register_in(&user, &email, &password, "Sinh Viên").await;
+    let token = launcher_token_for(&user).await;
+    let res = reqwest::Client::new()
+        .post(format!("{BASE}/v1/catalog/installs"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"app_id": app, "version": "0.1.0"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 204);
+    let lib = get(&user, "/library").await;
+    assert!(
+        lib.contains(&format!(r#"class="button open-web" href="{url}""#)),
+        "{lib}"
+    );
+
+    // --- Scenario "ThesisAI đăng nhập bằng F-Eco": client phía máy chủ có secret.
+    let secret = format!("bi-mat-{}", uuid::Uuid::new_v4().simple());
+    let client: Value = reqwest::Client::new()
+        .post(format!("{HYDRA_ADMIN}/admin/clients"))
+        .json(&serde_json::json!({
+            "client_name": "ThesisAI",
+            "client_secret": secret,
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "scope": "openid offline_access profile email",
+            "redirect_uris": [WEB_APP_CALLBACK],
+            "token_endpoint_auth_method": "client_secret_basic",
+            "subject_type": "pairwise",
+            "policy_uri": "https://thesisai.example/privacy",
+            "metadata": {"developer": "ThesisAI", "scopes": {
+                "profile": {"required": true, "purpose_vi": "Hiện tên của bạn", "purpose_en": "Show your name"},
+                "email": {"required": true, "purpose_vi": "Liên kết tài khoản ThesisAI", "purpose_en": "Link your ThesisAI account"}
+            }},
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let client_id = client["client_id"].as_str().expect("client_id").to_owned();
+    let a = authorize_to(&user, &client_id, "openid profile email", WEB_APP_CALLBACK).await;
+    let a = answer_consent(&user, a, "accept", &[]).await;
+    let cb = a.callback.clone().expect("về backend ThesisAI");
+    assert_eq!(cb.port(), Some(8000));
+    assert_eq!(cb.path(), "/api/auth/feco/callback");
+    assert_eq!(
+        query(&cb, "state").as_deref(),
+        Some("trang-thai-cua-thesisai")
+    );
+    let (status, tokens) = exchange_with_secret(&client_id, &secret, WEB_APP_CALLBACK, &a).await;
+    assert_eq!(status, 200, "{tokens}");
+    let sub = id_token_sub(&tokens);
+    let identity = subject_of(&email).await.to_string();
+    assert_ne!(sub, identity, "sub là pairwise, không phải mã danh tính");
+    let (status, body) = me(tokens["access_token"].as_str().unwrap(), None).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["email"], email.as_str());
+    assert!(body["email_verified"].is_boolean(), "{body}");
+    assert_eq!(body["name"], "Sinh Viên");
+
+    // --- Scenario "Sai client secret": lần đăng nhập sau không hỏi lại đồng ý.
+    let again = authorize_to(&user, &client_id, "openid profile email", WEB_APP_CALLBACK).await;
+    assert!(again.callback.is_some(), "đã đồng ý thì về thẳng app");
+    let (status, body) =
+        exchange_with_secret(&client_id, "sai-bi-mat", WEB_APP_CALLBACK, &again).await;
+    assert_eq!(status, 401, "{body}");
+    assert_eq!(body["error"], "invalid_client");
+    assert!(body.get("access_token").is_none());
+
+    // --- Scenario "Chuyển hướng lạ": Hydra không chuyển mã tới địa chỉ chưa đăng ký.
+    let evil = authorize_to(
+        &user,
+        &client_id,
+        "openid profile email",
+        "http://localhost:8000/evil",
+    )
+    .await;
+    if let Some(cb) = &evil.callback {
+        assert!(query(cb, "code").is_none(), "{cb}");
+        assert_ne!(cb.path(), "/evil", "{cb}");
+    }
+}

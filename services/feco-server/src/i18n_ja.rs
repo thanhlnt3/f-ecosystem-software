@@ -834,4 +834,8 @@ pub const JA: &[(&str, &str)] = &[
     ("lib.latest", "最新"),
     ("lib.update", "更新あり"),
     ("lib.purchased", "購入済み"),
+    ("store.open_web", "Web アプリを開く"),
+    ("store.web_hint", "この Web アプリはブラウザーで動作し、F-Eco アカウントでサインインします。F-Launcher に追加するとライブラリからすぐ開けます。"),
+    ("store.web_app", "Web アプリ"),
+    ("lib.open", "開く"),
 ];

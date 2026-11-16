@@ -83,6 +83,8 @@ pub struct Card {
     pub price: String,
     pub rating: String,
     pub platforms: String,
+    /// Địa chỉ app web (rỗng với app desktop).
+    pub web_url: String,
 }
 
 pub struct ScopeLine {
@@ -185,6 +187,7 @@ pub fn platform_label(p: &str) -> String {
         "windows" => "Windows",
         "macos" => "macOS",
         "linux" => "Linux",
+        "web" => "Web",
         other => other,
     };
     if arch.is_empty() {
@@ -239,6 +242,7 @@ fn card(lang: Lang, l: &Listing) -> Card {
             .map(|p| platform_label(p))
             .collect::<Vec<_>>()
             .join(", "),
+        web_url: l.web_url.clone().unwrap_or_default(),
     }
 }
 
@@ -648,6 +652,7 @@ pub struct LibraryRow {
     pub latest: String,
     pub purchased: bool,
     pub update: bool,
+    pub web_url: String,
 }
 
 #[derive(Template)]
@@ -694,6 +699,7 @@ pub async fn library(
             },
             latest: i.latest.clone().unwrap_or_default(),
             purchased: i.purchased,
+            web_url: i.web_url.clone().unwrap_or_default(),
         })
         .collect();
     html(

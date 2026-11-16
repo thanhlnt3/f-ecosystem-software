@@ -165,6 +165,9 @@ pub struct Prefs {
     /// Phiên bản người dùng chọn "Bỏ qua bản này" khi được gợi ý cập nhật (mã app → phiên bản).
     #[serde(default)]
     pub skipped_updates: std::collections::BTreeMap<String, String>,
+    /// Thanh bên thu gọn, chỉ còn icon (launcher-sidebar-and-web-apps).
+    #[serde(default)]
+    pub sidebar_collapsed: bool,
 }
 
 impl Default for Prefs {
@@ -183,6 +186,7 @@ impl Default for Prefs {
             language: Language::Vi,
             style: UiStyle::Plain,
             skipped_updates: Default::default(),
+            sidebar_collapsed: false,
         }
     }
 }
@@ -222,6 +226,7 @@ impl Prefs {
             language: field(map, "language", d.language),
             style: field(map, "style", d.style),
             skipped_updates: field(map, "skipped_updates", d.skipped_updates),
+            sidebar_collapsed: field(map, "sidebar_collapsed", d.sidebar_collapsed),
         };
         prefs.sanitized()
     }
@@ -392,6 +397,28 @@ mod tests {
         Prefs::default().save(&path).unwrap();
         let back = Prefs::load(&path).0;
         assert_eq!((back.language, back.style), (Language::Vi, UiStyle::Plain));
+    }
+
+    /// launcher-sidebar-and-web-apps, scenario "Thu gọn thanh bên", "Mở lại launcher",
+    /// "Cài đặt cũ".
+    #[test]
+    fn sidebar_choice_is_saved() {
+        let old = serde_json::json!({"theme": "dark", "compact": true});
+        let prefs = Prefs::from_value(&old);
+        assert!(!prefs.sidebar_collapsed);
+        assert_eq!(prefs.theme, Theme::Dark);
+        assert!(prefs.compact);
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let chosen = Prefs {
+            sidebar_collapsed: true,
+            ..Prefs::default()
+        };
+        chosen.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"sidebar_collapsed\": true"), "{text}");
+        assert!(Prefs::load(&path).0.sidebar_collapsed);
     }
 
     /// Màu nhấn của launcher trùng bảng chung `feco_core::ui_palette::ACCENTS` (trang web dùng bảng đó).

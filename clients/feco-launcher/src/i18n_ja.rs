@@ -236,4 +236,13 @@ pub(crate) const JA: &[(&str, &str)] = &[
     ("Ứng dụng của tôi", "マイアプリ"),
     ("Dự án phần mềm", "ソフトウェアプロジェクト"),
     ("Đơn xây app", "アプリ開発の注文"),
+    ("App web", "Web アプリ"),
+    ("Thêm", "追加"),
+    ("Đã thêm", "追加済み"),
+    ("Thu gọn thanh bên (Ctrl+B)", "サイドバーを折りたたむ (Ctrl+B)"),
+    ("Mở rộng thanh bên (Ctrl+B)", "サイドバーを展開 (Ctrl+B)"),
+    ("Trình duyệt web", "Web ブラウザー"),
+    ("Thêm {} vào Thư viện?", "{} をライブラリに追加しますか?"),
+    ("App web mở bằng trình duyệt tại {} và đăng nhập bằng tài khoản F-Eco.", "この Web アプリはブラウザーで {} を開き、F-Eco アカウントでサインインします。"),
+    ("Đã mở {} trong trình duyệt", "{} をブラウザーで開きました"),
 ];

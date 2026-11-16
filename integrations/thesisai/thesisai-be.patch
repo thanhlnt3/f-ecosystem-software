@@ -1,0 +1,297 @@
+diff --git a/.env.example b/.env.example
+index 6fc58cc..b6e66f5 100644
+--- a/.env.example
++++ b/.env.example
+@@ -33,3 +33,11 @@ AUDIO_RETENTION_HOURS=24
+ AUTO_DELETE_RAW_DOCS=True
+ MAX_UPLOAD_SIZE_MB=50
+ MAX_AUDIO_SIZE_MB=10
++
++# Đăng nhập bằng F-Eco (scripts/dev-apps.sh thesisai in client ID và secret). Để trống thì tắt.
++FECO_ISSUER_URL="http://127.0.0.1:4444/"
++FECO_SERVER_URL="http://127.0.0.1:8080/"
++FECO_CLIENT_ID=""
++FECO_CLIENT_SECRET=""
++FECO_REDIRECT_URI="http://localhost:8000/api/auth/feco/callback"
++FRONTEND_URL="http://localhost:3000"
+diff --git a/alembic/versions/7c1e2f0a9b3d_add_feco_subject.py b/alembic/versions/7c1e2f0a9b3d_add_feco_subject.py
+new file mode 100644
+index 0000000..691faca
+--- /dev/null
++++ b/alembic/versions/7c1e2f0a9b3d_add_feco_subject.py
+@@ -0,0 +1,25 @@
++"""add_feco_subject: đăng nhập bằng tài khoản F-Eco
++
++Revision ID: 7c1e2f0a9b3d
++Revises: 278ed2008cbd
++"""
++from typing import Sequence, Union
++
++from alembic import op
++import sqlalchemy as sa
++
++
++revision: str = "7c1e2f0a9b3d"
++down_revision: Union[str, Sequence[str], None] = "278ed2008cbd"
++branch_labels: Union[str, Sequence[str], None] = None
++depends_on: Union[str, Sequence[str], None] = None
++
++
++def upgrade() -> None:
++    op.add_column("users", sa.Column("feco_subject", sa.String(length=255), nullable=True))
++    op.create_index(op.f("ix_users_feco_subject"), "users", ["feco_subject"], unique=True)
++
++
++def downgrade() -> None:
++    op.drop_index(op.f("ix_users_feco_subject"), table_name="users")
++    op.drop_column("users", "feco_subject")
+diff --git a/app/api/api_router.py b/app/api/api_router.py
+index 103ca8d..1e1de8e 100644
+--- a/app/api/api_router.py
++++ b/app/api/api_router.py
+@@ -1,9 +1,10 @@
+ from fastapi import APIRouter
+-from app.api.routes import health, auth, projects, documents, knowledge_profiles, rag, practice_sessions, answers
++from app.api.routes import health, auth, feco_auth, projects, documents, knowledge_profiles, rag, practice_sessions, answers
+ 
+ api_router = APIRouter()
+ api_router.include_router(health.router)
+ api_router.include_router(auth.router)
++api_router.include_router(feco_auth.router)
+ api_router.include_router(projects.router)
+ api_router.include_router(documents.router)
+ api_router.include_router(knowledge_profiles.router)
+diff --git a/app/api/routes/feco_auth.py b/app/api/routes/feco_auth.py
+new file mode 100644
+index 0000000..4ba51fc
+--- /dev/null
++++ b/app/api/routes/feco_auth.py
+@@ -0,0 +1,75 @@
++"""Đăng nhập bằng tài khoản F-Eco (OIDC authorization code + PKCE, client phía máy chủ).
++
++Luồng: frontend `/auth/feco` -> GET /api/auth/feco/login -> F-Eco -> GET /api/auth/feco/callback
++-> frontend `/auth/feco#token=...`. Authlib lo phần OAuth: state, nonce, PKCE, đổi mã bằng client
++secret, kiểm chữ ký ID token qua JWKS.
++"""
++from urllib.parse import urlencode
++
++from authlib.integrations.starlette_client import OAuth, OAuthError
++from fastapi import APIRouter, Depends, HTTPException, Request, status
++from fastapi.responses import RedirectResponse
++from sqlalchemy.orm import Session
++
++from app.core.config import settings
++from app.db.session import get_db
++from app.services.auth_service import auth_service
++
++router = APIRouter(prefix="/auth/feco", tags=["Authentication"])
++
++oauth = OAuth()
++if settings.FECO_CLIENT_ID:
++    oauth.register(
++        name="feco",
++        client_id=settings.FECO_CLIENT_ID,
++        client_secret=settings.FECO_CLIENT_SECRET,
++        server_metadata_url=settings.FECO_ISSUER_URL.rstrip("/")
++        + "/.well-known/openid-configuration",
++        client_kwargs={
++            "scope": "openid profile email",
++            "code_challenge_method": "S256",
++            "token_endpoint_auth_method": "client_secret_basic",
++        },
++    )
++
++
++def _client():
++    client = oauth.create_client("feco")
++    if client is None:
++        raise HTTPException(
++            status_code=status.HTTP_404_NOT_FOUND,
++            detail="Chưa bật đăng nhập bằng F-Eco (thiếu FECO_CLIENT_ID).",
++        )
++    return client
++
++
++def _to_frontend(**fragment: str) -> RedirectResponse:
++    # Token nằm trong fragment (#) nên không đi vào nhật ký máy chủ hay header Referer.
++    url = settings.FRONTEND_URL.rstrip("/") + "/auth/feco#" + urlencode(fragment)
++    return RedirectResponse(url, status_code=status.HTTP_303_SEE_OTHER)
++
++
++@router.get("/login", summary="Chuyển sang F-Eco để đăng nhập")
++async def feco_login(request: Request):
++    return await _client().authorize_redirect(request, settings.FECO_REDIRECT_URI)
++
++
++@router.get("/callback", summary="F-Eco chuyển về sau khi người dùng đăng nhập")
++async def feco_callback(request: Request, db: Session = Depends(get_db)):
++    client = _client()
++    try:
++        token = await client.authorize_access_token(request)
++    except OAuthError as e:
++        return _to_frontend(error=e.description or e.error or "Đăng nhập F-Eco thất bại.")
++    claims = token.get("userinfo") or {}
++    subject = claims.get("sub")
++    if not subject:
++        return _to_frontend(error="F-Eco không trả về mã người dùng.")
++    me = await client.get(settings.FECO_SERVER_URL.rstrip("/") + "/v1/me", token=token)
++    if me.status_code != 200:
++        return _to_frontend(error="Không đọc được thông tin tài khoản F-Eco.")
++    try:
++        access_token = auth_service.login_with_feco(db, subject, me.json())
++    except HTTPException as e:
++        return _to_frontend(error=str(e.detail))
++    return _to_frontend(token=access_token)
+diff --git a/app/core/config.py b/app/core/config.py
+index 3e45679..51cc5eb 100644
+--- a/app/core/config.py
++++ b/app/core/config.py
+@@ -51,6 +51,14 @@ class Settings(BaseSettings):
+     MAX_UPLOAD_SIZE_MB: int = 50
+     MAX_AUDIO_SIZE_MB: int = 10
+ 
++    # Đăng nhập bằng tài khoản F-Eco (OIDC, client phía máy chủ). Để trống FECO_CLIENT_ID thì tắt.
++    FECO_ISSUER_URL: str = "http://127.0.0.1:4444/"
++    FECO_SERVER_URL: str = "http://127.0.0.1:8080/"
++    FECO_CLIENT_ID: str = ""
++    FECO_CLIENT_SECRET: str = ""
++    FECO_REDIRECT_URI: str = "http://localhost:8000/api/auth/feco/callback"
++    FRONTEND_URL: str = "http://localhost:3000"
++
+     @property
+     def documents_dir(self) -> Path:
+         p = Path(self.STORAGE_DIR) / "uploads" / "documents"
+diff --git a/app/main.py b/app/main.py
+index 55c6141..c6094c4 100644
+--- a/app/main.py
++++ b/app/main.py
+@@ -1,5 +1,6 @@
+ from fastapi import FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
++from starlette.middleware.sessions import SessionMiddleware
+ from app.core.config import settings
+ from app.api.api_router import api_router
+ 
+@@ -10,6 +11,9 @@ app = FastAPI(
+     redoc_url=f"{settings.API_V1_STR}/redoc",
+ )
+ 
++# Phiên ngắn (cookie ký bằng SECRET_KEY) giữ state, nonce, PKCE của lần đăng nhập F-Eco.
++app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, same_site="lax", max_age=600)
++
+ # Set CORS middleware
+ if settings.CORS_ORIGINS:
+     app.add_middleware(
+diff --git a/app/models/user.py b/app/models/user.py
+index e592a4a..6c5a321 100644
+--- a/app/models/user.py
++++ b/app/models/user.py
+@@ -1,4 +1,5 @@
+ ﻿from datetime import datetime
++from typing import Optional
+ from sqlalchemy import String, Boolean, DateTime
+ from sqlalchemy.orm import Mapped, mapped_column, relationship
+ from app.db.session import Base
+@@ -13,6 +14,10 @@ class User(Base):
+     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+     role: Mapped[str] = mapped_column(String(20), default="student", nullable=False)  # student, lecturer, admin
+     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
++    # Mã người dùng (pairwise `sub`) của F-Eco khi đăng nhập bằng F-Eco.
++    feco_subject: Mapped[Optional[str]] = mapped_column(
++        String(255), unique=True, index=True, nullable=True
++    )
+     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+     updated_at: Mapped[datetime] = mapped_column(
+         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+diff --git a/app/repositories/user_repo.py b/app/repositories/user_repo.py
+index f5bb2e7..7ddb0c1 100644
+--- a/app/repositories/user_repo.py
++++ b/app/repositories/user_repo.py
+@@ -14,6 +14,10 @@ class UserRepository:
+         stmt = select(User).where(User.email == email.strip().lower())
+         return db.scalars(stmt).first()
+ 
++    def get_by_feco_subject(self, db: Session, subject: str) -> Optional[User]:
++        stmt = select(User).where(User.feco_subject == subject)
++        return db.scalars(stmt).first()
++
+     def create(
+         self,
+         db: Session,
+diff --git a/app/services/auth_service.py b/app/services/auth_service.py
+index 6e926b2..534d790 100644
+--- a/app/services/auth_service.py
++++ b/app/services/auth_service.py
+@@ -1,4 +1,7 @@
+-﻿from fastapi import HTTPException, status
++﻿import secrets
++from typing import Any, Dict
++
++from fastapi import HTTPException, status
+ from sqlalchemy.orm import Session
+ from app.models.user import User
+ from app.schemas.auth import UserRegisterRequest, UserLoginRequest, TokenResponse, UserResponse
+@@ -57,5 +60,50 @@ class AuthService:
+             user=UserResponse.model_validate(user),
+         )
+ 
++    def login_with_feco(self, db: Session, subject: str, profile: Dict[str, Any]) -> str:
++        """Đăng nhập bằng tài khoản F-Eco và trả về JWT của ThesisAI.
++
++        `subject` là `sub` (pairwise) trong ID token đã kiểm chữ ký; `profile` là kết quả
++        `GET /v1/me` của F-Eco (tên, email, email_verified).
++        """
++        user = user_repo.get_by_feco_subject(db, subject)
++        if user is None:
++            email = str(profile.get("email") or "").strip().lower()
++            if not email:
++                raise HTTPException(
++                    status_code=status.HTTP_400_BAD_REQUEST,
++                    detail="F-Eco chưa chia sẻ email nên ThesisAI không tạo được tài khoản.",
++                )
++            user = user_repo.get_by_email(db, email)
++            if user is not None:
++                # Chỉ liên kết tài khoản có sẵn khi F-Eco xác nhận email là của người dùng.
++                if not profile.get("email_verified"):
++                    raise HTTPException(
++                        status_code=status.HTTP_409_CONFLICT,
++                        detail="Email này đã có tài khoản ThesisAI. Hãy xác minh email trên F-Eco "
++                        "rồi thử lại, hoặc đăng nhập bằng mật khẩu.",
++                    )
++            else:
++                name = str(profile.get("name") or "").strip() or email.split("@")[0]
++                # Mật khẩu ngẫu nhiên không ai biết: tài khoản này đăng nhập qua F-Eco.
++                user = user_repo.create(
++                    db=db,
++                    name=name[:100],
++                    email=email,
++                    password_hash=hash_password(secrets.token_urlsafe(32)),
++                    role="student",
++                )
++            user.feco_subject = subject
++            db.commit()
++            db.refresh(user)
++        if not user.is_active:
++            raise HTTPException(
++                status_code=status.HTTP_401_UNAUTHORIZED,
++                detail="Tài khoản ThesisAI đã bị khóa.",
++            )
++        return create_access_token(
++            data={"sub": str(user.id), "email": user.email, "role": user.role}
++        )
++
+ 
+ auth_service = AuthService()
+diff --git a/requirements.txt b/requirements.txt
+index 81a72eb..36d60c5 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -13,6 +13,8 @@ python-dotenv>=1.0.1
+ httpx>=0.27.0
+ bcrypt>=4.0.0
+ pyjwt[crypto]>=2.8.0
++authlib>=1.3.2
++itsdangerous>=2.2.0
+ pypdf>=5.0.0
+ python-docx>=1.1.0
+ python-pptx>=1.0.0

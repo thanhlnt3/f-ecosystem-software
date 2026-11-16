@@ -1003,6 +1003,10 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "lib.latest" => ("bản mới nhất", "latest"),
         "lib.update" => ("Có bản mới", "Update available"),
         "lib.purchased" => ("Đã mua", "Purchased"),
+        "store.open_web" => ("Mở ứng dụng web", "Open web app"),
+        "store.web_hint" => ("Ứng dụng web chạy trong trình duyệt và đăng nhập bằng tài khoản F-Eco. Thêm vào F-Launcher để mở nhanh từ Thư viện.", "This web app runs in your browser and signs in with your F-Eco account. Add it in F-Launcher to open it quickly from your Library."),
+        "store.web_app" => ("App web", "Web app"),
+        "lib.open" => ("Mở", "Open"),
         _ => {
             tracing::warn!(key, "thiếu bản dịch");
             ("", "")

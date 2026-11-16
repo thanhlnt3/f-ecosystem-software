@@ -729,3 +729,80 @@ async fn app_icon_is_signed_with_its_targets() {
     assert_eq!(meta.version, "1.2.0", "thông tin khác giữ nguyên");
     assert!(state.targets[other].meta.as_ref().unwrap().icon.is_none());
 }
+
+/// App web: địa chỉ được ký cùng target nền tảng `web`; địa chỉ không an toàn bị từ chối và kho
+/// không đổi (launcher-sidebar-and-web-apps, scenario "Địa chỉ không an toàn").
+#[tokio::test]
+async fn web_app_url_is_signed_and_checked() {
+    use feco_tuf::repo::{valid_web_url, WEB_PLATFORM};
+    assert!(valid_web_url("https://thesisai.example.edu.vn/auth/feco"));
+    assert!(valid_web_url("http://localhost:3000/auth/feco"));
+    assert!(valid_web_url("http://127.0.0.1:3000/"));
+    for bad in [
+        "http://example.com/app",
+        "javascript:alert(1)",
+        "file:///C:/Windows",
+        "https://user:pass@example.com/",
+        "ftp://example.com/",
+        "localhost:3000",
+        "",
+    ] {
+        assert!(!valid_web_url(bad), "{bad}");
+    }
+
+    let fixture = Fixture::new().await;
+    let name = "thesisai-0.1.0-web.zip";
+    let file = fixture.package(name, b"webapp.json").await;
+    let web = |url: Option<&str>, platform: &str| TargetMeta {
+        app: "thesisai".into(),
+        version: "0.1.0".into(),
+        platform: platform.into(),
+        web_url: url.map(str::to_owned),
+        ..Default::default()
+    };
+    for bad in [
+        web(Some("http://example.com/app"), WEB_PLATFORM),
+        web(None, WEB_PLATFORM),
+        web(Some("https://thesisai.example/"), "windows-x64"),
+    ] {
+        let err = fixture
+            .repo
+            .publish(
+                &file,
+                name,
+                &bad,
+                &fixture.release_keys(),
+                Expiry::default(),
+                Timestamp::now(),
+            )
+            .await
+            .unwrap_err();
+        assert!(format!("{err}").contains("web"), "{err}");
+    }
+    let client = fixture.client("launcher").await;
+    assert!(
+        !client.sync().await.unwrap().targets.contains_key(name),
+        "kho không đổi"
+    );
+
+    let good = web(Some("http://localhost:3000/auth/feco"), WEB_PLATFORM);
+    fixture
+        .repo
+        .publish(
+            &file,
+            name,
+            &good,
+            &fixture.release_keys(),
+            Expiry::default(),
+            Timestamp::now(),
+        )
+        .await
+        .unwrap();
+    let state = client.sync().await.unwrap();
+    let meta = state.targets[name].meta.as_ref().unwrap();
+    assert_eq!(meta.platform, "web");
+    assert_eq!(
+        meta.web_url.as_deref(),
+        Some("http://localhost:3000/auth/feco")
+    );
+}

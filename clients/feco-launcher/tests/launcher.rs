@@ -612,3 +612,79 @@ async fn private_apps_show_only_for_their_customer() {
     l.set_private_apps(Default::default()).unwrap();
     assert_eq!(apps(&l), ["paintbox"]);
 }
+
+/// launcher-sidebar-and-web-apps, scenario "App web trên Windows", "Mở app web": target nền tảng
+/// `web` hiện trên mọi nền tảng; app có gói cho máy này thì dùng gói đó; "Thêm" tải và kiểm gói
+/// nhỏ; mở app web trả địa chỉ đã ký, không cần tệp chạy.
+#[tokio::test]
+async fn web_apps_show_everywhere_and_open_their_url() {
+    let f = Fixture::new().await;
+    f.publish_app("soundlab", "1.2.0").await;
+    let upload = f.tmp.path().join("uploads");
+    std::fs::create_dir_all(&upload).unwrap();
+    for (app, url) in [
+        ("thesisai", "http://localhost:3000/auth/feco"),
+        // App vừa có gói Windows vừa có bản web: launcher trên Windows dùng gói Windows.
+        ("soundlab", "https://soundlab.example/"),
+    ] {
+        let name = format!("{app}-web.zip");
+        let file = upload.join(&name);
+        make_zip(&file, &[("webapp.json", b"{}"), ("NOTICE.txt", b"web")]);
+        let meta = TargetMeta {
+            app: app.into(),
+            version: if app == "soundlab" { "1.2.0" } else { "0.1.0" }.into(),
+            platform: "web".into(),
+            title: Some("ThesisAI".into()),
+            entry: Some("webapp.json".into()),
+            client_id: Some(format!("client-{app}")),
+            web_url: Some(url.into()),
+            ..Default::default()
+        };
+        f.repo
+            .publish(
+                &file,
+                &name,
+                &meta,
+                &signers(&f.keys),
+                Expiry::default(),
+                Timestamp::now(),
+            )
+            .await
+            .unwrap();
+    }
+    let mut l = f.launcher().await;
+    l.sync(Timestamp::now()).await.unwrap();
+    let latest: Vec<(String, String)> = l
+        .catalog_latest()
+        .iter()
+        .map(|e| (e.app.clone(), e.platform.clone()))
+        .collect();
+    assert_eq!(
+        latest,
+        [
+            ("soundlab".into(), PLATFORM.into()),
+            ("thesisai".into(), "web".into())
+        ]
+    );
+    let web = entry(&l, "thesisai", "0.1.0");
+    assert!(web.is_web() && web.info.web);
+    assert_eq!(
+        web.info.web_url.as_deref(),
+        Some("http://localhost:3000/auth/feco")
+    );
+    assert_eq!(web.platforms, ["web"]);
+
+    l.install(&web, Timestamp::now()).await.unwrap();
+    let plan = l.prepare_launch("thesisai").unwrap();
+    assert_eq!(
+        plan.web_url.as_deref(),
+        Some("http://localhost:3000/auth/feco")
+    );
+    assert!(!plan.terminal);
+    assert_eq!(l.my_apps().len(), 1);
+    // App desktop vẫn chạy tệp trong gói.
+    l.install(&entry(&l, "soundlab", "1.2.0"), Timestamp::now())
+        .await
+        .unwrap();
+    assert!(l.prepare_launch("soundlab").unwrap().web_url.is_none());
+}

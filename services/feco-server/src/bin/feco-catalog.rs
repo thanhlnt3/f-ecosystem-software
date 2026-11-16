@@ -139,6 +139,13 @@ async fn run(args: Vec<String>) -> Result<(), String> {
             }
             let input: catalog::AppInput =
                 serde_json::from_value(value).map_err(|e| format!("app.json không hợp lệ: {e}"))?;
+            if let Some(url) = &input.web_url {
+                if !feco_tuf::repo::valid_web_url(url) {
+                    return Err(format!(
+                        "web_url không hợp lệ: {url} (cần https://, hoặc http://localhost, http://127.0.0.1)"
+                    ));
+                }
+            }
             catalog::upsert_app(&state.db, &state.catalog, &input)
                 .await
                 .map_err(e)?;

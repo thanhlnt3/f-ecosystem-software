@@ -834,4 +834,8 @@ pub const FR: &[(&str, &str)] = &[
     ("lib.latest", "dernière version"),
     ("lib.update", "Mise à jour disponible"),
     ("lib.purchased", "Achetée"),
+    ("store.open_web", "Ouvrir l’app web"),
+    ("store.web_hint", "Cette app web fonctionne dans le navigateur et se connecte avec votre compte F-Eco. Ajoutez-la dans F-Launcher pour l’ouvrir vite depuis la Bibliothèque."),
+    ("store.web_app", "App web"),
+    ("lib.open", "Ouvrir"),
 ];

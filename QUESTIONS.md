@@ -343,3 +343,21 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
     hiệu của FPT đồng ý trước khi phát hành thương mại. Ai sẽ xin ý kiến này?
 90. **Phí nền tảng.** Phí bán app và phí dự án đã làm xong nhưng đang đặt 0%. Chủ dự án muốn mức
     phí nào khi ra mắt, và phí có tính trên tiền chia khi xử lý tranh chấp không (hiện có)?
+
+## Thay đổi launcher-sidebar-and-web-apps (bản 1.7.0)
+
+91. **Giấy phép ThesisAI.** Hai repo thesisai-fe và thesisai-be chưa có tệp LICENSE. Chủ dự án xác
+    nhận tác giả đồng ý cho F-Eco tích hợp, sửa phần đăng nhập và dùng logo. Đề nghị tác giả:
+    - thêm LICENSE vào hai repo, ví dụ MIT;
+    - xác nhận bằng văn bản (email hoặc issue trên GitHub) để lưu hồ sơ.
+92. **Chạy ThesisAI thật.** Bản vá ThesisAI mới được kiểm bằng `py_compile` và áp thử, chưa chạy
+    thật. Muốn chạy trên máy dev cần tải về:
+    - Ollama và mô hình `qwen2.5:7b`, `bge-m3` (khoảng 6 GB);
+    - pgvector cho PostgreSQL;
+    - thư viện Python (khoảng 1,5 GB) và npm (khoảng 400 MB).
+
+    Chủ dự án cho phép tải phần nào, hay tác giả ThesisAI tự chạy và báo kết quả? Câu hỏi thứ hai
+    là ThesisAI sẽ chạy ở đâu khi ra mắt, để đổi `web_url` sang HTTPS.
+93. **App web qua Cổng nhà phát triển.** Hiện app web được đưa vào bằng `feco-tuf` và
+    `feco-catalog` (nhà vận hành). Có cần cho nhà phát triển tự gửi app web qua Cổng nhà phát
+    triển không? Nếu có, kiểm duyệt app web cần gì (kiểm tên miền, chính sách quyền riêng tư)?

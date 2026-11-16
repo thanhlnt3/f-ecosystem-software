@@ -132,6 +132,8 @@ pub struct LaunchPlan {
     pub client_id: Option<String>,
     /// Mở trong cửa sổ terminal riêng (xem [`crate::launch::command`]).
     pub terminal: bool,
+    /// App web: mở địa chỉ này bằng trình duyệt thay vì chạy `program`.
+    pub web_url: Option<String>,
 }
 
 pub struct Launcher {
@@ -595,13 +597,33 @@ impl Launcher {
         }
         let working_dir = self.paths.version(app, &current.version);
         let program = working_dir.join(&current.entry);
+        let data_dir = self.paths.app_data(app);
+        if current.info.web {
+            // App web (launcher-sidebar-and-web-apps): không chạy tệp nào trong gói.
+            let url = current.info.web_url.clone().ok_or_else(|| {
+                LauncherError::Other(format!(
+                    "địa chỉ của app web {} {} không hợp lệ",
+                    current.title, current.version
+                ))
+            })?;
+            return Ok(LaunchPlan {
+                app: app.to_owned(),
+                title: current.title.clone(),
+                version: current.version.clone(),
+                program,
+                working_dir,
+                data_dir,
+                client_id: current.client_id.clone(),
+                terminal: false,
+                web_url: Some(url),
+            });
+        }
         if !program.is_file() {
             return Err(LauncherError::Other(format!(
                 "không thấy file chạy của {} {}, hãy cài lại",
                 current.title, current.version
             )));
         }
-        let data_dir = self.paths.app_data(app);
         std::fs::create_dir_all(&data_dir).map_err(io(&data_dir))?;
         Ok(LaunchPlan {
             app: app.to_owned(),
@@ -612,6 +634,7 @@ impl Launcher {
             data_dir,
             client_id: current.client_id.clone(),
             terminal: current.info.terminal,
+            web_url: None,
         })
     }
 }

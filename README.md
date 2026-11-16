@@ -273,6 +273,19 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
     trình viên hoặc Quản trị viên). Lập trình viên có nút **Cổng nhà phát triển**; Quản trị viên có
     thêm **Bảng quản trị**. Đổi vai trò ở `/admin/members` (Quản trị hệ thống) hoặc bằng
     `feco-catalog role-set <email> developer "<lý do>"`.
+14. **Thanh bên thu gọn**: bấm nút cạnh logo (hoặc Ctrl+B) để thanh bên chỉ còn icon. Rê chuột lên
+    icon để xem tên; số thông báo chưa đọc và số bản cập nhật hiện thành huy hiệu. Launcher nhớ lựa
+    chọn này; cửa sổ hẹp hơn 720 px thì thanh bên tự thu gọn.
+15. **App web ThesisAI**: app web chạy trong trình duyệt và đăng nhập bằng tài khoản F-Eco.
+
+    ```bash
+    scripts/dev-apps.sh thesisai
+    ```
+
+    Bấm **Đồng bộ**. ThesisAI có nhãn "App web" trong Cửa hàng: **Thêm** rồi **Mở** để mở
+    `http://localhost:3000/auth/feco` bằng trình duyệt. Muốn ThesisAI chạy thật thì làm theo
+    [integrations/thesisai/README.md](integrations/thesisai/README.md) (áp bản vá "Đăng nhập bằng
+    F-Eco", đặt biến `FECO_*` mà lệnh trên in ra).
 
 Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
@@ -666,7 +679,8 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/f-dev` | CLI cho nhà phát triển: `f-dev validate`, `f-dev pack`, `f-dev publish` |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |
 | `infra/` | Hạ tầng dev: `docker-compose.yml`, cấu hình Kratos (schema, mẫu email) và Hydra |
-| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher; `dev-apps.sh`: đưa app mẫu và app mã nguồn mở từ GitHub vào kho dev |
+| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher; `dev-apps.sh`: đưa app mẫu, app mã nguồn mở từ GitHub và app web ThesisAI vào kho dev |
+| `integrations/` | Tích hợp app bên ngoài: `thesisai/` (bản vá "Đăng nhập bằng F-Eco" cho ThesisAI, hướng dẫn, nguồn gốc) |
 | `docs/security/` | Quy trình xử lý sự cố, quản lý khóa TUF, biên bản diễn tập |
 | `third_party/` | Khai báo license và ngoại lệ đã duyệt |
 | `openspec/` | Yêu cầu, thiết kế, kế hoạch |

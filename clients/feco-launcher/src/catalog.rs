@@ -1,6 +1,7 @@
 //! Danh mục trong launcher, dựng từ metadata TUF đã xác minh. Khi có dịch vụ danh mục (nhóm 7),
 //! phần mô tả, ảnh, đánh giá lấy từ đó; nguồn tin cậy cho gói cài đặt vẫn là TUF.
 
+use feco_tuf::repo::{valid_web_url, WEB_PLATFORM};
 use feco_tuf::SyncState;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -62,6 +63,20 @@ pub struct AppInfo {
     /// Logo PNG mã hóa base64, từ metadata TUF đã ký.
     #[serde(default)]
     pub icon: Option<String>,
+    /// Địa chỉ của app web (nền tảng `web`), từ metadata TUF đã ký và đã kiểm
+    /// [`feco_tuf::repo::valid_web_url`].
+    #[serde(default)]
+    pub web_url: Option<String>,
+    /// Target nền tảng `web` (kể cả khi `web_url` không hợp lệ: khi đó không mở được).
+    #[serde(default)]
+    pub web: bool,
+}
+
+impl CatalogEntry {
+    /// App web: mở bằng trình duyệt, không có tệp chạy.
+    pub fn is_web(&self) -> bool {
+        self.platform == WEB_PLATFORM
+    }
 }
 
 impl AppInfo {
@@ -89,18 +104,21 @@ impl AppInfo {
             license: clean(&meta.license),
             released_at: clean(&meta.released_at),
             icon: clean(&meta.icon),
+            web_url: clean(&meta.web_url).filter(|u| valid_web_url(u)),
+            web: meta.platform == WEB_PLATFORM,
         }
     }
 }
 
-/// Mọi phiên bản đang phát hành cho nền tảng này, xếp theo app rồi phiên bản mới nhất trước.
+/// Mọi phiên bản đang phát hành cho nền tảng này và mọi app web, xếp theo app rồi phiên bản mới
+/// nhất trước. App có gói cho nền tảng này thì bỏ bản web của nó.
 pub fn build(state: &SyncState, platform: &str) -> Vec<CatalogEntry> {
     let mut out: Vec<CatalogEntry> = state
         .targets
         .values()
         .filter_map(|t| {
             let meta = t.meta.as_ref()?;
-            if meta.platform != platform {
+            if meta.platform != platform && meta.platform != WEB_PLATFORM {
                 return None;
             }
             Some(CatalogEntry {
@@ -119,6 +137,12 @@ pub fn build(state: &SyncState, platform: &str) -> Vec<CatalogEntry> {
             })
         })
         .collect();
+    let native: std::collections::HashSet<String> = out
+        .iter()
+        .filter(|e| !e.is_web())
+        .map(|e| e.app.clone())
+        .collect();
+    out.retain(|e| !e.is_web() || !native.contains(&e.app));
     // Nền tảng của cùng app và phiên bản, kể cả nền tảng khác máy này.
     for entry in &mut out {
         let mut platforms: Vec<String> = state

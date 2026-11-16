@@ -15,6 +15,7 @@ Logo được nhúng (PNG 128 px, mã hóa base64) vào metadata TUF đã ký v�
 | `bottom.svg` | `assets/icons/bottom-system-monitor.svg` của [ClementTsang/bottom](https://github.com/ClementTsang/bottom) | MIT, © Clement Tsang |
 | `kibi.svg` | `assets/kibi.svg` của [ilai-deutel/kibi](https://github.com/ilai-deutel/kibi) | MIT OR Apache-2.0, © Ilaï Deutel và cộng sự |
 | `eframe-template.png` | `assets/favicon-512x512.png` của [emilk/eframe_template](https://github.com/emilk/eframe_template) | MIT OR Apache-2.0, © Emil Ernerfeldt |
+| `thesisai.svg` | `public/logo.svg` của [justAchillGuy8386/thesisai-fe](https://github.com/justAchillGuy8386/thesisai-fe); hình mặt trời giống icon `sun` của Lucide | Chưa công bố giấy phép; tác giả cho phép F-Eco dùng (integrations/thesisai/NOTICE.md). Lucide: ISC |
 
 Các tệp `*-256.png` và `*-128.png` được vẽ lại từ tệp gốc:
 - SVG: dùng Chrome headless;
@@ -34,3 +35,4 @@ Mỗi app có một logo PNG, tối đa 64 KB; nên dùng 128 × 128 px, nền v
 - `feco-tuf set-icon --app ID --icon LOGO.png`: đặt logo cho các phiên bản đã có.
 - Trường `icon_file` trong tệp JSON của `feco-catalog add-app`.
 - `scripts/dev-apps.sh icons`: đặt logo cho các app dev.
+- `scripts/dev-apps.sh thesisai`: app web ThesisAI, phát hành kèm logo.

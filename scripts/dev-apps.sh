@@ -14,6 +14,9 @@
 #   scripts/dev-apps.sh all         # samples + opensource
 #   scripts/dev-apps.sh icons       # đặt logo (assets/logos/<id>-128.png) cho app đã có trong kho
 #                                   # TUF và danh mục dev
+#   scripts/dev-apps.sh thesisai    # app web ThesisAI: client OAuth phía máy chủ (có secret), gói app
+#                                   # web, logo, danh mục; in biến môi trường cho backend ThesisAI
+#                                   # (integrations/thesisai/README.md)
 #
 # Mã nguồn tải về và bản dựng nằm ngoài repo, trong $FECO_EXT_DIR (mặc định ~/.feco-dev-ext), để
 # Cargo không coi chúng là một phần workspace của F-Eco. Chỉ dùng cho dev: bản phát hành thật đi
@@ -51,8 +54,9 @@ EOF
 # JSON an toàn cho một chuỗi.
 json_str() { "$PY" -I -c 'import json,sys; print(json.dumps(sys.argv[1], ensure_ascii=False))' "$1"; }
 
-# Nội dung trang chi tiết của app sắp phát hành (đặt trước khi gọi publish_app).
-DESCRIPTION="" FEATURES="" WEBSITE="" NOTES="" ICON=""
+# Nội dung trang chi tiết của app sắp phát hành (đặt trước khi gọi publish_app). WEB_URL khác rỗng
+# thì app là app web: target nền tảng `web`, launcher mở địa chỉ này bằng trình duyệt.
+DESCRIPTION="" FEATURES="" WEBSITE="" NOTES="" ICON="" WEB_URL=""
 
 # publish_app ID TÊN VERSION THƯ-MỤC-GÓI FILE-CHẠY CLIENT-ID-TUF SUMMARY CATEGORY DEVELOPER LICENSE \
 #             SOURCE TERMINAL CATALOG-CLIENT-ID
@@ -62,6 +66,7 @@ publish_app() {
   local catalog_client="${13}"
   local plat zipname zipfile
   plat="$(platform)"
+  [[ -n "$WEB_URL" ]] && plat=web
   zipname="$id-$version-$plat.zip"
   zipfile="$DEV/uploads/$zipname"
   # Mỗi phiên bản chỉ ký một lần: chạy lại script thì không ký lại phiên bản đã có trong kho
@@ -82,6 +87,7 @@ publish_app() {
   [[ -n "$WEBSITE" ]] && args+=(--website "$WEBSITE")
   [[ -n "$NOTES" ]] && args+=(--release-notes "$NOTES")
   [[ -n "$ICON" ]] && args+=(--icon "$ICON")
+  [[ -n "$WEB_URL" ]] && args+=(--web-url "$WEB_URL")
   [[ -n "$tuf_client" ]] && args+=(--client-id "$tuf_client")
   [[ -n "$source_url" ]] && args+=(--source "$source_url")
   [[ "$terminal" == "true" ]] && args+=(--terminal true)
@@ -91,13 +97,16 @@ publish_app() {
 
 # Ghi app và phiên bản vào danh mục F-Store (dùng biến cục bộ của publish_app).
 catalog_entry() {
-  local json="$DEV/catalog-$id.json"
+  local json="$DEV/catalog-$id.json" extra=""
+  # Trường tùy chọn dựng trước: trong heredoc, dấu nháy bên trong ${VAR:+...} bị bash bỏ đi.
+  [[ -n "$WEB_URL" ]] && extra+=",\"web_url\":$(json_str "$WEB_URL")"
+  [[ -n "$ICON" ]] && extra+=",\"icon_file\":$(json_str "$(cygpath -m "$ICON" 2>/dev/null || echo "$ICON")")"
   cat > "$json" <<EOF
 {"id":"$id","client_id":"$catalog_client","name":$(json_str "$name"),
  "developer":$(json_str "$developer"),"developer_verified":false,"first_party":false,
  "summary":$(json_str "$summary"),
  "description":$(json_str "${DESCRIPTION:-$summary}${source_url:+ Mã nguồn: $source_url}"),
- "category":"$category","price_vnd":0,"license":$(json_str "$license"),"screenshots":[]${ICON:+,"icon_file":$(json_str "$(cygpath -m "$ICON" 2>/dev/null || echo "$ICON")")}}
+ "category":"$category","price_vnd":0,"license":$(json_str "$license"),"screenshots":[]$extra}
 EOF
   catalog add-app "$json"
   catalog release "$id" "$version" "$plat" "$(wc -c < "$zipfile" | tr -d ' ')" "$zipname" \
@@ -255,11 +264,66 @@ PYEOF
   done
 }
 
+# App web ThesisAI (thay đổi launcher-sidebar-and-web-apps). Mã nguồn ThesisAI không nằm trong
+# gói: gói chỉ có thông tin app; ThesisAI chạy riêng ở http://localhost:3000 (frontend) và
+# http://localhost:8000 (backend) sau khi áp bản vá trong integrations/thesisai/.
+thesisai() {
+  need_repo
+  build
+  local id=thesisai name="ThesisAI" version="${THESISAI_VERSION:-0.1.0}"
+  local front="${THESISAI_URL:-http://localhost:3000}" back="${THESISAI_API:-http://localhost:8000}"
+  local secret_file="$DEV/thesisai-client-secret" id_file="$DEV/thesisai-client-id" client
+  # Client phía máy chủ: secret do script tạo, chỉ lưu trong .dev/ (không commit).
+  [[ -s "$secret_file" ]] || "$PY" -I -c 'import secrets; print(secrets.token_urlsafe(32))' > "$secret_file"
+  client="$(cat "$id_file" 2>/dev/null || true)"
+  if [[ -z "$client" ]] || ! curl -sf -o /dev/null "$HYDRA_ADMIN/admin/clients/$client"; then
+    create_client "{\"client_name\":\"ThesisAI\",\"client_secret\":$(json_str "$(cat "$secret_file" | tr -d '\r\n')"),
+      \"grant_types\":[\"authorization_code\",\"refresh_token\"],\"response_types\":[\"code\"],
+      \"scope\":\"openid offline_access profile email\",
+      \"redirect_uris\":[\"$back/api/auth/feco/callback\"],\"token_endpoint_auth_method\":\"client_secret_basic\",
+      \"subject_type\":\"pairwise\",\"policy_uri\":\"$front/\",
+      \"metadata\":{\"developer\":\"justAchillGuy8386\",\"scopes\":{
+        \"profile\":{\"required\":true,\"purpose_vi\":\"Hiện tên của bạn trong ThesisAI\",\"purpose_en\":\"Show your name in ThesisAI\"},
+        \"email\":{\"required\":true,\"purpose_vi\":\"Tạo hoặc liên kết tài khoản ThesisAI của bạn\",\"purpose_en\":\"Create or link your ThesisAI account\"}}}}" \
+      > "$id_file"
+    client="$(cat "$id_file")"
+  fi
+  local pkg="$EXT/pkg/$id"
+  rm -rf "$pkg"
+  mkdir -p "$pkg"
+  "$PY" -I -c 'import json,sys; json.dump({"name": sys.argv[1], "url": sys.argv[2]}, open(sys.argv[3], "w", encoding="utf-8"), ensure_ascii=False)' \
+    "$name" "$front/auth/feco" "$pkg/webapp.json"
+  printf 'ThesisAI: https://github.com/justAchillGuy8386/thesisai-fe và thesisai-be\nGói này chỉ chứa thông tin app web; ứng dụng chạy trong trình duyệt.\n' > "$pkg/NOTICE.txt"
+  WEB_URL="$front/auth/feco"
+  ICON="$ROOT/assets/logos/thesisai-128.png"
+  WEBSITE=""
+  DESCRIPTION="ThesisAI giúp sinh viên luyện bảo vệ đồ án tốt nghiệp với hội đồng AI chạy cục bộ: tải tài liệu đồ án lên, hệ thống sinh câu hỏi phản biện, sinh viên trả lời bằng giọng nói và nhận đánh giá. Ứng dụng web chạy trong trình duyệt và đăng nhập bằng tài khoản F-Eco."
+  FEATURES="Tải tài liệu đồ án (PDF, DOCX, PPTX)|Sinh câu hỏi phản biện từ tài liệu (RAG)|Luyện trả lời bằng giọng nói, chuyển thành văn bản|Đánh giá câu trả lời và hồ sơ kiến thức|Mô hình AI chạy cục bộ qua Ollama|Đăng nhập bằng tài khoản F-Eco"
+  NOTES="Bản tích hợp đầu tiên với F-Eco: đăng nhập bằng tài khoản F-Eco (bản vá trong integrations/thesisai)."
+  publish_app "$id" "$name" "$version" "$pkg" "webapp.json" "" \
+    "Luyện bảo vệ đồ án tốt nghiệp với hội đồng AI." education "justAchillGuy8386" \
+    "Chưa công bố giấy phép (tác giả cho phép F-Eco tích hợp)" "https://github.com/justAchillGuy8386/thesisai-fe" \
+    "false" "$client"
+  WEB_URL=""
+  cat >&2 <<ENVEOF
+
+Đã đưa ThesisAI vào kho TUF và danh mục dev. Đặt các biến sau trong .env của backend ThesisAI
+(client secret nằm trong $secret_file, không commit):
+  FECO_ISSUER_URL=${HYDRA_PUBLIC:-http://127.0.0.1:4444}/
+  FECO_SERVER_URL=${FECO_SERVER_URL:-http://127.0.0.1:8080/}
+  FECO_CLIENT_ID=$client
+  FECO_CLIENT_SECRET=<nội dung tệp $secret_file>
+  FECO_REDIRECT_URI=$back/api/auth/feco/callback
+  FRONTEND_URL=$front
+ENVEOF
+}
+
 case "${1:-}" in
   samples) samples ;;
+  thesisai) thesisai ;;
   icons) icons ;;
   github) shift; github "$@" ;;
   opensource) opensource ;;
   all) samples; opensource ;;
-  *) sed -n '2,16p' "$0"; exit 2 ;;
+  *) sed -n '2,19p' "$0"; exit 2 ;;
 esac

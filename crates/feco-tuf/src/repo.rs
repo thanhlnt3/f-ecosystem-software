@@ -103,6 +103,46 @@ pub struct TargetMeta {
     /// launcher tin được mà không cần tải thêm tệp (thay đổi fcoin-wallet-and-marketplace).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// Địa chỉ của app web (target nền tảng [`WEB_PLATFORM`]); launcher mở địa chỉ này bằng
+    /// trình duyệt (thay đổi launcher-sidebar-and-web-apps). Xem [`valid_web_url`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_url: Option<String>,
+}
+
+/// Nền tảng của app web: chạy trong trình duyệt trên mọi hệ điều hành.
+pub const WEB_PLATFORM: &str = "web";
+
+/// Địa chỉ app web được chấp nhận: `https://`, hoặc `http://` chỉ với `localhost` và
+/// `127.0.0.1` (môi trường dev); không chứa tên đăng nhập hay mật khẩu.
+pub fn valid_web_url(s: &str) -> bool {
+    let Ok(u) = url::Url::parse(s.trim()) else {
+        return false;
+    };
+    if !u.username().is_empty() || u.password().is_some() {
+        return false;
+    }
+    match u.scheme() {
+        "https" => u.host_str().is_some_and(|h| !h.is_empty()),
+        "http" => matches!(u.host_str(), Some("localhost") | Some("127.0.0.1")),
+        _ => false,
+    }
+}
+
+/// Kiểm `web_url` và nền tảng của target trước khi ký.
+fn check_web(meta: &TargetMeta) -> Result<()> {
+    match (&meta.web_url, meta.platform == WEB_PLATFORM) {
+        (Some(url), true) if valid_web_url(url) => Ok(()),
+        (Some(url), true) => Err(Error::Invalid(format!(
+            "địa chỉ app web không hợp lệ: {url} (cần https://, hoặc http://localhost, http://127.0.0.1)"
+        ))),
+        (None, true) => Err(Error::Invalid(
+            "target nền tảng web cần địa chỉ app web (--web-url)".into(),
+        )),
+        (Some(_), false) => Err(Error::Invalid(format!(
+            "chỉ target nền tảng {WEB_PLATFORM} mới có địa chỉ app web"
+        ))),
+        (None, false) => Ok(()),
+    }
 }
 
 /// Kích thước tối đa của logo (byte, trước khi mã hóa base64).
@@ -320,6 +360,7 @@ impl Repo {
         expiry: Expiry,
         now: Timestamp,
     ) -> Result<()> {
+        check_web(meta)?;
         let repo = self.load().await?;
         let target_name = TargetName::new(name)?;
         let revoked = read_revocations(&repo).await?;

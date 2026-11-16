@@ -1341,6 +1341,7 @@ pub async fn release(
             license: manifest.license.clone(),
             screenshots: Vec::new(),
             icon: None,
+            web_url: None,
         },
     )
     .await?;
@@ -1462,6 +1463,8 @@ async fn sign_target(
         .ok()
         .flatten()
         .flatten(),
+        // Cổng nhà phát triển chỉ phát hành app desktop (app web: QUESTIONS.md).
+        web_url: None,
     };
     let signers: Vec<_> = tuf.sign_keys.iter().map(feco_tuf::keys::source).collect();
     let repo = feco_tuf::Repo::open(&tuf.repo);

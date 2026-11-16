@@ -35,11 +35,17 @@ pub enum Icon {
     Wallet,
     /// Đồng F-Coin (nút Mua).
     Coin,
+    /// Ba gạch: mở rộng thanh bên.
+    Menu,
+    /// Khung có cột bên trái: thu gọn thanh bên.
+    PanelLeft,
 }
 
 #[cfg(test)]
 impl Icon {
-    pub const ALL: [Icon; 23] = [
+    pub const ALL: [Icon; 25] = [
+        Icon::Menu,
+        Icon::PanelLeft,
         Icon::Wallet,
         Icon::Coin,
         Icon::Library,
@@ -231,6 +237,21 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
         }
         Icon::ChevronLeft => line(p, r, s, &[(0.62, 0.2), (0.32, 0.5), (0.62, 0.8)]),
         Icon::ChevronRight => line(p, r, s, &[(0.38, 0.2), (0.68, 0.5), (0.38, 0.8)]),
+        Icon::Menu => {
+            for y in [0.28, 0.5, 0.72] {
+                line(p, r, s, &[(0.18, y), (0.82, y)]);
+            }
+        }
+        Icon::PanelLeft => {
+            p.rect_stroke(
+                Rect::from_min_max(at(r, 0.14, 0.2), at(r, 0.86, 0.8)),
+                r.width() * 0.08,
+                s,
+                egui::StrokeKind::Middle,
+            );
+            line(p, r, s, &[(0.4, 0.2), (0.4, 0.8)]);
+            line(p, r, s, &[(0.68, 0.38), (0.56, 0.5), (0.68, 0.62)]);
+        }
         Icon::Download => {
             line(p, r, s, &[(0.5, 0.14), (0.5, 0.62)]);
             line(p, r, s, &[(0.3, 0.44), (0.5, 0.64), (0.7, 0.44)]);
@@ -375,6 +396,31 @@ pub fn button(ui: &mut Ui, icon: Icon, tooltip: &str, selected: bool, enabled: b
     response
 }
 
+/// Chữ của huy hiệu số: không có khi `n` = 0, "9+" khi lớn hơn 9.
+pub fn badge_text(n: usize) -> Option<String> {
+    match n {
+        0 => None,
+        1..=9 => Some(n.to_string()),
+        _ => Some("9+".into()),
+    }
+}
+
+/// Vẽ huy hiệu số ở góc trên bên phải của `rect` (icon ở thanh bên thu gọn).
+pub fn badge(ui: &Ui, rect: Rect, n: usize, fill: Color32) {
+    let Some(text) = badge_text(n) else {
+        return;
+    };
+    let font = egui::FontId::proportional(9.5);
+    let galley = ui.painter().layout_no_wrap(text, font, Color32::WHITE);
+    let h = 14.0;
+    let w = (galley.size().x + 7.0).max(h);
+    let center = pos2(rect.right() - w / 2.0 + 2.0, rect.top() + h / 2.0 - 2.0);
+    let pill = Rect::from_center_size(center, vec2(w, h));
+    ui.painter().rect_filled(pill, h / 2.0, fill);
+    ui.painter()
+        .galley(center - galley.size() / 2.0, galley, Color32::WHITE);
+}
+
 /// Nút hành động chính: nền `fill`, icon và chữ màu `fg`.
 pub fn filled(
     ui: &mut Ui,
@@ -473,6 +519,15 @@ pub fn labeled(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Scenario "Huy hiệu thông báo": 12 thông báo chưa đọc thì huy hiệu ghi "9+".
+    #[test]
+    fn badge_counts() {
+        assert_eq!(badge_text(0), None);
+        assert_eq!(badge_text(3).as_deref(), Some("3"));
+        assert_eq!(badge_text(9).as_deref(), Some("9"));
+        assert_eq!(badge_text(12).as_deref(), Some("9+"));
+    }
 
     /// Mọi icon vẽ được, tạo hình trong ô và theo đúng màu được truyền vào.
     #[test]

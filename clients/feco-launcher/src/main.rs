@@ -464,6 +464,26 @@ enum Action {
     CloseDetail(u64),
     /// Mở (hoặc đưa lên trước) cửa sổ Cài đặt.
     OpenSettings,
+    /// Thu gọn hoặc mở rộng thanh bên (lưu vào cài đặt).
+    ToggleSidebar,
+}
+
+/// Độ rộng thanh bên đầy đủ và thu gọn; cửa sổ hẹp hơn [`NARROW_WINDOW`] thì thanh bên thu gọn.
+const SIDEBAR_FULL: f32 = 210.0;
+const SIDEBAR_COMPACT: f32 = 56.0;
+const NARROW_WINDOW: f32 = 720.0;
+
+/// Thanh bên đang thu gọn: người dùng đã chọn, hoặc cửa sổ hẹp (không đổi lựa chọn đã lưu).
+fn sidebar_collapsed(saved: bool, window_width: f32) -> bool {
+    saved || window_width < NARROW_WINDOW
+}
+
+fn sidebar_width(collapsed: bool) -> f32 {
+    if collapsed {
+        SIDEBAR_COMPACT
+    } else {
+        SIDEBAR_FULL
+    }
 }
 
 /// Số cửa sổ chi tiết mở cùng lúc; mở thêm thì cửa sổ cũ nhất đóng lại.
@@ -789,6 +809,13 @@ impl LauncherApp {
                     Ok(tf("Đã gỡ {}. Quyền dữ liệu bạn đã cấp cho app vẫn còn; thu hồi ở trang \"Ứng dụng đã kết nối\".", &[&app]))
                 })
             }
+            Action::ToggleSidebar => {
+                let prefs = Prefs {
+                    sidebar_collapsed: !self.prefs.sidebar_collapsed,
+                    ..self.prefs.clone()
+                };
+                self.set_prefs(prefs);
+            }
             Action::OpenLink(url) => {
                 if let Err(e) = open::that(&url) {
                     self.notice = Some((true, tf("Không mở được trình duyệt: {}", &[&e])));
@@ -986,7 +1013,11 @@ impl LauncherApp {
             egui::Modal::new(egui::Id::unique("confirm-install")).show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     app_icon(ui, &entry.app, &entry.title, 40.0);
-                    ui.heading(tf("Cài {} {}?", &[&entry.title, &entry.version]));
+                    ui.heading(if entry.is_web() {
+                        tf("Thêm {} vào Thư viện?", &[&entry.title])
+                    } else {
+                        tf("Cài {} {}?", &[&entry.title, &entry.version])
+                    });
                 });
                 if let Some(summary) = &entry.info.summary {
                     ui.label(summary);
@@ -995,13 +1026,20 @@ impl LauncherApp {
                 if let Some(source) = &entry.info.source {
                     ui.hyperlink_to(t("Mã nguồn"), source);
                 }
-                ui.label(tf(
-                    "Dung lượng tải về: {} MB. Gói được kiểm tra chữ ký của F-Eco trước khi cài.",
-                    &[&format!("{:.1}", entry.length as f64 / 1_048_576.0)],
-                ));
-                ui.colored_label(egui::Color32::from_rgb(200, 120, 0), t(ISOLATION_NOTICE));
+                if let Some(url) = entry.info.web_url.as_deref().filter(|_| entry.is_web()) {
+                    ui.label(tf(
+                        "App web mở bằng trình duyệt tại {} và đăng nhập bằng tài khoản F-Eco.",
+                        &[&url],
+                    ));
+                } else {
+                    ui.label(tf(
+                        "Dung lượng tải về: {} MB. Gói được kiểm tra chữ ký của F-Eco trước khi cài.",
+                        &[&format!("{:.1}", entry.length as f64 / 1_048_576.0)],
+                    ));
+                    ui.colored_label(egui::Color32::from_rgb(200, 120, 0), t(ISOLATION_NOTICE));
+                }
                 ui.horizontal(|ui| {
-                    if ui.button(t("Cài")).clicked() {
+                    if ui.button(install_label(entry)).clicked() {
                         actions.push(Action::Install(Box::new(entry.clone())));
                     }
                     if ui.button(t("Hủy")).clicked() {
@@ -1122,7 +1160,22 @@ impl eframe::App for LauncherApp {
             }
         }
         let mut actions = Vec::new();
-        let mut nav = egui::Panel::left("nav").exact_size(210.0).resizable(false);
+        // Ctrl+B (Cmd+B trên macOS): ẩn/hiện chữ ở thanh bên.
+        if ui.input_mut(|i| {
+            i.consume_shortcut(&egui::KeyboardShortcut::new(
+                egui::Modifiers::COMMAND,
+                egui::Key::B,
+            ))
+        }) {
+            actions.push(Action::ToggleSidebar);
+        }
+        let collapsed = sidebar_collapsed(
+            self.prefs.sidebar_collapsed,
+            ui.ctx().content_rect().width(),
+        );
+        let mut nav = egui::Panel::left("nav")
+            .exact_size(sidebar_width(collapsed))
+            .resizable(false);
         if let Some(p) = self.prefs.style.palette() {
             nav = nav.frame(
                 egui::Frame::side_top_panel(ui.style())
@@ -1130,7 +1183,13 @@ impl eframe::App for LauncherApp {
                     .stroke(egui::Stroke::new(1.0, rgb(p.stroke))),
             );
         }
-        nav.show(ui, |ui| self.sidebar(ui, &mut actions));
+        nav.show(ui, |ui| {
+            if collapsed {
+                self.sidebar_compact(ui, &mut actions)
+            } else {
+                self.sidebar(ui, &mut actions)
+            }
+        });
         self.status_panel(ui, "status");
         egui::CentralPanel::default().show(ui, |ui| match self.page {
             Page::Library => self.library_page(ui, &mut actions),
@@ -1618,12 +1677,36 @@ fn size_mb(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / 1_048_576.0)
 }
 
+/// Dung lượng gói, hoặc "App web" (gói của app web chỉ có thông tin app, không cài gì lên máy).
+fn entry_size(entry: &CatalogEntry) -> String {
+    if entry.is_web() {
+        t("App web").to_owned()
+    } else {
+        size_mb(entry.length)
+    }
+}
+
 /// "Nhà phát triển · Nhóm" (bỏ phần trống).
 fn byline(info: &feco_launcher::AppInfo) -> String {
     let category = library::category_label(&library::category_of(info));
-    match &info.developer {
+    let line = match &info.developer {
         Some(d) => format!("{d} · {category}"),
         None => category,
+    };
+    // Nhãn "App web" (launcher-sidebar-and-web-apps).
+    if info.web {
+        format!("{} · {line}", t("App web"))
+    } else {
+        line
+    }
+}
+
+/// Chữ của nút cài: "Thêm" cho app web (vào Thư viện, không cài gì lên máy), "Cài" cho app desktop.
+fn install_label(entry: &CatalogEntry) -> &'static str {
+    if entry.is_web() {
+        t("Thêm")
+    } else {
+        t("Cài")
     }
 }
 
@@ -1660,11 +1743,132 @@ impl LauncherApp {
         }
     }
 
+    /// Mục điều hướng: icon, trang, tên, số cần báo (bản cập nhật, thông báo chưa đọc).
+    fn nav_entries(&self) -> [(Icon, Page, &'static str, usize); 3] {
+        let unread = self.view.notifications.iter().filter(|n| !n.read).count();
+        let updates = self
+            .view
+            .my_apps
+            .iter()
+            .filter(|a| a.update.is_some())
+            .count();
+        [
+            (Icon::Library, Page::Library, t("Thư viện"), updates),
+            (Icon::Store, Page::Store, t("Cửa hàng"), 0),
+            (Icon::Bell, Page::Notifications, t("Thông báo"), unread),
+        ]
+    }
+
+    fn signed_in(&self) -> bool {
+        matches!(
+            self.view.sign_in,
+            Some(SignIn::SignedIn) | Some(SignIn::Offline)
+        )
+    }
+
+    /// Địa chỉ trang ví trên web.
+    fn wallet_url(&self) -> Option<String> {
+        let w = self.view.wallet.as_ref()?;
+        Some(w.wallet_url.clone().unwrap_or_else(|| {
+            self.shared
+                .config
+                .server
+                .join("wallet")
+                .map(|u| u.to_string())
+                .unwrap_or_default()
+        }))
+    }
+
+    /// Nút icon dưới cùng: đồng bộ, F-Eco trên web, lối tắt theo vai trò, đăng xuất. Thứ tự gọi
+    /// là thứ tự hiện (từ trái sang phải ở chế độ đầy đủ, từ dưới lên ở chế độ thu gọn).
+    fn tool_buttons(&self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let idle = self.busy.is_none();
+        let sync_tip = match self.view.last_sync {
+            // Giờ địa phương của máy (Timestamp là UTC).
+            Some(at) => tf(
+                "Đồng bộ lúc {}",
+                &[&at
+                    .to_zoned(jiff::tz::TimeZone::system())
+                    .strftime("%H:%M %d/%m")],
+            ),
+            None => t("Đồng bộ").to_owned(),
+        };
+        if icons::button(ui, Icon::Sync, &sync_tip, false, idle).clicked() {
+            actions.push(Action::Sync);
+        }
+        // Tính năng tài khoản trên web (đồng bộ tính năng launcher và web).
+        let server = self.shared.config.server.clone();
+        let web = icons::button(ui, Icon::Globe, t("F-Eco trên web"), false, true);
+        egui::Popup::menu(&web).show(|ui| {
+            for (label, path) in [
+                (t("Hồ sơ và vai trò"), ""),
+                (t("Ví F-Coin"), "wallet"),
+                (t("Ứng dụng của tôi"), "library"),
+                (t("Dự án phần mềm"), "projects"),
+                (t("Đơn xây app"), "orders"),
+                (t("Thông báo"), "notifications"),
+            ] {
+                if ui.button(label).clicked() {
+                    if let Ok(url) = server.join(path) {
+                        actions.push(Action::OpenLink(url.to_string()));
+                    }
+                    ui.close();
+                }
+            }
+        });
+        if !self.signed_in() {
+            return;
+        }
+        if let Some(role) = &self.view.role {
+            if role.is_admin() {
+                if let Some(url) = &role.admin_console {
+                    if icons::button(ui, Icon::Shield, t("Bảng quản trị"), false, true).clicked()
+                    {
+                        actions.push(Action::OpenLink(url.clone()));
+                    }
+                }
+            }
+            if role.can_develop() {
+                if let Some(url) = &role.developer_portal {
+                    if icons::button(ui, Icon::Code, t("Cổng nhà phát triển"), false, true)
+                        .clicked()
+                    {
+                        actions.push(Action::OpenLink(url.clone()));
+                    }
+                }
+            }
+        }
+        if icons::button(ui, Icon::SignOut, t("Đăng xuất"), false, idle).clicked() {
+            actions.push(Action::Logout);
+        }
+    }
+
+    fn wallet_tip(&self) -> &'static str {
+        match &self.view.wallet {
+            Some(w) if w.frozen => t("Ví F-Coin đang bị khóa"),
+            _ => t("Số dư F-Coin · bấm để nạp hoặc rút"),
+        }
+    }
+
+    /// Thanh bên đầy đủ: icon và chữ.
     fn sidebar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             app_icon(ui, "f-launcher", "F Launcher", 28.0);
             ui.heading("F-Launcher");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if icons::button(
+                    ui,
+                    Icon::PanelLeft,
+                    t("Thu gọn thanh bên (Ctrl+B)"),
+                    false,
+                    true,
+                )
+                .clicked()
+                {
+                    actions.push(Action::ToggleSidebar);
+                }
+            });
         });
         if self.prefs.style.motif().is_some() {
             ui.add_space(6.0);
@@ -1678,36 +1882,13 @@ impl LauncherApp {
             ui.colored_label(warn_color(ui), t("Đang ngoại tuyến"));
         }
         ui.add_space(12.0);
-        let unread = self.view.notifications.iter().filter(|n| !n.read).count();
-        let updates = self
-            .view
-            .my_apps
-            .iter()
-            .filter(|a| a.update.is_some())
-            .count();
-        let entries = [
-            (
-                Icon::Library,
-                Page::Library,
-                if updates > 0 {
-                    tf("Thư viện  ({} cập nhật)", &[&updates])
-                } else {
-                    t("Thư viện").to_owned()
-                },
-            ),
-            (Icon::Store, Page::Store, t("Cửa hàng").to_owned()),
-            (
-                Icon::Bell,
-                Page::Notifications,
-                if unread > 0 {
-                    tf("Thông báo  ({})", &[&unread])
-                } else {
-                    t("Thông báo").to_owned()
-                },
-            ),
-        ];
         let width = ui.available_width();
-        for (icon, page, label) in entries {
+        for (icon, page, name, count) in self.nav_entries() {
+            let label = match (page, count) {
+                (_, 0) => name.to_owned(),
+                (Page::Library, n) => tf("Thư viện  ({} cập nhật)", &[&n]),
+                (_, n) => tf("Thông báo  ({})", &[&n]),
+            };
             let selected = self.page == page;
             let text = if selected {
                 egui::RichText::new(label).strong()
@@ -1727,90 +1908,18 @@ impl LauncherApp {
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             ui.add_space(8.0);
-            let idle = self.busy.is_none();
             if let Some(t) = self.view.last_sync {
                 // Giờ địa phương của máy (Timestamp là UTC).
                 let local = t.to_zoned(jiff::tz::TimeZone::system());
                 ui.weak(tf("Đồng bộ lúc {}", &[&local.strftime("%H:%M %d/%m")]));
             }
-            let signed_in = matches!(
-                self.view.sign_in,
-                Some(SignIn::SignedIn) | Some(SignIn::Offline)
-            );
             // Hàng nút icon: đồng bộ, lối tắt theo vai trò, đăng xuất.
-            ui.horizontal(|ui| {
-                if icons::button(ui, Icon::Sync, t("Đồng bộ"), false, idle).clicked() {
-                    actions.push(Action::Sync);
-                }
-                // Tính năng tài khoản trên web (đồng bộ tính năng launcher và web).
-                let server = self.shared.config.server.clone();
-                let web = icons::button(ui, Icon::Globe, t("F-Eco trên web"), false, true);
-                egui::Popup::menu(&web).show(|ui| {
-                    for (label, path) in [
-                        (t("Hồ sơ và vai trò"), ""),
-                        (t("Ví F-Coin"), "wallet"),
-                        (t("Ứng dụng của tôi"), "library"),
-                        (t("Dự án phần mềm"), "projects"),
-                        (t("Đơn xây app"), "orders"),
-                        (t("Thông báo"), "notifications"),
-                    ] {
-                        if ui.button(label).clicked() {
-                            if let Ok(url) = server.join(path) {
-                                actions.push(Action::OpenLink(url.to_string()));
-                            }
-                            ui.close();
-                        }
-                    }
-                });
-                if signed_in {
-                    if let Some(role) = &self.view.role {
-                        if role.is_admin() {
-                            if let Some(url) = &role.admin_console {
-                                if icons::button(ui, Icon::Shield, t("Bảng quản trị"), false, true)
-                                    .clicked()
-                                {
-                                    actions.push(Action::OpenLink(url.clone()));
-                                }
-                            }
-                        }
-                        if role.can_develop() {
-                            if let Some(url) = &role.developer_portal {
-                                if icons::button(
-                                    ui,
-                                    Icon::Code,
-                                    t("Cổng nhà phát triển"),
-                                    false,
-                                    true,
-                                )
-                                .clicked()
-                                {
-                                    actions.push(Action::OpenLink(url.clone()));
-                                }
-                            }
-                        }
-                    }
-                    if icons::button(ui, Icon::SignOut, t("Đăng xuất"), false, idle).clicked() {
-                        actions.push(Action::Logout);
-                    }
-                }
-            });
-            if signed_in {
-                if let Some(w) = &self.view.wallet {
-                    let url = w.wallet_url.clone().unwrap_or_else(|| {
-                        self.shared
-                            .config
-                            .server
-                            .join("wallet")
-                            .map(|u| u.to_string())
-                            .unwrap_or_default()
-                    });
+            ui.horizontal(|ui| self.tool_buttons(ui, actions));
+            if self.signed_in() {
+                if let (Some(w), Some(url)) = (&self.view.wallet, self.wallet_url()) {
                     let label = coins(w.balance);
                     if icons::labeled(ui, Icon::Wallet, &label, false, width)
-                        .on_hover_text(if w.frozen {
-                            t("Ví F-Coin đang bị khóa")
-                        } else {
-                            t("Số dư F-Coin · bấm để nạp hoặc rút")
-                        })
+                        .on_hover_text(self.wallet_tip())
                         .clicked()
                     {
                         actions.push(Action::OpenLink(url));
@@ -1818,29 +1927,97 @@ impl LauncherApp {
                 }
             }
             ui.separator();
-            match self.view.sign_in {
-                Some(SignIn::SignedIn) | Some(SignIn::Offline) => {
-                    if let Some(role) = &self.view.role {
-                        ui.label(
-                            egui::RichText::new(role_label(&role.role))
-                                .small()
-                                .color(accent(&self.prefs)),
-                        );
-                    }
-                    ui.strong(
-                        self.view
-                            .user
-                            .clone()
-                            .unwrap_or_else(|| t("Đã đăng nhập").into()),
+            if self.signed_in() {
+                if let Some(role) = &self.view.role {
+                    ui.label(
+                        egui::RichText::new(role_label(&role.role))
+                            .small()
+                            .color(accent(&self.prefs)),
                     );
                 }
-                _ => {
-                    if primary_button(ui, &self.prefs, idle, Icon::SignIn, t("Đăng nhập")) {
-                        actions.push(Action::Login);
-                    }
-                    ui.weak(t("Chưa đăng nhập"));
+                ui.strong(
+                    self.view
+                        .user
+                        .clone()
+                        .unwrap_or_else(|| t("Đã đăng nhập").into()),
+                );
+            } else {
+                let idle = self.busy.is_none();
+                if primary_button(ui, &self.prefs, idle, Icon::SignIn, t("Đăng nhập")) {
+                    actions.push(Action::Login);
+                }
+                ui.weak(t("Chưa đăng nhập"));
+            }
+        });
+    }
+
+    /// Thanh bên thu gọn: chỉ icon, tooltip ghi tên, huy hiệu số (launcher-sidebar-and-web-apps).
+    fn sidebar_compact(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let badge_fill = accent(&self.prefs);
+        ui.add_space(8.0);
+        ui.vertical_centered(|ui| {
+            app_icon(ui, "f-launcher", "F Launcher", 28.0).on_hover_text("F-Launcher");
+            ui.add_space(4.0);
+            if icons::button(ui, Icon::Menu, t("Mở rộng thanh bên (Ctrl+B)"), false, true).clicked()
+            {
+                actions.push(Action::ToggleSidebar);
+            }
+            // Chấm trạng thái kết nối.
+            let (color, tip) = if self.view.online {
+                (egui::Color32::from_rgb(0x2f, 0xb3, 0x4b), t("Đã kết nối"))
+            } else {
+                (warn_color(ui), t("Đang ngoại tuyến"))
+            };
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
+            ui.painter().circle_filled(rect.center(), 4.0, color);
+            response.on_hover_text(tip);
+            ui.add_space(4.0);
+            ui.separator();
+            for (icon, page, name, count) in self.nav_entries() {
+                let tip = if count > 0 {
+                    format!("{name} ({count})")
+                } else {
+                    name.to_owned()
+                };
+                let response = icons::button(ui, icon, &tip, self.page == page, true);
+                icons::badge(ui, response.rect, count, badge_fill);
+                if response.clicked() {
+                    self.page = page;
                 }
             }
+            if icons::button(ui, Icon::Gear, t("Cài đặt"), self.settings_open, true).clicked() {
+                actions.push(Action::OpenSettings);
+            }
+        });
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+            ui.add_space(8.0);
+            if self.signed_in() {
+                let name = self
+                    .view
+                    .user
+                    .clone()
+                    .unwrap_or_else(|| t("Đã đăng nhập").into());
+                let tip = match &self.view.role {
+                    Some(role) => format!("{name} · {}", role_label(&role.role)),
+                    None => name.clone(),
+                };
+                app_icon(ui, "account", &name, 28.0).on_hover_text(tip);
+            } else if icons::button(ui, Icon::SignIn, t("Đăng nhập"), false, self.busy.is_none())
+                .clicked()
+            {
+                actions.push(Action::Login);
+            }
+            ui.separator();
+            if self.signed_in() {
+                if let (Some(w), Some(url)) = (&self.view.wallet, self.wallet_url()) {
+                    let tip = format!("{} · {}", coins(w.balance), self.wallet_tip());
+                    if icons::button(ui, Icon::Wallet, &tip, false, true).clicked() {
+                        actions.push(Action::OpenLink(url));
+                    }
+                }
+            }
+            self.tool_buttons(ui, actions);
         });
     }
 
@@ -2289,7 +2466,11 @@ impl LauncherApp {
                 }
             }
             None => {
-                ui.weak(t("Đã cài"));
+                ui.weak(if entry.is_web() {
+                    t("Đã thêm")
+                } else {
+                    t("Đã cài")
+                });
             }
         }
     }
@@ -2304,7 +2485,13 @@ impl LauncherApp {
     ) {
         match acquire(&self.view, &entry.app) {
             Acquire::Install => {
-                if primary_button(ui, &self.prefs, enabled, Icon::Download, t("Cài")) {
+                if primary_button(
+                    ui,
+                    &self.prefs,
+                    enabled,
+                    Icon::Download,
+                    install_label(entry),
+                ) {
                     actions.push(Action::AskInstall(Box::new(entry.clone())));
                 }
             }
@@ -2366,12 +2553,8 @@ impl LauncherApp {
                 }
                 ui.add(
                     egui::Label::new(
-                        egui::RichText::new(format!(
-                            "{} · {}",
-                            entry.version,
-                            size_mb(entry.length)
-                        ))
-                        .weak(),
+                        egui::RichText::new(format!("{} · {}", entry.version, entry_size(entry)))
+                            .weak(),
                     )
                     .truncate(),
                 );
@@ -2393,11 +2576,7 @@ impl LauncherApp {
                             ui.add(egui::Label::new(s).truncate());
                         }
                     }
-                    ui.weak(format!(
-                        "{} · {}",
-                        byline(&entry.info),
-                        size_mb(entry.length)
-                    ));
+                    ui.weak(format!("{} · {}", byline(&entry.info), entry_size(entry)));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if let Some(source) = &entry.info.source {
@@ -2946,7 +3125,10 @@ impl LauncherApp {
                                 row(ui, t("Ngày phát hành"), date);
                             }
                             if let Some(e) = &entry {
-                                row(ui, t("Dung lượng tải về"), size_mb(e.length));
+                                match e.info.web_url.as_deref().filter(|_| e.is_web()) {
+                                    Some(url) => row(ui, t("App web"), url.to_owned()),
+                                    None => row(ui, t("Dung lượng tải về"), size_mb(e.length)),
+                                }
                                 let platforms = if e.platforms.is_empty() {
                                     library::platform_label(&e.platform)
                                 } else {
@@ -3143,6 +3325,14 @@ async fn open_app(s: &Shared, app: &str) -> Result<String, String> {
         .await
         .prepare_launch(app)
         .map_err(|e| e.to_string())?;
+    if let Some(url) = &plan.web_url {
+        // App web: mở bằng trình duyệt, app tự đăng nhập F-Eco bằng OIDC (không cấp mã khởi chạy).
+        open::that(url).map_err(|e| tf("Không mở được trình duyệt: {}", &[&e]))?;
+        if let Err(e) = s.launcher.lock().await.mark_opened(app, Timestamp::now()) {
+            eprintln!("không ghi được lần mở {app}: {e}");
+        }
+        return Ok(tf("Đã mở {} trong trình duyệt", &[&plan.title]));
+    }
     let mut note = String::new();
     let code = match &plan.client_id {
         Some(client_id) => match s.identity.access_token().await {
@@ -3273,6 +3463,17 @@ mod tests {
         // Có bản mới hơn bản đã bỏ qua thì gợi ý lại.
         let newer = vec![my_app("kibi", "0.3.2", Some("0.3.4"))];
         assert_eq!(update_suggestions(&newer, &skipped).len(), 1);
+    }
+
+    /// launcher-sidebar-and-web-apps, scenario "Thu gọn thanh bên", "Cửa sổ hẹp".
+    #[test]
+    fn sidebar_collapses_when_chosen_or_narrow() {
+        assert_eq!(sidebar_width(sidebar_collapsed(false, 1000.0)), 210.0);
+        assert_eq!(sidebar_width(sidebar_collapsed(true, 1000.0)), 56.0);
+        // Cửa sổ 700 px: thu gọn mà không đổi lựa chọn đã lưu; rộng lại thì đầy đủ.
+        assert!(sidebar_collapsed(false, 700.0));
+        assert!(!sidebar_collapsed(false, 1000.0));
+        assert!(sidebar_collapsed(true, 700.0));
     }
 
     /// Scenario "Cửa sổ ở giữa màn hình".

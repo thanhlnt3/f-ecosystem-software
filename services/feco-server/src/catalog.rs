@@ -96,6 +96,8 @@ pub struct Listing {
     pub price_coin: u64,
     /// Có logo (lấy ở `/store/{id}/icon.png`).
     pub has_icon: bool,
+    /// Địa chỉ của app web (launcher-sidebar-and-web-apps); `None` với app desktop.
+    pub web_url: Option<String>,
     pub platforms: Vec<String>,
     pub latest_version: String,
     #[serde(with = "time::serde::rfc3339")]
@@ -172,6 +174,9 @@ pub struct AppInput {
     pub screenshots: Vec<String>,
     /// Logo PNG mã hóa base64 (không có thì giữ logo cũ).
     pub icon: Option<String>,
+    /// Địa chỉ của app web (không có thì giữ địa chỉ cũ). Địa chỉ không hợp lệ bị bỏ qua; xem
+    /// [`feco_tuf::repo::valid_web_url`].
+    pub web_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -224,6 +229,7 @@ type AppRow = (
     OffsetDateTime,
     i64,
     bool,
+    Option<String>,
 );
 
 type ReviewRow = (
@@ -248,7 +254,7 @@ type ReportRow = (
 );
 
 const APP_COLUMNS: &str = "a.id, a.client_id, a.name, a.developer, a.developer_verified, \
-     a.first_party, a.summary, a.category, a.price_vnd, a.updated_at, a.price_coin, a.icon IS NOT NULL";
+     a.first_party, a.summary, a.category, a.price_vnd, a.updated_at, a.price_coin, a.icon IS NOT NULL, a.web_url";
 
 /// Điều kiện "đang hiện trong danh mục". App riêng tư (bản build bàn giao của đơn xây app, spec
 /// custom-build-orders) không hiện công khai: chỉ khách hàng của đơn thấy qua [`private_for`].
@@ -302,6 +308,7 @@ async fn decorate(db: &Db, rows: Vec<AppRow>) -> sqlx::Result<Vec<Listing>> {
                 price_vnd: r.8.max(0) as u64,
                 price_coin: r.10.max(0) as u64,
                 has_icon: r.11,
+                web_url: r.12,
                 platforms,
                 rating_avg,
                 rating_count,
@@ -325,7 +332,8 @@ pub async fn search(db: &Db, f: &Filters) -> sqlx::Result<Vec<Listing>> {
            AND (cardinality($1::text[]) = 0 OR a.search_text LIKE ALL ($1))
            AND ($2::text IS NULL OR a.category = $2)
            AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM catalog_versions v
-                WHERE v.app_id = a.id AND v.status = 'released' AND v.platform LIKE $3 || '%'))
+                WHERE v.app_id = a.id AND v.status = 'released'
+                  AND (v.platform LIKE $3 || '%' OR v.platform = 'web')))
            AND ($4::bool IS NULL OR (a.price_coin = 0) = $4)
            AND (NOT $5 OR a.developer_verified)
          ORDER BY a.first_party DESC, a.name"
@@ -431,13 +439,14 @@ pub async fn upsert_app(db: &Db, cache: &Cache, a: &AppInput) -> sqlx::Result<()
     ));
     sqlx::query(
         "INSERT INTO catalog_apps (id, client_id, name, developer, developer_verified, owner_subject,
-             first_party, summary, description, category, price_vnd, license, screenshots, search_text, icon, price_coin)
+             first_party, summary, description, category, price_vnd, license, screenshots, search_text, icon, price_coin, web_url)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-             coalesce((SELECT price_coin FROM developer_apps WHERE app_id = $1 AND price_coin > 0), ($11 + 999) / 1000))
+             coalesce((SELECT price_coin FROM developer_apps WHERE app_id = $1 AND price_coin > 0), ($11 + 999) / 1000), $16)
          ON CONFLICT (id) DO UPDATE SET client_id = $2, name = $3, developer = $4,
              developer_verified = $5, owner_subject = $6, first_party = $7, summary = $8,
              description = $9, category = $10, price_vnd = $11, license = $12, screenshots = $13,
              search_text = $14, updated_at = now(), icon = coalesce($15, catalog_apps.icon),
+             web_url = coalesce($16, catalog_apps.web_url),
              price_coin = coalesce((SELECT price_coin FROM developer_apps WHERE app_id = $1 AND price_coin > 0), ($11 + 999) / 1000)",
     )
     .bind(&a.id)
@@ -455,6 +464,12 @@ pub async fn upsert_app(db: &Db, cache: &Cache, a: &AppInput) -> sqlx::Result<()
     .bind(&a.screenshots)
     .bind(search_text)
     .bind(&a.icon)
+    .bind(
+        a.web_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|u| feco_tuf::repo::valid_web_url(u)),
+    )
     .execute(db)
     .await?;
     cache.clear();
@@ -577,6 +592,8 @@ pub struct LibraryItem {
     pub installed_version: Option<String>,
     pub purchased: bool,
     pub latest: Option<String>,
+    /// Địa chỉ của app web.
+    pub web_url: Option<String>,
 }
 
 impl LibraryItem {
@@ -622,11 +639,12 @@ pub async fn library(db: &Db, subject: Uuid) -> sqlx::Result<Vec<LibraryItem>> {
         Option<String>,
         bool,
         Option<String>,
+        Option<String>,
     );
     let rows: Vec<Row> = sqlx::query_as(
         "SELECT a.id, a.name, a.icon IS NOT NULL, i.subject IS NOT NULL, i.version, p.buyer IS NOT NULL,
                 (SELECT v.version FROM catalog_versions v WHERE v.app_id = a.id AND v.status = 'released'
-                 ORDER BY v.released_at DESC LIMIT 1)
+                 ORDER BY v.released_at DESC LIMIT 1), a.web_url
          FROM catalog_apps a
          LEFT JOIN catalog_installs i ON i.app_id = a.id AND i.subject = $1
          LEFT JOIN app_purchases p ON p.app_id = a.id AND p.buyer = $1
@@ -646,6 +664,7 @@ pub async fn library(db: &Db, subject: Uuid) -> sqlx::Result<Vec<LibraryItem>> {
             installed_version: r.4,
             purchased: r.5,
             latest: r.6,
+            web_url: r.7,
         })
         .collect())
 }

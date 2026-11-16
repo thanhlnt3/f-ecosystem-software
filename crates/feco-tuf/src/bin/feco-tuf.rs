@@ -20,7 +20,7 @@ feco-tuf: quản lý kho TUF của F-Eco
                    [--summary MÔ-TẢ] [--category NHÓM] [--developer TÊN] [--source URL]
                    [--terminal true] [--description TEXT] [--features A|B|C] [--website URL]
                    [--release-notes TEXT] [--license SPDX] [--released-at RFC3339]
-                   [--icon LOGO.png]
+                   [--icon LOGO.png] [--web-url URL (nền tảng web)]
   feco-tuf set-icon --repo DIR --app A --icon LOGO.png --sign T,S,TS   đặt logo cho mọi phiên bản
   feco-tuf revoke --repo DIR --name N --reason TEXT --sign T,S,TS
   feco-tuf remove --repo DIR --app A --sign T,S,TS   gỡ mọi phiên bản của app khỏi danh mục
@@ -193,6 +193,7 @@ async fn run(raw: &[String]) -> Result<(), String> {
                     Some(path) => Some(read_icon(path)?),
                     None => None,
                 },
+                web_url: args.flags.get("web-url").cloned(),
             };
             let name = args.get("name")?;
             args.repo()?

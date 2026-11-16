@@ -1,0 +1,101 @@
+diff --git a/src/app/auth/feco/page.tsx b/src/app/auth/feco/page.tsx
+new file mode 100644
+index 0000000..5e0a1ad
+--- /dev/null
++++ b/src/app/auth/feco/page.tsx
+@@ -0,0 +1,71 @@
++"use client";
++
++import React, { useEffect, useRef, useState } from "react";
++import Link from "next/link";
++import { useRouter } from "next/navigation";
++import { AlertCircle, Loader2 } from "lucide-react";
++import { API_BASE_URL, User } from "@/lib/api";
++import { useAuth } from "@/context/AuthContext";
++
++/**
++ * Đăng nhập bằng tài khoản F-Eco.
++ * - Không có gì sau dấu #: chuyển sang backend để bắt đầu đăng nhập (F-Launcher mở trang này).
++ * - `#token=...`: backend đã cấp JWT của ThesisAI; lưu như đăng nhập thường rồi vào bảng điều khiển.
++ * - `#error=...`: báo lỗi.
++ */
++export default function FecoLoginPage() {
++  const router = useRouter();
++  const { login } = useAuth();
++  const [error, setError] = useState<string | null>(null);
++  const started = useRef(false);
++
++  useEffect(() => {
++    if (started.current) return;
++    started.current = true;
++    const params = new URLSearchParams(window.location.hash.slice(1));
++    const token = params.get("token");
++    const failure = params.get("error");
++    if (!token && !failure) {
++      window.location.replace(`${API_BASE_URL}/auth/feco/login`);
++      return;
++    }
++    // Xóa token khỏi thanh địa chỉ và lịch sử trình duyệt.
++    window.history.replaceState(null, "", window.location.pathname);
++    if (failure || !token) {
++      setError(failure || "Đăng nhập F-Eco thất bại.");
++      return;
++    }
++    fetch(`${API_BASE_URL}/auth/me`, {
++      headers: { Authorization: `Bearer ${token}` },
++    })
++      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
++      .then((user: User) => {
++        login(token, user);
++        router.replace("/dashboard");
++      })
++      .catch(() => setError("Không đọc được tài khoản ThesisAI. Vui lòng thử lại."));
++  }, [login, router]);
++
++  return (
++    <div className="min-h-screen bg-[#F6F1E8] text-[#1F1E1D] flex items-center justify-center p-6">
++      <div className="w-full max-w-md text-center">
++        {error ? (
++          <>
++            <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-[#FCA5A5] bg-[#FEF2F2] p-3.5 text-left text-sm text-[#991B1B]">
++              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[#DC2626]" />
++              <span>{error}</span>
++            </div>
++            <Link href="/login" className="font-medium text-[#D97757] hover:underline">
++              Quay lại trang đăng nhập
++            </Link>
++          </>
++        ) : (
++          <p className="flex items-center justify-center gap-2 text-sm text-[#706B63]">
++            <Loader2 className="h-5 w-5 animate-spin text-[#D97757]" />
++            Đang đăng nhập bằng tài khoản F-Eco...
++          </p>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/login/page.tsx b/src/app/login/page.tsx
+index 7462e81..0ed8d57 100644
+--- a/src/app/login/page.tsx
++++ b/src/app/login/page.tsx
+@@ -193,6 +193,19 @@ export default function LoginPage() {
+               </button>
+             </form>
+ 
++            <div className="my-4 flex items-center gap-3 text-xs text-[#A09B90]">
++              <span className="h-px flex-1 bg-[#E2DCD1]" />
++              hoặc
++              <span className="h-px flex-1 bg-[#E2DCD1]" />
++            </div>
++            <Link
++              href="/auth/feco"
++              id="feco-login"
++              className="w-full py-3.5 px-6 rounded-xl border border-[#D5D0C5] bg-white hover:bg-[#FAF8F5] text-[#1F1E1D] font-medium text-base transition-all flex items-center justify-center gap-2"
++            >
++              Đăng nhập bằng F-Eco
++            </Link>
++
+             <p className="mt-4 text-[11px] sm:text-[11.5px] text-[#7A756D] text-center whitespace-nowrap">
+               Dữ liệu luận văn được bảo mật và phân tích mô hình cục bộ trên thiết bị của bạn.
+             </p>

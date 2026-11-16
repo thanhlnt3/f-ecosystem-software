@@ -1,5 +1,52 @@
 # Nhật ký thay đổi
 
+## 1.7.0 (16/11/2026)
+
+Thay đổi OpenSpec `launcher-sidebar-and-web-apps`.
+
+### Thanh bên của F-Launcher
+
+- Nút ẩn/hiện cạnh logo và phím tắt Ctrl+B: thanh bên thu gọn còn 56 px, chỉ có icon.
+- Ở chế độ thu gọn:
+  - tooltip ghi tên từng mục;
+  - số thông báo chưa đọc và số bản cập nhật hiện thành huy hiệu ("9+" khi trên 9);
+  - mọi chức năng vẫn còn: đồng bộ, F-Eco trên web, bảng quản trị, cổng nhà phát triển, ví, đăng nhập, đăng xuất.
+- Launcher nhớ lựa chọn trong `settings.json` (`sidebar_collapsed`); cửa sổ hẹp hơn 720 px thì thanh bên tự thu gọn.
+
+### App web
+
+- **Metadata TUF**: thêm trường `web_url`, ký cùng target nền tảng `web`.
+  - `feco-tuf publish --web-url` chỉ nhận `https://`, hoặc `http://localhost` và `http://127.0.0.1`.
+  - Địa chỉ có tên đăng nhập hay mật khẩu bị từ chối.
+- **F-Launcher**:
+  - hiện app web trên mọi hệ điều hành, nhãn "App web";
+  - "Thêm" ghi app vào Thư viện; "Mở" mở địa chỉ bằng trình duyệt, không cấp mã khởi chạy;
+  - app có gói cho máy đang dùng thì dùng gói đó.
+- **F-Store**:
+  - cột `catalog_apps.web_url` (migration `0017_web_apps.sql`);
+  - trang app có nút "Mở ứng dụng web", nền tảng ghi "Web";
+  - bộ lọc Windows, macOS, Linux vẫn hiện app web;
+  - trang "Ứng dụng của tôi" có nút "Mở" cho app web.
+- **Đăng nhập**: app web dùng client OAuth phía máy chủ (client secret, PKCE, `sub` pairwise). E2E kiểm cả trường hợp sai secret và địa chỉ chuyển hướng lạ.
+
+### ThesisAI
+
+- ThesisAI (luyện bảo vệ đồ án tốt nghiệp với hội đồng AI) có trong F-Store và F-Launcher dưới dạng app web, kèm logo của ThesisAI.
+- `integrations/thesisai/`: bản vá "Đăng nhập bằng F-Eco" cho hai repo ThesisAI.
+  - Backend: Authlib, cột `feco_subject`.
+  - Frontend: trang `/auth/feco` và nút đăng nhập.
+  - Kèm hướng dẫn chạy cùng F-Eco và ghi nguồn gốc.
+- `scripts/dev-apps.sh thesisai`: client OAuth, gói app web, danh mục; in biến môi trường cho backend ThesisAI.
+
+### Sửa lỗi
+
+- `scripts/dev-apps.sh`: trường `icon_file` trong tệp danh mục mất dấu nháy (JSON hỏng) khi app có logo.
+
+### Ghi chú nâng cấp
+
+- Migration `0017_web_apps.sql` chạy tự động khi máy chủ khởi động.
+- Cổng nhà phát triển chưa nhận app web; app web được đưa vào bằng `feco-tuf` và `feco-catalog` (QUESTIONS.md 93).
+
 ## 1.6.0 (15/11/2026)
 
 Gồm hai thay đổi OpenSpec: `fcoin-wallet-and-marketplace` và `launcher-logos-and-updates`.

@@ -355,6 +355,15 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("Ứng dụng của tôi", "My apps", "Mes applications"),
     ("Dự án phần mềm", "Software projects", "Projets logiciels"),
     ("Đơn xây app", "Custom app orders", "Commandes d'applications"),
+    ("App web", "Web app", "App web"),
+    ("Thêm", "Add", "Ajouter"),
+    ("Đã thêm", "Added", "Ajoutée"),
+    ("Thu gọn thanh bên (Ctrl+B)", "Collapse sidebar (Ctrl+B)", "Réduire la barre latérale (Ctrl+B)"),
+    ("Mở rộng thanh bên (Ctrl+B)", "Expand sidebar (Ctrl+B)", "Développer la barre latérale (Ctrl+B)"),
+    ("Trình duyệt web", "Web browser", "Navigateur web"),
+    ("Thêm {} vào Thư viện?", "Add {} to your Library?", "Ajouter {} à la Bibliothèque ?"),
+    ("App web mở bằng trình duyệt tại {} và đăng nhập bằng tài khoản F-Eco.", "This web app opens in your browser at {} and signs in with your F-Eco account.", "Cette app web s’ouvre dans le navigateur à l’adresse {} et se connecte avec votre compte F-Eco."),
+    ("Đã mở {} trong trình duyệt", "Opened {} in your browser", "{} ouverte dans le navigateur"),
 ];
 
 #[cfg(test)]

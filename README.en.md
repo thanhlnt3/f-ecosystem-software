@@ -273,6 +273,20 @@ app repository; it is used only to try single sign-on in step 5.
     Administrator). Developers get a **Developer portal** button; Administrators additionally get
     **Admin console**. Change the role at `/admin/members` (System administrator) or with
     `feco-catalog role-set <email> developer "<reason>"`.
+14. **Collapsed sidebar**: click the button next to the logo (or press Ctrl+B) to show only icons
+    in the sidebar. Hover an icon to see its name; unread notifications and available updates show
+    as badges. The launcher remembers your choice; windows narrower than 720 px collapse the
+    sidebar automatically.
+15. **ThesisAI web app**: a web app that runs in the browser and signs in with your F-Eco account.
+
+    ```bash
+    scripts/dev-apps.sh thesisai
+    ```
+
+    Click **Sync**. ThesisAI shows a "Web app" label in the Store: **Add**, then **Open** to open
+    `http://localhost:3000/auth/feco` in your browser. To run ThesisAI itself, follow
+    [integrations/thesisai/README.md](integrations/thesisai/README.md) (apply the "Sign in with
+    F-Eco" patch and set the `FECO_*` variables the command above prints).
 
 Launcher variables: `FECO_LAUNCHER_SERVER` (default `http://127.0.0.1:8080/`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`), `FECO_LAUNCHER_DATA_DIR` (data directory), `FECO_LAUNCHER_TRUSTED_ROOT`
@@ -666,7 +680,8 @@ Questions awaiting a decision are in [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/f-dev` | CLI for developers: `f-dev validate`, `f-dev pack`, `f-dev publish` |
 | `tools/feco-license-check` | Checks service and container image licenses |
 | `infra/` | Dev infrastructure: `docker-compose.yml`, the Kratos configuration (schema, email templates) and Hydra |
-| `scripts/` | `dev-local.sh`: runs the infrastructure without Docker; `tuf-drill.sh`: drills the TUF chain of trust; `dev-launcher.sh`: the TUF repository and OAuth clients for trying the launcher; `dev-apps.sh`: puts sample apps and open-source apps from GitHub into the dev repository |
+| `scripts/` | `dev-local.sh`: runs the infrastructure without Docker; `tuf-drill.sh`: drills the TUF chain of trust; `dev-launcher.sh`: the TUF repository and OAuth clients for trying the launcher; `dev-apps.sh`: puts sample apps, open-source apps from GitHub and the ThesisAI web app into the dev repository |
+| `integrations/` | Integrations with outside apps: `thesisai/` (the "Sign in with F-Eco" patch for ThesisAI, guide, provenance) |
 | `docs/security/` | Incident response procedure, TUF key management, drill reports |
 | `third_party/` | License declarations and approved exceptions |
 | `openspec/` | Requirements, design, plan |

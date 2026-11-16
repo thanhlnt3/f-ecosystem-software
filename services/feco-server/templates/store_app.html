@@ -30,7 +30,7 @@
 {% else %}
 <ul id="scopes">{% for s in scopes %}<li class="scope{% if s.required %} required{% endif %}">{{ s.text }}</li>{% endfor %}</ul>
 {% endif %}
-<p class="muted">{{ i18n.t("store.isolation") }}</p>
+{% if card.web_url.is_empty() %}<p class="muted">{{ i18n.t("store.isolation") }}</p>{% endif %}
 {% if price_coin > 0 %}
 <div class="card" id="buy" style="margin:12px 0">
   {% if owned %}<p id="owned"><span class="badge ok">{{ i18n.t("wallet.owned") }}</span></p>
@@ -45,7 +45,12 @@
   {% endif %}
 </div>
 {% endif %}
+{% if card.web_url.is_empty() %}
 <p id="install"><strong>{{ i18n.t("store.install") }}</strong>: {{ i18n.t("store.install_hint") }}</p>
+{% else %}
+<p id="open-web"><a class="button" href="{{ card.web_url }}" rel="noopener" target="_blank">{{ i18n.t("store.open_web") }}</a></p>
+<p class="muted" id="web-hint">{{ i18n.t("store.web_hint") }}</p>
+{% endif %}
 
 <h2>{{ i18n.t("store.changelog") }}</h2>
 <table id="versions">
