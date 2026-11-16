@@ -434,6 +434,105 @@ async fn offline_start_keeps_my_apps_usable() {
     assert!(!kinds(l.events()).contains(&"invalid_metadata".to_owned()));
 }
 
+/// Ngoại tuyến quá 7 ngày kể từ lần đồng bộ thành công gần nhất thì không mở app nữa (danh sách
+/// thu hồi có thể đã cũ); trong 7 ngày vẫn mở được.
+#[tokio::test]
+async fn launch_needs_a_sync_within_seven_days() {
+    let f = Fixture::new().await;
+    f.publish_app("soundlab", "1.2.0").await;
+    let synced = Timestamp::now();
+    {
+        let mut l = f.launcher().await;
+        l.sync(synced).await.unwrap();
+        l.install(&entry(&l, "soundlab", "1.2.0"), synced)
+            .await
+            .unwrap();
+    }
+    let mut l = f.offline_launcher().await;
+    assert!(l.sync(Timestamp::now()).await.is_err());
+    let day = SignedDuration::from_hours(24);
+    assert_eq!(
+        l.prepare_launch_at("soundlab", synced + day * 6)
+            .unwrap()
+            .version,
+        "1.2.0"
+    );
+    let err = l
+        .prepare_launch_at("soundlab", synced + day * 8)
+        .unwrap_err();
+    assert!(matches!(err, LauncherError::StaleSync), "{err:?}");
+    assert!(err.to_string().contains("đồng bộ"), "{err}");
+    // Đồng bộ lại được thì mở bình thường.
+    let mut l = f.launcher().await;
+    l.sync(synced + day * 8).await.unwrap();
+    assert!(l.prepare_launch_at("soundlab", synced + day * 8).is_ok());
+}
+
+/// Gói có hai mục trùng nhau trên NTFS (khác hoa thường hoặc có `./`) bị từ chối, dù đã được ký:
+/// tệp được quét có thể không phải tệp được chạy.
+#[tokio::test]
+async fn package_with_colliding_entries_is_rejected() {
+    let f = Fixture::new().await;
+    f.publish(
+        "clash",
+        "1.0.0",
+        &[
+            ("bin/clash.cmd", b"@echo sach"),
+            ("./bin/CLASH.cmd", b"@echo doc"),
+        ],
+    )
+    .await;
+    let mut l = f.launcher().await;
+    l.sync(Timestamp::now()).await.unwrap();
+    let err = l
+        .install(&entry(&l, "clash", "1.0.0"), Timestamp::now())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, LauncherError::InvalidPackage(d) if d.contains("trùng")),
+        "{err:?}"
+    );
+    assert!(l.state().apps.is_empty());
+}
+
+/// File chạy có ký tự đặc biệt của `cmd.exe` bị từ chối khi cài (app terminal mở qua `cmd /C`).
+#[tokio::test]
+async fn entry_with_shell_metacharacters_is_rejected() {
+    let f = Fixture::new().await;
+    let name = target("kibi", "0.3.3");
+    let upload = f.tmp.path().join("uploads");
+    std::fs::create_dir_all(&upload).unwrap();
+    let file = upload.join(&name);
+    make_zip(&file, &[("kibi.exe&calc.exe", b"x"), ("kibi.exe", b"y")]);
+    let meta = TargetMeta {
+        app: "kibi".into(),
+        version: "0.3.3".into(),
+        platform: PLATFORM.into(),
+        entry: Some("kibi.exe&calc.exe".into()),
+        terminal: true,
+        ..Default::default()
+    };
+    f.repo
+        .publish(
+            &file,
+            &name,
+            &meta,
+            &signers(&f.keys),
+            Expiry::default(),
+            Timestamp::now(),
+        )
+        .await
+        .unwrap();
+    let mut l = f.launcher().await;
+    l.sync(Timestamp::now()).await.unwrap();
+    let err = l
+        .install(&entry(&l, "kibi", "0.3.3"), Timestamp::now())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, LauncherError::InvalidPackage(_)), "{err:?}");
+    assert!(l.state().apps.is_empty());
+}
+
 /// Scenario "Phiên bản bị thu hồi": sau lần đồng bộ kế tiếp không cho mở, hiện lý do.
 #[tokio::test]
 async fn revoked_version_is_blocked_after_next_sync() {
@@ -585,6 +684,11 @@ async fn broker_refuses_codes_for_other_apps() {
     assert_eq!(res.status(), 200);
     let code: LaunchCode = res.json().await.unwrap();
     assert_eq!(code.code, "ma-cho-client-a");
+
+    // App đã thoát: bí mật của lần chạy đó bị hủy.
+    broker.unregister(&secret_a);
+    let res = ask(&secret_a, "client-a").await.unwrap();
+    assert_eq!(res.status(), 401);
 }
 
 /// Spec custom-build-orders, "Bàn giao mốc và nghiệm thu": bản build bàn giao là app riêng tư,

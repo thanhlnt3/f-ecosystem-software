@@ -73,10 +73,13 @@ pub fn safe_component(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
 }
 
-/// Đường dẫn tương đối trong gói (file chạy): không tuyệt đối, không có `..`.
+/// Đường dẫn tương đối trong gói (file chạy): không tuyệt đối, không có `..`, chỉ gồm
+/// `A-Z a-z 0-9 . _ - /`, mỗi đoạn không bắt đầu hay kết thúc bằng `.` (cùng quy tắc với
+/// `entry` của f-app.toml). App terminal trên Windows được mở qua `cmd.exe`, nên ký tự như
+/// `& ^ % ( )` có thể chèn lệnh.
 pub fn safe_relative(s: &str) -> bool {
     let p = Path::new(s);
-    !s.is_empty()
+    feco_manifest::safe_entry(s)
         && p.is_relative()
         && p.components()
             .all(|c| matches!(c, std::path::Component::Normal(_)))
@@ -94,7 +97,22 @@ mod tests {
             assert!(!safe_component(bad), "{bad}");
         }
         assert!(safe_relative("bin/soundlab.exe"));
-        for bad in ["", "../x", "/etc/passwd", "a/../../b"] {
+        assert!(safe_relative("SoundLab.app/Contents/MacOS/SoundLab"));
+        for bad in [
+            "",
+            "../x",
+            "/etc/passwd",
+            "a/../../b",
+            "a.exe&calc.exe",
+            "a^b.exe",
+            "%COMSPEC%",
+            "x(1).exe",
+            "My App.exe",
+            "a\\b.exe",
+            "C:/a.exe",
+            "app.exe.",
+            "./a.exe",
+        ] {
             assert!(!safe_relative(bad), "{bad}");
         }
     }

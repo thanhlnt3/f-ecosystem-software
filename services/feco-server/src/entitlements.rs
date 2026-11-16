@@ -181,3 +181,114 @@ pub async fn api_list(State(state): State<Arc<AppState>>, headers: HeaderMap) ->
         Err(e) => unavailable(e.to_string()),
     }
 }
+
+/// Một app trong danh mục, nhìn từ phía một người dùng (để quyết định cấp mã khởi chạy).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchAccess {
+    pub private_to: Option<Uuid>,
+    pub price_coin: i64,
+    /// Người dùng là chủ app hoặc thành viên tài khoản nhà phát triển của app.
+    pub developer: bool,
+    /// Người dùng đã mua app bằng F-Coin hoặc có quyền sử dụng còn hiệu lực.
+    pub owns: bool,
+}
+
+impl LaunchAccess {
+    /// App riêng tư của người khác, hoặc app có giá chưa mua, thì không được mở.
+    pub fn allows(&self, subject: Uuid) -> bool {
+        if self.developer {
+            return true;
+        }
+        if self.private_to.is_some_and(|p| p != subject) {
+            return false;
+        }
+        self.price_coin <= 0 || self.owns
+    }
+}
+
+/// Người dùng `subject` có được mở app có client ID này không (spec launcher, "Mở app con và
+/// truyền phiên đăng nhập"). App không có trong danh mục (app thử nghiệm, app của nền tảng) không
+/// bị giới hạn.
+pub async fn may_launch(db: &Db, client_id: &str, subject: Uuid) -> sqlx::Result<bool> {
+    let rows: Vec<(Option<Uuid>, i64, bool, bool)> = sqlx::query_as(
+        "SELECT a.private_to, a.price_coin,
+                COALESCE(a.owner_subject = $2, false) OR EXISTS (
+                    SELECT 1 FROM developer_apps d
+                    JOIN developer_members m ON m.account_id = d.account_id
+                    WHERE d.app_id = a.id AND m.subject = $2 AND m.status = 'active'),
+                EXISTS (SELECT 1 FROM app_purchases p WHERE p.app_id = a.id AND p.buyer = $2)
+                OR EXISTS (SELECT 1 FROM entitlements e
+                    WHERE e.client_id = a.client_id AND e.subject = $2 AND e.revoked_at IS NULL
+                      AND (e.expires_at IS NULL OR e.expires_at > now()))
+         FROM catalog_apps a WHERE a.client_id = $1",
+    )
+    .bind(client_id)
+    .bind(subject)
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .all(|(private_to, price_coin, developer, owns)| {
+            LaunchAccess {
+                private_to,
+                price_coin,
+                developer,
+                owns,
+            }
+            .allows(subject)
+        }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// App riêng tư của người khác và app có giá chưa mua không được cấp mã khởi chạy; nhà phát
+    /// triển của app luôn được.
+    #[test]
+    fn launch_access() {
+        let me = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let free = LaunchAccess {
+            private_to: None,
+            price_coin: 0,
+            developer: false,
+            owns: false,
+        };
+        assert!(free.allows(me));
+        let private = LaunchAccess {
+            private_to: Some(other),
+            ..free.clone()
+        };
+        assert!(!private.allows(me));
+        assert!(private.allows(other));
+        assert!(LaunchAccess {
+            developer: true,
+            ..private.clone()
+        }
+        .allows(me));
+        let paid = LaunchAccess {
+            price_coin: 49,
+            ..free.clone()
+        };
+        assert!(!paid.allows(me));
+        assert!(LaunchAccess {
+            owns: true,
+            ..paid.clone()
+        }
+        .allows(me));
+        assert!(LaunchAccess {
+            developer: true,
+            ..paid
+        }
+        .allows(me));
+        // App riêng tư có giá: khách hàng của đơn vẫn cần quyền sử dụng.
+        let private_paid = LaunchAccess {
+            private_to: Some(me),
+            price_coin: 10,
+            developer: false,
+            owns: false,
+        };
+        assert!(!private_paid.allows(me));
+    }
+}

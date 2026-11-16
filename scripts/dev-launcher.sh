@@ -146,6 +146,9 @@ export FECO_LAUNCHER_CLIENT_ID=$(cat "$DEV/launcher-client-id")
 # F-Launcher:
 export FECO_LAUNCHER_CLIENT_ID=$(cat "$DEV/launcher-client-id")
 export FECO_LAUNCHER_TUF='$repo_native'
+# Bản release không có địa chỉ mặc định: đặt rõ máy chủ và Hydra của máy dev.
+export FECO_LAUNCHER_SERVER=http://127.0.0.1:8080/
+export FECO_LAUNCHER_HYDRA=http://127.0.0.1:4444/
 cargo run -p feco-launcher
 
 # App mẫu F-SDK (README, bước 8):

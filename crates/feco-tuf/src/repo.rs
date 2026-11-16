@@ -148,6 +148,20 @@ fn check_web(meta: &TargetMeta) -> Result<()> {
 /// Kích thước tối đa của logo (byte, trước khi mã hóa base64).
 pub const MAX_ICON_BYTES: usize = 64 * 1024;
 
+/// Chiều rộng, chiều cao tối đa của logo (pixel). Launcher cũng từ chối ảnh lớn hơn.
+pub const MAX_ICON_PX: u32 = 1024;
+
+/// Đọc chiều rộng, chiều cao từ chunk IHDR (chunk đầu tiên) của một tệp PNG.
+pub fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+    let rest = bytes.strip_prefix(SIGNATURE)?;
+    let be = |b: &[u8]| -> Option<u32> { Some(u32::from_be_bytes(b.try_into().ok()?)) };
+    if rest.len() < 16 || be(&rest[0..4])? != 13 || &rest[4..8] != b"IHDR" {
+        return None;
+    }
+    Some((be(&rest[8..12])?, be(&rest[12..16])?))
+}
+
 /// Kiểm tra một tệp PNG làm logo và trả về chuỗi base64 để ghi vào [`TargetMeta::icon`].
 pub fn icon_from_png(bytes: &[u8]) -> Result<String> {
     use base64::Engine;
@@ -161,6 +175,16 @@ pub fn icon_from_png(bytes: &[u8]) -> Result<String> {
             bytes.len()
         )));
     }
+    // Ảnh khai kích thước khổng lồ làm launcher cạn bộ nhớ khi giải mã.
+    match png_dimensions(bytes) {
+        Some((w, h)) if (1..=MAX_ICON_PX).contains(&w) && (1..=MAX_ICON_PX).contains(&h) => {}
+        Some((w, h)) => {
+            return Err(Error::Invalid(format!(
+                "logo {w}×{h} pixel, tối đa {MAX_ICON_PX}×{MAX_ICON_PX}"
+            )))
+        }
+        None => return Err(Error::Invalid("logo PNG thiếu chunk IHDR hợp lệ".into())),
+    }
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
@@ -172,6 +196,26 @@ pub struct Revocation {
     pub version: Option<String>,
     pub reason: String,
     pub revoked_at: Timestamp,
+}
+
+/// Trạng thái của một tên target trong kho.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TargetStatus {
+    /// Chưa từng phát hành, hoặc đã gỡ bằng [`Repo::remove_app`].
+    Absent,
+    /// Đang phát hành, kèm thông tin đã ký.
+    Published(Option<Box<TargetMeta>>),
+    /// Đã có trong danh sách thu hồi.
+    Revoked,
+}
+
+/// Tệp khóa trong thư mục kho: mọi thao tác ghi giữ khóa độc quyền trên tệp này.
+const LOCK_FILE: &str = ".feco-tuf.lock";
+
+/// Khóa độc quyền trên kho; nhả khi bị drop (đóng tệp).
+#[derive(Debug)]
+struct RepoLock {
+    _file: std::fs::File,
 }
 
 /// Khóa công khai của từng vai trò khi dựng kho.
@@ -293,6 +337,7 @@ impl Repo {
         expiry: Expiry,
         now: Timestamp,
     ) -> Result<()> {
+        let _lock = self.lock().await?;
         let first = self.root_path(1);
         if tokio::fs::try_exists(&first)
             .await
@@ -361,6 +406,7 @@ impl Repo {
         now: Timestamp,
     ) -> Result<()> {
         check_web(meta)?;
+        let _lock = self.lock().await?;
         let repo = self.load().await?;
         let target_name = TargetName::new(name)?;
         let revoked = read_revocations(&repo).await?;
@@ -380,7 +426,8 @@ impl Repo {
     }
 
     /// Thu hồi một target: phát hành metadata mới không còn target đó, và ghi lý do vào
-    /// [`REVOCATIONS_TARGET`].
+    /// [`REVOCATIONS_TARGET`]. Target đã bị gỡ khỏi danh mục (hoặc chưa phát hành) vẫn được ghi
+    /// vào danh sách thu hồi, để launcher đã cài nó chặn mở và tên đó không phát hành lại được.
     pub async fn revoke(
         &self,
         name: &str,
@@ -392,17 +439,19 @@ impl Repo {
         if reason.trim().is_empty() {
             return Err(Error::Invalid("thu hồi phải có lý do".into()));
         }
+        validate_target_name(name)?;
+        if name == REVOCATIONS_TARGET {
+            return Err(Error::Invalid(format!("không thu hồi được {name}")));
+        }
+        let _lock = self.lock().await?;
         let repo = self.load().await?;
         let target_name = TargetName::new(name)?;
-        let target = repo
-            .targets()
-            .signed
-            .targets
-            .get(&target_name)
-            .filter(|_| name != REVOCATIONS_TARGET)
-            .cloned()
-            .ok_or_else(|| Error::Invalid(format!("không có target {name} đang phát hành")))?;
-        let meta = target_meta(&target);
+        let mut list = read_revocations(&repo).await?;
+        if list.iter().any(|r| r.target == name) {
+            return Err(Error::Invalid(format!("target {name} đã bị thu hồi")));
+        }
+        let listed = repo.targets().signed.targets.get(&target_name).cloned();
+        let meta = listed.as_ref().and_then(target_meta);
         let revocation = Revocation {
             target: name.to_owned(),
             app: meta.as_ref().map(|m| m.app.clone()),
@@ -410,14 +459,31 @@ impl Repo {
             reason: reason.trim().to_owned(),
             revoked_at: now,
         };
-        let mut list = read_revocations(&repo).await?;
         list.push(revocation.clone());
         let (list_name, list_target) = self.stage_revocations(&list).await?;
         let mut editor = self.editor_from(repo, None, expiry, now).await?;
-        editor.remove_target(&target_name)?;
+        if listed.is_some() {
+            editor.remove_target(&target_name)?;
+        }
         editor.add_target(list_name, list_target)?;
         self.finish(editor, signers).await?;
         Ok(revocation)
+    }
+
+    /// Trạng thái hiện tại của target `name` (đang phát hành, đã thu hồi, hay không có).
+    pub async fn target_status(&self, name: &str) -> Result<TargetStatus> {
+        let repo = self.load().await?;
+        let revoked = read_revocations(&repo).await?;
+        if revoked.iter().any(|r| r.target == name) {
+            return Ok(TargetStatus::Revoked);
+        }
+        let target_name = TargetName::new(name)?;
+        Ok(match repo.targets().signed.targets.get(&target_name) {
+            Some(t) if name != REVOCATIONS_TARGET => {
+                TargetStatus::Published(target_meta(t).map(Box::new))
+            }
+            _ => TargetStatus::Absent,
+        })
     }
 
     /// Gỡ mọi phiên bản của một app khỏi danh mục (thay đổi platform-roles, design R7): khác với
@@ -430,6 +496,7 @@ impl Repo {
         expiry: Expiry,
         now: Timestamp,
     ) -> Result<Vec<String>> {
+        let _lock = self.lock().await?;
         let repo = self.load().await?;
         let names: Vec<TargetName> = repo
             .targets()
@@ -461,6 +528,7 @@ impl Repo {
         expiry: Expiry,
         now: Timestamp,
     ) -> Result<usize> {
+        let _lock = self.lock().await?;
         let repo = self.load().await?;
         let items: Vec<(TargetName, Target)> = repo
             .targets()
@@ -495,6 +563,7 @@ impl Repo {
         expiry: Expiry,
         now: Timestamp,
     ) -> Result<()> {
+        let _lock = self.lock().await?;
         let repo = self.load().await?;
         let holder = KeyHolder::Root(repo.root().signed.clone());
         let rng = SystemRandom::new();
@@ -535,6 +604,7 @@ impl Repo {
         expiry: Expiry,
         now: Timestamp,
     ) -> Result<()> {
+        let _lock = self.lock().await?;
         let repo = self.load().await?;
         let editor = self.editor_from(repo, None, expiry, now).await?;
         self.finish(editor, signers).await
@@ -577,6 +647,7 @@ impl Repo {
         now: Timestamp,
     ) -> Result<()> {
         draft.check(signed_root)?;
+        let _lock = self.lock().await?;
         let version = draft.next.version.get();
         if version != self.latest_root_version().await? + 1 {
             return Err(Error::Invalid(
@@ -595,6 +666,26 @@ impl Repo {
             let _ = tokio::fs::remove_file(&path).await;
         }
         result
+    }
+
+    /// Giữ khóa độc quyền của hệ điều hành trên tệp khóa trong thư mục kho, suốt chu trình đọc →
+    /// ký → ghi, để máy chủ, CLI và việc ký lại định kỳ (tiến trình khác) không ghi đè lẫn nhau.
+    async fn lock(&self) -> Result<RepoLock> {
+        let dir = self.dir.clone();
+        tokio::task::spawn_blocking(move || {
+            std::fs::create_dir_all(&dir).map_err(io_err(&dir))?;
+            let path = dir.join(LOCK_FILE);
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(&path)
+                .map_err(io_err(&path))?;
+            file.lock().map_err(io_err(&path))?;
+            Ok(RepoLock { _file: file })
+        })
+        .await
+        .map_err(|e| Error::Invalid(format!("không khóa được kho: {e}")))?
     }
 
     async fn editor_from(

@@ -14,10 +14,12 @@ use std::{net::SocketAddr, path::Path, time::Duration};
 use sha2::Digest;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-/// Tệp lớn nhất trong gói được đọc để quét.
-const MAX_FILE_BYTES: u64 = 1024 * 1024 * 1024;
+/// Tệp lớn nhất trong gói được đọc vào bộ nhớ để quét; tệp lớn hơn làm gói bị từ chối.
+const MAX_FILE_BYTES: u64 = 256 * 1024 * 1024;
 /// Tổng dung lượng giải nén tối đa của một gói (chống "zip bomb").
 const MAX_TOTAL_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+/// Số mục (tệp và thư mục) tối đa trong một gói.
+pub const MAX_ENTRIES: usize = 10_000;
 const CLAMD_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Mẫu thử chống virus EICAR, ghép lúc chạy để chính mã nguồn và tệp build không chứa nguyên
@@ -195,30 +197,140 @@ pub struct Report {
     pub engine_errors: Vec<String>,
 }
 
-/// Đọc lần lượt từng tệp trong gói (không giữ cả gói trong bộ nhớ).
-async fn entry_at(path: &Path, index: usize) -> Result<Option<(String, Vec<u8>, bool)>, String> {
-    let path = path.to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        use std::io::Read;
-        let file = std::fs::File::open(&path).map_err(|e| e.to_string())?;
-        let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("gói không phải zip: {e}"))?;
-        if index >= zip.len() {
-            return Ok(None);
+/// Lỗi bố cục của gói zip, phát hiện trước khi đọc nội dung (kiểm khi tải lên và khi quét).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LayoutProblem {
+    /// Gói có quá [`MAX_ENTRIES`] mục.
+    TooManyEntries(usize),
+    /// Đường dẫn thoát ra ngoài thư mục cài đặt, tuyệt đối, hoặc là liên kết tượng trưng.
+    UnsafePath(String),
+    /// Hai mục ghi đè nhau khi giải nén trên NTFS/APFS (khác hoa thường, `./`, `\`...): tệp được
+    /// quét có thể không phải tệp launcher chạy.
+    Duplicate(String, String),
+    /// Không đọc được mục lục của gói.
+    Unreadable(String),
+}
+
+impl LayoutProblem {
+    pub fn vi(&self) -> String {
+        match self {
+            Self::TooManyEntries(n) => format!("Gói có {n} mục, tối đa {MAX_ENTRIES}"),
+            Self::UnsafePath(name) => {
+                format!("Gói có đường dẫn không an toàn hoặc liên kết tượng trưng: {name}")
+            }
+            Self::Duplicate(a, b) => {
+                format!("Gói có hai mục trùng đường dẫn khi giải nén: {a} và {b}")
+            }
+            Self::Unreadable(e) => format!("Không đọc được mục lục gói: {e}"),
         }
-        let item = zip.by_index(index).map_err(|e| e.to_string())?;
+    }
+
+    pub fn en(&self) -> String {
+        match self {
+            Self::TooManyEntries(n) => {
+                format!("The package has {n} entries; the maximum is {MAX_ENTRIES}")
+            }
+            Self::UnsafePath(name) => {
+                format!("The package contains an unsafe path or a symbolic link: {name}")
+            }
+            Self::Duplicate(a, b) => {
+                format!("Two package entries map to the same path when extracted: {a} and {b}")
+            }
+            Self::Unreadable(e) => format!("Cannot read the package index: {e}"),
+        }
+    }
+}
+
+/// Kiểm bố cục gói: số mục, đường dẫn an toàn (như launcher kiểm khi giải nén), không có hai mục
+/// trùng nhau theo [`feco_manifest::package_path_key`].
+pub fn check_layout<R: std::io::Read + std::io::Seek>(
+    zip: &mut zip::ZipArchive<R>,
+) -> Result<(), LayoutProblem> {
+    if zip.len() > MAX_ENTRIES {
+        return Err(LayoutProblem::TooManyEntries(zip.len()));
+    }
+    let mut seen = std::collections::HashMap::new();
+    for i in 0..zip.len() {
+        let item = zip
+            .by_index_raw(i)
+            .map_err(|e| LayoutProblem::Unreadable(e.to_string()))?;
         let name = item.name().map(|n| n.into_owned()).unwrap_or_default();
-        if item.is_dir() {
-            return Ok(Some((name, Vec::new(), true)));
+        if item.is_symlink() || item.enclosed_name().is_none() {
+            return Err(LayoutProblem::UnsafePath(name));
         }
-        let too_big = item.size() > MAX_FILE_BYTES;
-        let mut bytes = Vec::new();
-        item.take(MAX_FILE_BYTES)
-            .read_to_end(&mut bytes)
-            .map_err(|e| e.to_string())?;
-        Ok(Some((name, bytes, too_big)))
-    })
-    .await
-    .map_err(|e| e.to_string())?
+        if let Some(first) = seen.insert(feco_manifest::package_path_key(&name), name.clone()) {
+            return Err(LayoutProblem::Duplicate(first, name));
+        }
+    }
+    Ok(())
+}
+
+/// Một tệp đọc từ gói. `path` là đường dẫn sau khi giải nén (đoạn ngăn bằng `/`, bỏ `./`).
+struct Item {
+    name: String,
+    path: String,
+    bytes: Vec<u8>,
+    too_big: bool,
+}
+
+enum ReadError {
+    Layout(LayoutProblem),
+    Read(String),
+}
+
+/// Mở gói một lần, kiểm bố cục rồi gửi lần lượt từng tệp qua `tx` (kênh có sức chứa 1 nên chỉ vài
+/// tệp nằm trong bộ nhớ cùng lúc). Dừng khi bên nhận đã đóng kênh.
+fn read_items(path: &Path, tx: &tokio::sync::mpsc::Sender<Result<Item, ReadError>>) {
+    use std::io::Read;
+    let result = (|| -> Result<(), ReadError> {
+        let file = std::fs::File::open(path).map_err(|e| ReadError::Read(e.to_string()))?;
+        let mut zip = zip::ZipArchive::new(file)
+            .map_err(|e| ReadError::Read(format!("gói không phải zip: {e}")))?;
+        check_layout(&mut zip).map_err(ReadError::Layout)?;
+        for i in 0..zip.len() {
+            let item = zip
+                .by_index(i)
+                .map_err(|e| ReadError::Read(e.to_string()))?;
+            if item.is_dir() {
+                continue;
+            }
+            let name = item.name().map(|n| n.into_owned()).unwrap_or_default();
+            let path = item
+                .enclosed_name()
+                .map(|p| {
+                    p.components()
+                        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                        .collect::<Vec<_>>()
+                        .join("/")
+                })
+                .unwrap_or_default();
+            // Không tin kích thước khai trong mục lục: đọc tối đa MAX_FILE_BYTES + 1 byte.
+            let mut too_big = item.size() > MAX_FILE_BYTES;
+            let mut bytes = Vec::new();
+            if !too_big {
+                item.take(MAX_FILE_BYTES + 1)
+                    .read_to_end(&mut bytes)
+                    .map_err(|e| ReadError::Read(e.to_string()))?;
+                if bytes.len() as u64 > MAX_FILE_BYTES {
+                    too_big = true;
+                    bytes = Vec::new();
+                }
+            }
+            let item = Item {
+                name,
+                path,
+                bytes,
+                too_big,
+            };
+            if tx.blocking_send(Ok(item)).is_err() {
+                return Ok(());
+            }
+        }
+        Ok(())
+    })();
+    if let Err(e) = result {
+        let _ = tx.blocking_send(Err(e));
+    }
 }
 
 /// Kiểm tra một gói. `entry`/`arch` là tệp chạy và kiến trúc manifest khai báo; `full` thì kiểm
@@ -237,23 +349,35 @@ pub async fn check_package(
     };
     let mut total = 0u64;
     let mut found_entry = false;
-    let mut index = 0;
-    loop {
-        let (name, bytes, too_big) = match entry_at(path, index).await {
-            Ok(Some(x)) => x,
-            Ok(None) => break,
-            Err(e) => {
+    // Mở gói một lần trong luồng chặn; tệp được chuyển sang đây lần lượt qua kênh.
+    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    let reader = {
+        let path = path.to_path_buf();
+        tokio::task::spawn_blocking(move || read_items(&path, &tx))
+    };
+    while let Some(next) = rx.recv().await {
+        let Item {
+            name,
+            path: item_path,
+            bytes,
+            too_big,
+        } = match next {
+            Ok(item) => item,
+            Err(ReadError::Layout(p)) => {
+                report.problems.push(format!("Gói {platform}: {}", p.vi()));
+                return report;
+            }
+            Err(ReadError::Read(e)) => {
                 report
                     .problems
                     .push(format!("Không đọc được gói {platform}: {e}"));
                 return report;
             }
         };
-        index += 1;
         if too_big {
             report
                 .problems
-                .push(format!("{name} lớn hơn 1 GB, không quét được"));
+                .push(format!("{name} lớn hơn 256 MB, không quét được"));
             continue;
         }
         total += bytes.len() as u64;
@@ -269,7 +393,7 @@ pub async fn check_package(
         report.files += 1;
         if full {
             let archs = executable_archs(&bytes);
-            if name == entry {
+            if item_path == entry {
                 found_entry = true;
                 match &archs {
                     Some(a) if a.contains(&arch) => {}
@@ -299,6 +423,9 @@ pub async fn check_package(
             }
         }
     }
+    // Đóng kênh trước khi chờ luồng đọc (nó có thể đang chờ gửi tệp kế tiếp).
+    drop(rx);
+    let _ = reader.await;
     if full && !found_entry {
         report
             .problems
@@ -491,5 +618,55 @@ mod tests {
             .problems
             .iter()
             .any(|p| p.contains("không có tệp chạy SoundLab.exe")));
+
+        // Tệp chạy nằm dưới `./` vẫn được nhận ra (launcher giải nén cùng đường dẫn).
+        let dotted = check(vec![("./SoundLab.exe", fixtures::pe(true))]).await;
+        assert!(dotted.problems.is_empty(), "{dotted:?}");
+        // Hai mục ghi đè nhau trên NTFS: tệp sạch được quét, tệp kia được chạy.
+        let clash = check(vec![
+            ("SoundLab.exe", fixtures::pe(true)),
+            ("./soundlab.EXE", fixtures::pe_for(0x8664, true, &["UPX0"])),
+        ])
+        .await;
+        assert_eq!(clash.files, 0, "không đọc nội dung gói có mục trùng");
+        assert!(clash.problems[0].contains("trùng đường dẫn"), "{clash:?}");
+    }
+
+    /// Gói quá nhiều mục bị từ chối mà không đọc từng mục (mở gói một lần).
+    #[tokio::test]
+    async fn too_many_entries_are_rejected() {
+        let names: Vec<String> = (0..=MAX_ENTRIES).map(|i| format!("f{i}.txt")).collect();
+        let files: Vec<(&str, Vec<u8>)> =
+            names.iter().map(|n| (n.as_str(), b"x".to_vec())).collect();
+        let zip = zip_with(&files);
+        let report = check_package(
+            zip.path(),
+            "windows-x64",
+            "SoundLab.exe",
+            "x64",
+            &[Engine::Signatures(Vec::new())],
+            true,
+        )
+        .await;
+        assert_eq!(report.files, 0);
+        assert!(report.problems[0].contains("tối đa 10000"), "{report:?}");
+
+        // Dưới giới hạn: mọi tệp được quét trong một lần mở gói.
+        let files: Vec<(&str, Vec<u8>)> = names[..2000]
+            .iter()
+            .map(|n| (n.as_str(), b"x".to_vec()))
+            .collect();
+        let zip = zip_with(&files);
+        let report = check_package(
+            zip.path(),
+            "windows-x64",
+            "SoundLab.exe",
+            "x64",
+            &[Engine::Signatures(Vec::new())],
+            false,
+        )
+        .await;
+        assert_eq!(report.files, 2000);
+        assert!(report.problems.is_empty(), "{report:?}");
     }
 }

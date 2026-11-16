@@ -4,8 +4,9 @@
 //! | Biến | Mặc định | Ý nghĩa |
 //! |---|---|---|
 //! | `FECO_LAUNCHER_CLIENT_ID` | (bắt buộc) | Client ID của launcher trong Hydra |
-//! | `FECO_LAUNCHER_SERVER` | `http://127.0.0.1:8080/` | feco-server |
-//! | `FECO_LAUNCHER_HYDRA` | `http://127.0.0.1:4444/` | Hydra (OAuth 2.0) |
+//! | `FECO_LAUNCHER_SERVER` | `http://127.0.0.1:8080/` (chỉ bản dev) | feco-server |
+//! | `FECO_LAUNCHER_HYDRA` | `http://127.0.0.1:4444/` (chỉ bản dev) | Hydra (OAuth 2.0) |
+//! | `FECO_LAUNCHER_DEV` | | `1`: bản release vẫn dùng địa chỉ mặc định của máy dev |
 //! | `FECO_LAUNCHER_TUF` | (bắt buộc) | Gốc kho TUF (có `metadata/` và `targets/`): HTTPS, hoặc thư mục cục bộ khi dev |
 //! | `FECO_LAUNCHER_TRUSTED_ROOT` | `<TUF>/metadata/1.root.json` nếu là thư mục | root.json tin cậy đi kèm bộ cài |
 //! | `FECO_LAUNCHER_DATA_DIR` | thư mục dữ liệu của người dùng | Nơi cài app và lưu trạng thái |
@@ -62,9 +63,25 @@ impl Config {
         Self::from_vars(|k| std::env::var(k).ok().filter(|v| !v.trim().is_empty()))
     }
 
+    /// Đọc cấu hình; địa chỉ máy chủ và Hydra chỉ có mặc định (máy dev) ở bản debug hoặc khi
+    /// `FECO_LAUNCHER_DEV=1`.
     pub fn from_vars(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
+        let dev = cfg!(debug_assertions) || get("FECO_LAUNCHER_DEV").as_deref() == Some("1");
+        Self::from_vars_with(get, dev)
+    }
+
+    /// Như [`Config::from_vars`]; `dev_defaults` quyết định có dùng địa chỉ mặc định của máy dev.
+    pub fn from_vars_with(
+        get: impl Fn(&str) -> Option<String>,
+        dev_defaults: bool,
+    ) -> Result<Self, String> {
         let url = |name: &str, default: &str| -> Result<Url, String> {
-            let raw = get(name).unwrap_or_else(|| default.to_owned());
+            let raw = match get(name) {
+                Some(raw) => raw,
+                None if dev_defaults => default.to_owned(),
+                // Bản phát hành không được lặng lẽ trỏ vào máy này.
+                None => return Err(format!("thiếu {name} (bản phát hành phải cấu hình địa chỉ này; máy dev đặt FECO_LAUNCHER_DEV=1 để dùng {default})")),
+            };
             let url = Url::parse(&raw).map_err(|e| format!("{name} không hợp lệ: {e}"))?;
             check_transport(name, &url)?;
             Ok(with_slash(url))
@@ -160,6 +177,46 @@ mod tests {
         ])
         .unwrap_err();
         assert!(err.contains("FECO_LAUNCHER_SERVER"), "{err}");
+    }
+
+    /// Bản phát hành không có địa chỉ mặc định trỏ vào máy này: thiếu biến thì báo lỗi rõ ràng.
+    #[test]
+    fn release_build_needs_server_and_hydra() {
+        let base = [
+            ("FECO_LAUNCHER_CLIENT_ID", "launcher"),
+            ("FECO_LAUNCHER_TUF", "https://dl.f-eco.example/tuf"),
+            ("FECO_LAUNCHER_TRUSTED_ROOT", "root.json"),
+            ("FECO_LAUNCHER_DATA_DIR", "data"),
+        ];
+        let release = |extra: &[(&str, &str)]| {
+            let map: HashMap<String, String> = base
+                .iter()
+                .chain(extra)
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            Config::from_vars_with(|k| map.get(k).cloned(), false)
+        };
+        let err = release(&[]).unwrap_err();
+        assert!(err.contains("thiếu FECO_LAUNCHER_SERVER"), "{err}");
+        let err = release(&[("FECO_LAUNCHER_SERVER", "https://id.f-eco.example")]).unwrap_err();
+        assert!(err.contains("thiếu FECO_LAUNCHER_HYDRA"), "{err}");
+        let ok = release(&[
+            ("FECO_LAUNCHER_SERVER", "https://id.f-eco.example"),
+            ("FECO_LAUNCHER_HYDRA", "https://auth.f-eco.example"),
+        ])
+        .unwrap();
+        assert_eq!(ok.hydra.as_str(), "https://auth.f-eco.example/");
+        // Bản dev (hoặc FECO_LAUNCHER_DEV=1) giữ mặc định của máy dev.
+        let dev = Config::from_vars_with(
+            |k| {
+                base.iter()
+                    .find(|(n, _)| *n == k)
+                    .map(|(_, v)| v.to_string())
+            },
+            true,
+        )
+        .unwrap();
+        assert_eq!(dev.server.as_str(), "http://127.0.0.1:8080/");
     }
 
     #[test]

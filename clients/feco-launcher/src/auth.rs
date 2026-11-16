@@ -599,22 +599,38 @@ pub async fn wait_for_callback(
     expected_state: &str,
     timeout: Duration,
 ) -> Result<String, AuthError> {
-    use axum::{extract::Query, response::Html, routing::get, Router};
+    use axum::{extract::Query, http::StatusCode, response::Html, routing::get, Router};
 
     let (tx, rx) = tokio::sync::oneshot::channel::<HashMap<String, String>>();
     let tx = Arc::new(Mutex::new(Some(tx)));
+    let expected = expected_state.to_owned();
     let router = Router::new().route(
         "/callback",
         get(move |Query(q): Query<HashMap<String, String>>| {
             let tx = tx.clone();
+            let expected = expected.clone();
             async move {
+                // Yêu cầu có state lạ (trang khác gọi vào cổng loopback) bị bỏ qua; vẫn chờ
+                // callback đúng tới hết thời gian.
+                if q.get("state") != Some(&expected) {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Html(
+                            "<!doctype html><meta charset=utf-8><title>F-Launcher</title>\
+                             <p>Yêu cầu không hợp lệ.</p><p>Invalid request.</p>",
+                        ),
+                    );
+                }
                 if let Some(tx) = tx.lock().expect("khóa").take() {
                     let _ = tx.send(q);
                 }
-                Html(
-                    "<!doctype html><meta charset=utf-8><title>F-Launcher</title>\
-                     <p>Đã đăng nhập. Hãy quay lại F-Launcher.</p>\
-                     <p>Signed in. Return to F-Launcher.</p>",
+                (
+                    StatusCode::OK,
+                    Html(
+                        "<!doctype html><meta charset=utf-8><title>F-Launcher</title>\
+                         <p>Đã đăng nhập. Hãy quay lại F-Launcher.</p>\
+                         <p>Signed in. Return to F-Launcher.</p>",
+                    ),
                 )
             }
         }),
@@ -640,6 +656,24 @@ pub async fn wait_for_callback(
         .get("code")
         .cloned()
         .ok_or_else(|| AuthError::Failed("callback không có code".into()))
+}
+
+/// Liên kết máy chủ gửi về mà launcher được mở: `https://` (máy chủ bất kỳ), hoặc `http://` chỉ
+/// tới máy dev (`127.0.0.1`, `localhost`, `[::1]`); không có tên đăng nhập, mật khẩu. Phân tích
+/// bằng `url::Url` và so đúng scheme, host (không so tiền tố chuỗi: `http://127.0.0.1.evil.example`
+/// không qua được).
+pub fn web_link(s: &str) -> bool {
+    let Ok(u) = Url::parse(s) else {
+        return false;
+    };
+    if !u.username().is_empty() || u.password().is_some() {
+        return false;
+    }
+    match u.scheme() {
+        "https" => u.host_str().is_some_and(|h| !h.is_empty()),
+        "http" => matches!(u.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")),
+        _ => false,
+    }
 }
 
 /// Một thông báo trong trung tâm thông báo của launcher.
@@ -673,11 +707,7 @@ impl AccountRole {
             ) => r.to_owned(),
             _ => "user".to_owned(),
         };
-        let https_or_local = |v: &Value| {
-            v.as_str()
-                .filter(|u| u.starts_with("https://") || u.starts_with("http://127.0.0.1"))
-                .map(str::to_owned)
-        };
+        let https_or_local = |v: &Value| v.as_str().filter(|u| web_link(u)).map(str::to_owned);
         AccountRole {
             role,
             developer_portal: https_or_local(&body["developer_portal"]),
@@ -742,7 +772,7 @@ impl WalletInfo {
                 .collect(),
             wallet_url: body["wallet_url"]
                 .as_str()
-                .filter(|u| u.starts_with("https://") || u.starts_with("http://127.0.0.1"))
+                .filter(|u| web_link(u))
                 .map(str::to_owned),
         }
     }
@@ -778,7 +808,7 @@ pub fn parse_notifications(body: &Value) -> Vec<Notification> {
                 body: n["body"].as_str().unwrap_or_default().to_owned(),
                 link: n["link"]
                     .as_str()
-                    .filter(|l| l.starts_with("https://") || l.starts_with("http://"))
+                    .filter(|l| web_link(l))
                     .unwrap_or_default()
                     .to_owned(),
                 created_at: n["created_at"].as_str().unwrap_or_default().to_owned(),
@@ -810,6 +840,42 @@ mod notification_tests {
         assert_eq!(odd.role, "user");
         assert!(!odd.can_develop());
         assert!(AccountRole::from_json(&serde_json::json!({"role": "admin"})).is_admin());
+    }
+
+    /// Liên kết được phân tích và so đúng host, không so tiền tố chuỗi.
+    #[test]
+    fn web_links_compare_scheme_and_exact_host() {
+        for ok in [
+            "https://f-eco.vn/wallet",
+            "http://127.0.0.1:8080/wallet",
+            "http://localhost:8080/developer",
+            "http://[::1]:8080/",
+        ] {
+            assert!(web_link(ok), "{ok}");
+        }
+        for bad in [
+            "http://127.0.0.1.evil.example/wallet",
+            "http://127.0.0.1@evil.example/",
+            "https://user:pass@f-eco.vn/",
+            "http://f-eco.vn/",
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "https//f-eco.vn",
+            "",
+        ] {
+            assert!(!web_link(bad), "{bad}");
+        }
+        let wallet = WalletInfo::from_json(&serde_json::json!({
+            "wallet_url": "http://127.0.0.1.evil.example/wallet"
+        }));
+        assert_eq!(wallet.wallet_url, None);
+        let role = AccountRole::from_json(&serde_json::json!({
+            "role": "admin", "admin_console": "http://127.0.0.1:8080/admin"
+        }));
+        assert_eq!(
+            role.admin_console.as_deref(),
+            Some("http://127.0.0.1:8080/admin")
+        );
     }
 
     #[test]

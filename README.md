@@ -290,8 +290,8 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
     [integrations/thesisai/README.md](integrations/thesisai/README.md) (áp bản vá "Đăng nhập bằng
     F-Eco", đặt biến `FECO_*` mà lệnh trên in ra).
 
-Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/`), `FECO_LAUNCHER_HYDRA`
-(`http://127.0.0.1:4444/`), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
+Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/` chỉ ở bản debug; bản release bắt buộc đặt, trừ khi `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
+(`http://127.0.0.1:4444/`, cùng quy tắc), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
 (root.json tin cậy; mặc định `metadata/1.root.json` của kho cục bộ), `FECO_LAUNCHER_FONT` (phông chữ
 `.ttf` nếu máy không có Segoe UI/Arial). Ngoài dev, các địa chỉ phải là HTTPS.
 

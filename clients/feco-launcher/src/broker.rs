@@ -84,6 +84,16 @@ impl Broker {
         secret
     }
 
+    /// Hủy bí mật của một lần chạy (khi tiến trình app đã thoát): bí mật lộ ra sau đó không xin
+    /// được mã nữa.
+    pub fn unregister(&self, secret: &str) {
+        self.inner
+            .launched
+            .lock()
+            .expect("khóa broker")
+            .remove(&hash(secret));
+    }
+
     /// Chạy API ở một cổng ngẫu nhiên trên 127.0.0.1; trả địa chỉ.
     pub async fn serve(&self) -> std::io::Result<SocketAddr> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
