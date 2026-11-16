@@ -11,6 +11,7 @@ rust-version.workspace = true
 [dependencies]
 feco-core.workspace = true
 feco-tuf = { path = "../../crates/feco-tuf" }
+feco-manifest = { path = "../../crates/feco-manifest" }
 tough = { version = "0.24.0", features = ["http"] }
 axum.workspace = true
 tokio = { workspace = true, features = ["fs", "process", "time", "sync"] }

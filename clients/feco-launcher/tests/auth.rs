@@ -113,9 +113,37 @@ async fn first_login_through_browser_with_pkce() {
     assert_eq!(store.load().unwrap(), Some(valid.lock().unwrap().clone()));
 }
 
-/// Callback có state lạ (CSRF) bị bỏ qua.
+/// Callback có state lạ (CSRF) bị bỏ qua và launcher tiếp tục chờ callback đúng; chỉ có callback
+/// lạ thì hết thời gian chờ.
 #[tokio::test]
 async fn callback_with_wrong_state_is_rejected() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let browser = tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let forged = reqwest::get(format!("http://{addr}/callback?code=gia&state=gia-mao"))
+            .await
+            .unwrap();
+        let forged_error = reqwest::get(format!(
+            "http://{addr}/callback?error=access_denied&state=gia-mao"
+        ))
+        .await
+        .unwrap();
+        let _ = reqwest::get(format!("http://{addr}/callback?code=that&state=dung-state")).await;
+        (forged.status(), forged_error.status())
+    });
+    let code = feco_launcher::auth::wait_for_callback(
+        listener,
+        "dung-state",
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    .unwrap();
+    assert_eq!(code, "that");
+    let (forged, forged_error) = browser.await.unwrap();
+    assert_eq!(forged, 400);
+    assert_eq!(forged_error, 400);
+
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -125,11 +153,11 @@ async fn callback_with_wrong_state_is_rejected() {
     let err = feco_launcher::auth::wait_for_callback(
         listener,
         "dung-state",
-        std::time::Duration::from_secs(5),
+        std::time::Duration::from_secs(1),
     )
     .await
     .unwrap_err();
-    assert!(err.to_string().contains("state"), "{err}");
+    assert!(err.to_string().contains("hết thời gian"), "{err}");
 }
 
 /// Scenario "Khởi động lại máy": vẫn đăng nhập nhờ refresh token đã lưu; token được xoay.

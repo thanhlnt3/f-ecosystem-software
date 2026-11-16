@@ -39,11 +39,21 @@ static STARTED: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 /// Logo của F-Launcher (assets/logos), nhúng trong tệp chạy.
 const LAUNCHER_LOGO: &[u8] = include_bytes!("../../../assets/logos/f-launcher-256.png");
 
-/// Ảnh PNG giải mã thành RGBA 8 bit: (rộng, cao, điểm ảnh).
+/// Ảnh PNG giải mã thành RGBA 8 bit: (rộng, cao, điểm ảnh). Ảnh lớn hơn
+/// [`feco_tuf::repo::MAX_ICON_PX`] mỗi chiều bị bỏ qua (logo khai kích thước khổng lồ làm cạn bộ
+/// nhớ khi khởi động).
 fn decode_png(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
-    let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+    const MAX_PX: u32 = feco_tuf::repo::MAX_ICON_PX;
+    let limits = png::Limits {
+        bytes: 16 * 1024 * 1024,
+    };
+    let mut decoder = png::Decoder::new_with_limits(std::io::Cursor::new(bytes), limits);
     decoder.set_transformations(png::Transformations::normalize_to_color8());
     let mut reader = decoder.read_info().ok()?;
+    let (width, height) = reader.info().size();
+    if !(1..=MAX_PX).contains(&width) || !(1..=MAX_PX).contains(&height) {
+        return None;
+    }
     let mut buf = vec![0; reader.output_buffer_size()?];
     let info = reader.next_frame(&mut buf).ok()?;
     let px = &buf[..info.buffer_size()];
@@ -3356,11 +3366,27 @@ async fn open_app(s: &Shared, app: &str) -> Result<String, String> {
         server_url: s.config.server.to_string(),
         issuer_url: s.config.hydra.to_string(),
         broker_url: secret.as_ref().map(|_| s.broker_url.clone()),
-        broker_secret: secret,
+        broker_secret: secret.clone(),
     };
-    command(&plan, &env)
-        .spawn()
-        .map_err(|e| tf("không mở được {}: {}", &[&plan.title, &e]))?;
+    let spawned = command(&plan, &env).spawn();
+    let mut child = match spawned {
+        Ok(child) => child,
+        Err(e) => {
+            if let Some(secret) = &secret {
+                s.broker.unregister(secret);
+            }
+            return Err(tf("không mở được {}: {}", &[&plan.title, &e]));
+        }
+    };
+    // Hủy bí mật của lần chạy khi app thoát. App terminal được mở qua `cmd /C start` hay
+    // `open -a Terminal` (thoát ngay sau khi mở cửa sổ), nên giữ bí mật tới khi launcher đóng.
+    if let Some(secret) = secret.filter(|_| !plan.terminal) {
+        let broker = s.broker.clone();
+        std::thread::spawn(move || {
+            let _ = child.wait();
+            broker.unregister(&secret);
+        });
+    }
     if let Err(e) = s.launcher.lock().await.mark_opened(app, Timestamp::now()) {
         eprintln!("không ghi được lần mở {app}: {e}");
     }
@@ -3508,6 +3534,50 @@ mod tests {
         let bytes = icon_sources().lock().unwrap().get("kibi").cloned().unwrap();
         assert_eq!(decode_png(&bytes).unwrap().0, 128);
         assert!(decode_png(b"not a png").is_none());
+    }
+
+    /// Logo khai kích thước 65535×65535 trong IHDR bị bỏ qua, không cấp phát bộ đệm khổng lồ.
+    #[test]
+    fn huge_png_header_is_rejected() {
+        fn crc32(data: &[u8]) -> u32 {
+            let mut c = !0u32;
+            for &b in data {
+                c ^= u32::from(b);
+                for _ in 0..8 {
+                    c = if c & 1 != 0 {
+                        0xEDB8_8320 ^ (c >> 1)
+                    } else {
+                        c >> 1
+                    };
+                }
+            }
+            !c
+        }
+        fn chunk(out: &mut Vec<u8>, kind: &[u8], data: &[u8]) {
+            out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+            let start = out.len();
+            out.extend_from_slice(kind);
+            out.extend_from_slice(data);
+            let crc = crc32(&out[start..]);
+            out.extend_from_slice(&crc.to_be_bytes());
+        }
+        let png = |w: u32, h: u32| {
+            let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+            let mut ihdr = Vec::new();
+            ihdr.extend_from_slice(&w.to_be_bytes());
+            ihdr.extend_from_slice(&h.to_be_bytes());
+            ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+            chunk(&mut out, b"IHDR", &ihdr);
+            chunk(
+                &mut out,
+                b"IDAT",
+                &[0x78, 0x9c, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01],
+            );
+            chunk(&mut out, b"IEND", &[]);
+            out
+        };
+        assert!(decode_png(&png(65535, 65535)).is_none());
+        assert!(decode_png(&png(1025, 1)).is_none());
     }
 
     /// Scenario "Không đủ F-Coin trong launcher": còn thiếu 39 F-Coin.

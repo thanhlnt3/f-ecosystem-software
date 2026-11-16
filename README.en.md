@@ -291,8 +291,8 @@ app repository; it is used only to try single sign-on in step 5.
     [integrations/thesisai/README.md](integrations/thesisai/README.md) (apply the "Sign in with
     F-Eco" patch and set the `FECO_*` variables the command above prints).
 
-Launcher variables: `FECO_LAUNCHER_SERVER` (default `http://127.0.0.1:8080/`), `FECO_LAUNCHER_HYDRA`
-(`http://127.0.0.1:4444/`), `FECO_LAUNCHER_DATA_DIR` (data directory), `FECO_LAUNCHER_TRUSTED_ROOT`
+Launcher variables: `FECO_LAUNCHER_SERVER` (default `http://127.0.0.1:8080/` in debug builds only; required in release builds unless `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
+(`http://127.0.0.1:4444/`, same rule), `FECO_LAUNCHER_DATA_DIR` (data directory), `FECO_LAUNCHER_TRUSTED_ROOT`
 (the trusted root.json; by default `metadata/1.root.json` of the local repository), `FECO_LAUNCHER_FONT` (a `.ttf`
 font if the machine has no Segoe UI/Arial). Outside dev, the addresses must be HTTPS.
 

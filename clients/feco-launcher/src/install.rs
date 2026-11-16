@@ -19,6 +19,9 @@ use std::path::{Path, PathBuf};
 /// Kiểm tra bản cập nhật mỗi 6 giờ (spec launcher, "Cập nhật app con").
 pub const UPDATE_CHECK_INTERVAL: SignedDuration = SignedDuration::from_hours(6);
 
+/// Thời gian tối đa từ lần đồng bộ thành công gần nhất mà app đã cài vẫn mở được khi ngoại tuyến.
+pub const MAX_OFFLINE: SignedDuration = SignedDuration::from_hours(7 * 24);
+
 #[derive(Debug, thiserror::Error)]
 pub enum LauncherError {
     #[error("Đang ngoại tuyến ({0})")]
@@ -37,6 +40,8 @@ pub enum LauncherError {
     NotInstalled(String),
     #[error("Không có bản trước để quay lại")]
     NoPrevious,
+    #[error("Đã hơn 7 ngày chưa đồng bộ với máy chủ. Hãy kết nối mạng và đồng bộ để mở app.")]
+    StaleSync,
     #[error("Lỗi đọc/ghi {path}: {source}")]
     Io {
         path: PathBuf,
@@ -586,6 +591,16 @@ impl Launcher {
 
     /// Kiểm tra trước khi mở: phiên bản bị thu hồi thì không cho mở.
     pub fn prepare_launch(&self, app: &str) -> Result<LaunchPlan, LauncherError> {
+        self.prepare_launch_at(app, Timestamp::now())
+    }
+
+    /// Như [`Launcher::prepare_launch`] tại thời điểm `now`. Lần đồng bộ thành công gần nhất quá
+    /// [`MAX_OFFLINE`] thì không cho mở: danh sách thu hồi có thể đã cũ.
+    pub fn prepare_launch_at(
+        &self,
+        app: &str,
+        now: Timestamp,
+    ) -> Result<LaunchPlan, LauncherError> {
         let installed = self
             .state
             .apps
@@ -594,6 +609,13 @@ impl Launcher {
         let current = &installed.current;
         if let Some(err) = self.revoked_error(&current.title, &current.version, &current.target) {
             return Err(err);
+        }
+        let fresh = self
+            .state
+            .last_sync
+            .is_some_and(|last| now.duration_since(last) <= MAX_OFFLINE);
+        if !fresh {
+            return Err(LauncherError::StaleSync);
         }
         let working_dir = self.paths.version(app, &current.version);
         let program = working_dir.join(&current.entry);
@@ -617,6 +639,13 @@ impl Launcher {
                 terminal: false,
                 web_url: Some(url),
             });
+        }
+        // Đường dẫn file chạy có ký tự lạ (`& ^ %`...) có thể chèn lệnh khi mở qua `cmd.exe`.
+        if !safe_relative(&current.entry) {
+            return Err(LauncherError::InvalidPackage(format!(
+                "file chạy không an toàn: {:?}",
+                current.entry
+            )));
         }
         if !program.is_file() {
             return Err(LauncherError::Other(format!(
@@ -674,6 +703,9 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), LauncherError> {
     let mut zip =
         zip::ZipArchive::new(file).map_err(|e| invalid(format!("không đọc được gói zip: {e}")))?;
     std::fs::create_dir_all(dest).map_err(io(dest))?;
+    // Mục trùng nhau trên NTFS/APFS (`SoundLab.exe`, `soundlab.exe`, `./SoundLab.exe`) ghi đè
+    // nhau khi giải nén, nên tệp được quét ở máy chủ có thể không phải tệp được chạy.
+    let mut seen = std::collections::HashMap::new();
     for i in 0..zip.len() {
         let mut item = zip
             .by_index(i)
@@ -687,6 +719,11 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), LauncherError> {
                 "đường dẫn không an toàn trong gói: {name}"
             )));
         };
+        if let Some(first) = seen.insert(feco_manifest::package_path_key(&name), name.clone()) {
+            return Err(invalid(format!(
+                "gói có hai mục trùng đường dẫn khi giải nén: {first} và {name}"
+            )));
+        }
         let out = dest.join(relative);
         if item.is_dir() {
             std::fs::create_dir_all(&out).map_err(io(&out))?;

@@ -154,14 +154,43 @@ fn https(url: &str) -> bool {
         .is_some_and(|rest| !rest.is_empty() && !rest.starts_with('/') && !rest.contains(' '))
 }
 
-fn safe_relative(path: &str) -> bool {
+/// Đường dẫn file chạy (`entry`) an toàn: tương đối trong gói, ngăn cách bằng `/`, chỉ gồm
+/// `A-Z a-z 0-9 . _ - /`; mỗi đoạn không rỗng, không bắt đầu hay kết thúc bằng `.`. Ký tự như
+/// `& ^ % ( )` hay dấu cách bị từ chối vì launcher mở app terminal qua `cmd.exe` trên Windows.
+pub fn safe_entry(path: &str) -> bool {
     !path.is_empty()
-        && !path.starts_with('/')
-        && !path.contains('\\')
-        && !path.contains(':')
+        && path.len() <= 255
+        && path
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/'))
         && path
             .split('/')
-            .all(|p| !p.is_empty() && p != "." && p != "..")
+            .all(|p| !p.is_empty() && !p.starts_with('.') && !p.ends_with('.'))
+}
+
+/// Khóa so trùng của một mục trong gói zip: tách đoạn theo `/` và `\`, bỏ đoạn rỗng và `.`, bỏ
+/// dấu chấm và dấu cách ở cuối đoạn (Windows bỏ chúng), chữ thường. Hai mục cùng khóa sẽ ghi đè
+/// nhau khi giải nén trên NTFS hoặc APFS (không phân biệt hoa thường), ví dụ `SoundLab.exe`,
+/// `soundlab.exe` và `./SoundLab.exe`; máy chủ và launcher đều từ chối gói như vậy.
+pub fn package_path_key(name: &str) -> String {
+    name.split(['/', '\\'])
+        .filter(|s| !s.is_empty() && *s != ".")
+        .map(|s| s.trim_end_matches(['.', ' ']).to_lowercase())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Hai tên đầu tiên trong `names` có cùng [`package_path_key`].
+pub fn duplicate_package_path<'a>(
+    names: impl IntoIterator<Item = &'a str>,
+) -> Option<(&'a str, &'a str)> {
+    let mut seen = std::collections::HashMap::new();
+    for name in names {
+        if let Some(first) = seen.insert(package_path_key(name), name) {
+            return Some((first, name));
+        }
+    }
+    None
 }
 
 struct Checker {
@@ -375,10 +404,10 @@ fn platforms(c: &mut Checker, table: &Table) -> Vec<Platform> {
             c.invalid(&format!("{path}.arch"), "chỉ nhận x64 hoặc arm64");
         }
         let entry = c.string(t, "entry", &format!("{path}.entry"));
-        if entry.as_ref().is_some_and(|e| !safe_relative(e)) {
+        if entry.as_ref().is_some_and(|e| !safe_entry(e)) {
             c.invalid(
                 &format!("{path}.entry"),
-                "phải là đường dẫn tương đối trong gói, dùng '/', không có '..'",
+                "phải là đường dẫn tương đối trong gói, dùng '/', chỉ gồm chữ, số, '.', '_', '-', không có '..'",
             );
         }
         if let (Some(os), Some(arch), Some(entry)) = (os, arch, entry) {
@@ -595,6 +624,33 @@ user_folders = ["music"]
         );
         let e = errors(&FULL.replace("entry = \"SoundLab.exe\"", "entry = \"../evil.exe\""));
         assert!(e[0].starts_with("platforms[0].entry không hợp lệ"), "{e:?}");
+        // Ký tự đặc biệt của cmd.exe, dấu cách, đường dẫn tuyệt đối, đoạn bắt đầu/kết thúc bằng '.'.
+        for bad in [
+            "a.exe&calc.exe",
+            "a^b.exe",
+            "%COMSPEC%",
+            "x(1).exe",
+            "My App.exe",
+            "/abs.exe",
+            "C:/a.exe",
+            "a\\\\b.exe",
+            "bin/.hidden",
+            "app.exe.",
+            "a//b.exe",
+            "./a.exe",
+        ] {
+            let e = errors(&FULL.replace("SoundLab.exe", bad));
+            assert!(
+                e[0].starts_with("platforms[0].entry không hợp lệ"),
+                "{bad}: {e:?}"
+            );
+        }
+        for good in [
+            "bin/sound_lab-2.exe",
+            "SoundLab.app/Contents/MacOS/SoundLab",
+        ] {
+            assert!(safe_entry(good), "{good}");
+        }
         let e = errors(&FULL.replace(
             "os = \"macos\"\narch = \"arm64\"",
             "os = \"windows\"\narch = \"x64\"",
@@ -716,5 +772,28 @@ terminal = \"yes\"
         let text = format!("features = [\"\", \"{long}\", 3]\n{FULL}");
         let errors = parse(&text).unwrap_err();
         assert_eq!(errors.len(), 3, "{errors:?}");
+    }
+
+    /// Mục trong gói ghi đè nhau trên NTFS (hoa thường, `./`, `\`, dấu chấm cuối) bị phát hiện.
+    #[test]
+    fn colliding_package_paths() {
+        assert_eq!(package_path_key("./Bin\\SoundLab.EXE."), "bin/soundlab.exe");
+        for other in [
+            "soundlab.exe",
+            "./SoundLab.exe",
+            "SOUNDLAB.EXE",
+            "SoundLab.exe.",
+            ".//SoundLab.exe",
+        ] {
+            assert_eq!(
+                duplicate_package_path(["SoundLab.exe", "README.txt", other]),
+                Some(("SoundLab.exe", other)),
+                "{other}"
+            );
+        }
+        assert_eq!(
+            duplicate_package_path(["bin/", "bin/a.exe", "bin/b.exe", "Bin2/a.exe"]),
+            None
+        );
     }
 }
