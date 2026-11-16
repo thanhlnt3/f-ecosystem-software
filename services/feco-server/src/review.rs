@@ -247,6 +247,27 @@ pub fn manual_reason(previous: Option<&Manifest>, next: &Manifest) -> Option<Str
     if !permissions.is_empty() {
         return Some(format!("Thêm quyền hệ thống: {}", permissions.join(", ")));
     }
+    // Đổi tệp chạy hoặc cách mở (terminal) thay đổi thứ launcher thực thi trên máy người dùng.
+    if next.terminal != previous.terminal {
+        return Some(format!(
+            "Đổi cách mở app: terminal = {} (trước: {})",
+            next.terminal, previous.terminal
+        ));
+    }
+    let entries: Vec<String> = next
+        .platforms
+        .iter()
+        .filter(|p| {
+            !previous
+                .platforms
+                .iter()
+                .any(|q| q.key() == p.key() && q.entry == p.entry)
+        })
+        .map(|p| format!("{} = {}", p.key(), p.entry))
+        .collect();
+    if !entries.is_empty() {
+        return Some(format!("Đổi tệp chạy: {}", entries.join(", ")));
+    }
     None
 }
 
@@ -961,15 +982,56 @@ pub async fn revoke(
         ));
     }
     let mut targets: Vec<String> = catalog_only.iter().map(|c| c.2.clone()).collect();
-    for (id, ver, platforms) in &versions {
+    for (_, ver, platforms) in &versions {
+        for p in platforms {
+            targets.push(developer::target_name(app_id, ver, p));
+        }
+    }
+    // Ký metadata TUF trước, rồi mới đổi CSDL: nếu ký lỗi, CSDL giữ nguyên nên gọi lại sẽ thu
+    // hồi tiếp (target đã thu hồi ở lần trước được bỏ qua). Launcher chặn mở các phiên bản này
+    // sau lần đồng bộ kế tiếp (capability launcher).
+    if let Some(tuf) = &state.tuf {
+        let signers: Vec<_> = tuf.sign_keys.iter().map(feco_tuf::keys::source).collect();
+        let repo = feco_tuf::Repo::open(&tuf.repo);
+        let _guard = state.tuf_lock.lock().await;
+        targets.sort();
+        targets.dedup();
+        for target in &targets {
+            if feco_tuf::repo::validate_target_name(target).is_err() {
+                // Không phải tên target TUF (dữ liệu nhập tay): không launcher nào tải được nó.
+                tracing::warn!(target = %target, "bỏ qua tên target TUF không hợp lệ khi thu hồi");
+                continue;
+            }
+            let tuf_err = |e: feco_tuf::Error| {
+                DevError::Upstream(format!("không thu hồi được target TUF {target}: {e}"))
+            };
+            match repo.target_status(target).await.map_err(tuf_err)? {
+                feco_tuf::TargetStatus::Revoked => continue,
+                // Tên `{app}-{version}-{platform}.zip` trùng với target của app khác.
+                feco_tuf::TargetStatus::Published(Some(m)) if m.app != app_id => {
+                    tracing::warn!(target = %target, owner = %m.app, "bỏ qua target của app khác khi thu hồi");
+                    continue;
+                }
+                _ => {}
+            }
+            // Target đã gỡ khỏi danh mục vẫn được ghi vào danh sách thu hồi.
+            repo.revoke(
+                target,
+                reason.trim(),
+                &signers,
+                feco_tuf::Expiry::default(),
+                jiff::Timestamp::now(),
+            )
+            .await
+            .map_err(tuf_err)?;
+        }
+    }
+    for (id, _, _) in &versions {
         sqlx::query("UPDATE app_versions SET status = 'revoked', review_note = $2 WHERE id = $1")
             .bind(id)
             .bind(format!("Thu hồi khẩn cấp: {}", reason.trim()))
             .execute(&state.db)
             .await?;
-        for p in platforms {
-            targets.push(developer::target_name(app_id, ver, p));
-        }
     }
     let mut revoked_versions: BTreeSet<String> = versions.iter().map(|v| v.1.clone()).collect();
     revoked_versions.extend(catalog_only.iter().map(|c| c.0.clone()));
@@ -978,34 +1040,6 @@ pub async fn revoke(
     }
     if version.is_none() {
         catalog::remove_app(&state.db, &state.catalog, app_id, reason.trim()).await?;
-    }
-    // Launcher chặn mở các phiên bản này sau lần đồng bộ kế tiếp (capability launcher).
-    if let Some(tuf) = &state.tuf {
-        let signers: Vec<_> = tuf.sign_keys.iter().map(feco_tuf::keys::source).collect();
-        let repo = feco_tuf::Repo::open(&tuf.repo);
-        let _guard = state.tuf_lock.lock().await;
-        targets.sort();
-        targets.dedup();
-        for target in &targets {
-            match repo
-                .revoke(
-                    target,
-                    reason.trim(),
-                    &signers,
-                    feco_tuf::Expiry::default(),
-                    jiff::Timestamp::now(),
-                )
-                .await
-            {
-                Ok(_) => {}
-                Err(feco_tuf::Error::Invalid(msg)) if msg.contains("không có target") => {}
-                Err(e) => {
-                    return Err(DevError::Upstream(format!(
-                        "không thu hồi được target TUF {target}: {e}"
-                    )))
-                }
-            }
-        }
     }
     // Báo cho chính app (spec app-sdk, "Sự kiện cho app").
     let client_id: Option<String> = sqlx::query_scalar(
@@ -1144,6 +1178,29 @@ mod tests {
             manual_reason(Some(&offline), &base).as_deref(),
             Some("Thêm quyền hệ thống: network")
         );
+    }
+
+    /// Đổi tệp chạy hoặc cờ terminal giữa hai phiên bản thì phải duyệt thủ công.
+    #[test]
+    fn entry_or_terminal_change_needs_manual_review() {
+        let base = manifest(&["profile"], true, &["music"]);
+        let mut entry = base.clone();
+        entry.platforms[0].entry = "bin/Other.exe".into();
+        assert_eq!(
+            manual_reason(Some(&base), &entry).as_deref(),
+            Some("Đổi tệp chạy: windows-x64 = bin/Other.exe")
+        );
+        let mut terminal = base.clone();
+        terminal.terminal = true;
+        assert_eq!(
+            manual_reason(Some(&base), &terminal).as_deref(),
+            Some("Đổi cách mở app: terminal = true (trước: false)")
+        );
+        let mut platform = base.clone();
+        platform.platforms[0].arch = "arm64".into();
+        assert!(manual_reason(Some(&base), &platform)
+            .unwrap()
+            .starts_with("Đổi tệp chạy: windows-arm64"));
     }
 
     #[test]
