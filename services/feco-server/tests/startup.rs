@@ -11,6 +11,10 @@ fn server() -> Command {
             cmd.env_remove(k);
         }
     }
+    // Ngoài dev phải khai báo tài khoản quản trị viên mặc định (production-readiness); các test
+    // này kiểm lỗi khác nên đặt sẵn.
+    cmd.env("FECO_ADMIN_EMAIL", "root@f-eco.vn")
+        .env("FECO_ADMIN_PASSWORD_FILE", "/run/secrets/feco-admin");
     cmd
 }
 
