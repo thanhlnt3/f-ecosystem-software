@@ -29,25 +29,6 @@ fn is_active_access_token(v: &Value) -> bool {
     v["active"] == true && v["token_use"] == "access_token"
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn bearer_rejects_refresh_tokens() {
-        assert!(is_active_access_token(
-            &json!({"active": true, "token_use": "access_token", "client_id": "app"})
-        ));
-        assert!(!is_active_access_token(
-            &json!({"active": true, "token_use": "refresh_token"})
-        ));
-        assert!(!is_active_access_token(&json!({"active": true})));
-        assert!(!is_active_access_token(
-            &json!({"active": false, "token_use": "access_token"})
-        ));
-    }
-}
-
 impl HydraClient {
     pub fn new(admin: Url) -> Self {
         HydraClient {
@@ -302,5 +283,24 @@ impl HydraClient {
                 .await?,
         )
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bearer_rejects_refresh_tokens() {
+        assert!(is_active_access_token(
+            &json!({"active": true, "token_use": "access_token", "client_id": "app"})
+        ));
+        assert!(!is_active_access_token(
+            &json!({"active": true, "token_use": "refresh_token"})
+        ));
+        assert!(!is_active_access_token(&json!({"active": true})));
+        assert!(!is_active_access_token(
+            &json!({"active": false, "token_use": "access_token"})
+        ));
     }
 }
