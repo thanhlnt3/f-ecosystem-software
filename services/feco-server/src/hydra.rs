@@ -24,6 +24,30 @@ fn enc(s: &str) -> String {
     form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
 
+/// Kết quả introspection là access token còn hiệu lực (`token_use` của Hydra).
+fn is_active_access_token(v: &Value) -> bool {
+    v["active"] == true && v["token_use"] == "access_token"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bearer_rejects_refresh_tokens() {
+        assert!(is_active_access_token(
+            &json!({"active": true, "token_use": "access_token", "client_id": "app"})
+        ));
+        assert!(!is_active_access_token(
+            &json!({"active": true, "token_use": "refresh_token"})
+        ));
+        assert!(!is_active_access_token(&json!({"active": true})));
+        assert!(!is_active_access_token(
+            &json!({"active": false, "token_use": "access_token"})
+        ));
+    }
+}
+
 impl HydraClient {
     pub fn new(admin: Url) -> Self {
         HydraClient {
@@ -211,7 +235,8 @@ impl HydraClient {
         }
     }
 
-    /// Kiểm tra access token. Trả về `None` khi token không còn hiệu lực.
+    /// Kiểm tra access token. Trả về `None` khi token không còn hiệu lực hoặc không phải access
+    /// token (refresh token cũng `active` nhưng không được dùng làm Bearer).
     pub async fn introspect(&self, token: &str) -> Result<Option<Value>, HydraError> {
         let body = form_urlencoded::Serializer::new(String::new())
             .append_pair("token", token)
@@ -224,7 +249,7 @@ impl HydraClient {
             .send()
             .await?;
         let v = Self::json(res).await?;
-        Ok((v["active"] == true).then_some(v))
+        Ok(is_active_access_token(&v).then_some(v))
     }
 
     pub async fn get_client(&self, client_id: &str) -> Result<Option<Value>, HydraError> {
