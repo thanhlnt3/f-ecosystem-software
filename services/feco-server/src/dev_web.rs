@@ -664,6 +664,12 @@ pub async fn account_action(
         Ok(s) => s,
         Err(r) => return *r,
     };
+    // Vai trò nền tảng phải được phép phát triển, kể cả khi nhận lời mời.
+    match crate::roles::role_of(&state.db, subject).await {
+        Ok(r) if r.can_develop() => {}
+        Ok(_) => return see_other("/developer"),
+        Err(e) => return explain(lang, e.into()).1.text.into_response(),
+    }
     // Chấp nhận lời mời là thao tác duy nhất của người chưa có tài khoản nhà phát triển.
     if action == "join" {
         let result: DevResult<()> = async {
