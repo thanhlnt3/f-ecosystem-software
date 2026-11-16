@@ -729,7 +729,7 @@ fn lang_redirect(code: &str, next: Option<String>) -> Response {
     let lang = Lang::parse(code).unwrap_or_default();
     // Chỉ quay về đường dẫn nội bộ, tránh chuyển hướng mở.
     let next = next
-        .filter(|n| n.starts_with('/') && !n.starts_with("//") && !n.contains('\\'))
+        .filter(|n| crate::ui_prefs::safe_local_path(n).is_some())
         .unwrap_or_else(|| "/".into());
     let cookie = format!(
         "{}={}; Path=/; Max-Age=31536000; SameSite=Lax",
@@ -784,5 +784,8 @@ mod tests {
             .starts_with("feco_lang=en"));
         let res = lang_redirect("vi", Some("/settings".into()));
         assert_eq!(res.headers()["location"], "/settings");
+        // `?next=/%09/evil.example`: trình duyệt bỏ tab thành `//evil.example`.
+        let res = lang_redirect("vi", Some("/\t/evil.example".into()));
+        assert_eq!(res.headers()["location"], "/");
     }
 }

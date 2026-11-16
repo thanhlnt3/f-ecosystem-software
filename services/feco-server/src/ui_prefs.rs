@@ -375,9 +375,20 @@ fn accent_label(lang: Lang, code: &str) -> &'static str {
     })
 }
 
+/// Đường dẫn nội bộ an toàn để chuyển hướng: bắt đầu bằng một `/`, không có `//` ở đầu,
+/// không có `\`, ký tự điều khiển hay khoảng trắng (trình duyệt bỏ tab/xuống dòng nên
+/// `/\t/evil.example` thành `//evil.example`).
+pub fn safe_local_path(p: &str) -> Option<&str> {
+    let ok = p.starts_with('/')
+        && !p.starts_with("//")
+        && !p.contains('\\')
+        && !p.chars().any(|c| c.is_control() || c.is_whitespace());
+    ok.then_some(p)
+}
+
 /// Đường dẫn nội bộ để quay lại: `next` nếu an toàn, không thì trang chủ.
 pub fn safe_path(next: Option<&str>) -> String {
-    next.filter(|n| n.starts_with('/') && !n.starts_with("//") && !n.contains('\\'))
+    next.and_then(safe_local_path)
         .filter(|n| !n.starts_with("/preferences"))
         .unwrap_or("/")
         .to_owned()
@@ -678,5 +689,18 @@ mod tests {
         assert_eq!(safe_path(Some("/\\evil")), "/");
         assert_eq!(safe_path(Some("/preferences")), "/");
         assert_eq!(safe_path(None), "/");
+        assert_eq!(safe_path(Some("/\t/evil.example")), "/");
+    }
+
+    #[test]
+    fn safe_local_path_rejects_tab_open_redirect() {
+        assert_eq!(safe_local_path("/\t/evil.example"), None);
+        assert_eq!(safe_local_path("/\n/evil.example"), None);
+        assert_eq!(safe_local_path("/ /evil.example"), None);
+        assert_eq!(safe_local_path("//evil"), None);
+        assert_eq!(safe_local_path("/\\evil"), None);
+        assert_eq!(safe_local_path("evil"), None);
+        assert_eq!(safe_local_path(""), None);
+        assert_eq!(safe_local_path("/ok?x=1"), Some("/ok?x=1"));
     }
 }
