@@ -242,6 +242,32 @@ pub async fn issue(
             return unavailable();
         }
     }
+    // App riêng tư của người khác, hoặc app có giá mà người dùng chưa mua (trừ nhà phát triển
+    // của app), không được cấp mã khởi chạy.
+    match crate::entitlements::may_launch(&state.db, &req.client_id, subject).await {
+        Ok(true) => {}
+        Ok(false) => {
+            audit::record(
+                &state.db,
+                Actor::User(subject),
+                "launch_code.denied_not_entitled",
+                Some(&req.client_id),
+                client.ip.as_deref(),
+                json!({}),
+            )
+            .await;
+            return api_error(
+                StatusCode::FORBIDDEN,
+                "not_entitled",
+                "You don't have access to this app. Buy it in F-Store first.",
+                "Bạn chưa có quyền dùng app này. Hãy mua app trong F-Store trước.",
+            );
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "không đọc được quyền dùng app");
+            return unavailable();
+        }
+    }
     let code = random_code();
     let res = sqlx::query(
         "INSERT INTO launch_codes (code_hash, subject, client_id, expires_at)
