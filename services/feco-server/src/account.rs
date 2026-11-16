@@ -473,6 +473,15 @@ pub async fn delete_submit(
     if has_open_orders(&state, &id).await {
         return page(Msg::error(lang.t("delete.blocked_orders")));
     }
+    // Tài khoản quản trị viên mặc định không xóa được (production-readiness).
+    if let Ok(subject) = id.parse::<uuid::Uuid>() {
+        if crate::bootstrap::is_system_admin(&state.db, subject)
+            .await
+            .unwrap_or(true)
+        {
+            return page(Msg::error(lang.t("delete.blocked_system_admin")));
+        }
+    }
     if let Err(e) = request_deletion(&state.kratos, &id, SystemTime::now()).await {
         return unavailable(lang, e);
     }

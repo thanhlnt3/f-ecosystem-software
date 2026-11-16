@@ -201,6 +201,7 @@ fn kind_label(k: Kind) -> &'static str {
         Kind::EscrowFund => "wallet.kind.escrow_fund",
         Kind::EscrowRelease => "wallet.kind.escrow_release",
         Kind::EscrowRefund => "wallet.kind.escrow_refund",
+        Kind::AdminTransfer | Kind::AdminGrant => "wallet.kind.transfers",
     }
 }
 
@@ -772,6 +773,20 @@ struct AdminWalletPage {
     query: String,
     lines: Vec<AdminLineView>,
     revealed: Option<(String, String)>,
+    /// Khóa idempotency của biểu mẫu chuyển F-Coin (sinh mỗi lần hiện trang).
+    transfer_idem: String,
+    grants: Vec<GrantView>,
+}
+
+pub struct GrantView {
+    pub id: String,
+    pub code: String,
+    pub email: String,
+    pub coins: String,
+    pub amount: String,
+    pub reason: String,
+    pub by: String,
+    pub at: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -805,11 +820,12 @@ async fn render_admin(
     status: StatusCode,
 ) -> Response {
     let now = OffsetDateTime::now_utc();
-    let (o, rates, open, lines) = tokio::join!(
+    let (o, rates, open, lines, grants) = tokio::join!(
         wallet::overview(&state.db, now),
         wallet::rate_history(&state.db, 10),
         wallet::open_withdrawals(&state.db),
-        wallet::search(&state.db, query)
+        wallet::search(&state.db, query),
+        wallet::pending_grants(&state.db)
     );
     let o = o.unwrap_or_default();
     let max = o
@@ -907,6 +923,21 @@ async fn render_admin(
                 })
                 .collect(),
             revealed,
+            transfer_idem: Uuid::new_v4().simple().to_string(),
+            grants: grants
+                .unwrap_or_default()
+                .into_iter()
+                .map(|g| GrantView {
+                    id: g.id.to_string(),
+                    code: g.code,
+                    email: g.recipient_email,
+                    coins: coin(g.coins, lang),
+                    amount: vnd(g.amount_vnd),
+                    reason: g.reason,
+                    by: g.requested_by,
+                    at: format_time(g.created_at),
+                })
+                .collect(),
         },
         lang,
         status,
@@ -983,7 +1014,19 @@ async fn admin_do(
     }
     let me = a.email.clone();
     let mut revealed = None;
+    let mut done_message: Option<String> = None;
     let result = match (id, action.as_str()) {
+        (None, "transfer") => match transfer(&state, &a, &f).await {
+            Ok(wallet::TransferOutcome::Posted(code)) => {
+                done_message = Some(lang.t("aw.transfer_done").replace("{code}", &code));
+                Ok(())
+            }
+            Ok(wallet::TransferOutcome::PendingGrant(code)) => {
+                done_message = Some(lang.t("aw.grant_pending").replace("{code}", &code));
+                Ok(())
+            }
+            Err(e) => Err(e),
+        },
         (None, "rate") => {
             wallet::set_rate(
                 &state,
@@ -1033,13 +1076,115 @@ async fn admin_do(
         _ => return (StatusCode::NOT_FOUND, lang.t("error.not_found")).into_response(),
     };
     let (messages, status) = match result {
-        Ok(()) => (vec![Msg::success(lang.t("admin.saved"))], StatusCode::OK),
+        Ok(()) => (
+            vec![Msg::success(
+                done_message.unwrap_or_else(|| lang.t("admin.saved").to_owned()),
+            )],
+            StatusCode::OK,
+        ),
         Err(e) => {
             let (s, m) = explain(lang, e);
             (vec![m], s)
         }
     };
     render_admin(&state, lang, &headers, &a, "", messages, revealed, status).await
+}
+
+/// Biểu mẫu "Chuyển F-Coin" (production-readiness, design K2): tìm người nhận theo email (phải đã
+/// xác minh), rồi chuyển hoặc tạo yêu cầu cấp.
+async fn transfer(
+    state: &AppState,
+    a: &admin::Admin,
+    f: &std::collections::BTreeMap<String, String>,
+) -> Result<wallet::TransferOutcome, crate::orders::OrderError> {
+    let email = get(f, "email").trim().to_ascii_lowercase();
+    let not_found = || {
+        crate::orders::problem(
+            StatusCode::NOT_FOUND,
+            "recipient_not_found",
+            "Không có tài khoản đã xác minh email với địa chỉ này.",
+            "There is no account with this verified email address.",
+        )
+    };
+    let identity = state
+        .kratos
+        .find_identity(&email)
+        .await
+        .map_err(|_| not_found())?
+        .ok_or_else(not_found)?;
+    let verified = identity["verifiable_addresses"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|v| {
+            v["verified"].as_bool() == Some(true)
+                && v["value"]
+                    .as_str()
+                    .is_some_and(|x| x.eq_ignore_ascii_case(&email))
+        });
+    let recipient: Uuid = identity["id"]
+        .as_str()
+        .and_then(|s| s.parse().ok())
+        .filter(|_| verified)
+        .ok_or_else(not_found)?;
+    let source = wallet::TransferSource::parse(get(f, "source")).ok_or_else(|| {
+        crate::orders::problem(
+            StatusCode::BAD_REQUEST,
+            "invalid_form",
+            "Hãy chọn nguồn F-Coin.",
+            "Choose where the F-Coin comes from.",
+        )
+    })?;
+    wallet::admin_transfer(
+        state,
+        &wallet::TransferRequest {
+            admin_subject: a.subject,
+            admin_email: &a.email,
+            recipient,
+            recipient_email: &email,
+            coins: get(f, "coins").trim().parse().unwrap_or(0),
+            source,
+            reason: get(f, "reason"),
+            idem: get(f, "idem"),
+        },
+    )
+    .await
+}
+
+/// POST /admin/wallet/grants/{id}/{action}: approve, reject (quản trị viên Tài chính thứ hai).
+pub async fn admin_grant_action(
+    State(state): State<Arc<AppState>>,
+    lang: Lang,
+    Path((id, action)): Path<(Uuid, String)>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let f = form(&body);
+    if !csrf::verify(&headers, Some(get(&f, csrf::FIELD))) {
+        return (StatusCode::FORBIDDEN, lang.t("error.csrf")).into_response();
+    }
+    let a = match admin_gate(&state, lang, &headers).await {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    if !a.has(Role::Finance) {
+        return (StatusCode::FORBIDDEN, lang.t("admin.forbidden")).into_response();
+    }
+    let result = match action.as_str() {
+        "approve" => wallet::approve_grant(&state, id, &a.email)
+            .await
+            .map(|_| ()),
+        "reject" => wallet::reject_grant(&state, id, &a.email, get(&f, "reason")).await,
+        _ => return (StatusCode::NOT_FOUND, lang.t("error.not_found")).into_response(),
+    };
+    let (messages, status) = match result {
+        Ok(()) => (vec![Msg::success(lang.t("admin.saved"))], StatusCode::OK),
+        Err(e) => {
+            let (s, m) = explain(lang, e);
+            (vec![m], s)
+        }
+    };
+    render_admin(&state, lang, &headers, &a, "", messages, None, status).await
 }
 
 #[cfg(test)]

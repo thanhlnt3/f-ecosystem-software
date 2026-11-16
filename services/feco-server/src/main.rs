@@ -1,7 +1,7 @@
 use std::{process::ExitCode, sync::Arc, time::Duration};
 
 use feco_config::Config;
-use feco_server::{account, router, store, webhooks, AppState};
+use feco_server::{account, bootstrap, router, store, webhooks, AppState};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -31,6 +31,16 @@ async fn main() -> ExitCode {
         eprintln!("Không cập nhật được lược đồ cơ sở dữ liệu: {e}");
         return ExitCode::FAILURE;
     }
+    // Tài khoản quản trị viên mặc định (production-readiness): tệp mật khẩu phải đọc được (dev tự
+    // sinh); thiếu thì không khởi động.
+    let admin_cfg = config.admin_bootstrap.clone();
+    if let Err(e) = bootstrap::load_password(&admin_cfg) {
+        eprintln!("Tài khoản quản trị viên mặc định: {e}");
+        return ExitCode::from(78);
+    }
+    if let Err(e) = bootstrap::ensure_admin(&state, &admin_cfg).await {
+        tracing::error!(error = %e, "chưa bảo đảm được tài khoản quản trị viên mặc định, thử lại sau 10 phút");
+    }
 
     let listener = match tokio::net::TcpListener::bind(config.http_addr).await {
         Ok(l) => l,
@@ -42,6 +52,19 @@ async fn main() -> ExitCode {
     tracing::info!(environment = %config.environment, addr = %config.http_addr, "feco-server đang chạy");
 
     spawn_background_jobs(state.clone());
+    {
+        let state = state.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(600));
+            tick.tick().await;
+            loop {
+                tick.tick().await;
+                if let Err(e) = bootstrap::ensure_admin(&state, &admin_cfg).await {
+                    tracing::error!(error = %e, "không bảo đảm được tài khoản quản trị viên mặc định");
+                }
+            }
+        });
+    }
     let shutdown = async {
         let _ = tokio::signal::ctrl_c().await;
         tracing::info!("nhận tín hiệu dừng");

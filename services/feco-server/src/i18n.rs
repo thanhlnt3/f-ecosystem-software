@@ -1019,6 +1019,23 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "role.source_page" => ("Trang Vai trò", "Role page"),
         "role.email_verified" => ("Email đã xác minh", "Email verified"),
         "role.email_unverified" => ("Email chưa xác minh", "Email not verified"),
+        "role.err.protected" => ("Không thể hạ vai trò của tài khoản quản trị viên mặc định.", "The default administrator account cannot be demoted."),
+        "delete.blocked_system_admin" => ("Tài khoản quản trị viên mặc định không xóa được.", "The default administrator account cannot be deleted."),
+        "wallet.kind.transfer_in" => ("Nhận F-Coin từ F-Eco", "F-Coin from F-Eco"),
+        "wallet.kind.transfer_out" => ("Chuyển F-Coin", "F-Coin transfer"),
+        "wallet.kind.transfers" => ("Chuyển, cấp F-Coin", "F-Coin transfers and grants"),
+        "wallet.cat.transfers" => ("Chuyển khoản", "Transfers"),
+        "aw.transfer_title" => ("Chuyển F-Coin cho người dùng", "Transfer F-Coin to a user"),
+        "aw.transfer_to" => ("Email người nhận (đã xác minh)", "Recipient email (verified)"),
+        "aw.transfer_coins" => ("Số F-Coin", "Amount of F-Coin"),
+        "aw.transfer_source" => ("Nguồn", "Source"),
+        "aw.source_own" => ("Ví của tôi", "My wallet"),
+        "aw.source_platform" => ("Quỹ nền tảng (phát hành thêm F-Coin)", "Platform fund (issues new F-Coin)"),
+        "aw.transfer_hint" => ("Cấp từ quỹ nền tảng từ 1.000.000 ₫ trở lên cần một quản trị viên Tài chính khác duyệt. Người nhận nhận thông báo và email.", "Grants from the platform fund of 1,000,000 VND or more need another Finance administrator's approval. The recipient gets a notification and an email."),
+        "aw.transfer" => ("Chuyển", "Transfer"),
+        "aw.transfer_done" => ("Đã chuyển F-Coin (giao dịch {code}).", "F-Coin transferred (transaction {code})."),
+        "aw.grant_pending" => ("Đã tạo yêu cầu cấp {code}, chờ một quản trị viên Tài chính khác duyệt.", "Grant request {code} created; it needs another Finance administrator's approval."),
+        "aw.grants" => ("Yêu cầu cấp F-Coin chờ duyệt", "F-Coin grant requests awaiting approval"),
         _ => {
             tracing::warn!(key, "thiếu bản dịch");
             ("", "")

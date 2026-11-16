@@ -176,6 +176,21 @@ pub struct DeveloperConfig {
     pub admin_emails: Vec<String>,
 }
 
+/// Tài khoản quản trị viên mặc định, luôn hoạt động (thay đổi production-readiness).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdminBootstrapConfig {
+    /// `FECO_ADMIN_EMAIL` (dev: `admin@f-eco.local`).
+    pub email: String,
+    /// `FECO_ADMIN_PASSWORD_FILE`: tệp bí mật chứa mật khẩu ban đầu (dev: `.dev/admin-password`,
+    /// máy chủ tự sinh nếu chưa có).
+    pub password_file: PathBuf,
+    /// Được tự sinh mật khẩu khi tệp chưa có (chỉ dev).
+    pub generate_password: bool,
+}
+
+/// Độ dài tối thiểu của mật khẩu quản trị viên mặc định.
+pub const ADMIN_PASSWORD_MIN_LEN: usize = 12;
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub environment: Environment,
@@ -185,6 +200,7 @@ pub struct Config {
     pub auth: AuthConfig,
     pub security: SecurityConfig,
     pub developer: DeveloperConfig,
+    pub admin_bootstrap: AdminBootstrapConfig,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -406,6 +422,7 @@ impl Config {
         let auth = auth_config(environment, &get)?;
         let security = security_config(environment, &get)?;
         let developer = developer_config(environment, &get)?;
+        let admin_bootstrap = admin_bootstrap_config(environment, &get)?;
 
         let config = Config {
             environment,
@@ -414,6 +431,7 @@ impl Config {
             auth,
             security,
             developer,
+            admin_bootstrap,
             payments: PaymentsConfig {
                 vnpay,
                 momo,
@@ -595,6 +613,38 @@ fn security_config<'a>(
         rate_ip_per_min: num("FECO_RATE_IP_PER_MIN", 1200)?,
         rate_app_per_min: num("FECO_RATE_APP_PER_MIN", 1200)?,
         rate_user_per_min: num("FECO_RATE_USER_PER_MIN", 120)?,
+    })
+}
+
+fn admin_bootstrap_config<'a>(
+    environment: Environment,
+    get: &impl Fn(&str) -> Option<&'a str>,
+) -> Result<AdminBootstrapConfig, ConfigError> {
+    let dev = environment == Environment::Dev;
+    let email = match get("FECO_ADMIN_EMAIL").map(str::trim) {
+        Some(e) if !e.is_empty() => e.to_ascii_lowercase(),
+        _ if dev => "admin@f-eco.local".to_owned(),
+        _ => return Err(ConfigError::Missing("FECO_ADMIN_EMAIL")),
+    };
+    let valid = email.split_once('@').is_some_and(|(user, host)| {
+        !user.is_empty() && host.contains('.') && !host.starts_with('.')
+    }) && !email.chars().any(|c| c.is_whitespace())
+        && email.len() <= 320;
+    if !valid {
+        return Err(ConfigError::Invalid {
+            var: "FECO_ADMIN_EMAIL",
+            reason: format!("{email:?} không phải địa chỉ email"),
+        });
+    }
+    let (password_file, generate_password) = match get("FECO_ADMIN_PASSWORD_FILE").map(str::trim) {
+        Some(p) if !p.is_empty() => (PathBuf::from(p), false),
+        _ if dev => (PathBuf::from(".dev/admin-password"), true),
+        _ => return Err(ConfigError::Missing("FECO_ADMIN_PASSWORD_FILE")),
+    };
+    Ok(AdminBootstrapConfig {
+        email,
+        password_file,
+        generate_password,
     })
 }
 
@@ -807,6 +857,14 @@ mod tests {
     fn with_env(env: &str, extra: &[(&str, &str)]) -> HashMap<String, String> {
         let mut v = vars(extra);
         v.insert("FECO_ENV".into(), env.into());
+        // Ngoài dev phải khai báo tài khoản quản trị viên mặc định (thử riêng ở
+        // `admin_bootstrap_settings`).
+        if env != "dev" {
+            v.entry("FECO_ADMIN_EMAIL".into())
+                .or_insert_with(|| "root@f-eco.vn".into());
+            v.entry("FECO_ADMIN_PASSWORD_FILE".into())
+                .or_insert_with(|| "/run/secrets/feco-admin".into());
+        }
         v
     }
 
@@ -1010,6 +1068,50 @@ mod tests {
             Config::from_vars(&bad).unwrap_err(),
             ConfigError::Invalid {
                 var: "FECO_CLAMD_ADDR",
+                ..
+            }
+        ));
+    }
+
+    /// production-readiness, scenario "Production thiếu mật khẩu".
+    #[test]
+    fn admin_bootstrap_settings() {
+        let c = Config::from_vars(&with_env("dev", &[])).unwrap();
+        assert_eq!(c.admin_bootstrap.email, "admin@f-eco.local");
+        assert_eq!(
+            c.admin_bootstrap.password_file,
+            PathBuf::from(".dev/admin-password")
+        );
+        assert!(c.admin_bootstrap.generate_password);
+
+        let get_from = |pairs: &'static [(&'static str, &'static str)]| {
+            move |k: &str| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| *v)
+        };
+        let prod = Environment::Production;
+        assert_eq!(
+            admin_bootstrap_config(prod, &get_from(&[])).unwrap_err(),
+            ConfigError::Missing("FECO_ADMIN_EMAIL")
+        );
+        assert_eq!(
+            admin_bootstrap_config(prod, &get_from(&[("FECO_ADMIN_EMAIL", "root@f-eco.vn")]))
+                .unwrap_err(),
+            ConfigError::Missing("FECO_ADMIN_PASSWORD_FILE")
+        );
+        let ok = admin_bootstrap_config(
+            prod,
+            &get_from(&[
+                ("FECO_ADMIN_EMAIL", " Root@F-Eco.vn "),
+                ("FECO_ADMIN_PASSWORD_FILE", "/run/secrets/feco-admin"),
+            ]),
+        )
+        .unwrap();
+        assert_eq!(ok.email, "root@f-eco.vn");
+        assert!(!ok.generate_password, "production không tự sinh mật khẩu");
+        assert!(matches!(
+            admin_bootstrap_config(prod, &get_from(&[("FECO_ADMIN_EMAIL", "khong-phai-email")]))
+                .unwrap_err(),
+            ConfigError::Invalid {
+                var: "FECO_ADMIN_EMAIL",
                 ..
             }
         ));

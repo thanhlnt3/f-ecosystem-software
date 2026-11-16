@@ -1198,6 +1198,16 @@ pub async fn resolve(
     if p.status != "disputed" {
         return Err(wrong_state());
     }
+    // Quản lý dự án là một bên của dự án thì không xử lý tranh chấp đó (rà soát trước production).
+    let admin_is = |email: &str| email.trim().eq_ignore_ascii_case(admin.trim());
+    if admin_is(&p.customer_email) || admin_is(&p.provider_email) {
+        return Err(problem(
+            StatusCode::FORBIDDEN,
+            "conflict_of_interest",
+            "Bạn là một bên của dự án này nên không xử lý được tranh chấp.",
+            "You are a party to this project, so you can't resolve its dispute.",
+        ));
+    }
     if !(0..=p.escrow_coin).contains(&to_provider) {
         return Err(bad(
             "invalid_split",

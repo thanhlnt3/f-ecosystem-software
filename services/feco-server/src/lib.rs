@@ -9,6 +9,7 @@ pub mod api;
 pub mod apps;
 pub mod audit;
 pub mod auth;
+pub mod bootstrap;
 pub mod catalog;
 pub mod challenge;
 pub mod codesign;
@@ -401,6 +402,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/admin/wallet/withdrawals/{id}/{action}",
             post(wallet_web::admin_withdrawal_action),
+        )
+        .route(
+            "/admin/wallet/grants/{id}/{action}",
+            post(wallet_web::admin_grant_action),
         )
         .route(
             "/account/role",

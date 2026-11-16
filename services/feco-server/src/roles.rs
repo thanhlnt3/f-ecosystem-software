@@ -143,6 +143,8 @@ pub enum RoleError {
     NotRequestable,
     #[error("cần tên pháp lý và mã số thuế hợp lệ")]
     LegalInfoRequired,
+    #[error("không thể hạ vai trò của tài khoản quản trị viên mặc định")]
+    ProtectedAccount,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -160,6 +162,7 @@ impl RoleError {
             RoleError::RequestNotFound => "role.err.request",
             RoleError::NotRequestable => "role.err.not_requestable",
             RoleError::LegalInfoRequired => "role.err.legal",
+            RoleError::ProtectedAccount => "role.err.protected",
             RoleError::Db(_) => "error.generic",
         }
     }
@@ -231,6 +234,16 @@ pub async fn set_role(
     sqlx::query("LOCK TABLE admin_members IN SHARE ROW EXCLUSIVE MODE")
         .execute(&mut *tx)
         .await?;
+    // Tài khoản quản trị viên mặc định (production-readiness): luôn là Quản trị viên và giữ vai
+    // trò Quản trị hệ thống.
+    let protected: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM system_admins WHERE subject = $1)")
+            .bind(target)
+            .fetch_one(&mut *tx)
+            .await?;
+    if protected && !(role == PlatformRole::Admin && subroles.contains(&admin::Role::Sysadmin)) {
+        return Err(RoleError::ProtectedAccount);
+    }
     let before = role_of_tx(&mut tx, target).await?;
     let loses_sysadmin = {
         let current: Vec<String> = sqlx::query_scalar::<_, Vec<String>>(

@@ -21,8 +21,11 @@
   - Đã xác minh bằng E2E: Kratos chặn mật khẩu bị lộ (HIBP) và mật khẩu dưới 10 ký tự; feco-server làm chậm 0,25 → 4 giây, yêu cầu thử thách từ lần sai thứ 5 trong 15 phút, gửi email cảnh báo cho chủ tài khoản, không khóa cứng. Giới hạn: bộ đếm trong bộ nhớ (cần Valkey khi chạy nhiều bản) và chỉ có thử thách thử nghiệm (nhà cung cấp thật là câu hỏi mở trong QUESTIONS.md).
 - [ ] 2.3 Đăng nhập Google và GitHub, liên kết với tài khoản có sẵn sau khi xác thực lại; xác minh bằng test với nhà cung cấp OIDC giả lập
   - Chưa làm: cần client ID và secret của ứng dụng OAuth Google và GitHub do chủ dự án tạo (QUESTIONS.md). Kratos đã có sẵn cơ chế liên kết tài khoản trùng email sau khi xác thực lại.
-- [ ] 2.4 TOTP, passkey, mã khôi phục; bắt buộc hai lớp cho nhà phát triển và quản trị; xác minh bằng test E2E
-  - Trạng thái: TOTP, mã khôi phục (10+ mã, dùng một lần) và đăng nhập bắt buộc bước hai (`required_aal: highest_available`) đã xác minh bằng E2E `totp_recovery_codes_and_second_factor_login`. Passkey: nút và script WebAuthn của Kratos đã hiển thị nhưng chưa kiểm thử (cần trình duyệt thật và tên miền `localhost`). Bắt buộc hai lớp cho nhà phát triển và quản trị áp dụng khi có vai trò (nhóm 8, 14).
+- [x] 2.4 TOTP, passkey, mã khôi phục; bắt buộc hai lớp cho nhà phát triển và quản trị; xác minh bằng test E2E
+  - Xác minh (16/11/2026, change production-readiness):
+    - E2E `totp_recovery_codes_and_second_factor_login`: TOTP, mã khôi phục dùng một lần, đăng nhập bắt buộc bước hai;
+    - E2E `developer_portal_end_to_end`: nhà phát triển chưa bật hai lớp thì không đăng ký được ("Bạn cần bật xác thực hai lớp");
+    - E2E `admin_console_end_to_end` (qua `admin_with_passkey`): quản trị viên chưa có passkey bị chặn 403; thêm passkey bằng khóa mềm WebAuthn trong Cài đặt rồi đăng nhập bằng mật khẩu và passkey thì vào được.
 - [ ] 2.5 Phiên đăng nhập: access token 15 phút, refresh token xoay vòng, danh sách thiết bị, đăng xuất từ xa, phát hiện refresh token bị dùng lại; xác minh bằng các scenario trong spec
   - Trạng thái: danh sách thiết bị (trình duyệt, hệ điều hành, IP, vị trí), đăng xuất từng thiết bị và mọi thiết bị khác đã xác minh bằng E2E `device_list_and_remote_logout`. Access token 15 phút và refresh token xoay vòng 30 ngày đã cấu hình trong Hydra, kiểm chứng khi có luồng OAuth ở nhóm 3. Chưa làm: email cảnh báo khi refresh token bị dùng lại.
 - [x] 2.6 Đặt lại mật khẩu, xóa tài khoản sau 30 ngày chờ, chặn xóa khi còn đơn đang thực hiện; xác minh bằng test tích hợp

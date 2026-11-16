@@ -9048,3 +9048,291 @@ async fn role_chosen_at_registration() {
     .await;
     assert!(mail.contains("Chưa có hồ sơ năng lực"), "{mail}");
 }
+
+// ============ production-readiness: quản trị viên mặc định, quản trị viên chuyển F-Coin ============
+
+/// Spec admin-console "Tài khoản quản trị viên mặc định", "Bảo vệ tài khoản quản trị viên mặc định".
+#[tokio::test]
+async fn default_admin_is_always_on() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::{
+        admin::Role,
+        bootstrap,
+        roles::{self, ChangedBy, PlatformRole, RoleError},
+    };
+    let state = local_state();
+    let tag = &uuid::Uuid::new_v4().simple().to_string()[..8];
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = feco_config::AdminBootstrapConfig {
+        email: format!("admin-{tag}@f-eco.test"),
+        password_file: dir.path().join("admin-password"),
+        generate_password: true,
+    };
+
+    // --- Scenario "Lần khởi động đầu".
+    let first = bootstrap::ensure_admin(&state, &cfg).await.unwrap();
+    assert!(first.created && first.roles_restored);
+    let identity = state
+        .kratos
+        .find_identity(&cfg.email)
+        .await
+        .unwrap()
+        .expect("đã tạo danh tính");
+    assert_eq!(identity["state"], "active");
+    assert_eq!(identity["verifiable_addresses"][0]["verified"], true);
+    assert_eq!(
+        roles::role_of(&state.db, first.subject).await.unwrap(),
+        PlatformRole::Admin
+    );
+    let mut have = roles::admin_roles(&state.db, first.subject).await.unwrap();
+    have.sort();
+    let mut all: Vec<String> = Role::ALL.iter().map(|r| r.as_str().to_owned()).collect();
+    all.sort();
+    assert_eq!(have, all);
+    let audited: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'admin.bootstrap' AND target = $1",
+    )
+    .bind(first.subject.to_string())
+    .fetch_one(&state.db)
+    .await
+    .unwrap();
+    assert!(audited >= 1);
+    // Mật khẩu sinh ra đăng nhập được, và không bị đặt lại ở lượt sau.
+    let password = std::fs::read_to_string(&cfg.password_file).unwrap();
+    let c = browser();
+    assert!(login(&c, &cfg.email, password.trim())
+        .await
+        .contains(&cfg.email));
+    let again = bootstrap::ensure_admin(&state, &cfg).await.unwrap();
+    assert!(!again.created && !again.reactivated && !again.roles_restored);
+
+    // --- Scenario "Tài khoản bị tắt".
+    state
+        .kratos
+        .set_identity_state(&first.subject.to_string(), "inactive")
+        .await
+        .unwrap();
+    let back = bootstrap::ensure_admin(&state, &cfg).await.unwrap();
+    assert!(back.reactivated);
+    let identity = state
+        .kratos
+        .find_identity(&cfg.email)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(identity["state"], "active");
+
+    // --- Scenario "Hạ vai trò tài khoản mặc định": cả bảng quản trị và CLI đều đi qua set_role.
+    let by = ChangedBy {
+        subject: None,
+        name: "nguoi-van-hanh".into(),
+    };
+    let err = roles::set_role(
+        &state.db,
+        first.subject,
+        &cfg.email,
+        PlatformRole::User,
+        &[],
+        &by,
+        "Thử hạ vai trò",
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, RoleError::ProtectedAccount), "{err:?}");
+    let err = roles::set_role(
+        &state.db,
+        first.subject,
+        &cfg.email,
+        PlatformRole::Admin,
+        &[Role::Reviewer],
+        &by,
+        "Bỏ Quản trị hệ thống",
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, RoleError::ProtectedAccount));
+    assert_eq!(
+        roles::role_of(&state.db, first.subject).await.unwrap(),
+        PlatformRole::Admin
+    );
+    assert!(bootstrap::is_system_admin(&state.db, first.subject)
+        .await
+        .unwrap());
+}
+
+/// Đọc khóa idempotency của biểu mẫu chuyển F-Coin.
+fn transfer_idem(page: &str) -> String {
+    Regex::new(r#"name="idem" value="([^"]+)""#)
+        .unwrap()
+        .captures(page)
+        .unwrap_or_else(|| panic!("trang không có biểu mẫu chuyển F-Coin:\n{page}"))[1]
+        .to_owned()
+}
+
+async fn coins_of(state: &AppState, email: &str) -> i64 {
+    feco_server::wallet::summary(&state.db, subject_of(email).await)
+        .await
+        .unwrap()
+        .balance
+}
+
+/// Spec admin-console "Quản trị viên chuyển F-Coin", "Ràng buộc khi chuyển F-Coin".
+#[tokio::test]
+async fn admin_transfers_f_coin() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::admin::Role;
+    let state = local_state();
+    let (a, a_email) = admin_with_passkey(&state, "tai-chinh-a", &[Role::Finance]).await;
+    let (b, _) = admin_with_passkey(&state, "tai-chinh-b", &[Role::Finance]).await;
+    let (lan_email, lan_password) = unique("lan-nhan-coin");
+    let lan = app_browser();
+    register_in(&lan, &lan_email, &lan_password, "Lan").await;
+    verify_email(&lan, &lan_email).await;
+    topup_manual(&state, subject_of(&a_email).await, &a_email, 200).await;
+    let lan_start = coins_of(&state, &lan_email).await;
+
+    // --- Scenario "Chuyển từ ví của quản trị viên" và "Gửi lại biểu mẫu".
+    let page = get(&a, "/admin/wallet").await;
+    assert!(page.contains("transfer-form"), "{page}");
+    let idem = transfer_idem(&page);
+    let form = [
+        ("email", lan_email.as_str()),
+        ("coins", "50"),
+        ("source", "own"),
+        ("reason", "Hoàn tiền hỗ trợ"),
+        ("idem", idem.as_str()),
+    ];
+    let (status, body) = post(&a, "/admin/wallet/transfer", &csrf_of(&page), &form).await;
+    assert_eq!(status, 200, "{body}");
+    assert!(body.contains("Đã chuyển F-Coin"), "{body}");
+    let (status, _) = post(&a, "/admin/wallet/transfer", &csrf_of(&page), &form).await;
+    assert_eq!(status, 200);
+    assert_eq!(coins_of(&state, &a_email).await, 150);
+    assert_eq!(coins_of(&state, &lan_email).await, lan_start + 50);
+    let mail = wait_mail(&lan_email, "Bạn nhận được 50 F-Coin").await;
+    assert!(mail.contains("Hoàn tiền hỗ trợ"), "{mail}");
+
+    // --- Scenario "Ví của quản trị viên không đủ".
+    let page = get(&a, "/admin/wallet").await;
+    let (status, body) = post(
+        &a,
+        "/admin/wallet/transfer",
+        &csrf_of(&page),
+        &[
+            ("email", lan_email.as_str()),
+            ("coins", "190"),
+            ("source", "own"),
+            ("reason", "Quá số dư"),
+            ("idem", transfer_idem(&page).as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(status, 402, "{body}");
+    assert!(body.contains("còn thiếu 40 F-Coin"), "{body}");
+    assert_eq!(coins_of(&state, &a_email).await, 150);
+
+    // --- Scenario "Chuyển cho chính mình".
+    let page = get(&a, "/admin/wallet").await;
+    let (status, body) = post(
+        &a,
+        "/admin/wallet/transfer",
+        &csrf_of(&page),
+        &[
+            ("email", a_email.as_str()),
+            ("coins", "10"),
+            ("source", "platform"),
+            ("reason", "Tự cấp"),
+            ("idem", transfer_idem(&page).as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(status, 400, "{body}");
+    assert!(body.contains("chính mình"), "{body}");
+    assert_eq!(coins_of(&state, &a_email).await, 150);
+
+    // --- Scenario "Cấp từ quỹ nền tảng" (dưới 1.000.000 ₫).
+    let page = get(&a, "/admin/wallet").await;
+    let (status, body) = post(
+        &a,
+        "/admin/wallet/transfer",
+        &csrf_of(&page),
+        &[
+            ("email", lan_email.as_str()),
+            ("coins", "100"),
+            ("source", "platform"),
+            ("reason", "Khuyến mại ra mắt"),
+            ("idem", transfer_idem(&page).as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(coins_of(&state, &lan_email).await, lan_start + 150);
+
+    // --- Scenario "Cấp lớn cần người thứ hai".
+    let page = get(&a, "/admin/wallet").await;
+    let (status, body) = post(
+        &a,
+        "/admin/wallet/transfer",
+        &csrf_of(&page),
+        &[
+            ("email", lan_email.as_str()),
+            ("coins", "2000"),
+            ("source", "platform"),
+            ("reason", "Bồi hoàn sự cố"),
+            ("idem", transfer_idem(&page).as_str()),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert!(
+        body.contains("chờ một quản trị viên Tài chính khác duyệt"),
+        "{body}"
+    );
+    assert_eq!(coins_of(&state, &lan_email).await, lan_start + 150);
+    let grant = feco_server::wallet::pending_grants(&state.db)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|g| g.recipient_email == lan_email)
+        .expect("yêu cầu cấp đang chờ");
+    let page = get(&a, "/admin/wallet").await;
+    let (status, _) = post(
+        &a,
+        &format!("/admin/wallet/grants/{}/approve", grant.id),
+        &csrf_of(&page),
+        &[],
+    )
+    .await;
+    assert_eq!(status, 403, "người tạo không tự duyệt");
+    let page = get(&b, "/admin/wallet").await;
+    assert!(page.contains(&grant.code), "{page}");
+    let (status, body) = post(
+        &b,
+        &format!("/admin/wallet/grants/{}/approve", grant.id),
+        &csrf_of(&page),
+        &[],
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(coins_of(&state, &lan_email).await, lan_start + 2150);
+    let audited: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action IN ('wallet.admin_transfer', 'wallet.admin_grant', 'wallet.grant_request') AND actor_type = 'admin' AND actor_id = ANY($1)",
+    )
+    .bind(vec![a_email.clone(), grant.requested_by.clone()])
+    .fetch_one(&state.db)
+    .await
+    .unwrap();
+    assert!(audited >= 3, "{audited}");
+    // Sổ cái vẫn cân.
+    let check = feco_server::wallet::check_ledger(&state.db).await.unwrap();
+    assert!(
+        check.total == 0 && check.mismatched.is_empty() && check.unbalanced.is_empty(),
+        "{check:?}"
+    );
+}

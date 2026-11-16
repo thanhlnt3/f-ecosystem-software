@@ -83,6 +83,28 @@
     {% if finance %}<button type="submit" class="secondary">{{ i18n.t("pay.save") }}</button>{% endif %}
   </form>
 </section>
+{% if finance %}
+<section class="card" id="transfer-card">
+  <h2>{{ i18n.t("aw.transfer_title") }}</h2>
+  <form method="post" action="/admin/wallet/transfer" id="transfer-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <input type="hidden" name="idem" value="{{ transfer_idem }}">
+    <label for="transfer-email">{{ i18n.t("aw.transfer_to") }}</label>
+    <input type="email" name="email" id="transfer-email" required>
+    <label for="transfer-coins">{{ i18n.t("aw.transfer_coins") }}</label>
+    <input type="number" name="coins" id="transfer-coins" min="1" max="1000000" required>
+    <label for="transfer-source">{{ i18n.t("aw.transfer_source") }}</label>
+    <select name="source" id="transfer-source">
+      <option value="own">{{ i18n.t("aw.source_own") }}</option>
+      <option value="platform">{{ i18n.t("aw.source_platform") }}</option>
+    </select>
+    <label for="transfer-reason">{{ i18n.t("role.reason") }}</label>
+    <input type="text" name="reason" id="transfer-reason" maxlength="500" required>
+    <p class="muted">{{ i18n.t("aw.transfer_hint") }}</p>
+    <button type="submit">{{ i18n.t("aw.transfer") }}</button>
+  </form>
+</section>
+{% endif %}
 <section class="card" id="freeze-card">
   <h2>{{ i18n.t("aw.freeze_title") }}</h2>
   <form method="post" action="/admin/wallet/freeze" id="freeze-form">
@@ -96,6 +118,20 @@
   </form>
 </section>
 </div>
+
+{% if !grants.is_empty() %}
+<h2 id="grant-queue">{{ i18n.t("aw.grants") }}</h2>
+{% for g in grants %}
+<div class="card grant" data-grant="{{ g.id }}">
+  <p><strong>{{ g.code }}</strong> · {{ g.email }} · {{ g.coins }} ({{ g.amount }}) · {{ g.at }}</p>
+  <p>{{ g.reason }} <span class="muted">— {{ g.by }}</span></p>
+  {% if finance %}
+  <form method="post" action="/admin/wallet/grants/{{ g.id }}/approve" style="display:inline"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit">{{ i18n.t("aw.approve") }}</button></form>
+  <form method="post" action="/admin/wallet/grants/{{ g.id }}/reject"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="text" name="reason" placeholder="{{ i18n.t("role.decision_note") }}" required><button type="submit" class="danger">{{ i18n.t("aw.reject") }}</button></form>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
 
 <h2>{{ i18n.t("aw.search") }}</h2>
 <form method="get" action="/admin/wallet" class="filters" id="txn-search">

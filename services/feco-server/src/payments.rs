@@ -415,6 +415,16 @@ pub struct PayLink {
 
 /// Bắt đầu (hoặc tiếp tục) thanh toán một khoản bằng phương thức khách chọn. Liên kết còn hạn của
 /// cùng phương thức được dùng lại (idempotent); hết hạn hoặc đổi phương thức thì tạo lần thử mới.
+/// Lệnh nạp F-Coin quá 30 phút, hoặc tạo theo tỷ giá khác tỷ giá hiện hành.
+pub fn topup_expired(
+    created_at: OffsetDateTime,
+    vnd_per_coin: i64,
+    current_rate: i64,
+    now: OffsetDateTime,
+) -> bool {
+    now - created_at > time::Duration::minutes(30) || vnd_per_coin != current_rate
+}
+
 pub async fn start(
     state: &AppState,
     customer: Uuid,
@@ -456,6 +466,35 @@ pub async fn start(
                 "Khoản này không còn cần thanh toán.",
                 "This no longer needs paying.",
             ))
+        }
+    }
+    // Lệnh nạp F-Coin chỉ thanh toán được trong 30 phút và khi tỷ giá chưa đổi (rà soát trước
+    // production): không giữ lệnh nạp theo tỷ giá cũ để trả sau khi tỷ giá tăng.
+    let topup: Option<(Uuid, i64, OffsetDateTime)> = sqlx::query_as(
+        "SELECT w.id, w.vnd_per_coin, w.created_at FROM payment_requests r
+         JOIN wallet_topups w ON w.id = r.topup_id WHERE r.id = $1",
+    )
+    .bind(request)
+    .fetch_optional(&mut *db)
+    .await?;
+    if let Some((topup_id, per_coin, created_at)) = topup {
+        let current = crate::wallet::rate(&mut *db).await?;
+        if topup_expired(created_at, per_coin, current, now) {
+            sqlx::query("UPDATE wallet_topups SET status = 'cancelled' WHERE id = $1 AND status = 'pending'")
+                .bind(topup_id)
+                .execute(&mut *db)
+                .await?;
+            sqlx::query("UPDATE payment_requests SET status = 'cancelled' WHERE id = $1 AND status = 'pending'")
+                .bind(request)
+                .execute(&mut *db)
+                .await?;
+            db.commit().await?;
+            return Err(problem(
+                StatusCode::GONE,
+                "topup_expired",
+                "Lệnh nạp đã hết hạn hoặc tỷ giá đã thay đổi. Hãy tạo lệnh nạp mới.",
+                "This top-up has expired or the rate has changed. Create a new top-up.",
+            ));
         }
     }
     let reusable: Option<(Uuid, String, Option<String>)> = sqlx::query_as(
@@ -614,6 +653,11 @@ pub async fn settle(
             .await?;
     if !TxStatus::parse(&current).can_move(TxStatus::Succeeded) {
         db.commit().await?;
+        if current == "succeeded" {
+            // Callback lặp lại: nếu lần trước dừng giữa chừng (đã ghi thành công nhưng chưa cộng
+            // F-Coin hay chưa bắt đầu đơn) thì làm nốt. Cả hai bước đều idempotent.
+            repair_settled(state, t.request_id, now).await?;
+        }
         return Ok(Settled::Duplicate);
     }
     sqlx::query("UPDATE payment_transactions SET status = 'succeeded', gateway_trans_id = $2, channel = $3, settled_at = $4 WHERE id = $1")
@@ -630,7 +674,16 @@ pub async fn settle(
             .fetch_one(&mut *db)
             .await?;
     db.commit().await?;
-    issue_invoice(state, t.id).await;
+    let is_topup: bool =
+        sqlx::query_scalar("SELECT topup_id IS NOT NULL FROM payment_requests WHERE id = $1")
+            .bind(t.request_id)
+            .fetch_one(&state.db)
+            .await?;
+    // Hóa đơn của lệnh nạp F-Coin chưa có mẫu đúng (QUESTIONS.md 85): không xuất hóa đơn dịch vụ
+    // xây app cho lệnh nạp.
+    if !is_topup {
+        issue_invoice(state, t.id).await;
+    }
     if other_paid || request_status != "pending" && request_status != "succeeded" {
         // Thu hai lần, hoặc khách trả sau khi đơn đã hủy: hoàn ngay giao dịch này.
         let why = if other_paid {
@@ -652,12 +705,7 @@ pub async fn settle(
         .await;
         return Ok(Settled::Refunded(refund));
     }
-    let topup: bool =
-        sqlx::query_scalar("SELECT topup_id IS NOT NULL FROM payment_requests WHERE id = $1")
-            .bind(t.request_id)
-            .fetch_one(&state.db)
-            .await?;
-    if topup {
+    if is_topup {
         // Lệnh nạp F-Coin: cộng F-Coin (đã idempotent), ví tự gửi thông báo.
         crate::wallet::topup_settled(state, t.request_id, now).await?;
         return Ok(Settled::Recorded);
@@ -681,6 +729,27 @@ pub async fn settle(
     )
     .await;
     Ok(Settled::Recorded)
+}
+
+/// Làm nốt việc sau khi giao dịch đã ghi thành công: cộng F-Coin của lệnh nạp, hoặc bắt đầu đơn
+/// khi yêu cầu thanh toán vẫn đang chờ.
+async fn repair_settled(state: &AppState, request: Uuid, now: OffsetDateTime) -> OrderResult<()> {
+    let row: Option<(bool, String)> =
+        sqlx::query_as("SELECT topup_id IS NOT NULL, status FROM payment_requests WHERE id = $1")
+            .bind(request)
+            .fetch_optional(&state.db)
+            .await?;
+    match row {
+        Some((true, _)) => crate::wallet::topup_settled(state, request, now)
+            .await
+            .map(|_| ()),
+        Some((false, status)) if status == "pending" => {
+            orders::payment_settled(state, request, true, now)
+                .await
+                .map(|_| ())
+        }
+        _ => Ok(()),
+    }
 }
 
 /// Phản hồi cho callback của ZaloPay: `return_code` 1 đã nhận, -1 sai chữ ký, 0 lỗi tạm (cổng gửi lại).
@@ -1156,6 +1225,25 @@ pub async fn request_refund(
             "Only a succeeded transaction can be refunded.",
         ));
     }
+    // Giao dịch nạp F-Coin chỉ hoàn qua lệnh rút (giữ và hủy đúng số F-Coin). Hoàn thẳng ở trang
+    // quản trị sẽ để người dùng giữ F-Coin mà tiền đã trả lại (rà soát trước production).
+    if matches!(by, Requester::Admin(_)) {
+        let topup: bool = sqlx::query_scalar(
+            "SELECT r.topup_id IS NOT NULL FROM payment_transactions t
+             JOIN payment_requests r ON r.id = t.request_id WHERE t.id = $1",
+        )
+        .bind(transaction)
+        .fetch_one(&mut *db)
+        .await?;
+        if topup {
+            return Err(problem(
+                StatusCode::CONFLICT,
+                "topup_refund_via_withdrawal",
+                "Giao dịch nạp F-Coin chỉ hoàn qua lệnh rút F-Coin của người dùng.",
+                "F-Coin top-ups can only be refunded through the user's F-Coin withdrawal.",
+            ));
+        }
+    }
     let committed: i64 = sqlx::query_scalar("SELECT coalesce(sum(amount_vnd), 0)::bigint FROM refunds WHERE transaction_id = $1 AND status <> 'failed'")
         .bind(transaction)
         .fetch_one(&mut *db)
@@ -1298,8 +1386,20 @@ pub(crate) async fn execute_refund(
 ) -> OrderResult<()> {
     let r = refund(state, id).await?;
     let t = transaction(state, r.transaction_id).await?;
+    // Chỉ một lần gọi chuyển được lệnh từ "chờ phê duyệt" sang "đang xử lý": hai quản trị viên
+    // duyệt cùng lúc không gửi lệnh hoàn tới cổng hai lần (rà soát trước production).
+    let claimed = sqlx::query(
+        "UPDATE refunds SET status = 'processing' WHERE id = $1 AND status = 'pending_approval'",
+    )
+    .bind(id)
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    if claimed == 0 {
+        return Ok(());
+    }
     if t.provider == "manual" {
-        sqlx::query("UPDATE refunds SET status = 'processing', gateway_ref = $2 WHERE id = $1")
+        sqlx::query("UPDATE refunds SET gateway_ref = $2 WHERE id = $1")
             .bind(id)
             .bind(format!("manual_{}", id.simple()))
             .execute(&state.db)
@@ -1315,10 +1415,6 @@ pub(crate) async fn execute_refund(
         .last()
         .cloned()
         .unwrap_or_else(|| "system".into());
-    sqlx::query("UPDATE refunds SET status = 'processing' WHERE id = $1")
-        .bind(id)
-        .execute(&state.db)
-        .await?;
     match gateways::refund(state, &t, id, r.amount_vnd, &description, &by, now).await {
         Ok((refund_ref, status)) => {
             sqlx::query("UPDATE refunds SET gateway_ref = $2 WHERE id = $1")
@@ -1338,16 +1434,52 @@ pub(crate) async fn execute_refund(
             }
         }
         Err(e) => {
-            tracing::warn!(error = %e, "gửi lệnh hoàn thất bại");
-            finish_refund(
+            // Lỗi đường truyền hoặc chữ ký phản hồi sai: cổng có thể đã nhận lệnh. Không coi là thất
+            // bại (trả F-Coin về ví hay cho hoàn lần nữa sẽ thành trả hai lần); giữ "đang xử lý" và
+            // báo quản trị viên đối chiếu trên trang của cổng (rà soát trước production).
+            tracing::warn!(error = %e, "không rõ kết quả gửi lệnh hoàn");
+            sqlx::query("UPDATE refunds SET failure = $2 WHERE id = $1")
+                .bind(id)
+                .bind(format!("chưa rõ kết quả: {e}"))
+                .execute(&state.db)
+                .await?;
+            crate::review::admin_alert(
                 state,
-                id,
-                RefundStatus::Failed(format!("không gửi được lệnh hoàn: {e}")),
-                now,
+                "refund_unknown",
+                &format!(
+                    "Lệnh hoàn {} ({}) chưa rõ kết quả, cần đối chiếu với cổng {}",
+                    id.simple(),
+                    vnd(r.amount_vnd),
+                    t.provider
+                ),
+                json!({"refund": id, "error": e.to_string()}),
             )
-            .await
+            .await;
+            Ok(())
         }
     }
+}
+
+/// Chuyển lệnh hoàn từ "đang xử lý" sang `status`; false khi lệnh đã được kết thúc ở nơi khác.
+async fn mark_refund(
+    state: &AppState,
+    id: Uuid,
+    status: &str,
+    failure: Option<&str>,
+    now: OffsetDateTime,
+) -> OrderResult<bool> {
+    Ok(sqlx::query(
+        "UPDATE refunds SET status = $2, failure = coalesce($3, failure), settled_at = $4
+         WHERE id = $1 AND status = 'processing'",
+    )
+    .bind(id)
+    .bind(status)
+    .bind(failure)
+    .bind(now)
+    .execute(&state.db)
+    .await?
+    .rows_affected()
+        == 1)
 }
 
 /// Kết thúc lệnh hoàn: cập nhật giao dịch, yêu cầu hoàn của đơn, gửi email và hóa đơn điều chỉnh.
@@ -1366,25 +1498,15 @@ async fn finish_refund(
     match status {
         RefundStatus::Processing => Ok(()),
         RefundStatus::Failed(why) if withdrawal => {
-            sqlx::query(
-                "UPDATE refunds SET status = 'failed', failure = $2, settled_at = $3 WHERE id = $1",
-            )
-            .bind(id)
-            .bind(&why)
-            .bind(now)
-            .execute(&state.db)
-            .await?;
+            if !mark_refund(state, id, "failed", Some(&why), now).await? {
+                return Ok(());
+            }
             crate::wallet::refund_finished(state, id, false, None, &why, now).await
         }
         RefundStatus::Failed(why) => {
-            sqlx::query(
-                "UPDATE refunds SET status = 'failed', failure = $2, settled_at = $3 WHERE id = $1",
-            )
-            .bind(id)
-            .bind(&why)
-            .bind(now)
-            .execute(&state.db)
-            .await?;
+            if !mark_refund(state, id, "failed", Some(&why), now).await? {
+                return Ok(());
+            }
             crate::review::admin_alert(
                 state,
                 "refund_failed",
@@ -1396,11 +1518,18 @@ async fn finish_refund(
         }
         RefundStatus::Succeeded => {
             let mut db = state.db.begin().await?;
-            sqlx::query("UPDATE refunds SET status = 'succeeded', settled_at = $2 WHERE id = $1")
-                .bind(id)
-                .bind(now)
-                .execute(&mut *db)
-                .await?;
+            // Chỉ một lần gọi kết thúc được lệnh (worker và lần hỏi ngay có thể chạy song song).
+            let done = sqlx::query(
+                "UPDATE refunds SET status = 'succeeded', settled_at = $2 WHERE id = $1 AND status = 'processing'",
+            )
+            .bind(id)
+            .bind(now)
+            .execute(&mut *db)
+            .await?
+            .rows_affected();
+            if done == 0 {
+                return Ok(());
+            }
             sqlx::query(
                 "UPDATE payment_transactions SET refunded_vnd = refunded_vnd + $2 WHERE id = $1",
             )
@@ -2327,6 +2456,16 @@ pub async fn invoice_document(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Rà soát trước production: lệnh nạp chỉ thanh toán trong 30 phút và khi tỷ giá chưa đổi.
+    #[test]
+    fn topups_expire() {
+        let t0 = OffsetDateTime::UNIX_EPOCH;
+        let min = time::Duration::minutes;
+        assert!(!topup_expired(t0, 1000, 1000, t0 + min(29)));
+        assert!(topup_expired(t0, 1000, 1000, t0 + min(31)));
+        assert!(topup_expired(t0, 1000, 1200, t0 + min(1)));
+    }
 
     #[test]
     fn transaction_states() {

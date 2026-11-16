@@ -6,7 +6,8 @@
 //! - [`post`] khóa các tài khoản liên quan theo thứ tự id rồi mới kiểm khóa idempotency, nên hai
 //!   lần gọi song song với cùng khóa chỉ ghi một lần, và hai lần trừ song song không làm âm ví.
 //! - Đơn vị là nguyên F-Coin; số tiền nạp, rút = F-Coin × tỷ giá lúc tạo lệnh.
-//! - F-Coin không chuyển tự do giữa người dùng: chỉ đi qua nạp, rút, mua app, ký quỹ dự án.
+//! - F-Coin không chuyển tự do giữa người dùng: chỉ đi qua nạp, rút, mua app, ký quỹ dự án, và
+//!   quản trị viên Tài chính chuyển hoặc cấp (thay đổi production-readiness, design K2).
 
 use axum::http::StatusCode;
 use serde::Serialize;
@@ -61,10 +62,14 @@ pub enum Kind {
     EscrowFund,
     EscrowRelease,
     EscrowRefund,
+    /// Quản trị viên chuyển từ ví của mình.
+    AdminTransfer,
+    /// Quản trị viên cấp từ quỹ nền tảng (tài khoản `issuance`).
+    AdminGrant,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 8] = [
+    pub const ALL: [Kind; 10] = [
         Kind::Topup,
         Kind::WithdrawalHold,
         Kind::WithdrawalRelease,
@@ -73,6 +78,8 @@ impl Kind {
         Kind::EscrowFund,
         Kind::EscrowRelease,
         Kind::EscrowRefund,
+        Kind::AdminTransfer,
+        Kind::AdminGrant,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -85,6 +92,8 @@ impl Kind {
             Kind::EscrowFund => "escrow_fund",
             Kind::EscrowRelease => "escrow_release",
             Kind::EscrowRefund => "escrow_refund",
+            Kind::AdminTransfer => "admin_transfer",
+            Kind::AdminGrant => "admin_grant",
         }
     }
 
@@ -105,6 +114,8 @@ pub fn line_key(kind: Kind, amount: i64) -> &'static str {
         (Kind::EscrowFund, _) => "wallet.kind.escrow_fund",
         (Kind::EscrowRelease, _) => "wallet.kind.escrow_release",
         (Kind::EscrowRefund, _) => "wallet.kind.escrow_refund",
+        (Kind::AdminTransfer | Kind::AdminGrant, true) => "wallet.kind.transfer_in",
+        (Kind::AdminTransfer | Kind::AdminGrant, false) => "wallet.kind.transfer_out",
     }
 }
 
@@ -117,6 +128,7 @@ pub fn category(kind: Kind, amount: i64) -> (bool, &'static str) {
         Kind::Purchase => (false, "wallet.cat.apps"),
         Kind::EscrowRelease => (true, "wallet.cat.project_income"),
         Kind::EscrowFund | Kind::EscrowRefund => (false, "wallet.cat.projects"),
+        Kind::AdminTransfer | Kind::AdminGrant => (amount > 0, "wallet.cat.transfers"),
         Kind::WithdrawalHold | Kind::WithdrawalRelease | Kind::WithdrawalPaid => {
             (false, "wallet.cat.withdrawals")
         }
@@ -413,6 +425,13 @@ pub async fn set_rate(
         ));
     }
     let before = rate(&state.db).await?;
+    if !rate_change_allowed(before, vnd_per_coin) {
+        return Err(bad(
+            "rate_change_too_large",
+            "Mỗi lần chỉ đổi tỷ giá tối đa 20% so với tỷ giá hiện hành.",
+            "Each change may move the rate by at most 20% of the current rate.",
+        ));
+    }
     sqlx::query("INSERT INTO coin_rates (vnd_per_coin, set_by, reason) VALUES ($1, $2, $3)")
         .bind(vnd_per_coin)
         .bind(admin)
@@ -429,6 +448,14 @@ pub async fn set_rate(
     )
     .await;
     Ok(())
+}
+
+/// Một lần đổi tỷ giá không vượt quá 20% tỷ giá hiện hành (một quản trị viên không đẩy tỷ giá đi
+/// xa trong một bước rồi rút tiền theo tỷ giá đó).
+pub fn rate_change_allowed(current: i64, new: i64) -> bool {
+    let current = current.max(1) as i128;
+    let diff = (new as i128 - current).abs();
+    diff * 5 <= current
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -806,12 +833,29 @@ pub struct Withdrawal {
     pub decision_note: Option<String>,
     pub payout_ref: Option<String>,
     pub created_at: OffsetDateTime,
+    /// Số người duyệt tính lúc tạo theo tổng 24 giờ (None: lệnh cũ).
+    pub approvals_required: Option<i16>,
 }
 
 impl Withdrawal {
     pub fn approvals_needed(&self) -> usize {
-        approvals_needed(self.amount_vnd)
+        let stored = self.approvals_required.unwrap_or(1).clamp(1, 2) as usize;
+        approvals_needed(self.amount_vnd).max(stored)
     }
+
+    /// Lệnh rút này của chính quản trị viên `admin` (email).
+    fn owned_by(&self, admin: &str) -> bool {
+        self.email.trim().eq_ignore_ascii_case(admin.trim())
+    }
+}
+
+fn own_withdrawal_error() -> OrderError {
+    problem(
+        StatusCode::FORBIDDEN,
+        "own_withdrawal",
+        "Quản trị viên không xử lý lệnh rút của chính mình.",
+        "Administrators can't act on their own withdrawals.",
+    )
 }
 
 /// Số người duyệt cần cho một lệnh rút.
@@ -825,7 +869,8 @@ pub fn approvals_needed(amount_vnd: i64) -> usize {
 
 const W_COLUMNS: &str =
     "id, code, subject, email, coins, vnd_per_coin, amount_vnd, method, source_tx, bank_name,
-    account_holder, account_last4, note, status, approvals, decision_note, payout_ref, created_at";
+    account_holder, account_last4, note, status, approvals, decision_note, payout_ref, created_at,
+    approvals_required";
 
 #[derive(sqlx::FromRow)]
 struct WRow {
@@ -847,6 +892,7 @@ struct WRow {
     decision_note: Option<String>,
     payout_ref: Option<String>,
     created_at: OffsetDateTime,
+    approvals_required: Option<i16>,
 }
 
 impl From<WRow> for Withdrawal {
@@ -870,6 +916,7 @@ impl From<WRow> for Withdrawal {
             decision_note: r.decision_note,
             payout_ref: r.payout_ref,
             created_at: r.created_at,
+            approvals_required: r.approvals_required,
         }
     }
 }
@@ -1027,10 +1074,25 @@ pub async fn create_withdrawal(
         .fetch_one(&mut *tx)
         .await?;
     let code = format!("RUT-{n:06}");
+    // Tổng các lệnh rút còn hiệu lực trong 24 giờ, cộng lệnh này: chia nhỏ không né được quy tắc
+    // hai người duyệt. Ví đã khóa (FOR UPDATE ở `user_account`) nên hai lệnh song song xét lần lượt.
+    sqlx::query("SELECT id FROM wallet_accounts WHERE id = $1 FOR UPDATE")
+        .bind(user)
+        .execute(&mut *tx)
+        .await?;
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT coalesce(sum(amount_vnd), 0)::bigint FROM wallet_withdrawals
+         WHERE subject = $1 AND created_at > now() - interval '24 hours'
+           AND status NOT IN ('cancelled', 'rejected', 'failed')",
+    )
+    .bind(subject)
+    .fetch_one(&mut *tx)
+    .await?;
+    let required = approvals_needed(recent.saturating_add(amount_vnd)) as i16;
     sqlx::query(
         "INSERT INTO wallet_withdrawals (id, code, subject, email, coins, vnd_per_coin, amount_vnd, method, source_tx,
-             bank_name, account_holder, account_last4, account_enc, note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+             bank_name, account_holder, account_last4, account_enc, note, approvals_required)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
     )
     .bind(id)
     .bind(&code)
@@ -1046,6 +1108,7 @@ pub async fn create_withdrawal(
     .bind(&last4)
     .bind(&enc)
     .bind(note.trim().chars().take(500).collect::<String>())
+    .bind(required)
     .execute(&mut *tx)
     .await?;
     let pending = system_account(&mut *tx, system::WITHDRAWALS).await?;
@@ -1289,6 +1352,12 @@ pub async fn approve_withdrawal(
             "Another administrator must approve this.",
         ));
     }
+    if w.owned_by(admin) {
+        return Err(own_withdrawal_error());
+    }
+    // Ví đã bị khóa sau khi tạo lệnh: không duyệt.
+    let account = user_account(&mut tx, w.subject, None).await?;
+    ensure_not_frozen(&mut tx, account).await?;
     let mut approvals = w.approvals.clone();
     approvals.push(admin.to_owned());
     let done = approvals.len() >= w.approvals_needed();
@@ -1457,6 +1526,11 @@ pub async fn mark_paid(
     }
     let mut tx = state.db.begin().await?;
     let w = lock_withdrawal(&mut tx, id).await?;
+    if w.owned_by(admin) {
+        return Err(own_withdrawal_error());
+    }
+    let account = user_account(&mut tx, w.subject, None).await?;
+    ensure_not_frozen(&mut tx, account).await?;
     if w.method != "bank" || w.status != "approved" {
         return Err(conflict(
             "not_approved",
@@ -2167,9 +2241,479 @@ pub async fn check_ledger(db: &Db) -> sqlx::Result<LedgerCheck> {
     })
 }
 
+// ---------- Quản trị viên chuyển F-Coin (production-readiness, design K2) ----------
+
+/// Số F-Coin tối đa mỗi lần chuyển.
+pub const MAX_ADMIN_TRANSFER: i64 = 1_000_000;
+/// Cấp từ quỹ nền tảng từ mức này (đồng) trở lên cần quản trị viên Tài chính thứ hai duyệt.
+pub const GRANT_SECOND_APPROVAL_FROM: i64 = 1_000_000;
+
+/// Nguồn F-Coin khi quản trị viên chuyển.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransferSource {
+    /// Ví của chính quản trị viên.
+    Own,
+    /// Quỹ nền tảng: phát hành thêm F-Coin.
+    Platform,
+}
+
+impl TransferSource {
+    pub fn parse(s: &str) -> Option<TransferSource> {
+        match s {
+            "own" => Some(TransferSource::Own),
+            "platform" => Some(TransferSource::Platform),
+            _ => None,
+        }
+    }
+}
+
+/// Một lần chuyển do quản trị viên gửi.
+#[derive(Debug, Clone)]
+pub struct TransferRequest<'a> {
+    pub admin_subject: Uuid,
+    pub admin_email: &'a str,
+    pub recipient: Uuid,
+    pub recipient_email: &'a str,
+    pub coins: i64,
+    pub source: TransferSource,
+    pub reason: &'a str,
+    /// Khóa sinh khi hiện biểu mẫu: gửi lại cùng biểu mẫu không chuyển hai lần.
+    pub idem: &'a str,
+}
+
+/// Kết quả: đã ghi bút toán (mã GD-…), hoặc yêu cầu cấp đang chờ duyệt (mã CP-…).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TransferOutcome {
+    Posted(String),
+    PendingGrant(String),
+}
+
+fn check_transfer(r: &TransferRequest<'_>) -> OrderResult<()> {
+    let reason = r.reason.trim();
+    if reason.is_empty() || reason.chars().count() > 500 {
+        return Err(bad(
+            "reason_required",
+            "Hãy ghi lý do (tối đa 500 ký tự).",
+            "Give a reason (at most 500 characters).",
+        ));
+    }
+    if !(1..=MAX_ADMIN_TRANSFER).contains(&r.coins) {
+        return Err(bad(
+            "invalid_amount",
+            "Số F-Coin phải từ 1 đến 1.000.000.",
+            "The amount must be between 1 and 1,000,000 F-Coin.",
+        ));
+    }
+    if r.recipient == r.admin_subject
+        || r.recipient_email
+            .trim()
+            .eq_ignore_ascii_case(r.admin_email.trim())
+    {
+        return Err(bad(
+            "self_transfer",
+            "Không chuyển F-Coin cho chính mình.",
+            "You can't transfer F-Coin to yourself.",
+        ));
+    }
+    let idem = r.idem.trim();
+    if idem.is_empty() || idem.len() > 100 {
+        return Err(bad(
+            "invalid_form",
+            "Biểu mẫu không hợp lệ, hãy tải lại trang.",
+            "Invalid form; reload the page.",
+        ));
+    }
+    Ok(())
+}
+
+/// Quản trị viên chuyển F-Coin cho người dùng: từ ví của mình, hoặc cấp từ quỹ nền tảng (lớn thì
+/// chờ người thứ hai duyệt). Quyền Tài chính kiểm ở tầng web.
+pub async fn admin_transfer(
+    state: &AppState,
+    r: &TransferRequest<'_>,
+) -> OrderResult<TransferOutcome> {
+    check_transfer(r)?;
+    let reason = r.reason.trim();
+    let idem = format!("admin-transfer:{}", r.idem.trim());
+    let mut tx = state.db.begin().await?;
+    let to = user_account(&mut tx, r.recipient, Some(r.recipient_email)).await?;
+    ensure_not_frozen(&mut tx, to).await?;
+    let (from, kind) = match r.source {
+        TransferSource::Own => (
+            user_account(&mut tx, r.admin_subject, Some(r.admin_email)).await?,
+            Kind::AdminTransfer,
+        ),
+        TransferSource::Platform => {
+            let rate = rate(&mut *tx).await?;
+            let amount_vnd = r.coins.checked_mul(rate).ok_or_else(|| {
+                bad(
+                    "invalid_amount",
+                    "Số tiền quá lớn.",
+                    "The amount is too large.",
+                )
+            })?;
+            if amount_vnd >= GRANT_SECOND_APPROVAL_FROM {
+                let code = request_grant(&mut tx, r, amount_vnd, &idem).await?;
+                tx.commit().await?;
+                audit::record(
+                    &state.db,
+                    Actor::Admin(r.admin_email.to_owned()),
+                    "wallet.grant_request",
+                    Some(&code),
+                    None,
+                    json!({"to": r.recipient_email, "coins": r.coins, "vnd": amount_vnd, "reason": reason}),
+                )
+                .await;
+                return Ok(TransferOutcome::PendingGrant(code));
+            }
+            (
+                system_account(&mut *tx, system::ISSUANCE).await?,
+                Kind::AdminGrant,
+            )
+        }
+    };
+    let posted = post(
+        &mut tx,
+        &Posting {
+            kind,
+            idem: &idem,
+            memo: reason,
+            reference: Some(r.admin_email),
+            by: r.admin_email,
+        },
+        &[
+            Leg {
+                account: from,
+                amount: -r.coins,
+            },
+            Leg {
+                account: to,
+                amount: r.coins,
+            },
+        ],
+    )
+    .await?;
+    tx.commit().await?;
+    if !posted.duplicate {
+        audit::record(
+            &state.db,
+            Actor::Admin(r.admin_email.to_owned()),
+            match kind {
+                Kind::AdminGrant => "wallet.admin_grant",
+                _ => "wallet.admin_transfer",
+            },
+            Some(&posted.code),
+            None,
+            json!({"to": r.recipient_email, "coins": r.coins, "reason": reason}),
+        )
+        .await;
+        notify_received(
+            state,
+            r.recipient,
+            r.recipient_email,
+            r.coins,
+            reason,
+            &posted.code,
+        )
+        .await;
+    }
+    Ok(TransferOutcome::Posted(posted.code))
+}
+
+async fn request_grant(
+    tx: &mut Tx<'_>,
+    r: &TransferRequest<'_>,
+    amount_vnd: i64,
+    idem: &str,
+) -> OrderResult<String> {
+    if let Some(code) =
+        sqlx::query_scalar::<_, String>("SELECT code FROM wallet_grants WHERE idem_key = $1")
+            .bind(idem)
+            .fetch_optional(&mut **tx)
+            .await?
+    {
+        return Ok(code);
+    }
+    let n: i64 = sqlx::query_scalar("SELECT nextval('wallet_grant_seq')")
+        .fetch_one(&mut **tx)
+        .await?;
+    let code = format!("CP-{n:06}");
+    sqlx::query(
+        "INSERT INTO wallet_grants (id, code, recipient, recipient_email, coins, amount_vnd, reason, requested_by, idem_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(&code)
+    .bind(r.recipient)
+    .bind(r.recipient_email.trim().to_ascii_lowercase())
+    .bind(r.coins)
+    .bind(amount_vnd)
+    .bind(r.reason.trim())
+    .bind(r.admin_email.trim())
+    .bind(idem)
+    .execute(&mut **tx)
+    .await?;
+    Ok(code)
+}
+
+async fn notify_received(
+    state: &AppState,
+    subject: Uuid,
+    email: &str,
+    coins: i64,
+    reason: &str,
+    code: &str,
+) {
+    let n = Note::vi(
+        format!("Bạn nhận được {}", coin(coins, Lang::Vi)),
+        format!(
+            "F-Eco đã chuyển {} vào ví của bạn (giao dịch {code}). Lý do: {reason}",
+            coin(coins, Lang::Vi)
+        ),
+        "/wallet",
+    )
+    .en(
+        format!("You received {}", coin(coins, Lang::En)),
+        format!(
+            "F-Eco added {} to your wallet (transaction {code}). Reason: {reason}",
+            coin(coins, Lang::En)
+        ),
+    );
+    notifications::notify(state, subject, Some(email), Category::Payment, &n).await;
+}
+
+/// Yêu cầu cấp F-Coin từ quỹ nền tảng.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct Grant {
+    pub id: Uuid,
+    pub code: String,
+    pub recipient: Uuid,
+    pub recipient_email: String,
+    pub coins: i64,
+    pub amount_vnd: i64,
+    pub reason: String,
+    pub status: String,
+    pub requested_by: String,
+    pub created_at: OffsetDateTime,
+}
+
+const GRANT_COLUMNS: &str =
+    "id, code, recipient, recipient_email, coins, amount_vnd, reason, status, requested_by, created_at";
+
+/// Yêu cầu cấp đang chờ, cũ nhất trước.
+pub async fn pending_grants(db: &Db) -> sqlx::Result<Vec<Grant>> {
+    sqlx::query_as(&format!(
+        "SELECT {GRANT_COLUMNS} FROM wallet_grants WHERE status = 'pending' ORDER BY created_at"
+    ))
+    .fetch_all(db)
+    .await
+}
+
+async fn lock_grant(tx: &mut Tx<'_>, id: Uuid, admin: &str) -> OrderResult<Grant> {
+    let g: Grant = sqlx::query_as(&format!(
+        "SELECT {GRANT_COLUMNS} FROM wallet_grants WHERE id = $1 FOR UPDATE"
+    ))
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .ok_or_else(|| not_found("Không có yêu cầu cấp này.", "No such grant request."))?;
+    if g.status != "pending" {
+        return Err(conflict(
+            "not_pending",
+            "Yêu cầu cấp đã được xử lý.",
+            "The grant request was already decided.",
+        ));
+    }
+    let admin = admin.trim();
+    if admin.is_empty()
+        || admin.eq_ignore_ascii_case(&g.requested_by)
+        || admin.eq_ignore_ascii_case(&g.recipient_email)
+    {
+        return Err(problem(
+            StatusCode::FORBIDDEN,
+            "second_approver_required",
+            "Cần một quản trị viên Tài chính khác (không phải người tạo hay người nhận) duyệt.",
+            "Another Finance administrator (not the requester or recipient) must decide.",
+        ));
+    }
+    Ok(g)
+}
+
+/// Quản trị viên Tài chính thứ hai duyệt yêu cầu cấp: ghi bút toán `admin_grant`.
+pub async fn approve_grant(state: &AppState, id: Uuid, admin: &str) -> OrderResult<String> {
+    let mut tx = state.db.begin().await?;
+    let g = lock_grant(&mut tx, id, admin).await?;
+    let to = user_account(&mut tx, g.recipient, Some(&g.recipient_email)).await?;
+    ensure_not_frozen(&mut tx, to).await?;
+    let issuance = system_account(&mut *tx, system::ISSUANCE).await?;
+    let posted = post(
+        &mut tx,
+        &Posting {
+            kind: Kind::AdminGrant,
+            idem: &format!("grant:{}", g.id),
+            memo: &g.reason,
+            reference: Some(&g.code),
+            by: admin.trim(),
+        },
+        &[
+            Leg {
+                account: issuance,
+                amount: -g.coins,
+            },
+            Leg {
+                account: to,
+                amount: g.coins,
+            },
+        ],
+    )
+    .await?;
+    sqlx::query(
+        "UPDATE wallet_grants SET status = 'approved', decided_by = $2, decided_at = now(), txn_id = $3 WHERE id = $1",
+    )
+    .bind(g.id)
+    .bind(admin.trim())
+    .bind(posted.txn)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    audit::record(
+        &state.db,
+        Actor::Admin(admin.trim().to_owned()),
+        "wallet.admin_grant",
+        Some(&posted.code),
+        None,
+        json!({"grant": g.code, "to": g.recipient_email, "coins": g.coins, "requested_by": g.requested_by}),
+    )
+    .await;
+    notify_received(
+        state,
+        g.recipient,
+        &g.recipient_email,
+        g.coins,
+        &g.reason,
+        &posted.code,
+    )
+    .await;
+    Ok(posted.code)
+}
+
+/// Từ chối yêu cầu cấp (bắt buộc lý do).
+pub async fn reject_grant(state: &AppState, id: Uuid, admin: &str, note: &str) -> OrderResult<()> {
+    let note = note.trim();
+    if note.is_empty() {
+        return Err(bad("reason_required", "Hãy ghi lý do.", "Give a reason."));
+    }
+    let mut tx = state.db.begin().await?;
+    let g = lock_grant(&mut tx, id, admin).await?;
+    sqlx::query(
+        "UPDATE wallet_grants SET status = 'rejected', decided_by = $2, decided_at = now(), decision_note = $3 WHERE id = $1",
+    )
+    .bind(g.id)
+    .bind(admin.trim())
+    .bind(note)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    audit::record(
+        &state.db,
+        Actor::Admin(admin.trim().to_owned()),
+        "wallet.grant_reject",
+        Some(&g.code),
+        None,
+        json!({"note": note}),
+    )
+    .await;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Rà soát trước production: một lần đổi tỷ giá không quá 20%; ngưỡng hai người duyệt tính theo
+    /// tổng 24 giờ (giá trị lưu được ưu tiên khi lớn hơn).
+    #[test]
+    fn rate_steps_and_rolling_approvals() {
+        assert!(rate_change_allowed(1000, 1200));
+        assert!(rate_change_allowed(1000, 800));
+        assert!(!rate_change_allowed(1000, 1201));
+        assert!(!rate_change_allowed(1000, 999_999));
+        assert!(!rate_change_allowed(1000, 1));
+        let w = |amount_vnd: i64, stored: Option<i16>| Withdrawal {
+            id: Uuid::nil(),
+            code: "RUT-000001".into(),
+            subject: Uuid::nil(),
+            email: "lan@example.com".into(),
+            coins: 1,
+            vnd_per_coin: 1000,
+            amount_vnd,
+            method: "bank".into(),
+            source_tx: None,
+            bank_name: None,
+            account_holder: None,
+            account_last4: None,
+            note: String::new(),
+            status: "pending".into(),
+            approvals: vec![],
+            decision_note: None,
+            payout_ref: None,
+            created_at: OffsetDateTime::UNIX_EPOCH,
+            approvals_required: stored,
+        };
+        assert_eq!(w(9_000_000, None).approvals_needed(), 1);
+        assert_eq!(w(9_000_000, Some(2)).approvals_needed(), 2);
+        assert_eq!(w(12_000_000, Some(1)).approvals_needed(), 2);
+        assert!(w(1, None).owned_by(" LAN@example.com "));
+        assert!(!w(1, None).owned_by("an@example.com"));
+    }
+
+    #[test]
+    fn transfer_checks() {
+        let base = TransferRequest {
+            admin_subject: Uuid::from_u128(1),
+            admin_email: "tc@f-eco.vn",
+            recipient: Uuid::from_u128(2),
+            recipient_email: "lan@example.com",
+            coins: 50,
+            source: TransferSource::Own,
+            reason: "Hỗ trợ",
+            idem: "abc",
+        };
+        assert!(check_transfer(&base).is_ok());
+        for bad in [
+            TransferRequest {
+                reason: "  ",
+                ..base.clone()
+            },
+            TransferRequest {
+                coins: 0,
+                ..base.clone()
+            },
+            TransferRequest {
+                coins: MAX_ADMIN_TRANSFER + 1,
+                ..base.clone()
+            },
+            TransferRequest {
+                recipient: Uuid::from_u128(1),
+                ..base.clone()
+            },
+            TransferRequest {
+                recipient_email: "TC@f-eco.vn",
+                ..base.clone()
+            },
+            TransferRequest {
+                idem: "",
+                ..base.clone()
+            },
+        ] {
+            assert!(check_transfer(&bad).is_err(), "{bad:?}");
+        }
+        assert_eq!(
+            TransferSource::parse("platform"),
+            Some(TransferSource::Platform)
+        );
+        assert_eq!(TransferSource::parse("issuance"), None);
+    }
     use time::macros::datetime;
 
     #[test]

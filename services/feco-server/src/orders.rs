@@ -985,11 +985,24 @@ pub async fn accept_quote(
         )
     })?;
     let mut tx = state.db.begin().await?;
-    sqlx::query("UPDATE order_quotes SET status = 'accepted', accepted_at = $2 WHERE id = $1")
-        .bind(q.id)
-        .bind(now)
-        .execute(&mut *tx)
-        .await?;
+    // Chỉ một lần bấm "Chấp nhận" đổi được báo giá đang mở: bấm hai lần không tạo hai khoản đặt cọc
+    // (rà soát trước production).
+    let accepted = sqlx::query(
+        "UPDATE order_quotes SET status = 'accepted', accepted_at = $2 WHERE id = $1 AND status = 'open'",
+    )
+    .bind(q.id)
+    .bind(now)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if accepted == 0 {
+        return Err(problem(
+            StatusCode::CONFLICT,
+            "no_open_quote",
+            "Báo giá này đã được chấp nhận.",
+            "This quote has already been accepted.",
+        ));
+    }
     sqlx::query("UPDATE order_milestones SET status = 'awaiting_payment' WHERE id = $1")
         .bind(deposit.id)
         .execute(&mut *tx)

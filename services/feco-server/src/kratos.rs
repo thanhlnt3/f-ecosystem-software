@@ -493,6 +493,60 @@ impl KratosClient {
         Ok(Self::into_response(res).await?.body)
     }
 
+    /// Danh tính dùng email này làm định danh đăng nhập (API quản trị).
+    pub async fn find_identity(&self, email: &str) -> Result<Option<Value>, KratosError> {
+        let mut url = self.admin_url("admin/identities");
+        url.query_pairs_mut()
+            .append_pair("credentials_identifier", email.trim());
+        let res = self.http.get(url).send().await?;
+        let r = Self::into_response(res).await?;
+        if r.status != StatusCode::OK {
+            return Err(KratosError::Body(format!(
+                "tìm danh tính thất bại: {}",
+                r.status
+            )));
+        }
+        Ok(r.body.as_array().and_then(|a| a.first()).cloned())
+    }
+
+    /// Tạo danh tính (API quản trị). Không ghi nội dung yêu cầu vào nhật ký vì có mật khẩu.
+    pub async fn create_identity(&self, body: &Value) -> Result<Value, KratosError> {
+        let res = self
+            .http
+            .post(self.admin_url("admin/identities"))
+            .json(body)
+            .send()
+            .await?;
+        let r = Self::into_response(res).await?;
+        if r.status == StatusCode::CREATED || r.status == StatusCode::OK {
+            Ok(r.body)
+        } else {
+            Err(KratosError::Body(format!(
+                "tạo danh tính thất bại: {} {}",
+                r.status, r.body["error"]["reason"]
+            )))
+        }
+    }
+
+    /// Đặt trạng thái danh tính (`active`, `inactive`).
+    pub async fn set_identity_state(&self, id: &str, value: &str) -> Result<(), KratosError> {
+        let patch = serde_json::json!([{ "op": "replace", "path": "/state", "value": value }]);
+        let res = self
+            .http
+            .patch(self.identity_url(id, ""))
+            .json(&patch)
+            .send()
+            .await?;
+        if res.status().is_success() {
+            Ok(())
+        } else {
+            Err(KratosError::Body(format!(
+                "đổi trạng thái danh tính thất bại: {}",
+                res.status()
+            )))
+        }
+    }
+
     /// Có tài khoản nào dùng email này làm định danh đăng nhập không (API quản trị).
     pub async fn identity_exists(&self, email: &str) -> Result<bool, KratosError> {
         let mut url = self
