@@ -427,6 +427,75 @@ pub fn flow_view(lang: Lang, kind: FlowKind, flow: &Value) -> FlowView {
     }
 }
 
+/// Thêm ô Vai trò, Tên pháp lý, Mã số thuế vào biểu mẫu đăng ký (thay đổi role-at-registration),
+/// ngay trước ô mật khẩu. `error` hiện dưới ô sai. Chỉ thêm vào biểu mẫu có ô email.
+pub fn add_role_fields(
+    lang: Lang,
+    view: &mut FlowView,
+    choice: &crate::roles::RoleChoice,
+    error: Option<crate::roles::RoleChoiceError>,
+) {
+    use crate::roles::{PlatformRole, REGISTRATION_ROLES};
+    let selected = PlatformRole::parse(&choice.role).unwrap_or(PlatformRole::User);
+    let msgs = |name: &str| match error {
+        Some(e) if e.field() == name => vec![Msg::error(lang.t(e.key()))],
+        _ => vec![],
+    };
+    for form in view
+        .forms
+        .iter_mut()
+        .filter(|f| f.fields.iter().any(|x| x.name == "traits.email"))
+    {
+        let mut role_msgs = msgs("feco_role");
+        role_msgs.push(Msg::info(lang.t("reg.role_hint")));
+        let fields = [
+            Field {
+                name: "feco_role".into(),
+                input_type: "select".into(),
+                label: lang.t("reg.role").into(),
+                value: selected.as_str().into(),
+                required: true,
+                autocomplete: String::new(),
+                messages: role_msgs,
+                options: REGISTRATION_ROLES
+                    .iter()
+                    .map(|r| SelectOption {
+                        value: r.as_str().into(),
+                        label: r.label(lang).into(),
+                        selected: *r == selected,
+                    })
+                    .collect(),
+            },
+            Field {
+                name: "feco_legal_name".into(),
+                input_type: "text".into(),
+                label: lang.t("reg.legal_name").into(),
+                value: choice.legal_name.clone(),
+                required: false,
+                autocomplete: "organization".into(),
+                messages: msgs("feco_legal_name"),
+                options: vec![],
+            },
+            Field {
+                name: "feco_tax_code".into(),
+                input_type: "text".into(),
+                label: lang.t("reg.tax_code").into(),
+                value: choice.tax_code.clone(),
+                required: false,
+                autocomplete: String::new(),
+                messages: msgs("feco_tax_code"),
+                options: vec![],
+            },
+        ];
+        let at = form
+            .fields
+            .iter()
+            .position(|f| f.name == "password")
+            .unwrap_or(form.fields.len());
+        form.fields.splice(at..at, fields);
+    }
+}
+
 /// Trang đăng ký chỉ hỏi những gì cần để tạo tài khoản; phần hồ sơ còn lại (ảnh, số
 /// điện thoại, thông tin hóa đơn) điền sau ở trang cài đặt.
 fn registration_field(node: &Value) -> bool {
@@ -477,6 +546,60 @@ mod tests {
             v.forms[0].hidden,
             vec![("csrf_token".to_string(), "tok".to_string())]
         );
+    }
+
+    /// role-at-registration: biểu mẫu đăng ký có ô Vai trò (năm lựa chọn) trước ô mật khẩu,
+    /// giữ giá trị đã nhập và hiện lỗi dưới ô sai.
+    #[test]
+    fn registration_form_has_role_fields() {
+        use crate::roles::{RoleChoice, RoleChoiceError};
+        let mut v = flow_view(
+            Lang::Vi,
+            FlowKind::Registration,
+            &registration_flow_with(json!([])),
+        );
+        let choice = RoleChoice {
+            role: "dev_company".into(),
+            legal_name: "Công ty CP Sao Mai".into(),
+            tax_code: String::new(),
+        };
+        add_role_fields(
+            Lang::Vi,
+            &mut v,
+            &choice,
+            Some(RoleChoiceError::TaxCodeInvalid),
+        );
+        let names: Vec<&str> = v.forms[0].fields.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "traits.email",
+                "feco_role",
+                "feco_legal_name",
+                "feco_tax_code",
+                "password",
+                "traits.locale"
+            ]
+        );
+        let role = &v.forms[0].fields[1];
+        let options: Vec<(&str, &str, bool)> = role
+            .options
+            .iter()
+            .map(|o| (o.value.as_str(), o.label.as_str(), o.selected))
+            .collect();
+        assert_eq!(
+            options,
+            [
+                ("user", "Người dùng phổ thông", false),
+                ("customer", "Khách hàng cá nhân", false),
+                ("business_customer", "Khách hàng doanh nghiệp", false),
+                ("developer", "Lập trình viên cá nhân", false),
+                ("dev_company", "Công ty phát triển phần mềm", true),
+            ]
+        );
+        assert_eq!(v.forms[0].fields[2].value, "Công ty CP Sao Mai");
+        assert_eq!(v.forms[0].fields[3].messages[0].kind, "error");
+        assert!(v.forms[0].fields[2].messages.is_empty());
     }
 
     #[test]

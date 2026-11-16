@@ -8789,3 +8789,262 @@ async fn web_apps_and_server_side_login() {
         assert_ne!(cb.path(), "/evil", "{cb}");
     }
 }
+
+// ============ role-at-registration: chọn vai trò khi đăng ký, quản trị viên xác nhận ============
+
+/// Gửi biểu mẫu đăng ký kèm các trường vai trò; trả về trang kết quả.
+async fn register_with_role(
+    c: &reqwest::Client,
+    email: &str,
+    password: &str,
+    name: &str,
+    role: &[(&str, &str)],
+) -> String {
+    let page = get(c, "/registration").await;
+    let form = parse_form(&page);
+    let mut extra: Vec<(&str, &str)> = vec![
+        ("traits.email", email),
+        ("traits.name", name),
+        ("password", password),
+        ("method", "password"),
+    ];
+    extra.extend_from_slice(role);
+    submit(c, &form, &extra).await
+}
+
+/// Phần thông báo của trang (bỏ email để so hai trang với nhau).
+fn page_messages(html: &str, email: &str) -> Vec<String> {
+    let doc = Html::parse_document(html);
+    doc.select(&Selector::parse(".msg").unwrap())
+        .map(|m| m.text().collect::<String>().replace(email, "EMAIL"))
+        .collect()
+}
+
+/// Spec account-identity "Chọn vai trò khi đăng ký", "Thông tin tổ chức khi đăng ký", "Trang sau
+/// khi đăng ký không lộ email đã dùng"; spec admin-console "Xác nhận vai trò chọn khi đăng ký".
+#[tokio::test]
+async fn role_chosen_at_registration() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::{
+        admin::Role,
+        roles::{self, PlatformRole},
+    };
+    let state = local_state();
+    let db = state.db.clone();
+    let pending_of = |email: String| {
+        let db = db.clone();
+        async move {
+            roles::pending_requests(&db)
+                .await
+                .unwrap()
+                .into_iter()
+                .find(|r| r.email == email)
+        }
+    };
+
+    // Trang đăng ký có ô Vai trò với năm lựa chọn, mặc định Người dùng phổ thông.
+    let page = get(&browser(), "/registration").await;
+    let doc = Html::parse_document(&page);
+    let options: Vec<(String, bool)> = doc
+        .select(&Selector::parse("select[name=feco_role] option").unwrap())
+        .map(|o| {
+            (
+                o.text().collect::<String>(),
+                o.value().attr("selected").is_some(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        options,
+        [
+            ("Người dùng phổ thông".to_string(), true),
+            ("Khách hàng cá nhân".to_string(), false),
+            ("Khách hàng doanh nghiệp".to_string(), false),
+            ("Lập trình viên cá nhân".to_string(), false),
+            ("Công ty phát triển phần mềm".to_string(), false),
+        ],
+        "{page}"
+    );
+    assert!(page.contains(r#"name="feco_legal_name""#) && page.contains(r#"name="feco_tax_code""#));
+
+    // --- Scenario "Đăng ký làm Khách hàng doanh nghiệp".
+    let (mai_email, mai_password) = unique("mai-doanh-nghiep");
+    let mai = browser();
+    let sent = register_with_role(
+        &mai,
+        &mai_email,
+        &mai_password,
+        "Mai Hoa",
+        &[
+            ("feco_role", "business_customer"),
+            ("feco_legal_name", "Công ty TNHH Hoa Mai"),
+            ("feco_tax_code", "0312345678"),
+        ],
+    )
+    .await;
+    assert!(
+        sent.contains("Vai trò Khách hàng doanh nghiệp cần quản trị viên duyệt"),
+        "{sent}"
+    );
+    let req = pending_of(mai_email.clone())
+        .await
+        .expect("có yêu cầu đang chờ");
+    assert_eq!(req.role, "business_customer");
+    assert_eq!(req.note, roles::REGISTRATION_NOTE);
+    assert_eq!(req.legal_name.as_deref(), Some("Công ty TNHH Hoa Mai"));
+    assert_eq!(req.tax_code.as_deref(), Some("0312345678"));
+    let mai_subject = subject_of(&mai_email).await;
+    assert_eq!(req.subject, mai_subject);
+    assert_eq!(
+        roles::role_of(&db, mai_subject).await.unwrap(),
+        PlatformRole::User,
+        "chờ duyệt thì vẫn là Người dùng phổ thông"
+    );
+    wait_mail(
+        ADMIN_EMAIL,
+        &format!("{mai_email} yêu cầu vai trò Khách hàng doanh nghiệp"),
+    )
+    .await;
+
+    // --- Scenario "Duyệt vai trò chọn khi đăng ký".
+    let (sysadmin, _) = admin_with_passkey(&state, "he-thong-dk", &[Role::Sysadmin]).await;
+    let members = get(&sysadmin, "/admin/members").await;
+    let doc = Html::parse_document(&members);
+    let card = doc
+        .select(&Selector::parse(&format!(r#"div[data-request="{}"]"#, req.id)).unwrap())
+        .next()
+        .unwrap_or_else(|| panic!("{members}"))
+        .text()
+        .collect::<String>();
+    assert!(
+        card.contains("Chọn khi đăng ký")
+            && card.contains("Email chưa xác minh")
+            && card.contains("Công ty TNHH Hoa Mai · MST 0312345678"),
+        "{card}"
+    );
+    let (status, _) = post(
+        &sysadmin,
+        &format!("/admin/members/requests/{}/approve", req.id),
+        &csrf_of(&members),
+        &[("note", "")],
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        roles::role_of(&db, mai_subject).await.unwrap(),
+        PlatformRole::BusinessCustomer
+    );
+    wait_mail(&mai_email, "Đã được cấp vai trò Khách hàng doanh nghiệp").await;
+
+    // --- Scenario "Công ty thiếu mã số thuế": không tạo tài khoản, giữ giá trị đã nhập.
+    let (co_email, co_password) = unique("cong-ty-thieu-mst");
+    let page = register_with_role(
+        &browser(),
+        &co_email,
+        &co_password,
+        "Sao Mai",
+        &[
+            ("feco_role", "dev_company"),
+            ("feco_legal_name", "Công ty CP Phần mềm Sao Mai"),
+            ("feco_tax_code", ""),
+        ],
+    )
+    .await;
+    assert!(
+        page.contains("Mã số thuế gồm 10 chữ số")
+            && page.contains(r#"value="Công ty CP Phần mềm Sao Mai""#)
+            && page.contains(&format!(r#"value="{co_email}""#)),
+        "{page}"
+    );
+    assert!(!state.kratos.identity_exists(&co_email).await.unwrap());
+
+    // --- Scenario "Vai trò lạ".
+    let (x_email, x_password) = unique("vai-tro-la");
+    let page = register_with_role(
+        &browser(),
+        &x_email,
+        &x_password,
+        "X",
+        &[("feco_role", "admin")],
+    )
+    .await;
+    assert!(page.contains("Vai trò không hợp lệ"), "{page}");
+    assert!(!state.kratos.identity_exists(&x_email).await.unwrap());
+
+    // --- Scenario "Đăng ký làm Người dùng phổ thông": không có yêu cầu.
+    let (nam_email, nam_password) = unique("nam-pho-thong");
+    let sent = register_with_role(&browser(), &nam_email, &nam_password, "Nam", &[]).await;
+    assert!(!sent.contains("cần quản trị viên duyệt"), "{sent}");
+    assert!(state.kratos.identity_exists(&nam_email).await.unwrap());
+    assert!(pending_of(nam_email.clone()).await.is_none());
+
+    // --- Scenario "Email đã có tài khoản": trang giống hệt đăng ký mới, không có yêu cầu mới.
+    let (fresh_email, fresh_password) = unique("lap-trinh-moi");
+    let fresh = register_with_role(
+        &browser(),
+        &fresh_email,
+        &fresh_password,
+        "Hùng",
+        &[("feco_role", "developer")],
+    )
+    .await;
+    let again = register_with_role(
+        &browser(),
+        &nam_email,
+        "mat-khau-khac-123456",
+        "Ai Đó",
+        &[("feco_role", "developer")],
+    )
+    .await;
+    assert_eq!(
+        page_messages(&fresh, &fresh_email),
+        page_messages(&again, &nam_email)
+    );
+    assert!(page_messages(&again, &nam_email)
+        .iter()
+        .any(|m| m.contains("Vai trò Lập trình viên cá nhân cần quản trị viên duyệt")));
+    assert!(pending_of(nam_email.clone()).await.is_none());
+
+    // --- Scenario "Từ chối không có lý do", rồi "Từ chối vai trò chọn khi đăng ký".
+    let hung = pending_of(fresh_email.clone())
+        .await
+        .expect("yêu cầu của Hùng");
+    let members = get(&sysadmin, "/admin/members").await;
+    let (status, body) = post(
+        &sysadmin,
+        &format!("/admin/members/requests/{}/reject", hung.id),
+        &csrf_of(&members),
+        &[("note", "")],
+    )
+    .await;
+    assert_ne!(status, 500, "{body}");
+    assert!(
+        pending_of(fresh_email.clone()).await.is_some(),
+        "vẫn đang chờ"
+    );
+    let members = get(&sysadmin, "/admin/members").await;
+    let (status, _) = post(
+        &sysadmin,
+        &format!("/admin/members/requests/{}/reject", hung.id),
+        &csrf_of(&members),
+        &[("note", "Chưa có hồ sơ năng lực")],
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert!(pending_of(fresh_email.clone()).await.is_none());
+    assert_eq!(
+        roles::role_of(&db, subject_of(&fresh_email).await)
+            .await
+            .unwrap(),
+        PlatformRole::User
+    );
+    let mail = wait_mail(
+        &fresh_email,
+        "Yêu cầu vai trò Lập trình viên cá nhân chưa được duyệt",
+    )
+    .await;
+    assert!(mail.contains("Chưa có hồ sơ năng lực"), "{mail}");
+}

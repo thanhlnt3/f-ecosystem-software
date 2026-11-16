@@ -1,5 +1,23 @@
 # Nhật ký thay đổi
 
+## 1.8.0 (16/11/2026)
+
+Thay đổi OpenSpec `role-at-registration`.
+
+- **Chọn vai trò khi đăng ký**: trang đăng ký có ô Vai trò với năm lựa chọn:
+  - Người dùng phổ thông (mặc định);
+  - Khách hàng cá nhân;
+  - Khách hàng doanh nghiệp;
+  - Lập trình viên cá nhân;
+  - Công ty phát triển phần mềm.
+- **Thông tin tổ chức**: Khách hàng doanh nghiệp và Công ty phát triển phần mềm phải nhập tên pháp lý và mã số thuế. Thiếu hoặc sai thì không tạo tài khoản; trang đăng ký hiện lỗi dưới ô sai và giữ giá trị đã nhập (trừ mật khẩu). Vai trò lạ (ví dụ `admin`) bị từ chối.
+- **Yêu cầu chờ duyệt**: vai trò khác Người dùng phổ thông tạo yêu cầu đang chờ (ghi "Chọn khi đăng ký"), và quản trị viên nhận cảnh báo. Trong lúc chờ, tài khoản là Người dùng phổ thông.
+- **Trang "Đã gửi email"**: nói vai trò đã chọn cần quản trị viên duyệt. Trang giống hệt nhau dù email mới hay đã có tài khoản; email đã có tài khoản không tạo yêu cầu.
+- **Trang Phân quyền**:
+  - mỗi yêu cầu ghi nguồn ("Chọn khi đăng ký" hoặc "Trang Vai trò") và trạng thái xác minh email;
+  - duyệt, hoặc từ chối kèm lý do; người dùng nhận thông báo và email.
+- Các trường vai trò là trường của F-Eco: không gửi tới Kratos, không đổi schema danh tính, không có migration mới.
+
 ## 1.7.0 (16/11/2026)
 
 Thay đổi OpenSpec `launcher-sidebar-and-web-apps`.

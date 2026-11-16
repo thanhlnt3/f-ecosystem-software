@@ -170,6 +170,7 @@
 {% for r in role_requests %}
 <div class="card role-request" data-request="{{ r.id }}">
   <p><strong>{{ r.email }}</strong> · <span class="badge brand request-role">{{ r.role }}</span> · {{ r.created }}</p>
+  <p><span class="badge request-source" data-registration="{{ r.from_registration }}">{{ r.source }}</span>{% if !r.email_status.is_empty() %} <span class="badge {% if r.email_verified %}ok{% else %}warn{% endif %} request-email" data-verified="{{ r.email_verified }}">{{ r.email_status }}</span>{% endif %}</p>
   {% if !r.organization.is_empty() %}<p class="request-org">{{ r.organization }}</p>{% endif %}
   {% if !r.note.is_empty() %}<p>{{ r.note }}</p>{% endif %}
   <form method="post" action="/admin/members/requests/{{ r.id }}/approve" style="display:inline">

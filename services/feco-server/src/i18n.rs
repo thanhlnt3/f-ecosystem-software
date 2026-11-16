@@ -1007,6 +1007,18 @@ pub fn t(lang: Lang, key: &str) -> &'static str {
         "store.web_hint" => ("Ứng dụng web chạy trong trình duyệt và đăng nhập bằng tài khoản F-Eco. Thêm vào F-Launcher để mở nhanh từ Thư viện.", "This web app runs in your browser and signs in with your F-Eco account. Add it in F-Launcher to open it quickly from your Library."),
         "store.web_app" => ("App web", "Web app"),
         "lib.open" => ("Mở", "Open"),
+        "reg.role" => ("Vai trò", "Role"),
+        "reg.role_hint" => ("Vai trò khác Người dùng phổ thông cần quản trị viên duyệt. Trong lúc chờ, bạn dùng F-Eco với vai trò Người dùng phổ thông.", "Roles other than General user need an administrator's approval. Until then, you use F-Eco as a General user."),
+        "reg.legal_name" => ("Tên pháp lý (Khách hàng doanh nghiệp, Công ty phát triển phần mềm)", "Legal name (Business customer, Software company)"),
+        "reg.tax_code" => ("Mã số thuế (Khách hàng doanh nghiệp, Công ty phát triển phần mềm)", "Tax code (Business customer, Software company)"),
+        "reg.role_unknown" => ("Vai trò không hợp lệ. Hãy chọn một vai trò trong danh sách.", "Invalid role. Choose a role from the list."),
+        "reg.legal_name_required" => ("Nhập tên pháp lý của doanh nghiệp hoặc công ty.", "Enter the legal name of your business or company."),
+        "reg.tax_code_invalid" => ("Mã số thuế gồm 10 chữ số, hoặc 10 chữ số, dấu gạch ngang và 3 chữ số.", "The tax code has 10 digits, or 10 digits, a hyphen and 3 digits."),
+        "reg.role_pending" => ("Vai trò {role} cần quản trị viên duyệt. Bạn sẽ nhận email khi có kết quả; trong lúc chờ, tài khoản của bạn là Người dùng phổ thông.", "The {role} role needs an administrator's approval. You will get an email with the result; until then, your account is a General user."),
+        "role.source_registration" => ("Chọn khi đăng ký", "Chosen at sign-up"),
+        "role.source_page" => ("Trang Vai trò", "Role page"),
+        "role.email_verified" => ("Email đã xác minh", "Email verified"),
+        "role.email_unverified" => ("Email chưa xác minh", "Email not verified"),
         _ => {
             tracing::warn!(key, "thiếu bản dịch");
             ("", "")

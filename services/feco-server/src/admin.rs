@@ -377,6 +377,12 @@ pub struct RoleRequestRow {
     /// Vai trò xin (tên hiển thị) và thông tin tổ chức nếu có.
     pub role: &'static str,
     pub organization: String,
+    /// Nguồn: "Chọn khi đăng ký" hoặc "Trang Vai trò" (thay đổi role-at-registration).
+    pub source: &'static str,
+    pub from_registration: bool,
+    /// "Email đã xác minh", "Email chưa xác minh", hoặc rỗng khi Kratos không trả lời.
+    pub email_status: String,
+    pub email_verified: bool,
 }
 
 pub struct RoleOption {
@@ -1745,27 +1751,58 @@ async fn render_members(
                 .join(", "),
         })
         .collect();
-    page.role_requests = crate::roles::pending_requests(&state.db)
+    let pending = crate::roles::pending_requests(&state.db)
         .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|r| RoleRequestRow {
+        .unwrap_or_default();
+    let mut rows = Vec::with_capacity(pending.len());
+    for r in pending {
+        // Trạng thái xác minh email của người xin (Kratos không trả lời thì bỏ trống).
+        let verified = match state.kratos.get_identity(&r.subject.to_string()).await {
+            Ok(Some(identity)) => Some(
+                identity["verifiable_addresses"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .any(|a| a["verified"].as_bool() == Some(true)),
+            ),
+            _ => None,
+        };
+        let from_registration = r.note == crate::roles::REGISTRATION_NOTE;
+        rows.push(RoleRequestRow {
             role: r.platform_role().label(lang),
             organization: match (&r.legal_name, &r.tax_code) {
                 (Some(n), Some(t)) => format!("{n} · MST {t}"),
                 _ => String::new(),
             },
+            source: lang.t(if from_registration {
+                "role.source_registration"
+            } else {
+                "role.source_page"
+            }),
+            from_registration,
+            email_status: match verified {
+                Some(true) => lang.t("role.email_verified").into(),
+                Some(false) => lang.t("role.email_unverified").into(),
+                None => String::new(),
+            },
+            email_verified: verified == Some(true),
             id: r.id.to_string(),
             email: r.email,
-            note: r.note,
+            // Ghi chú tự động của F-Eco đã hiện thành nhãn nguồn.
+            note: if from_registration {
+                String::new()
+            } else {
+                r.note
+            },
             created: r
                 .created_at
                 .format(time::macros::format_description!(
                     "[day]/[month]/[year] [hour]:[minute]"
                 ))
                 .unwrap_or_default(),
-        })
-        .collect();
+        });
+    }
+    page.role_requests = rows;
     render(state, headers, page, status)
 }
 

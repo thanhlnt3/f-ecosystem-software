@@ -361,3 +361,10 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 93. **App web qua Cổng nhà phát triển.** Hiện app web được đưa vào bằng `feco-tuf` và
     `feco-catalog` (nhà vận hành). Có cần cho nhà phát triển tự gửi app web qua Cổng nhà phát
     triển không? Nếu có, kiểm duyệt app web cần gì (kiểm tên miền, chính sách quyền riêng tư)?
+
+## Thay đổi role-at-registration (bản 1.8.0)
+
+94. **Xác minh trước khi duyệt vai trò.** Trang Phân quyền ghi email đã xác minh hay chưa, nhưng
+    vẫn cho duyệt yêu cầu của email chưa xác minh. Có nên chặn duyệt cho tới khi email được xác
+    minh không? Có cần kiểm mã số thuế với cơ quan thuế (tra cứu mã số thuế doanh nghiệp) trước khi
+    duyệt Khách hàng doanh nghiệp và Công ty phát triển phần mềm không?

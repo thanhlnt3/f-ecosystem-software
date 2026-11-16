@@ -146,6 +146,9 @@ curl http://127.0.0.1:8080/healthz
 Mở http://127.0.0.1:8080 trong trình duyệt. Giao diện theo ngôn ngữ của trình duyệt; đổi bằng nút **VI · EN · FR · 日本語** ở góc phải trên. Nút **Giao diện** bên cạnh mở trang tùy chỉnh: phong cách (Chân phương, Trang nhã, Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài), chủ đề sáng/tối, màu nhấn, mật độ, cỡ chữ. Tùy chỉnh lưu trên trình duyệt (cookie `feco_ui`).
 
 1. **Đăng ký** tại http://127.0.0.1:8080/registration. Mật khẩu phải dài từ 10 ký tự và không nằm trong các vụ rò rỉ dữ liệu, nên ví dụ `Password123!` sẽ bị từ chối.
+   - Chọn **Vai trò**: Người dùng phổ thông (mặc định), Khách hàng cá nhân, Khách hàng doanh nghiệp, Lập trình viên cá nhân hoặc Công ty phát triển phần mềm.
+   - Khách hàng doanh nghiệp và Công ty phát triển phần mềm phải nhập tên pháp lý và mã số thuế (10 số, ví dụ `0312345678`).
+   - Vai trò khác Người dùng phổ thông chờ Quản trị hệ thống duyệt hoặc từ chối ở http://127.0.0.1:8080/admin/members. Yêu cầu ghi "Chọn khi đăng ký" kèm trạng thái xác minh email. Kết quả gửi về email; trong lúc chờ, tài khoản là Người dùng phổ thông.
 2. **Xác minh email**: mở Mailpit tại http://127.0.0.1:8025. Mọi email của hệ thống dev đều được giữ ở đây, không gửi ra ngoài. Mở email "Xác minh email tài khoản F-Eco" rồi bấm liên kết.
 3. **Đăng nhập** tại http://127.0.0.1:8080/login. Trang chủ là **trang hồ sơ**: tên, email và trạng thái xác minh, vai trò, ngày tham gia; thẻ số liệu (ứng dụng đã kết nối, thiết bị, đơn hàng, thông báo chưa đọc); lối tắt bảo mật (kèm trạng thái xác thực hai lớp), quyền riêng tư, mua sắm và công cụ theo vai trò.
 4. **Cài đặt** tại http://127.0.0.1:8080/settings:

@@ -28,6 +28,7 @@ use crate::{
     i18n::{self, Lang},
     kratos::{ClientInfo, FlowKind, InitOptions, KratosResponse, Whoami},
     mailer::templates,
+    roles::{PlatformRole, RoleChoice, RoleChoiceError},
     views::{flow_view, ids, FlowView, Msg},
     AppState,
 };
@@ -164,15 +165,41 @@ fn flow_page(
     flow: &Value,
     challenge_required: bool,
 ) -> Response {
+    flow_page_with(
+        state,
+        lang,
+        kind,
+        flow,
+        challenge_required,
+        &RoleChoice::default(),
+        None,
+    )
+}
+
+/// Trang của một luồng; trang đăng ký có thêm ô vai trò với lựa chọn `role` và lỗi `role_error`
+/// (thay đổi role-at-registration).
+fn flow_page_with(
+    state: &AppState,
+    lang: Lang,
+    kind: FlowKind,
+    flow: &Value,
+    challenge_required: bool,
+    role: &RoleChoice,
+    role_error: Option<RoleChoiceError>,
+) -> Response {
     let challenge = challenge_required.then(|| ChallengeBox {
         field: challenge::FIELD,
         value: state.challenge.test_value(),
         label: state.challenge.label(lang),
     });
+    let mut view = flow_view(lang, kind, flow);
+    if kind == FlowKind::Registration {
+        crate::views::add_role_fields(lang, &mut view, role, role_error);
+    }
     render(
         FlowPage {
             i18n: lang,
-            view: flow_view(lang, kind, flow),
+            view,
             challenge,
             links: links_for(lang, kind),
         },
@@ -180,14 +207,41 @@ fn flow_page(
     )
 }
 
+/// Ghi lại giá trị người dùng đã nhập vào các ô của luồng (trừ mật khẩu), để hiện lại trang khi
+/// F-Eco từ chối biểu mẫu trước khi gửi tới Kratos.
+fn keep_values(flow: &mut Value, form: &[(String, String)]) {
+    let Some(nodes) = flow["ui"]["nodes"].as_array_mut() else {
+        return;
+    };
+    for node in nodes {
+        let name = node["attributes"]["name"].as_str().unwrap_or_default();
+        if matches!(name, "" | "password" | "csrf_token" | "method") {
+            continue;
+        }
+        if let Some((_, v)) = form.iter().find(|(k, _)| k == name) {
+            node["attributes"]["value"] = Value::String(v.clone());
+        }
+    }
+}
+
 /// Thông báo sau khi gửi biểu mẫu đăng ký. Giống hệt nhau cho email mới và email đã có
 /// tài khoản (spec account-identity, "Email đã được dùng").
-fn registration_sent_page(lang: Lang, email: &str) -> Response {
+///
+/// `pending_role`: vai trò người dùng chọn cần quản trị viên duyệt. Dòng này hiện cả khi email đã
+/// có tài khoản (không tạo yêu cầu), để trang không cho biết email nào đã đăng ký.
+fn registration_sent_page(lang: Lang, email: &str, pending_role: Option<PlatformRole>) -> Response {
+    let mut messages = vec![Msg::info(lang.t("reg.sent.body").replace("{email}", email))];
+    if let Some(role) = pending_role {
+        messages.push(Msg::info(
+            lang.t("reg.role_pending")
+                .replace("{role}", role.label(lang)),
+        ));
+    }
     render(
         MessagePage {
             i18n: lang,
             title: lang.t("reg.sent.title").into(),
-            messages: vec![Msg::info(lang.t("reg.sent.body").replace("{email}", email))],
+            messages,
             links: vec![("/login".into(), lang.t("home.login").into())],
         },
         lang,
@@ -277,9 +331,32 @@ pub async fn submit_flow(
     };
     let mut form: Vec<(String, String)> = form_urlencoded::parse(&body).into_owned().collect();
     let challenge_answer = field(&form, challenge::FIELD).map(str::to_owned);
+    // Vai trò chọn khi đăng ký (role-at-registration).
+    let role_choice = (kind == FlowKind::Registration).then(|| RoleChoice::from_form(&form));
     // Trường của F-Eco không được chuyển tới Kratos.
     form.retain(|(k, _)| !k.starts_with("feco_"));
     let cookie = cookie(&headers);
+
+    // --- Đăng ký: lựa chọn vai trò sai thì không tạo tài khoản, hiện lại trang với lỗi.
+    if let Some(choice) = &role_choice {
+        if let Err(role_error) = choice.validate() {
+            return match state.kratos.get_flow(kind, &id, cookie).await {
+                Ok(r) if r.status == StatusCode::OK => {
+                    let mut flow = r.body;
+                    keep_values(&mut flow, &form);
+                    flow_page_with(&state, lang, kind, &flow, false, choice, Some(role_error))
+                }
+                Ok(_) => redirect(
+                    state
+                        .kratos
+                        .browser_init_url(kind, &InitOptions::default())
+                        .as_str(),
+                    &[],
+                ),
+                Err(e) => unavailable(lang, e),
+            };
+        }
+    }
 
     // --- Đăng nhập bằng mật khẩu: làm chậm và thử thách chống bot trước khi chuyển tới Kratos.
     let identifier = (kind == FlowKind::Login)
@@ -323,6 +400,7 @@ pub async fn submit_flow(
         identifier: identifier.as_deref(),
         client: &client,
         cookie,
+        role: role_choice.as_ref(),
     };
     handle_submit_response(&state, lang, &req, r).await
 }
@@ -346,6 +424,8 @@ struct SubmitContext<'a> {
     identifier: Option<&'a str>,
     client: &'a ClientInfo,
     cookie: Option<&'a str>,
+    /// Vai trò chọn trên trang đăng ký.
+    role: Option<&'a RoleChoice>,
 }
 
 async fn handle_submit_response(
@@ -360,7 +440,11 @@ async fn handle_submit_response(
         identifier,
         client,
         cookie,
+        role,
     } = *req;
+    let no_role = RoleChoice::default();
+    let role = role.unwrap_or(&no_role);
+    let pending_role = role.needs_approval();
     let msg_ids = r.message_ids();
     match (r.status.as_u16(), kind) {
         (200, FlowKind::Login) => {
@@ -421,7 +505,28 @@ async fn handle_submit_response(
         }
         (200, FlowKind::Registration) => {
             let email = field(form, "traits.email").unwrap_or_default();
-            with_cookies(registration_sent_page(lang, email), &r.set_cookies)
+            // Vai trò khác Người dùng phổ thông: yêu cầu chờ quản trị viên duyệt.
+            let subject = r.body["identity"]["id"]
+                .as_str()
+                .and_then(|s| s.parse::<uuid::Uuid>().ok());
+            if let (Some(wanted), Some(subject)) = (pending_role, subject) {
+                if let Err(e) = crate::roles::request_role(
+                    state,
+                    subject,
+                    email,
+                    wanted,
+                    crate::roles::REGISTRATION_NOTE,
+                    role.organization().as_ref(),
+                )
+                .await
+                {
+                    tracing::error!(error = %e, "không tạo được yêu cầu vai trò lúc đăng ký");
+                }
+            }
+            with_cookies(
+                registration_sent_page(lang, email, pending_role),
+                &r.set_cookies,
+            )
         }
         (200, FlowKind::Settings) => {
             // Spec platform-security, "Nhật ký kiểm toán": đổi thông tin bảo mật.
@@ -450,7 +555,10 @@ async fn handle_submit_response(
         (400, FlowKind::Registration) if msg_ids.contains(&ids::DUPLICATE_IDENTIFIER) => {
             let email = field(form, "traits.email").unwrap_or_default().to_owned();
             notify_registration_attempt(state, email.clone());
-            with_cookies(registration_sent_page(lang, &email), &r.set_cookies)
+            with_cookies(
+                registration_sent_page(lang, &email, pending_role),
+                &r.set_cookies,
+            )
         }
         (400, FlowKind::Login) => {
             let mut challenge = false;
@@ -475,7 +583,10 @@ async fn handle_submit_response(
                 &r.set_cookies,
             )
         }
-        (400, _) => with_cookies(flow_page(state, lang, kind, &r.body, false), &r.set_cookies),
+        (400, _) => with_cookies(
+            flow_page_with(state, lang, kind, &r.body, false, role, None),
+            &r.set_cookies,
+        ),
         (410, _) => redirect(
             state
                 .kratos

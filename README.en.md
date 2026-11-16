@@ -146,6 +146,9 @@ In the `dev` environment, every address has a default value pointing to the infr
 Open http://127.0.0.1:8080 in a browser. The UI follows the browser language; change it with the **VI · EN · FR · 日本語** button in the top-right corner. The **Appearance** (Giao diện) button next to it opens the customization page: style (Plain, Elegant, Parchment, Fresco, Starry night, Lotus pond, Cubist, Lily, Old quarter, Lacquer), light/dark theme, accent color, density, font size. Customizations are stored in the browser (cookie `feco_ui`).
 
 1. **Sign up** at http://127.0.0.1:8080/registration. The password must be at least 10 characters long and must not appear in known data breaches, so for example `Password123!` will be rejected.
+   - Choose a **Role**: General user (default), Individual customer, Business customer, Individual developer or Software company.
+   - Business customers and Software companies must enter a legal name and a tax code (10 digits, for example `0312345678`).
+   - Roles other than General user wait for a System administrator to approve or reject them at http://127.0.0.1:8080/admin/members. The request shows "Chosen at sign-up" and whether the email is verified. The result arrives by email; until then, the account is a General user.
 2. **Verify your email**: open Mailpit at http://127.0.0.1:8025. All emails from the dev system are kept here and never sent out. Open the email "Xác minh email tài khoản F-Eco" (Verify your F-Eco account email) and click the link.
 3. **Sign in** at http://127.0.0.1:8080/login. The home page is the **profile page**: name, email and verification status, role, join date; stat cards (connected apps, devices, orders, unread notifications); shortcuts to security (including two-factor status), privacy, shopping, and role-based tools.
 4. **Settings** at http://127.0.0.1:8080/settings:

@@ -353,6 +353,107 @@ async fn role_of_tx(
     })
 }
 
+/// Ghi chú của yêu cầu vai trò tạo lúc đăng ký (trang Phân quyền hiện nguồn "Chọn khi đăng ký").
+pub const REGISTRATION_NOTE: &str = "Chọn khi đăng ký";
+
+/// Vai trò chọn được trên trang đăng ký (thay đổi role-at-registration).
+pub const REGISTRATION_ROLES: [PlatformRole; 5] = [
+    PlatformRole::User,
+    PlatformRole::Customer,
+    PlatformRole::BusinessCustomer,
+    PlatformRole::Developer,
+    PlatformRole::DevCompany,
+];
+
+/// Lỗi của lựa chọn vai trò trên trang đăng ký.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoleChoiceError {
+    UnknownRole,
+    LegalNameRequired,
+    TaxCodeInvalid,
+}
+
+impl RoleChoiceError {
+    /// Khóa chuỗi giao diện của lỗi.
+    pub fn key(self) -> &'static str {
+        match self {
+            RoleChoiceError::UnknownRole => "reg.role_unknown",
+            RoleChoiceError::LegalNameRequired => "reg.legal_name_required",
+            RoleChoiceError::TaxCodeInvalid => "reg.tax_code_invalid",
+        }
+    }
+
+    /// Trường của biểu mẫu đăng ký bị sai.
+    pub fn field(self) -> &'static str {
+        match self {
+            RoleChoiceError::UnknownRole => "feco_role",
+            RoleChoiceError::LegalNameRequired => "feco_legal_name",
+            RoleChoiceError::TaxCodeInvalid => "feco_tax_code",
+        }
+    }
+}
+
+/// Vai trò, tên pháp lý, mã số thuế người dùng nhập trên trang đăng ký. Các trường `feco_*` không
+/// được chuyển tới Kratos.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RoleChoice {
+    pub role: String,
+    pub legal_name: String,
+    pub tax_code: String,
+}
+
+impl RoleChoice {
+    pub fn from_form(form: &[(String, String)]) -> Self {
+        let get = |name: &str| {
+            form.iter()
+                .find(|(k, _)| k == name)
+                .map(|(_, v)| v.trim().to_owned())
+                .unwrap_or_default()
+        };
+        RoleChoice {
+            role: get("feco_role"),
+            legal_name: get("feco_legal_name"),
+            tax_code: get("feco_tax_code"),
+        }
+    }
+
+    /// Vai trò đã chọn và kiểm: trống là Người dùng phổ thông; vai trò tổ chức cần tên pháp lý
+    /// và mã số thuế hợp lệ.
+    pub fn validate(&self) -> Result<PlatformRole, RoleChoiceError> {
+        let role = if self.role.is_empty() {
+            PlatformRole::User
+        } else {
+            PlatformRole::parse(&self.role)
+                .filter(|r| REGISTRATION_ROLES.contains(r))
+                .ok_or(RoleChoiceError::UnknownRole)?
+        };
+        if role.is_organization() {
+            if self.legal_name.is_empty() {
+                return Err(RoleChoiceError::LegalNameRequired);
+            }
+            if !crate::payments::valid_tax_code(&self.tax_code) {
+                return Err(RoleChoiceError::TaxCodeInvalid);
+            }
+        }
+        Ok(role)
+    }
+
+    /// Vai trò cần quản trị viên duyệt (khác Người dùng phổ thông), nếu lựa chọn hợp lệ.
+    pub fn needs_approval(&self) -> Option<PlatformRole> {
+        self.validate().ok().filter(|r| *r != PlatformRole::User)
+    }
+
+    pub fn organization(&self) -> Option<Organization> {
+        self.validate()
+            .ok()
+            .filter(|r| r.is_organization())
+            .map(|_| Organization {
+                legal_name: self.legal_name.clone(),
+                tax_code: self.tax_code.clone(),
+            })
+    }
+}
+
 /// Một yêu cầu vai trò.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Request {
@@ -618,6 +719,55 @@ pub async fn holders(db: &Db) -> sqlx::Result<Vec<Holder>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// role-at-registration, scenario "Công ty thiếu mã số thuế", "Vai trò lạ".
+    #[test]
+    fn role_choice_at_registration() {
+        let form = |pairs: &[(&str, &str)]| -> Vec<(String, String)> {
+            pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        };
+        // Mặc định: Người dùng phổ thông, không cần duyệt.
+        let c = RoleChoice::from_form(&form(&[("traits.email", "a@b.vn")]));
+        assert_eq!(c.validate(), Ok(PlatformRole::User));
+        assert_eq!(c.needs_approval(), None);
+        let c = RoleChoice::from_form(&form(&[("feco_role", "user")]));
+        assert_eq!(c.validate(), Ok(PlatformRole::User));
+        // Khách hàng cá nhân, Lập trình viên cá nhân: không cần thông tin tổ chức.
+        for code in ["customer", "developer"] {
+            let c = RoleChoice::from_form(&form(&[("feco_role", code)]));
+            assert_eq!(c.needs_approval().map(PlatformRole::as_str), Some(code));
+            assert!(c.organization().is_none());
+        }
+        // Vai trò lạ, kể cả Quản trị viên.
+        for code in ["admin", "root", "Developer"] {
+            let c = RoleChoice::from_form(&form(&[("feco_role", code)]));
+            assert_eq!(c.validate(), Err(RoleChoiceError::UnknownRole), "{code}");
+        }
+        // Vai trò tổ chức.
+        let c = RoleChoice::from_form(&form(&[
+            ("feco_role", "dev_company"),
+            ("feco_legal_name", "Công ty CP Phần mềm Sao Mai"),
+        ]));
+        assert_eq!(c.validate(), Err(RoleChoiceError::TaxCodeInvalid));
+        assert_eq!(c.validate().unwrap_err().field(), "feco_tax_code");
+        let c = RoleChoice::from_form(&form(&[
+            ("feco_role", "business_customer"),
+            ("feco_tax_code", "0312345678"),
+        ]));
+        assert_eq!(c.validate(), Err(RoleChoiceError::LegalNameRequired));
+        let c = RoleChoice::from_form(&form(&[
+            ("feco_role", "business_customer"),
+            ("feco_legal_name", " Công ty TNHH Hoa Mai "),
+            ("feco_tax_code", "0312345678-001"),
+        ]));
+        assert_eq!(c.validate(), Ok(PlatformRole::BusinessCustomer));
+        let org = c.organization().unwrap();
+        assert_eq!(org.legal_name, "Công ty TNHH Hoa Mai");
+        assert_eq!(org.tax_code, "0312345678-001");
+    }
 
     #[test]
     fn roles_parse_and_permissions() {
