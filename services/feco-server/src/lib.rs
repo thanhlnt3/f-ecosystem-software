@@ -182,6 +182,8 @@ impl AppState {
             .max_connections(10)
             .acquire_timeout(std::time::Duration::from_secs(5))
             .connect_lazy(config.database_url.expose())?;
+        // Tên cookie CSRF theo địa chỉ công khai (`__Host-` khi https).
+        csrf::init(a.public_url.scheme() == "https");
         Ok(AppState {
             environment: config.environment,
             public_url: a.public_url.clone(),
