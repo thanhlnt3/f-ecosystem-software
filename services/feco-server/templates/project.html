@@ -18,7 +18,7 @@
 {% match p.delivery_note %}{% when Some with (d) %}
 <h2>{{ i18n.t("proj.delivery") }}</h2>
 <div class="card" id="delivery" style="white-space:pre-wrap">{{ d }}{% match p.delivery_link %}{% when Some with (l) %}
-<a href="{{ l }}" rel="noopener noreferrer">{{ l }}</a>{% when None %}{% endmatch %}</div>
+{% if l.starts_with("https://") || l.starts_with("http://") %}<a href="{{ l }}" rel="noopener noreferrer">{{ l }}</a>{% else %}<span>{{ l }}</span>{% endif %}{% when None %}{% endmatch %}</div>
 {% when None %}{% endmatch %}
 
 <h2>{{ i18n.t("proj.offers") }}</h2>

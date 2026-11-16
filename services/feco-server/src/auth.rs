@@ -60,6 +60,9 @@ pub struct ChallengeBox {
     pub field: &'static str,
     pub value: &'static str,
     pub label: &'static str,
+    /// Site key Turnstile: có thì hiện widget thay cho ô đánh dấu.
+    pub site_key: Option<String>,
+    pub script: &'static str,
 }
 
 #[derive(Template)]
@@ -191,6 +194,8 @@ fn flow_page_with(
         field: challenge::FIELD,
         value: state.challenge.test_value(),
         label: state.challenge.label(lang),
+        site_key: state.challenge.site_key().map(str::to_owned),
+        script: challenge::TURNSTILE_SCRIPT,
     });
     let mut view = flow_view(lang, kind, flow);
     if kind == FlowKind::Registration {
@@ -364,7 +369,12 @@ pub async fn submit_flow(
         .flatten();
     if let Some(ident) = &identifier {
         let status = state.throttle.status(ident, Instant::now());
-        if status.challenge_required && !state.challenge.verify(challenge_answer.as_deref()).await {
+        if status.challenge_required
+            && !state
+                .challenge
+                .verify(challenge_answer.as_deref(), client.ip.as_deref())
+                .await
+        {
             return match state.kratos.get_flow(kind, &id, cookie).await {
                 Ok(r) if r.status == StatusCode::OK => {
                     let mut flow = r.body;
@@ -719,7 +729,7 @@ fn lang_redirect(code: &str, next: Option<String>) -> Response {
     let lang = Lang::parse(code).unwrap_or_default();
     // Chỉ quay về đường dẫn nội bộ, tránh chuyển hướng mở.
     let next = next
-        .filter(|n| n.starts_with('/') && !n.starts_with("//") && !n.contains('\\'))
+        .filter(|n| crate::ui_prefs::safe_local_path(n).is_some())
         .unwrap_or_else(|| "/".into());
     let cookie = format!(
         "{}={}; Path=/; Max-Age=31536000; SameSite=Lax",
@@ -774,5 +784,8 @@ mod tests {
             .starts_with("feco_lang=en"));
         let res = lang_redirect("vi", Some("/settings".into()));
         assert_eq!(res.headers()["location"], "/settings");
+        // `?next=/%09/evil.example`: trình duyệt bỏ tab thành `//evil.example`.
+        let res = lang_redirect("vi", Some("/\t/evil.example".into()));
+        assert_eq!(res.headers()["location"], "/");
     }
 }

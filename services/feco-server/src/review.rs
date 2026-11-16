@@ -684,13 +684,40 @@ fn not_in_manual_queue() -> DevError {
     )
 }
 
-/// Người duyệt chấp nhận một phiên bản trong hàng chờ duyệt thủ công.
+/// Người duyệt có là thành viên (kể cả đang được mời) của tài khoản nhà phát triển sở hữu app.
+fn reviewer_is_member(reviewer: &str, member_emails: &[String]) -> bool {
+    let reviewer = reviewer.trim();
+    !reviewer.is_empty()
+        && member_emails
+            .iter()
+            .any(|m| m.trim().eq_ignore_ascii_case(reviewer))
+}
+
+/// Người duyệt chấp nhận một phiên bản trong hàng chờ duyệt thủ công. Không được tự duyệt
+/// app của tài khoản nhà phát triển mà mình là thành viên.
 pub async fn approve(
     state: &AppState,
     version_id: Uuid,
     reviewer: &str,
     note: &str,
 ) -> DevResult<()> {
+    let members: Vec<String> = sqlx::query_scalar(
+        "SELECT m.email FROM app_versions v
+         JOIN developer_apps a ON a.app_id = v.app_id
+         JOIN developer_members m ON m.account_id = a.account_id
+         WHERE v.id = $1",
+    )
+    .bind(version_id)
+    .fetch_all(&state.db)
+    .await?;
+    if reviewer_is_member(reviewer, &members) {
+        return Err(problem(
+            StatusCode::FORBIDDEN,
+            "reviewer_is_developer",
+            "Bạn là thành viên của nhà phát triển app này nên không được tự duyệt. Hãy để người duyệt khác xử lý.",
+            "You are a member of this app's developer account, so you can't approve it yourself. Let another reviewer handle it.",
+        ));
+    }
     let row: Option<(String, String)> = sqlx::query_as(
         "UPDATE app_versions SET status = 'approved', review_stage = 'done', reviewed_at = now(),
              review_note = $2
@@ -1124,6 +1151,16 @@ pub async fn open_alerts(db: &Db) -> sqlx::Result<Vec<Alert>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reviewer_cannot_approve_own_developer_app() {
+        let members = vec!["Lan@Example.com".to_owned(), "minh@example.com".to_owned()];
+        assert!(reviewer_is_member("lan@example.com", &members));
+        assert!(reviewer_is_member(" minh@example.com ", &members));
+        assert!(!reviewer_is_member("reviewer@f-eco.example", &members));
+        assert!(!reviewer_is_member("", &members));
+        assert!(!reviewer_is_member("lan@example.com", &[]));
+    }
 
     fn manifest(scopes: &[&str], network: bool, folders: &[&str]) -> Manifest {
         let mut text = String::from(

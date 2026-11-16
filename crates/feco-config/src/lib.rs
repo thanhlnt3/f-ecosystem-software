@@ -9,7 +9,12 @@
 //! Spec `platform-security`: bí mật không được xuất hiện trong nhật ký, nên mọi bí mật
 //! được bọc trong [`Secret`], kiểu này in ra `***` khi debug.
 
-use std::{collections::HashMap, fmt, net::SocketAddr, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fmt,
+    net::{IpAddr, SocketAddr},
+    path::PathBuf,
+};
 
 use feco_core::Environment;
 use url::Url;
@@ -111,6 +116,11 @@ pub struct PaymentsConfig {
 pub enum ChallengeProvider {
     /// Thử thách giả cho dev và test: một ô đánh dấu. Bị cấm ở production.
     Test,
+    /// Cloudflare Turnstile (`FECO_TURNSTILE_SITE_KEY`, `FECO_TURNSTILE_SECRET_KEY`).
+    Turnstile {
+        site_key: String,
+        secret_key: Secret,
+    },
 }
 
 /// Cấu hình đăng nhập và tài khoản (spec account-identity).
@@ -151,6 +161,9 @@ pub struct SecurityConfig {
     /// `FECO_ADMIN_PASSKEY_OPTIONAL=true`: bảng quản trị không bắt buộc passkey. Chỉ được đặt khi
     /// `FECO_ENV=dev` (WebAuthn không chạy trên RP ID 127.0.0.1); môi trường khác từ chối khởi động.
     pub admin_passkey_optional: bool,
+    /// `FECO_TRUSTED_PROXIES`: IP của proxy phía trước (phân tách bằng dấu phẩy). Chỉ khi kết
+    /// nối tới từ các IP này mới tin `X-Forwarded-For`. Mặc định rỗng: luôn dùng IP kết nối.
+    pub trusted_proxies: Vec<IpAddr>,
 }
 
 /// Kho TUF mà máy chủ ký target khi một phiên bản được phát hành (design D3). Bản dev dùng khóa
@@ -513,6 +526,15 @@ fn auth_config<'a>(
     }
     let challenge = match get("FECO_CHALLENGE_PROVIDER") {
         Some("test") => ChallengeProvider::Test,
+        Some("turnstile") => ChallengeProvider::Turnstile {
+            site_key: get("FECO_TURNSTILE_SITE_KEY")
+                .ok_or(ConfigError::Missing("FECO_TURNSTILE_SITE_KEY"))?
+                .to_owned(),
+            secret_key: Secret::new(
+                get("FECO_TURNSTILE_SECRET_KEY")
+                    .ok_or(ConfigError::Missing("FECO_TURNSTILE_SECRET_KEY"))?,
+            ),
+        },
         None if !prod => ChallengeProvider::Test,
         None => return Err(ConfigError::Missing("FECO_CHALLENGE_PROVIDER")),
         Some(other) => {
@@ -607,9 +629,22 @@ fn security_config<'a>(
             })
         }
     };
+    let trusted_proxies = get("FECO_TRUSTED_PROXIES")
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            s.parse::<IpAddr>().map_err(|_| ConfigError::Invalid {
+                var: "FECO_TRUSTED_PROXIES",
+                reason: format!("{s:?} không phải địa chỉ IP"),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(SecurityConfig {
         data_key,
         admin_passkey_optional,
+        trusted_proxies,
         rate_ip_per_min: num("FECO_RATE_IP_PER_MIN", 1200)?,
         rate_app_per_min: num("FECO_RATE_APP_PER_MIN", 1200)?,
         rate_user_per_min: num("FECO_RATE_USER_PER_MIN", 120)?,
@@ -1147,6 +1182,85 @@ mod tests {
             Config::from_vars(&v).unwrap_err(),
             ConfigError::TestChallengeInProduction
         );
+    }
+
+    #[test]
+    fn production_accepts_turnstile_with_keys() {
+        let v = vars(&[
+            ("FECO_PUBLIC_URL", "https://f-eco.example/"),
+            ("FECO_KRATOS_PUBLIC_URL", "http://kratos:4433/"),
+            ("FECO_KRATOS_ADMIN_URL", "http://kratos:4434/"),
+            ("FECO_SMTP_URL", "smtps://mail.example:465"),
+            ("FECO_HYDRA_PUBLIC_URL", "https://auth.f-eco.example/"),
+            ("FECO_HYDRA_ADMIN_URL", "http://hydra:4445/"),
+            ("FECO_PAIRWISE_SECRET", "0123456789abcdef0123456789abcdef"),
+            ("FECO_CHALLENGE_PROVIDER", "turnstile"),
+            ("FECO_TURNSTILE_SITE_KEY", "0x4AAAAAAAsite"),
+            ("FECO_TURNSTILE_SECRET_KEY", "0x4AAAAAAAsecret"),
+        ]);
+        let get = |n: &str| v.get(n).map(String::as_str);
+        let a = auth_config(Environment::Production, &get).unwrap();
+        assert_eq!(
+            a.challenge,
+            ChallengeProvider::Turnstile {
+                site_key: "0x4AAAAAAAsite".into(),
+                secret_key: Secret::new("0x4AAAAAAAsecret"),
+            }
+        );
+        assert!(!format!("{a:?}").contains("0x4AAAAAAAsecret"));
+    }
+
+    #[test]
+    fn turnstile_without_keys_is_rejected() {
+        let v = with_env(
+            "production",
+            &[
+                ("FECO_DATABASE_URL", "postgres://x@db/feco"),
+                ("FECO_PUBLIC_URL", "https://f-eco.example/"),
+                ("FECO_CHALLENGE_PROVIDER", "turnstile"),
+            ],
+        );
+        assert_eq!(
+            Config::from_vars(&v).unwrap_err(),
+            ConfigError::Missing("FECO_TURNSTILE_SITE_KEY")
+        );
+        let v = with_env(
+            "dev",
+            &[
+                ("FECO_CHALLENGE_PROVIDER", "turnstile"),
+                ("FECO_TURNSTILE_SITE_KEY", "site"),
+            ],
+        );
+        assert_eq!(
+            Config::from_vars(&v).unwrap_err(),
+            ConfigError::Missing("FECO_TURNSTILE_SECRET_KEY")
+        );
+    }
+
+    #[test]
+    fn trusted_proxies_parse_and_default_empty() {
+        let c = Config::from_vars(&with_env("dev", &[])).unwrap();
+        assert!(c.security.trusted_proxies.is_empty());
+        let c = Config::from_vars(&with_env(
+            "dev",
+            &[("FECO_TRUSTED_PROXIES", "10.0.0.1, ::1")],
+        ))
+        .unwrap();
+        assert_eq!(
+            c.security.trusted_proxies,
+            vec![
+                "10.0.0.1".parse::<IpAddr>().unwrap(),
+                "::1".parse::<IpAddr>().unwrap()
+            ]
+        );
+        assert!(matches!(
+            Config::from_vars(&with_env("dev", &[("FECO_TRUSTED_PROXIES", "proxy.local")]))
+                .unwrap_err(),
+            ConfigError::Invalid {
+                var: "FECO_TRUSTED_PROXIES",
+                ..
+            }
+        ));
     }
 
     #[test]

@@ -1806,21 +1806,65 @@ async fn render_members(
     render(state, headers, page, status)
 }
 
-/// Tài khoản Kratos có email này.
-async fn subject_by_email(state: &AppState, email: &str) -> Result<Uuid, String> {
-    state
+/// Kết quả tìm tài khoản theo email để cấp quyền.
+#[derive(Debug, PartialEq, Eq)]
+pub enum EmailLookup {
+    /// Có tài khoản, email đã xác minh.
+    Verified(Uuid),
+    /// Có tài khoản nhưng email chưa xác minh: không được cấp quyền.
+    Unverified,
+    NotFound,
+}
+
+/// Danh tính Kratos có email (đã xác minh) này chưa.
+fn email_verified(identity: &Value, email: &str) -> bool {
+    identity["verifiable_addresses"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|a| {
+            a["verified"].as_bool() == Some(true)
+                && a["value"]
+                    .as_str()
+                    .is_some_and(|v| v.eq_ignore_ascii_case(email))
+        })
+}
+
+/// Tìm trong danh sách danh tính người có email này; chỉ nhận khi email đã xác minh.
+fn match_email(identities: &[Value], email: &str) -> EmailLookup {
+    let email = email.trim();
+    let Some(i) = identities.iter().find(|i| {
+        i["traits"]["email"]
+            .as_str()
+            .is_some_and(|e| e.eq_ignore_ascii_case(email))
+    }) else {
+        return EmailLookup::NotFound;
+    };
+    match i["id"].as_str().and_then(|s| s.parse().ok()) {
+        Some(id) if email_verified(i, email) => EmailLookup::Verified(id),
+        Some(_) => EmailLookup::Unverified,
+        None => EmailLookup::NotFound,
+    }
+}
+
+/// Tài khoản Kratos có email này, kèm trạng thái xác minh (cấp quyền theo email).
+pub async fn lookup_email(state: &AppState, email: &str) -> Result<EmailLookup, String> {
+    let all = state
         .kratos
         .list_identities()
         .await
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .find(|i| {
-            i["traits"]["email"]
-                .as_str()
-                .is_some_and(|e| e.eq_ignore_ascii_case(email.trim()))
-        })
-        .and_then(|i| i["id"].as_str().and_then(|s| s.parse().ok()))
-        .ok_or_else(|| "không có người dùng với email này".to_owned())
+        .map_err(|e| e.to_string())?;
+    Ok(match_email(&all, email))
+}
+
+/// Tài khoản Kratos có email này; email phải đã xác minh (không cấp quyền cho tài khoản mạo
+/// danh email chưa xác minh).
+pub async fn subject_by_email(state: &AppState, email: &str) -> Result<Uuid, String> {
+    match lookup_email(state, email).await? {
+        EmailLookup::Verified(id) => Ok(id),
+        EmailLookup::Unverified => Err("email của người dùng này chưa được xác minh".to_owned()),
+        EmailLookup::NotFound => Err("không có người dùng với email này".to_owned()),
+    }
 }
 
 /// GET /admin/members
@@ -1933,9 +1977,10 @@ pub async fn save_member(
         )
         .await
     };
-    let target = match subject_by_email(&state, &email).await {
-        Ok(t) => t,
-        Err(_) => return fail(lang.t("role.err.no_user").to_owned()).await,
+    let target = match lookup_email(&state, &email).await {
+        Ok(EmailLookup::Verified(t)) => t,
+        Ok(EmailLookup::Unverified) => return fail(lang.t("role.err.unverified").to_owned()).await,
+        _ => return fail(lang.t("role.err.no_user").to_owned()).await,
     };
     let by = crate::roles::ChangedBy {
         subject: Some(admin.subject),
@@ -1965,6 +2010,29 @@ pub async fn save_member(
         }
         Err(e) => fail(lang.t(e.key()).to_owned()).await,
     }
+}
+
+/// Người gửi yêu cầu quyền đã xác minh email đăng ký chưa. Yêu cầu không còn thì trả `true`
+/// để `roles::decide` báo lỗi riêng.
+pub async fn requester_email_verified(state: &AppState, request: Uuid) -> Result<bool, String> {
+    let row: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT subject, email FROM role_requests WHERE id = $1")
+            .bind(request)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| e.to_string())?;
+    let Some((subject, email)) = row else {
+        return Ok(true);
+    };
+    let identity = state
+        .kratos
+        .get_identity(&subject.to_string())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(identity.is_some_and(|i| {
+        let current = i["traits"]["email"].as_str().unwrap_or(&email).to_owned();
+        email_verified(&i, &current)
+    }))
 }
 
 /// POST /admin/members/requests/{id}/{approve|reject} (note): duyệt hoặc từ chối yêu cầu quyền
@@ -1997,6 +2065,35 @@ pub async fn decide_role_request(
         "reject" => false,
         _ => return page_status(lang, StatusCode::NOT_FOUND, "error.generic"),
     };
+    // Chỉ duyệt khi người xin đã xác minh email; từ chối thì luôn được.
+    if approve {
+        match requester_email_verified(&state, id).await {
+            Ok(true) => {}
+            Ok(false) => {
+                return render_members(
+                    &state,
+                    lang,
+                    &headers,
+                    &admin,
+                    vec![Msg::error(lang.t("role.err.unverified"))],
+                    StatusCode::CONFLICT,
+                )
+                .await
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "không kiểm được email của người xin quyền");
+                return render_members(
+                    &state,
+                    lang,
+                    &headers,
+                    &admin,
+                    vec![Msg::error(lang.t("error.unavailable"))],
+                    StatusCode::SERVICE_UNAVAILABLE,
+                )
+                .await;
+            }
+        }
+    }
     let by = crate::roles::ChangedBy {
         subject: Some(admin.subject),
         name: admin.email.clone(),
@@ -2012,6 +2109,41 @@ pub async fn decide_role_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn role_grant_by_email_requires_verified_address() {
+        let id = "8c9f7a3e-0000-4000-8000-000000000001";
+        let identity = |verified: bool| {
+            json!({
+                "id": id,
+                "traits": {"email": "Lan@Example.com"},
+                "verifiable_addresses": [{"value": "lan@example.com", "verified": verified}],
+            })
+        };
+        assert_eq!(
+            match_email(&[identity(true)], " lan@example.com "),
+            EmailLookup::Verified(id.parse().unwrap())
+        );
+        assert_eq!(
+            match_email(&[identity(false)], "lan@example.com"),
+            EmailLookup::Unverified
+        );
+        assert_eq!(
+            match_email(&[identity(true)], "khac@example.com"),
+            EmailLookup::NotFound
+        );
+        // Địa chỉ đã xác minh phải đúng là email đang tìm.
+        let other = json!({
+            "id": id,
+            "traits": {"email": "lan@example.com"},
+            "verifiable_addresses": [{"value": "cu@example.com", "verified": true}],
+        });
+        assert_eq!(
+            match_email(&[other], "lan@example.com"),
+            EmailLookup::Unverified
+        );
+        assert!(!email_verified(&json!({}), "lan@example.com"));
+    }
 
     #[test]
     fn revenue_chart_has_one_bar_per_day() {

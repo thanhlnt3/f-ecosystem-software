@@ -102,6 +102,11 @@ fn clip(s: &str, max: usize) -> String {
     s.trim().chars().take(max).collect()
 }
 
+/// Liên kết bàn giao chỉ được là http/https (chặn `javascript:`, `data:`…).
+fn is_web_link(link: &str) -> bool {
+    url::Url::parse(link).is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.has_host())
+}
+
 // ---------- Hồ sơ nhận việc ----------
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
@@ -885,6 +890,13 @@ pub async fn deliver(
             "Describe the delivery.",
         ));
     }
+    if !link.is_empty() && !is_web_link(&link) {
+        return Err(bad(
+            "invalid_request",
+            "Liên kết bàn giao phải bắt đầu bằng http:// hoặc https://.",
+            "The delivery link must start with http:// or https://.",
+        ));
+    }
     let mut tx = state.db.begin().await?;
     let (p, side) = lock_party(&mut tx, id, subject).await?;
     if side != Side::Provider {
@@ -1537,6 +1549,18 @@ pub async fn sign_contract(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn delivery_link_rejects_script_urls() {
+        assert!(is_web_link("https://example.com/build.zip"));
+        assert!(is_web_link("http://example.com"));
+        assert!(!is_web_link("javascript:alert(1)"));
+        assert!(!is_web_link("JaVaScRiPt:alert(1)"));
+        assert!(!is_web_link("data:text/html,<script>alert(1)</script>"));
+        assert!(!is_web_link("vbscript:x"));
+        assert!(!is_web_link("//evil.example"));
+        assert!(!is_web_link("example.com"));
+    }
 
     fn sample() -> Project {
         Project {

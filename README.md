@@ -569,7 +569,9 @@ Các API chính của `feco-server`:
 | `FECO_PAIRWISE_SECRET` | khóa dev cố định | Bắt buộc ở production, tối thiểu 32 ký tự; đổi khóa thì `sub` của mọi app thay đổi |
 | `FECO_SMTP_URL` | `smtp://127.0.0.1:1025` | Bắt buộc ở production |
 | `FECO_EMAIL_FROM` | `F-Eco <no-reply@f-eco.example>` | |
-| `FECO_CHALLENGE_PROVIDER` | `test` | Production cấm `test`; nhà cung cấp thật chưa được chọn (xem `QUESTIONS.md`) |
+| `FECO_CHALLENGE_PROVIDER` | `test` | `test` (chỉ dev/staging) hoặc `turnstile` (Cloudflare Turnstile). Production cấm `test` |
+| `FECO_TURNSTILE_SITE_KEY` / `FECO_TURNSTILE_SECRET_KEY` | | Bắt buộc khi `FECO_CHALLENGE_PROVIDER=turnstile` |
+| `FECO_TRUSTED_PROXIES` | rỗng | IP proxy phía trước, phân tách bằng dấu phẩy. Chỉ kết nối từ các IP này mới được tin `X-Forwarded-For` |
 | `FECO_DATA_KEY` | khóa dev cố định | Khóa AES-256 (32 byte, base64) mã hóa khóa webhook và file xuất dữ liệu khi lưu. Bắt buộc ở production. Tạo: `openssl rand -base64 32` |
 | `FECO_RATE_IP_PER_MIN` | `1200` | Số yêu cầu mỗi phút từ một IP; vượt thì trả 429 kèm `Retry-After` |
 | `FECO_RATE_APP_PER_MIN` / `FECO_RATE_USER_PER_MIN` | `1200` / `120` | Số lần gọi `/v1/me` mỗi phút của một app / một người dùng |

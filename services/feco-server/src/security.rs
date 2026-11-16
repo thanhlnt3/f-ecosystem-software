@@ -6,6 +6,7 @@
 //! - "Giới hạn tần suất" theo địa chỉ IP, trả 429 kèm `Retry-After`.
 
 use std::{
+    net::IpAddr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -26,8 +27,61 @@ fn set(res: &mut Response, name: header::HeaderName, value: &'static str) {
         .insert(name, HeaderValue::from_static(value));
 }
 
-pub async fn layer(State(state): State<Arc<AppState>>, req: Request, next: Next) -> Response {
+/// IP thật của người dùng, do [`layer`] tính một lần cho mỗi yêu cầu (đọc qua `ClientInfo`).
+#[derive(Debug, Clone, Copy)]
+pub struct ClientIp(pub IpAddr);
+
+/// IP người dùng: chỉ tin `X-Forwarded-For` khi kết nối tới từ proxy tin cậy, và lấy địa chỉ
+/// ngoài cùng bên phải không phải proxy tin cậy (phần bên trái do người dùng tự khai được).
+pub fn client_ip(peer: IpAddr, forwarded: &[&str], trusted: &[IpAddr]) -> IpAddr {
+    if !trusted.contains(&peer) {
+        return peer;
+    }
+    let hops: Vec<&str> = forwarded
+        .iter()
+        .flat_map(|h| h.split(','))
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    let mut ip = peer;
+    for hop in hops.iter().rev() {
+        let Some(addr) = parse_hop(hop) else {
+            // Proxy ghi giá trị lạ: dừng, dùng chặng tin cậy cuối cùng.
+            return ip;
+        };
+        ip = addr;
+        if !trusted.contains(&addr) {
+            break;
+        }
+    }
+    ip
+}
+
+/// Một chặng trong `X-Forwarded-For`: `ip`, `ip:cổng` hoặc `[ipv6]:cổng`.
+fn parse_hop(s: &str) -> Option<IpAddr> {
+    s.parse::<IpAddr>()
+        .ok()
+        .or_else(|| s.parse::<std::net::SocketAddr>().ok().map(|a| a.ip()))
+}
+
+pub async fn layer(State(state): State<Arc<AppState>>, mut req: Request, next: Next) -> Response {
     let https_public = state.public_url.scheme() == "https";
+
+    // IP người dùng cho giới hạn tần suất, nhật ký và Kratos.
+    if let Some(peer) = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|c| c.0.ip())
+    {
+        let forwarded: Vec<&str> = req
+            .headers()
+            .get_all("x-forwarded-for")
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .collect();
+        let ip = client_ip(peer, &forwarded, &state.trusted_proxies);
+        req.extensions_mut().insert(ClientIp(ip));
+    }
 
     // Chuyển HTTP sang HTTPS (chỉ khi chạy sau proxy TLS ở production).
     if state.environment.is_production()
@@ -118,4 +172,48 @@ pub fn too_many(path: &str, wait: Duration) -> Response {
         res.headers_mut().insert(header::RETRY_AFTER, v);
     }
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ip(s: &str) -> IpAddr {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn forwarded_for_ignored_unless_peer_is_trusted_proxy() {
+        let trusted = [ip("10.0.0.1"), ip("10.0.0.2")];
+        // Kết nối thẳng: bỏ qua X-Forwarded-For tự khai.
+        assert_eq!(
+            client_ip(ip("198.51.100.20"), &["203.0.113.7"], &trusted),
+            ip("198.51.100.20")
+        );
+        assert_eq!(
+            client_ip(ip("198.51.100.20"), &["203.0.113.7"], &[]),
+            ip("198.51.100.20")
+        );
+        // Qua proxy tin cậy: lấy chặng ngoài cùng bên phải không phải proxy.
+        assert_eq!(
+            client_ip(
+                ip("10.0.0.1"),
+                &["1.2.3.4, 203.0.113.7, 10.0.0.2"],
+                &trusted
+            ),
+            ip("203.0.113.7")
+        );
+        // Nhiều header được nối theo thứ tự.
+        assert_eq!(
+            client_ip(ip("10.0.0.1"), &["1.2.3.4", "203.0.113.7:5123"], &trusted),
+            ip("203.0.113.7")
+        );
+        // Không có X-Forwarded-For: dùng IP kết nối.
+        assert_eq!(client_ip(ip("10.0.0.1"), &[], &trusted), ip("10.0.0.1"));
+        // Giá trị rác ở chặng do proxy ghi: không tin.
+        assert_eq!(
+            client_ip(ip("10.0.0.1"), &["203.0.113.7, rac"], &trusted),
+            ip("10.0.0.1")
+        );
+    }
 }

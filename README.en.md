@@ -570,7 +570,9 @@ The main `feco-server` APIs:
 | `FECO_PAIRWISE_SECRET` | fixed dev key | Required in production, at least 32 characters; changing the key changes every app's `sub` |
 | `FECO_SMTP_URL` | `smtp://127.0.0.1:1025` | Required in production |
 | `FECO_EMAIL_FROM` | `F-Eco <no-reply@f-eco.example>` | |
-| `FECO_CHALLENGE_PROVIDER` | `test` | Production forbids `test`; the real provider has not been chosen yet (see `QUESTIONS.md`) |
+| `FECO_CHALLENGE_PROVIDER` | `test` | `test` (dev/staging only) or `turnstile` (Cloudflare Turnstile). Production forbids `test` |
+| `FECO_TURNSTILE_SITE_KEY` / `FECO_TURNSTILE_SECRET_KEY` | | Required when `FECO_CHALLENGE_PROVIDER=turnstile` |
+| `FECO_TRUSTED_PROXIES` | empty | Comma-separated IPs of the reverse proxy in front. `X-Forwarded-For` is trusted only on connections from these IPs |
 | `FECO_DATA_KEY` | fixed dev key | AES-256 key (32 bytes, base64) that encrypts webhook keys and data export files at rest. Required in production. Generate with: `openssl rand -base64 32` |
 | `FECO_RATE_IP_PER_MIN` | `1200` | Requests per minute from one IP; beyond that it returns 429 with `Retry-After` |
 | `FECO_RATE_APP_PER_MIN` / `FECO_RATE_USER_PER_MIN` | `1200` / `120` | `/v1/me` calls per minute per app / per user |

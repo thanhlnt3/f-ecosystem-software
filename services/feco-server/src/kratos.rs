@@ -63,9 +63,8 @@ pub fn message_ids(flow: &Value) -> Vec<i64> {
 /// Thông tin trình duyệt gửi kèm cho Kratos, để Kratos ghi đúng thiết bị và địa chỉ IP
 /// của người dùng vào phiên (thay vì của chính feco-server).
 ///
-/// IP lấy từ `X-Forwarded-For` (khi chạy sau proxy) hoặc từ địa chỉ kết nối. Ở
-/// production, proxy phía trước phải ghi đè `X-Forwarded-For` để người dùng không tự
-/// khai IP giả (chỉ ảnh hưởng tới phần hiển thị thiết bị).
+/// IP lấy từ địa chỉ kết nối; chỉ khi kết nối tới từ proxy trong `FECO_TRUSTED_PROXIES` mới
+/// dùng `X-Forwarded-For` (xem [`crate::security::client_ip`]).
 #[derive(Debug, Clone, Default)]
 pub struct ClientInfo {
     pub user_agent: Option<String>,
@@ -86,16 +85,22 @@ impl<S: Send + Sync> axum::extract::FromRequestParts<S> for ClientInfo {
                 .and_then(|v| v.to_str().ok())
                 .map(str::to_owned)
         };
-        let forwarded = header_str("x-forwarded-for")
-            .and_then(|v| v.split(',').next().map(|s| s.trim().to_owned()))
-            .filter(|s| !s.is_empty());
-        let remote = parts
+        // IP do lớp bảo vệ tính (chỉ tin X-Forwarded-For từ proxy tin cậy); không có thì
+        // dùng địa chỉ kết nối.
+        let ip = parts
             .extensions
-            .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-            .map(|c| c.0.ip().to_string());
+            .get::<crate::security::ClientIp>()
+            .map(|c| c.0)
+            .or_else(|| {
+                parts
+                    .extensions
+                    .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+                    .map(|c| c.0.ip())
+            })
+            .map(|ip| ip.to_string());
         Ok(ClientInfo {
             user_agent: header_str("user-agent"),
-            ip: forwarded.or(remote),
+            ip,
         })
     }
 }

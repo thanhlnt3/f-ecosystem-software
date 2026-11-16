@@ -8,7 +8,11 @@
 //!   không hỏi lại. Mỗi lựa chọn được ghi vào `consent_records`.
 //! - `/oauth/logout`: chấp nhận yêu cầu đăng xuất từ app.
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::BTreeSet,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use askama::Template;
 use axum::{
@@ -113,6 +117,62 @@ fn cookie(headers: &HeaderMap) -> Option<&str> {
     headers.get(header::COOKIE).and_then(|v| v.to_str().ok())
 }
 
+/// Phiên vừa xác thực trong khoảng này coi như đã "đăng nhập lại" cho `prompt=login`, và là mức
+/// tối thiểu của `max_age` (tránh vòng lặp: sau khi đăng nhập lại, trình duyệt quay về đây ngay).
+const FRESH_LOGIN: Duration = Duration::from_secs(60);
+
+/// Có phải bắt đăng nhập lại trước khi chấp nhận yêu cầu đăng nhập OAuth không: `prompt=login`
+/// mà phiên không vừa xác thực, hoặc phiên cũ hơn `max_age` giây. Không rõ lúc xác thực thì
+/// coi như cũ.
+pub fn needs_reauth(
+    request_url: &str,
+    authenticated_at: Option<SystemTime>,
+    now: SystemTime,
+) -> bool {
+    let query = request_url.split_once('?').map(|(_, q)| q).unwrap_or("");
+    let query = query.split('#').next().unwrap_or("");
+    let mut prompt_login = false;
+    let mut max_age: Option<u64> = None;
+    for (k, v) in form_urlencoded::parse(query.as_bytes()) {
+        match k.as_ref() {
+            "prompt" => prompt_login |= v.split(' ').any(|p| p == "login"),
+            "max_age" => max_age = v.trim().parse().ok(),
+            _ => {}
+        }
+    }
+    if !prompt_login && max_age.is_none() {
+        return false;
+    }
+    let Some(age) = authenticated_at.map(|at| now.duration_since(at).unwrap_or(Duration::ZERO))
+    else {
+        return true;
+    };
+    if prompt_login && age > FRESH_LOGIN {
+        return true;
+    }
+    max_age.is_some_and(|m| age > Duration::from_secs(m).max(FRESH_LOGIN))
+}
+
+/// `acr` (mức đảm bảo xác thực của phiên Kratos) và `amr` (các phương thức đã dùng) cho Hydra.
+fn session_acr_amr(session: &Value) -> (Option<String>, Vec<String>) {
+    let acr = session["authenticator_assurance_level"]
+        .as_str()
+        .map(str::to_owned);
+    let mut amr: Vec<String> = Vec::new();
+    for m in session["authentication_methods"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        if let Some(name) = m["method"].as_str() {
+            if !amr.iter().any(|x| x == name) {
+                amr.push(name.to_owned());
+            }
+        }
+    }
+    (acr, amr)
+}
+
 /// GET /oauth/login?login_challenge=...
 pub async fn login(
     State(state): State<Arc<AppState>>,
@@ -165,6 +225,28 @@ pub async fn login(
         }
         Err(e) => return upstream(lang, e),
     };
+    // App yêu cầu đăng nhập lại (`prompt=login`) hoặc phiên quá cũ so với `max_age`: bắt
+    // đăng nhập lại (Kratos refresh) rồi quay về đúng yêu cầu này.
+    let authenticated_at = session["authenticated_at"]
+        .as_str()
+        .and_then(|t| humantime::parse_rfc3339(t).ok());
+    if needs_reauth(
+        request["request_url"].as_str().unwrap_or_default(),
+        authenticated_at,
+        SystemTime::now(),
+    ) {
+        let opts = InitOptions {
+            return_to: Some(back_here),
+            aal: None,
+            refresh: true,
+        };
+        return see_other(
+            state
+                .kratos
+                .browser_init_url(FlowKind::Login, &opts)
+                .as_str(),
+        );
+    }
     let subject = session["identity"]["id"]
         .as_str()
         .unwrap_or_default()
@@ -181,9 +263,10 @@ pub async fn login(
         };
     }
     let pairwise = state.pairwise.subject(&client_id, &subject);
+    let (acr, amr) = session_acr_amr(&session);
     match state
         .hydra
-        .accept_login(&challenge, &subject, &pairwise)
+        .accept_login(&challenge, &subject, &pairwise, acr.as_deref(), &amr)
         .await
     {
         Ok(to) => see_other(&to),
@@ -423,5 +506,59 @@ pub async fn logout(
     match state.hydra.accept_logout(&challenge).await {
         Ok(to) => see_other(&to),
         Err(e) => upstream(lang, e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const AUTH: &str = "https://auth.f-eco.example/oauth2/auth?client_id=app&response_type=code";
+
+    #[test]
+    fn oauth_login_honors_prompt_login_and_max_age() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+        let ago = |s: u64| Some(now - Duration::from_secs(s));
+        // Không có prompt/max_age: dùng phiên sẵn có.
+        assert!(!needs_reauth(AUTH, ago(86_400), now));
+        assert!(!needs_reauth(AUTH, None, now));
+        // prompt=login: phiên cũ phải đăng nhập lại; vừa đăng nhập lại thì cho qua (không lặp).
+        let p = format!("{AUTH}&prompt=login");
+        assert!(needs_reauth(&p, ago(600), now));
+        assert!(!needs_reauth(&p, ago(5), now));
+        assert!(needs_reauth(&p, None, now));
+        assert!(needs_reauth(
+            &format!("{AUTH}&prompt=consent%20login"),
+            ago(600),
+            now
+        ));
+        assert!(!needs_reauth(
+            &format!("{AUTH}&prompt=consent"),
+            ago(600),
+            now
+        ));
+        // max_age tính bằng giây.
+        let m = format!("{AUTH}&max_age=300");
+        assert!(!needs_reauth(&m, ago(200), now));
+        assert!(needs_reauth(&m, ago(301), now));
+        assert!(needs_reauth(&m, None, now));
+        // max_age=0 không gây vòng lặp ngay sau khi đăng nhập lại.
+        let z = format!("{AUTH}&max_age=0");
+        assert!(!needs_reauth(&z, ago(3), now));
+        assert!(needs_reauth(&z, ago(120), now));
+    }
+
+    #[test]
+    fn oauth_accept_login_passes_session_acr_amr() {
+        let session = serde_json::json!({
+            "authenticator_assurance_level": "aal2",
+            "authentication_methods": [
+                {"method": "password"}, {"method": "totp"}, {"method": "password"}
+            ],
+        });
+        let (acr, amr) = session_acr_amr(&session);
+        assert_eq!(acr.as_deref(), Some("aal2"));
+        assert_eq!(amr, ["password", "totp"]);
+        assert_eq!(session_acr_amr(&serde_json::json!({})), (None, vec![]));
     }
 }
