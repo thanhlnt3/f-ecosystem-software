@@ -290,6 +290,16 @@ app repository; it is used only to try single sign-on in step 5.
     `http://localhost:3000/auth/feco` in your browser. To run ThesisAI itself, follow
     [integrations/thesisai/README.md](integrations/thesisai/README.md) (apply the "Sign in with
     F-Eco" patch and set the `FECO_*` variables the command above prints).
+16. **Mobile F-Launcher** (`clients/feco-mobile`, Flutter): a companion app for Android 10+ and iOS 18+.
+    - Five tabs: My apps, Store (open web apps, browse desktop apps), Wallet (buy apps), Notifications, Account.
+    - Sign in with your F-Eco account through the system browser.
+    - `scripts/dev-launcher.sh setup` creates the mobile OAuth client. Run `feco-server` with the `FECO_MOBILE_CLIENT_ID` the script prints, then run the app on an Android emulator:
+
+    ```bash
+    cd clients/feco-mobile && flutter run --dart-define=FECO_CLIENT_ID=$(cat ../../.dev/mobile-client-id)
+    ```
+
+    Add `--dart-define=FECO_DEMO=true` to try it with sample data and no server. Details in [clients/feco-mobile/README.md](clients/feco-mobile/README.md).
 
 Launcher variables: `FECO_LAUNCHER_SERVER` (default `http://127.0.0.1:8080/` in debug builds only; required in release builds unless `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, same rule), `FECO_LAUNCHER_DATA_DIR` (data directory), `FECO_LAUNCHER_TRUSTED_ROOT`
@@ -558,6 +568,7 @@ The main `feco-server` APIs:
 | `POST /v1/apps/crashes` | An app reports a runtime crash (`{"version"}`, the app's access token); used only for aggregate metrics |
 | `POST /v1/launch-codes/exchange` | Sub-app: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → an `authorization_code` to exchange for a token at Hydra with PKCE. Only re-issues scopes the user has already consented to; if not yet consented it returns `consent_required` |
 | `/wallet`, `/wallet/stats`, `POST /wallet/topup`, `POST /wallet/withdraw` | F-Coin wallet: balance, top-up, withdrawal, history, statistics |
+| `GET /v1/library` | F-Launcher token only (desktop or mobile): "My apps" as JSON |
 | `GET /v1/wallet`, `POST /v1/wallet/purchases` | F-Launcher token only: balance, owned apps, prices; buy an app `{"app_id", "expected_price"}` |
 | `/account/role`, `/projects`, `/projects/{id}`, `/library` | Role requests, software projects, my apps |
 | `/admin/wallet`, `/admin/projects` | F-Coin wallet admin (Finance) and projects (Project manager) |
@@ -593,6 +604,7 @@ The main `feco-server` APIs:
 | `FECO_ADMIN_PASSKEY_OPTIONAL` | `false` | `true`: the Admin Console does not require a passkey. Can be set only when `FECO_ENV=dev`; other environments refuse to start |
 | `FECO_LAUNCHER_CLIENT_ID` | not set | The F-Launcher client ID in Hydra. If set, it enables sub-app launch codes (`/v1/launch-codes`) and the launcher does not have to go through the consent screen |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | not set | Dev/staging may only point to the payment gateway's sandbox |
+| `FECO_MOBILE_CLIENT_ID` | | OAuth client of the mobile F-Launcher (first party: no consent screen, may call launcher APIs) |
 | `FECO_ADMIN_EMAIL` | dev: `admin@f-eco.local` | Email of the default administrator account; required outside dev |
 | `FECO_ADMIN_PASSWORD_FILE` | dev: `.dev/admin-password` (generated) | Secret file with the initial password (≥ 12 characters), used only when the account is created; required outside dev |
 | `FECO_WALLET_WITHDRAWALS` | `true` | `false`: stop accepting new F-Coin withdrawals (pending ones are still processed) |
@@ -688,6 +700,7 @@ Questions awaiting a decision are in [`QUESTIONS.md`](QUESTIONS.md).
 | `crates/feco-tuf` | The TUF repository (build, sign, revoke, rotate keys) and the verifying client for the launcher; the `feco-tuf` tool |
 | `services/feco-server` | The HTTP service (axum): account pages, OAuth login/consent, `/v1/me`, webhooks, data export, F-Store, build-to-order requests (`/orders`); the `feco-catalog` tool; `migrations/` is the PostgreSQL schema; `templates/` is the UI |
 | `clients/f-builder` | F-Builder: a tool for building apps yourself with a coding agent, developed from Craft Anything 0.6.0 (its own Cargo workspace; see `clients/f-builder/README.md` and `NOTICE`) |
+| `clients/feco-mobile` | Mobile F-Launcher (Flutter, Android 10+, iOS 18+) |
 | `clients/feco-launcher` | F-Launcher: the library (sign-in, install/update/uninstall through TUF, launch codes, local API) and the egui UI |
 | `tools/feco-demo-app` | Sample sub-app: single sign-on and calling `/v1/me`; when opened by the launcher it signs in with a launch code |
 | `sdk/` | F-SDK: `rust` (crate `fsdk`), `c` (C ABI `fsdk_c` and header), `python` (`ctypes` binding), `typescript` (package `@f-eco/sdk`) |

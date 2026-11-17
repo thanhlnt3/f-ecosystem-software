@@ -395,3 +395,21 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 100. **Đăng xuất từ app con.** Bấm đăng xuất trong một app dùng đăng nhập F-Eco chỉ kết thúc phiên
      của app đó; phiên F-Eco trên trình duyệt vẫn còn, nên lần đăng nhập OIDC sau không hỏi mật
      khẩu. Trên máy dùng chung, có nên hỏi "Đăng xuất cả F-Eco?" và kết thúc luôn phiên F-Eco không?
+
+## Thay đổi mobile-launcher (bản 1.10.0)
+
+101. **Phát hành trên Google Play.** APK hiện ký bằng khóa debug, chỉ để cài thử. Đưa lên Google
+     Play cần:
+     - tài khoản Google Play Console (phí một lần 25 USD) của F-Eco;
+     - khóa tải lên lưu trong kho bí mật (GitHub Secrets);
+     - chính sách quyền riêng tư và mục "An toàn dữ liệu" trên Play.
+
+     Ai tạo tài khoản và giữ khóa?
+102. **Phát hành trên App Store.** Bản iOS hiện chỉ chạy trên Simulator. Cài lên iPhone, TestFlight
+     hoặc App Store cần tài khoản Apple Developer (99 USD/năm), chứng thư phân phối và provisioning
+     profile cho `vn.feco.launcher`. Mua app bằng F-Coin trong app iOS có thể bị xem là mua hàng số
+     phải qua In-App Purchase (Điều 3.1.1 của App Review Guidelines). Cần xem xét trước khi gửi duyệt:
+     ẩn nút mua trên iOS, hoặc chỉ mở trang web.
+103. **App di động thật trong danh mục.** Hiện F-Store chỉ có app desktop và app web. Có cần thêm nền
+     tảng `android`, `ios` để nhà phát triển đăng app di động (mở trang Google Play hoặc App Store
+     từ F-Launcher di động) không?

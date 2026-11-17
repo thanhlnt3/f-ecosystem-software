@@ -1,5 +1,22 @@
 # Nhật ký thay đổi
 
+## 1.10.0 (17/11/2026)
+
+Thay đổi OpenSpec `mobile-launcher`: F-Launcher trên điện thoại.
+
+- **Ứng dụng mới `clients/feco-mobile`** (Flutter 3.50), gói `vn.feco.launcher`, biểu tượng là logo F-Launcher.
+  - Android 10 (API 29) trở lên, nhắm Android 16 (API 36); iOS 18 trở lên. Theo số liệu tháng 10–11/2026, các phiên bản này chiếm khoảng 95% máy Android và 98% iPhone đang dùng.
+  - Đăng nhập bằng tài khoản F-Eco qua trình duyệt hệ thống (OIDC, PKCE, AppAuth). Refresh token trong Keychain hoặc Keystore; tự làm mới khi API trả 401.
+  - Năm tab: Ứng dụng của tôi, Cửa hàng (tìm, lọc nhóm, mở và thêm app web, app desktop ghi "Dùng trên máy tính qua F-Launcher"), Ví (số dư, mua app, báo số còn thiếu, mở trang nạp và rút), Thông báo, Tài khoản.
+  - Bốn thứ tiếng: tiếng Việt, English, Français, 日本語.
+  - Chế độ dữ liệu mẫu `--dart-define=FECO_DEMO=true`.
+- **Máy chủ**:
+  - `FECO_MOBILE_CLIENT_ID`: client di động là app bên thứ nhất, không hỏi đồng ý, gọi được API dành cho launcher (trừ mã khởi chạy);
+  - API mới `GET /v1/library`;
+  - `scripts/dev-launcher.sh setup` tạo client di động.
+- **CI**: `flutter analyze`, unit test và widget test; integration test trên Android emulator API 29 và 36 và trên iOS Simulator.
+- **Bản phát hành** kèm `feco-mobile-<phiên bản>.apk` (ký bằng khóa debug, chỉ để cài thử) và `feco-mobile-<phiên bản>-ios-simulator.zip`.
+
 ## 1.9.0 (16/11/2026)
 
 Thay đổi OpenSpec `production-readiness`: chuẩn bị phát hành production.

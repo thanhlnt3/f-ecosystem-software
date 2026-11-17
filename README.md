@@ -289,6 +289,16 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
     `http://localhost:3000/auth/feco` bằng trình duyệt. Muốn ThesisAI chạy thật thì làm theo
     [integrations/thesisai/README.md](integrations/thesisai/README.md) (áp bản vá "Đăng nhập bằng
     F-Eco", đặt biến `FECO_*` mà lệnh trên in ra).
+16. **F-Launcher di động** (`clients/feco-mobile`, Flutter): ứng dụng đồng hành trên Android 10+ và iOS 18+.
+    - Năm tab: Ứng dụng của tôi, Cửa hàng (mở app web, xem app desktop), Ví (mua app), Thông báo, Tài khoản.
+    - Đăng nhập bằng tài khoản F-Eco qua trình duyệt hệ thống.
+    - `scripts/dev-launcher.sh setup` tạo client OAuth di động. Chạy `feco-server` với `FECO_MOBILE_CLIENT_ID` mà script in ra, rồi chạy app trên Android emulator:
+
+    ```bash
+    cd clients/feco-mobile && flutter run --dart-define=FECO_CLIENT_ID=$(cat ../../.dev/mobile-client-id)
+    ```
+
+    Thêm `--dart-define=FECO_DEMO=true` để xem với dữ liệu mẫu, không cần máy chủ. Chi tiết trong [clients/feco-mobile/README.md](clients/feco-mobile/README.md).
 
 Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/` chỉ ở bản debug; bản release bắt buộc đặt, trừ khi `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, cùng quy tắc), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
@@ -557,6 +567,7 @@ Các API chính của `feco-server`:
 | `POST /v1/apps/crashes` | App báo một lần lỗi khi chạy (`{"version"}`, access token của app); chỉ dùng cho số liệu tổng hợp |
 | `POST /v1/launch-codes/exchange` | App con: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → `authorization_code` để đổi lấy token tại Hydra bằng PKCE. Chỉ cấp lại scope người dùng đã đồng ý; chưa đồng ý thì trả `consent_required` |
 | `/wallet`, `/wallet/stats`, `POST /wallet/topup`, `POST /wallet/withdraw` | Ví F-Coin: số dư, nạp, rút, lịch sử, thống kê |
+| `GET /v1/library` | Chỉ token của F-Launcher (máy tính hoặc di động): "Ứng dụng của tôi" dạng JSON |
 | `GET /v1/wallet`, `POST /v1/wallet/purchases` | Chỉ token của F-Launcher: số dư, app đã mua, giá; mua app `{"app_id", "expected_price"}` |
 | `/account/role`, `/projects`, `/projects/{id}`, `/library` | Xin vai trò, dự án phần mềm, ứng dụng của tôi |
 | `/admin/wallet`, `/admin/projects` | Quản trị ví F-Coin (Tài chính) và dự án (Quản lý dự án) |
@@ -592,6 +603,7 @@ Các API chính của `feco-server`:
 | `FECO_ADMIN_PASSKEY_OPTIONAL` | `false` | `true`: bảng quản trị không bắt buộc passkey. Chỉ được đặt khi `FECO_ENV=dev`; môi trường khác từ chối khởi động |
 | `FECO_LAUNCHER_CLIENT_ID` | không đặt | Client ID của F-Launcher trong Hydra. Có thì bật mã khởi chạy app con (`/v1/launch-codes`) và launcher không phải qua màn hình đồng ý |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |
+| `FECO_MOBILE_CLIENT_ID` | | Client OAuth của F-Launcher di động (bên thứ nhất: không hỏi đồng ý, gọi được API dành cho launcher) |
 | `FECO_ADMIN_EMAIL` | dev: `admin@f-eco.local` | Email tài khoản quản trị viên mặc định; bắt buộc ngoài dev |
 | `FECO_ADMIN_PASSWORD_FILE` | dev: `.dev/admin-password` (tự sinh) | Tệp bí mật chứa mật khẩu ban đầu (≥ 12 ký tự), chỉ dùng khi tạo tài khoản; bắt buộc ngoài dev |
 | `FECO_WALLET_WITHDRAWALS` | `true` | `false`: tạm ngừng nhận lệnh rút F-Coin mới (lệnh đang chờ vẫn xử lý) |
@@ -687,6 +699,7 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `crates/feco-tuf` | Kho TUF (dựng, ký, thu hồi, xoay khóa) và client xác minh cho launcher; công cụ `feco-tuf` |
 | `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu, F-Store, đơn xây app (`/orders`); công cụ `feco-catalog`; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
 | `clients/f-builder` | F-Builder: công cụ tự xây app bằng coding agent, phát triển từ Craft Anything 0.6.0 (Cargo workspace riêng; xem `clients/f-builder/README.md` và `NOTICE`) |
+| `clients/feco-mobile` | F-Launcher di động (Flutter, Android 10+, iOS 18+) |
 | `clients/feco-launcher` | F-Launcher: thư viện (đăng nhập, cài/cập nhật/gỡ qua TUF, mã khởi chạy, API cục bộ) và giao diện egui |
 | `tools/feco-demo-app` | App con mẫu: đăng nhập một lần và gọi `/v1/me`; khi được launcher mở thì đăng nhập bằng mã khởi chạy |
 | `sdk/` | F-SDK: `rust` (crate `fsdk`), `c` (C ABI `fsdk_c` và header), `python` (binding `ctypes`), `typescript` (gói `@f-eco/sdk`) |
