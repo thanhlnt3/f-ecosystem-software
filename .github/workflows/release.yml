@@ -41,8 +41,53 @@ jobs:
           name: feco-${{ matrix.target }}
           path: dist/*.zip
 
+  mobile:
+    # mobile-launcher: APK (ký bằng khóa debug, chỉ để cài thử) và gói iOS Simulator.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: clients/feco-mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        if: runner.os == 'Linux'
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.50.0
+          channel: stable
+          cache: true
+      - run: flutter config --no-analytics
+      - run: flutter pub get
+      - name: Dựng APK
+        if: runner.os == 'Linux'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          flutter build apk --release
+          mkdir -p ../../dist
+          cp build/app/outputs/flutter-apk/app-release.apk "../../dist/feco-mobile-${version}.apk"
+      - name: Dựng cho iOS Simulator
+        if: runner.os == 'macOS'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          flutter build ios --simulator --debug
+          mkdir -p ../../dist
+          (cd build/ios/iphonesimulator && zip -qry "../../../../../dist/feco-mobile-${version}-ios-simulator.zip" Runner.app)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: feco-mobile-${{ matrix.os }}
+          path: |
+            dist/*.apk
+            dist/*.zip
+
   release:
-    needs: build
+    needs: [build, mobile]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -57,6 +102,6 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           awk -v v="$version" '$0 ~ "^## "v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
-          (cd dist && sha256sum *.zip > SHA256SUMS.txt)
-          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/SHA256SUMS.txt \
+          (cd dist && sha256sum *.zip *.apk > SHA256SUMS.txt)
+          gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.apk dist/SHA256SUMS.txt \
             --draft --title "F-Eco $version" --notes-file notes.md

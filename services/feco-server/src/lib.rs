@@ -101,6 +101,8 @@ pub struct AppState {
     pub hydra_public: Url,
     /// Client ID của F-Launcher (xem `feco_config::AuthConfig::launcher_client_id`).
     pub launcher_client_id: Option<String>,
+    /// Client ID của F-Launcher di động (`feco_config::AuthConfig::mobile_client_id`).
+    pub mobile_client_id: Option<String>,
     pub pairwise: Pairwise,
     /// HTTP client gửi webhook cho app con.
     pub http: reqwest::Client,
@@ -169,6 +171,14 @@ pub enum StartError {
 }
 
 impl AppState {
+    /// Client là F-Launcher (desktop hoặc di động): app bên thứ nhất, được gọi API dành cho
+    /// launcher (thay đổi mobile-launcher).
+    pub fn is_launcher_client(&self, client_id: &str) -> bool {
+        [&self.launcher_client_id, &self.mobile_client_id]
+            .iter()
+            .any(|c| c.as_deref() == Some(client_id))
+    }
+
     /// Dựng trạng thái từ cấu hình. Kết nối cơ sở dữ liệu được mở khi dùng lần đầu;
     /// gọi [`store::MIGRATOR`] trước khi phục vụ yêu cầu.
     pub fn from_config(config: &Config) -> Result<Self, StartError> {
@@ -196,6 +206,7 @@ impl AppState {
             hydra: HydraClient::new(a.hydra_admin_url.clone()),
             hydra_public: a.hydra_public_url.clone(),
             launcher_client_id: a.launcher_client_id.clone(),
+            mobile_client_id: a.mobile_client_id.clone(),
             pairwise: Pairwise::new(a.pairwise_secret.expose()),
             http: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
@@ -396,6 +407,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(wallet_web::cancel_withdrawal),
         )
         .route("/wallet/stats", get(wallet_web::stats))
+        .route("/v1/library", get(store_web::api_library))
         .route("/v1/wallet", get(wallet_web::api_wallet))
         .route("/v1/wallet/purchases", post(wallet_web::api_purchase))
         .route("/store/{id}/buy", post(wallet_web::buy))
@@ -487,6 +499,7 @@ mod tests {
             hydra: HydraClient::new(url("http://127.0.0.1:9/")),
             hydra_public: url("http://127.0.0.1:9/"),
             launcher_client_id: Some("launcher".into()),
+            mobile_client_id: None,
             pairwise: Pairwise::new("test-only-pairwise-secret-0123456789"),
             http: reqwest::Client::new(),
             data_key: crypto::DataKey::from_bytes(&[9u8; 32]).unwrap(),

@@ -97,14 +97,14 @@ pub async fn account_role(State(state): State<Arc<AppState>>, headers: HeaderMap
             "Access token bị thiếu, đã hết hạn hoặc đã bị thu hồi.",
         )
     };
-    let Some(launcher) = state.launcher_client_id.as_deref() else {
+    if state.launcher_client_id.is_none() && state.mobile_client_id.is_none() {
         return api_error(
             StatusCode::NOT_FOUND,
             "not_enabled",
             "F-Launcher is not enabled on this server.",
             "Máy chủ chưa bật F-Launcher.",
         );
-    };
+    }
     let Some(token) = bearer(&headers) else {
         return invalid();
     };
@@ -120,7 +120,7 @@ pub async fn account_role(State(state): State<Arc<AppState>>, headers: HeaderMap
     let (Some(subject), Some(caller)) = (subject, info["client_id"].as_str()) else {
         return invalid();
     };
-    if caller != launcher {
+    if !state.is_launcher_client(caller) {
         return api_error(
             StatusCode::FORBIDDEN,
             "launcher_only",
@@ -533,7 +533,8 @@ async fn authorize_headless(
         .ok_or_else(|| Headless::Upstream(format!("thiếu code: {callback}")))
 }
 
-/// Danh tính người dùng từ access token của F-Launcher; token của client khác bị từ chối
+/// Danh tính người dùng từ access token của F-Launcher (desktop hoặc di động); token của client
+/// khác bị từ chối
 /// (`launcher_only`). Dùng cho các API chỉ launcher được gọi.
 pub async fn launcher_subject(
     state: &AppState,
@@ -547,14 +548,14 @@ pub async fn launcher_subject(
             "Access token bị thiếu, đã hết hạn hoặc đã bị thu hồi.",
         ))
     };
-    let Some(launcher) = state.launcher_client_id.as_deref() else {
+    if state.launcher_client_id.is_none() && state.mobile_client_id.is_none() {
         return Err(Box::new(api_error(
             StatusCode::NOT_FOUND,
             "not_enabled",
             "F-Launcher is not configured on this server.",
             "Máy chủ chưa cấu hình F-Launcher.",
         )));
-    };
+    }
     let token = bearer(headers).ok_or_else(invalid)?;
     let info = match state.hydra.introspect(token).await {
         Ok(Some(i)) => i,
@@ -568,7 +569,11 @@ pub async fn launcher_subject(
         .as_str()
         .and_then(|s| s.parse::<Uuid>().ok())
         .ok_or_else(invalid)?;
-    if info["client_id"].as_str() != Some(launcher) {
+    // F-Launcher desktop hoặc di động (mobile-launcher).
+    if !info["client_id"]
+        .as_str()
+        .is_some_and(|c| state.is_launcher_client(c))
+    {
         return Err(Box::new(api_error(
             StatusCode::FORBIDDEN,
             "launcher_only",

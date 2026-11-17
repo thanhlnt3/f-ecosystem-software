@@ -31,6 +31,8 @@ const UA_LINUX_FIREFOX: &str =
 static SERIAL: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// Client ID của F-Launcher, tạo trong Hydra khi khởi động máy chủ kiểm thử.
 static LAUNCHER: OnceLock<String> = OnceLock::new();
+/// Client OAuth của F-Launcher di động (thay đổi mobile-launcher).
+static MOBILE: OnceLock<String> = OnceLock::new();
 /// Bản ghi của máy chủ DNS giả mà máy chủ kiểm thử dùng để xác minh tên miền.
 static DNS: OnceLock<feco_server::dns::testing::Records> = OnceLock::new();
 /// Kho TUF mà máy chủ kiểm thử ký target khi phát hành.
@@ -146,6 +148,8 @@ fn e2e_ready() -> bool {
             rt.block_on(async move {
                 let launcher = create_launcher().await;
                 LAUNCHER.set(launcher.clone()).unwrap();
+                let mobile = create_mobile().await;
+                MOBILE.set(mobile.clone()).unwrap();
                 let records = feco_server::dns::testing::Records::default();
                 let dns = feco_server::dns::testing::serve("127.0.0.1:0", records.clone())
                     .await
@@ -181,6 +185,7 @@ fn e2e_ready() -> bool {
                 let vars: HashMap<String, String> = [
                     ("FECO_ENV", "dev".to_owned()),
                     ("FECO_LAUNCHER_CLIENT_ID", launcher.clone()),
+                    ("FECO_MOBILE_CLIENT_ID", mobile.clone()),
                     ("FECO_DNS_SERVERS", dns.to_string()),
                     (
                         "FECO_PACKAGE_DIR",
@@ -918,6 +923,29 @@ async fn create_launcher() -> String {
         "response_types": ["code"],
         "scope": "openid offline_access profile",
         "redirect_uris": [APP_CALLBACK, "http://127.0.0.1:47201/callback"],
+        "token_endpoint_auth_method": "none",
+    });
+    let res: Value = reqwest::Client::new()
+        .post(format!("{HYDRA_ADMIN}/admin/clients"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    res["client_id"].as_str().expect("client_id").to_owned()
+}
+
+/// F-Launcher di động: client công khai bên thứ nhất, chuyển hướng về scheme của app (và
+/// APP_CALLBACK để test nhận code).
+async fn create_mobile() -> String {
+    let body = serde_json::json!({
+        "client_name": "F-Launcher di động",
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "scope": "openid offline_access profile",
+        "redirect_uris": [APP_CALLBACK, "vn.feco.launcher:/oauth2redirect"],
         "token_endpoint_auth_method": "none",
     });
     let res: Value = reqwest::Client::new()
@@ -9353,4 +9381,117 @@ async fn admin_transfers_f_coin() {
         check.total == 0 && check.mismatched.is_empty() && check.unbalanced.is_empty(),
         "{check:?}"
     );
+}
+
+// ============ mobile-launcher: client di động dùng API dành cho launcher ============
+
+/// Spec launcher "Client di động là app bên thứ nhất", "Ứng dụng của tôi dạng JSON".
+#[tokio::test]
+async fn mobile_client_uses_launcher_apis() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let state = local_state();
+    let mobile = MOBILE.get().unwrap().clone();
+    let (email, password) = unique("dien-thoai");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Điện Thoại").await;
+
+    // Bên thứ nhất: không có màn hình đồng ý.
+    let a = authorize(&user, &mobile, "openid offline_access profile").await;
+    assert!(a.consent_page.is_none(), "app di động không hỏi đồng ý");
+    let tokens = exchange(&mobile, &a).await;
+    let token = tokens["access_token"]
+        .as_str()
+        .expect("access token")
+        .to_owned();
+    assert!(tokens["refresh_token"].is_string(), "{tokens}");
+    let http = reqwest::Client::new();
+
+    // --- Scenario "Ví từ điện thoại".
+    let res = http
+        .get(format!("{BASE}/v1/wallet"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 200);
+    let wallet: Value = res.json().await.unwrap();
+    assert_eq!(wallet["balance"], 0, "{wallet}");
+
+    // --- Scenario "Thư viện có app web".
+    let tag = &uuid::Uuid::new_v4().simple().to_string()[..8];
+    let app = format!("web-mobile-{tag}");
+    let mut a = catalog_app(&app, &format!("client-{app}"), "ThesisAI");
+    a.web_url = Some("http://localhost:3000/auth/feco".into());
+    feco_server::catalog::upsert_app(&state.db, &state.catalog, &a)
+        .await
+        .unwrap();
+    feco_server::catalog::release_version(
+        &state.db,
+        &state.catalog,
+        &app,
+        &version("0.1.0", "web"),
+    )
+    .await
+    .unwrap();
+    let res = http
+        .post(format!("{BASE}/v1/catalog/installs"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"app_id": app, "version": "0.1.0"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 204);
+    let res = http
+        .get(format!("{BASE}/v1/library"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 200);
+    let lib: Value = res.json().await.unwrap();
+    let item = lib["apps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == app.as_str())
+        .cloned()
+        .unwrap_or_else(|| panic!("{lib}"));
+    assert_eq!(item["web_url"], "http://localhost:3000/auth/feco");
+    assert_eq!(item["installed_version"], "0.1.0");
+    assert_eq!(item["update_available"], false);
+
+    // Thông báo và vai trò cũng đọc được.
+    for path in ["/v1/notifications", "/v1/account/role"] {
+        let res = http
+            .get(format!("{BASE}{path}"))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status().as_u16(), 200, "{path}");
+    }
+
+    // --- Scenario "Mã khởi chạy từ điện thoại".
+    let res = http
+        .post(format!("{BASE}/v1/launch-codes"))
+        .bearer_auth(&token)
+        .json(&serde_json::json!({"client_id": format!("client-{app}")}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 403);
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["error"], "launcher_only", "{body}");
+
+    // Token của app khác vẫn bị từ chối ở /v1/library.
+    let res = http
+        .get(format!("{BASE}/v1/library"))
+        .bearer_auth("khong-phai-token")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 401);
 }

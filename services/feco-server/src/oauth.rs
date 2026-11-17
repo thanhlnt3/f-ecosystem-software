@@ -355,8 +355,8 @@ pub async fn consent(
     let app = AppInfo::from_client(&request["client"]);
     let subject = request["subject"].as_str().unwrap_or_default().to_owned();
     let requested = requested_scopes(&request);
-    // F-Launcher là app bên thứ nhất của nền tảng: không hỏi đồng ý cho chính nó.
-    if state.launcher_client_id.as_deref() == Some(app.client_id.as_str()) {
+    // F-Launcher (desktop và di động) là app bên thứ nhất của nền tảng: không hỏi đồng ý.
+    if state.is_launcher_client(&app.client_id) {
         return match accept_and_record(
             &state,
             &challenge,

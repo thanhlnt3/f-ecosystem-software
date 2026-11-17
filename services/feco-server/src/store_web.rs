@@ -713,6 +713,37 @@ pub async fn library(
     )
 }
 
+/// GET /v1/library: "Ứng dụng của tôi" dạng JSON cho F-Launcher desktop và di động (thay đổi
+/// mobile-launcher).
+pub async fn api_library(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let subject = match crate::launch::launcher_subject(&state, &headers).await {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    match catalog::library(&state.db, subject).await {
+        Ok(items) => {
+            let apps: Vec<serde_json::Value> = items
+                .iter()
+                .map(|i| {
+                    json!({
+                        "id": i.id,
+                        "name": i.name,
+                        "has_icon": i.has_icon,
+                        "installed": i.installed,
+                        "installed_version": i.installed_version,
+                        "purchased": i.purchased,
+                        "latest": i.latest,
+                        "web_url": i.web_url,
+                        "update_available": i.update_available(),
+                    })
+                })
+                .collect();
+            Json(json!({ "apps": apps })).into_response()
+        }
+        Err(e) => api_unavailable(e),
+    }
+}
+
 /// GET /store/{id}/icon.png: logo của app (PNG đã kiểm khi lưu).
 pub async fn icon(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
     match catalog::icon(&state.db, &id).await {

@@ -145,6 +145,9 @@ pub struct AuthConfig {
     /// Client ID của F-Launcher trong Hydra (client công khai, bên thứ nhất). Chỉ token của
     /// client này được xin mã khởi chạy app con. Không đặt thì tắt tính năng mã khởi chạy.
     pub launcher_client_id: Option<String>,
+    /// Client ID của F-Launcher di động (Android, iOS; thay đổi mobile-launcher): client công
+    /// khai, bên thứ nhất, gọi được API dành cho launcher nhưng không xin mã khởi chạy.
+    pub mobile_client_id: Option<String>,
 }
 
 /// Cấu hình bảo mật (spec platform-security).
@@ -566,6 +569,10 @@ fn auth_config<'a>(
             None => Secret::new("dev-only-pairwise-secret-not-for-production"),
         },
         launcher_client_id: get("FECO_LAUNCHER_CLIENT_ID")
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_owned),
+        mobile_client_id: get("FECO_MOBILE_CLIENT_ID")
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .map(str::to_owned),

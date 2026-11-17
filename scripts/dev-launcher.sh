@@ -89,6 +89,10 @@ setup() {
   ensure_client launcher-client-id '{"client_name":"F-Launcher","grant_types":["authorization_code","refresh_token"],
       "response_types":["code"],"scope":"openid offline_access profile",
       "redirect_uris":["http://127.0.0.1:47201/callback"],"token_endpoint_auth_method":"none"}'
+  # F-Launcher di động (mobile-launcher): client công khai, chuyển hướng về scheme của app.
+  ensure_client mobile-client-id '{"client_name":"F-Launcher di động","grant_types":["authorization_code","refresh_token"],
+      "response_types":["code"],"scope":"openid offline_access profile",
+      "redirect_uris":["vn.feco.launcher:/oauth2redirect"],"token_endpoint_auth_method":"none"}'
   ensure_client demo-client-id '{"client_name":"Demo App","grant_types":["authorization_code","refresh_token"],
       "response_types":["code"],"scope":"openid offline_access profile email locale phone",
       "redirect_uris":["http://127.0.0.1:9999/cb"],"token_endpoint_auth_method":"none",
@@ -142,6 +146,10 @@ env_vars() {
 
 # feco-server (thêm vào lệnh chạy ở bước 3):
 export FECO_LAUNCHER_CLIENT_ID=$(cat "$DEV/launcher-client-id")
+export FECO_MOBILE_CLIENT_ID=$(cat "$DEV/mobile-client-id")
+
+# F-Launcher di động (clients/feco-mobile, chạy trên Android emulator):
+#   flutter run --dart-define=FECO_CLIENT_ID=$(cat "$DEV/mobile-client-id") #     --dart-define=FECO_SERVER=http://10.0.2.2:8080/ --dart-define=FECO_ISSUER=http://10.0.2.2:4444/
 
 # F-Launcher:
 export FECO_LAUNCHER_CLIENT_ID=$(cat "$DEV/launcher-client-id")
