@@ -261,5 +261,8 @@ jobs:
         run: |
           udid=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for r,v in sorted(d.items(), reverse=True) if 'iOS' in r for x in v if x['name'].startswith('iPhone')))")
           xcrun simctl boot "$udid"
+          # Chờ Simulator khởi động xong hẳn: nếu không, lần mở app đầu có thể hết hạn kết nối
+          # tới VM Service.
+          xcrun simctl bootstatus "$udid" -b
           xcrun simctl list devices booted
-          flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true
+          flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true             || flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true
