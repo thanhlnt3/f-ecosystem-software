@@ -1,5 +1,53 @@
 # Nhật ký thay đổi
 
+## 1.12.0 (19/11/2026)
+
+Thay đổi OpenSpec `chat-and-source-scan`: chat giữa khách hàng và nhà phát triển, quét mã nguồn trước khi duyệt và trước khi tích hợp.
+
+### Chat
+
+- **Hội thoại trực tiếp**:
+  - nút **Nhắn nhà phát triển** ở trang app trong F-Store và ở danh sách nhà phát triển trong Dự án;
+  - mỗi cặp khách hàng và nhà phát triển có một hội thoại;
+  - nhà phát triển chặn được; ai cũng báo cáo được (Hỗ trợ xử lý ở `/admin/chat-reports`).
+- **Hội thoại dự án** thay luồng tin nhắn cũ; tin cũ được chuyển sang và tính là đã đọc. Quản lý dự án gửi tin trong hội thoại khi xử lý tranh chấp.
+- **Tin nhắn**:
+  - tối đa 5.000 ký tự;
+  - một tệp đính kèm tối đa 20 MB, quét mã độc trước khi tải được; tệp có mã độc bị chặn và quản trị được báo;
+  - đánh dấu đã đọc, số chưa đọc ở thanh trên cùng.
+- **Giới hạn**: 20 hội thoại mới mỗi 24 giờ, 30 tin mỗi phút.
+- **Tin đến ngay** trên web (Server-Sent Events, PostgreSQL `LISTEN/NOTIFY` giữa các máy chủ).
+- **F-Launcher máy tính**: mục "Tin nhắn" ở thanh bên (có huy hiệu), danh sách, luồng tin, gửi tin, hỏi tin mới mỗi 5 giây.
+- **F-Launcher di động**: tab "Tin nhắn" (sáu tab); phiên bản app lấy từ một hằng số, test so với `pubspec.yaml`.
+- **API** `/v1/chat/*` cho launcher.
+- **Thông báo**:
+  - nhóm "Tin nhắn" (bật mặc định, tắt email được);
+  - chỉ ghi người gửi, không chép nội dung, tối đa một lần mỗi 15 phút cho mỗi hội thoại;
+  - thông báo tin nhắn dự án cũng không còn trích nội dung.
+
+### Quét mã nguồn
+
+- **Crate và lệnh mới `feco-codescan`** tìm:
+  - bí mật lộ (khóa riêng, khóa đám mây, token);
+  - mã đáng ngờ (đào tiền ảo, đọc kho mật khẩu trình duyệt, móc bàn phím, tắt Defender, tải rồi chạy);
+  - thư viện có lỗ hổng: đọc lockfile Rust, npm, pnpm, yarn, Python, Go và tra OSV.dev; chỉ gửi tên và phiên bản thư viện;
+  - giấy phép không khớp manifest.
+
+  Bí mật trong báo cáo được che.
+- **Duyệt app**:
+  - phiên bản kèm mã nguồn qua trang app, `[source]` trong `f-app.toml`, `PUT /v1/dev/versions/{id}/source` hoặc `f-dev publish --source`;
+  - quét mã nguồn chạy sau khi gói sạch:
+    - phát hiện nghiêm trọng thì từ chối (`source_scan`);
+    - phát hiện mức cao thì chuyển duyệt tay;
+  - báo cáo hiện cho nhà phát triển và người duyệt.
+- **Trước khi tích hợp app bên ngoài**:
+  - `scripts/scan-integration.sh`;
+  - `integrations/<app>/SCAN.md` và `scan-allow.toml` cho Mentor và ThesisAI;
+  - job CI `integration-scan`;
+  - `build-desktop.sh` quét Mentor trước khi dựng.
+- **Cấu hình mới**: `FECO_OSV_URL`, `FECO_OSV`, `FECO_SOURCE_FETCH_URL`.
+- **Kiểm thử**: E2E `e2e_chat`, `e2e_source_scan` (cơ sở dữ liệu riêng); `FECO_E2E_DATABASE_URL` cho `e2e_auth`.
+
 ## 1.11.0 (19/11/2026)
 
 Thay đổi OpenSpec `mentor-integration`: Mentor trong F-Eco.

@@ -309,6 +309,12 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
     - Chạy gateway Mentor (cổng 8100) và app web (cổng 5173) theo [integrations/mentor/README.md](integrations/mentor/README.md), với các biến `FECO_*` mà lệnh trên in ra.
     - Trong launcher: **Đồng bộ**, Cửa hàng → Mentor → **Thêm** → **Mở**. Hoặc mở `http://localhost:5173` rồi bấm "Đăng nhập bằng F-Eco".
     - Lần đầu đăng nhập, Mentor tạo tài khoản học sinh. Giáo viên do quản trị Mentor nâng vai trò.
+    - Trước khi tích hợp app bên ngoài, quét repo tại đúng commit sẽ dùng. Báo cáo nằm ở `.dev/scans/`; phát hiện đã xem xét ghi trong `integrations/<app>/scan-allow.toml`, tóm tắt trong `integrations/<app>/SCAN.md`:
+
+      ```bash
+      scripts/scan-integration.sh katD2707/agent-mentor-maximum-experience "$(cat integrations/mentor/MENTOR_COMMIT)" integrations/mentor/scan-allow.toml
+      ```
+18. **Tin nhắn**: thanh bên có mục "Tin nhắn" kèm số tin chưa đọc (cập nhật mỗi 60 giây). Trang Tin nhắn có danh sách hội thoại và luồng tin; gõ rồi bấm **Gửi** hoặc Ctrl+Enter. Khi đang mở một hội thoại, launcher hỏi tin mới mỗi 5 giây. Tệp đính kèm chỉ gửi trên web; tệp đã quét sạch mở bằng trình duyệt. F-Launcher di động có tab "Tin nhắn" (sáu tab).
 
 Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/` chỉ ở bản debug; bản release bắt buộc đặt, trừ khi `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, cùng quy tắc), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
@@ -366,6 +372,19 @@ cargo run -p feco-server --bin feco-catalog -- resolve <id> upheld "<ghi chú>" 
    Điều khoản dùng khi từ chối: xem http://127.0.0.1:8080/policy/content. Nhà phát triển nhận
    email (Mailpit) nêu điều khoản và cách sửa, và bấm **Kháng nghị** trên trang app (một lần cho
    mỗi lần từ chối). Không có ClamAV thì chỉ engine chữ ký của F-Eco chạy (đủ để thử với mẫu EICAR).
+
+   **Quét mã nguồn.** Phiên bản kèm mã nguồn được quét sau khi gói sạch:
+   - bí mật lộ trong mã, như khóa riêng hay token, thì bị từ chối;
+   - thư viện có lỗ hổng đã công bố (tra OSV.dev) hoặc mã đáng ngờ thì chuyển duyệt tay;
+   - báo cáo hiện ở trang app và trang duyệt.
+
+   Kèm mã nguồn bằng một trong ba cách: tải `source.zip` hoặc nhập repo GitHub và commit ở trang app; khai `[source]` trong `f-app.toml`; hoặc dùng `--source`:
+
+   ```bash
+   FDEV_TOKEN=fdev_... cargo run -p f-dev -- publish --manifest f-app.toml --package dist/ --source .
+   ```
+
+   `f-dev` bỏ `.git`, `target`, `node_modules` và tệp `.env` thật khi đóng gói mã nguồn.
 
 6. Trên trang app, chọn kênh `stable` hoặc `beta` và phần trăm (10%, 50%, 100%) rồi bấm **Phát
    hành** (cần vai trò Quản trị hoặc Chủ sở hữu). App xuất hiện ở F-Store; scope và mục đích trên
@@ -540,6 +559,13 @@ F-Coin là đơn vị thanh toán chỉ dùng trong F-Eco. Tỷ giá ban đầu 
 
 6. **Ứng dụng của tôi**: http://127.0.0.1:8080/library hiện app đã cài qua F-Launcher và app đã mua, kèm nhãn "Có bản mới". F-Launcher tự gợi ý cập nhật sau mỗi lần đồng bộ.
 
+7. **Tin nhắn**: http://127.0.0.1:8080/messages.
+   - Khách hàng bấm **Nhắn nhà phát triển** ở trang app trong F-Store hoặc ở danh sách nhà phát triển trong Dự án.
+   - Mỗi dự án có một hội thoại giữa khách hàng và người nhận việc; tin nhắn cũ của dự án được chuyển sang.
+   - Tin đến ngay không cần tải lại trang (Server-Sent Events). Đính kèm một tệp tối đa 20 MB mỗi tin; tệp được quét mã độc trước khi tải được.
+   - Nhà phát triển chặn được hội thoại trực tiếp; ai cũng báo cáo được. Quản trị Hỗ trợ xem báo cáo ở `/admin/chat-reports`.
+   - Thông báo và email chỉ ghi "Tin nhắn mới từ …", không chép nội dung, tối đa một lần mỗi 15 phút cho mỗi hội thoại. Tắt email ở cài đặt thông báo, nhóm "Tin nhắn".
+
 ### 13. Dừng và xóa dữ liệu
 
 - Dừng `feco-server` và app mẫu bằng `Ctrl+C`.
@@ -578,6 +604,11 @@ Các API chính của `feco-server`:
 | `POST /v1/launch-codes/exchange` | App con: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → `authorization_code` để đổi lấy token tại Hydra bằng PKCE. Chỉ cấp lại scope người dùng đã đồng ý; chưa đồng ý thì trả `consent_required` |
 | `/wallet`, `/wallet/stats`, `POST /wallet/topup`, `POST /wallet/withdraw` | Ví F-Coin: số dư, nạp, rút, lịch sử, thống kê |
 | `GET /v1/library` | Chỉ token của F-Launcher (máy tính hoặc di động): "Ứng dụng của tôi" dạng JSON |
+| `GET /v1/chat/unread` | Token của F-Launcher: tổng số tin chưa đọc |
+| `GET`, `POST /v1/chat/conversations` | Token của F-Launcher: danh sách hội thoại; bắt đầu hội thoại với `{"developer"}` hoặc `{"app_id"}` |
+| `GET`, `POST /v1/chat/conversations/{id}/messages` | Token của F-Launcher: tin sau `?after=<id>`; gửi `{"body"}` |
+| `POST /v1/chat/conversations/{id}/read` | Token của F-Launcher: `{"up_to"}`, đánh dấu đã đọc |
+| `PUT /v1/dev/versions/{id}/source` | Token `fdev_`: mã nguồn dạng zip (header `X-Feco-Sha256`) |
 | `GET /v1/wallet`, `POST /v1/wallet/purchases` | Chỉ token của F-Launcher: số dư, app đã mua, giá; mua app `{"app_id", "expected_price"}` |
 | `/account/role`, `/projects`, `/projects/{id}`, `/library` | Xin vai trò, dự án phần mềm, ứng dụng của tôi |
 | `/admin/wallet`, `/admin/projects` | Quản trị ví F-Coin (Tài chính) và dự án (Quản lý dự án) |
@@ -614,6 +645,9 @@ Các API chính của `feco-server`:
 | `FECO_LAUNCHER_CLIENT_ID` | không đặt | Client ID của F-Launcher trong Hydra. Có thì bật mã khởi chạy app con (`/v1/launch-codes`) và launcher không phải qua màn hình đồng ý |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |
 | `FECO_MOBILE_CLIENT_ID` | | Client OAuth của F-Launcher di động (bên thứ nhất: không hỏi đồng ý, gọi được API dành cho launcher) |
+| `FECO_OSV_URL` | `https://api.osv.dev` | Dịch vụ tra lỗ hổng thư viện khi quét mã nguồn. Chỉ gửi hệ sinh thái, tên và phiên bản thư viện |
+| `FECO_OSV` | bật | `off` thì không tra lỗ hổng (phiên bản có mã nguồn chuyển duyệt tay) |
+| `FECO_SOURCE_FETCH_URL` | `https://codeload.github.com` | Nơi tải mã nguồn khai bằng repo GitHub và commit |
 | `FECO_ADMIN_EMAIL` | dev: `admin@f-eco.local` | Email tài khoản quản trị viên mặc định; bắt buộc ngoài dev |
 | `FECO_ADMIN_PASSWORD_FILE` | dev: `.dev/admin-password` (tự sinh) | Tệp bí mật chứa mật khẩu ban đầu (≥ 12 ký tự), chỉ dùng khi tạo tài khoản; bắt buộc ngoài dev |
 | `FECO_WALLET_WITHDRAWALS` | `true` | `false`: tạm ngừng nhận lệnh rút F-Coin mới (lệnh đang chờ vẫn xử lý) |
@@ -635,6 +669,12 @@ npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
 
 ```bash
 FECO_E2E=1 cargo test -p feco-server --test e2e_auth
+```
+
+Chat và quét mã nguồn có E2E riêng, mỗi bộ dùng cơ sở dữ liệu riêng (`feco_chat_e2e`, `feco_scan_e2e`, tự tạo). `FECO_E2E_DATABASE_URL` cho `e2e_auth` chạy trên một cơ sở dữ liệu khác `feco`:
+
+```bash
+FECO_E2E=1 cargo test -p feco-server --test e2e_chat --test e2e_source_scan
 ```
 
 E2E của F-SDK (`sdk_end_to_end`) còn chạy app mẫu Python (cần `python` và thư viện `fsdk_c`, test tự dựng nếu thiếu) và TypeScript (cần `node` ≥ 22.6); máy không có thì bỏ qua, trừ khi đặt `FECO_E2E_SDKS=1`. `standard_oidc_library_integration` (app Python dùng Authlib, không dùng F-SDK) chạy khi đã `pip install authlib requests`. Test riêng của từng binding:
@@ -707,6 +747,7 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `crates/feco-config` | Đọc và kiểm tra cấu hình lúc khởi động |
 | `crates/feco-manifest` | Lược đồ và trình kiểm tra `f-app.toml` (dùng chung cho cổng, CLI và kiểm duyệt) |
 | `crates/feco-tuf` | Kho TUF (dựng, ký, thu hồi, xoay khóa) và client xác minh cho launcher; công cụ `feco-tuf` |
+| `crates/feco-codescan` | Quét mã nguồn (bí mật lộ, mã đáng ngờ, lỗ hổng thư viện qua OSV.dev, giấy phép); lệnh `feco-codescan` |
 | `services/feco-server` | Dịch vụ HTTP (axum): trang tài khoản, OAuth login/consent, `/v1/me`, webhook, xuất dữ liệu, F-Store, đơn xây app (`/orders`); công cụ `feco-catalog`; `migrations/` là lược đồ PostgreSQL; `templates/` là giao diện |
 | `clients/f-builder` | F-Builder: công cụ tự xây app bằng coding agent, phát triển từ Craft Anything 0.6.0 (Cargo workspace riêng; xem `clients/f-builder/README.md` và `NOTICE`) |
 | `clients/feco-mobile` | F-Launcher di động (Flutter, Android 10+, iOS 18+) |
@@ -718,7 +759,7 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/f-dev` | CLI cho nhà phát triển: `f-dev validate`, `f-dev pack`, `f-dev publish` |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |
 | `infra/` | Hạ tầng dev: `docker-compose.yml`, cấu hình Kratos (schema, mẫu email) và Hydra |
-| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher; `dev-apps.sh`: đưa app mẫu, app mã nguồn mở từ GitHub, app web ThesisAI và Mentor vào kho dev |
+| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher; `dev-apps.sh`: đưa app mẫu, app mã nguồn mở từ GitHub, app web ThesisAI và Mentor vào kho dev; `scan-integration.sh`: quét repo bên ngoài trước khi tích hợp |
 | `integrations/` | Tích hợp app bên ngoài: `thesisai/` (bản vá "Đăng nhập bằng F-Eco" cho ThesisAI, hướng dẫn, nguồn gốc); `mentor/` (bản vá "Đăng nhập bằng F-Eco" cho Mentor, script dựng app desktop, hướng dẫn, nguồn gốc) |
 | `docs/security/` | Quy trình xử lý sự cố, quản lý khóa TUF, biên bản diễn tập |
 | `third_party/` | Khai báo license và ngoại lệ đã duyệt |

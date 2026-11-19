@@ -310,6 +310,12 @@ app repository; it is used only to try single sign-on in step 5.
     - Run the Mentor gateway (port 8100) and web app (port 5173) as in [integrations/mentor/README.md](integrations/mentor/README.md), with the `FECO_*` variables the command prints.
     - In the launcher: **Sync**, Store → Mentor → **Add** → **Open**. Or open `http://localhost:5173` and click "Sign in with F-Eco".
     - On first sign-in Mentor creates a student account. A Mentor admin promotes teachers.
+    - Before integrating an outside app, scan its repository at the exact commit you will use. Reports go to `.dev/scans/`; reviewed findings are recorded in `integrations/<app>/scan-allow.toml` and summarized in `integrations/<app>/SCAN.md`:
+
+      ```bash
+      scripts/scan-integration.sh katD2707/agent-mentor-maximum-experience "$(cat integrations/mentor/MENTOR_COMMIT)" integrations/mentor/scan-allow.toml
+      ```
+18. **Messages**: the sidebar has a "Messages" item with the unread count (refreshed every 60 seconds). The Messages page lists conversations and shows the thread; type and click **Send** or press Ctrl+Enter. While a conversation is open, the launcher checks for new messages every 5 seconds. Attachments are sent on the web only; scanned, clean files open in the browser. The mobile F-Launcher has a "Messages" tab (six tabs).
 
 Launcher variables: `FECO_LAUNCHER_SERVER` (default `http://127.0.0.1:8080/` in debug builds only; required in release builds unless `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, same rule), `FECO_LAUNCHER_DATA_DIR` (data directory), `FECO_LAUNCHER_TRUSTED_ROOT`
@@ -367,6 +373,19 @@ cargo run -p feco-server --bin feco-catalog -- resolve <id> upheld "<note>"  # r
    For the clause used on rejection, see http://127.0.0.1:8080/policy/content. The developer receives an
    email (Mailpit) stating the clause and how to fix it, and clicks **Appeal** on the app page (once per
    rejection). Without ClamAV only the F-Eco signature engine runs (enough to try with an EICAR sample).
+
+   **Source code scan.** A version that comes with source code is scanned after its packages pass:
+   - secrets in the code, such as a private key or a token, get the version rejected;
+   - libraries with published vulnerabilities (looked up on OSV.dev) or suspicious code send it to manual review;
+   - the report shows on the app page and the review page.
+
+   Attach the source in one of three ways: upload `source.zip` or enter a GitHub repository and commit on the app page; declare `[source]` in `f-app.toml`; or use `--source`:
+
+   ```bash
+   FDEV_TOKEN=fdev_... cargo run -p f-dev -- publish --manifest f-app.toml --package dist/ --source .
+   ```
+
+   `f-dev` leaves out `.git`, `target`, `node_modules` and real `.env` files when it packs the source.
 
 6. On the app page, choose the `stable` or `beta` channel and a percentage (10%, 50%, 100%), then click **Release**
    (requires the Admin or Owner role). The app appears in F-Store; the scopes and purposes on the
@@ -541,6 +560,13 @@ F-Coin is a payment unit used only inside F-Eco. The initial rate is 1 F-Coin = 
 
 6. **My apps**: http://127.0.0.1:8080/library lists apps installed through F-Launcher and apps you bought, with an "Update available" label. F-Launcher suggests updates after every sync.
 
+7. **Messages**: http://127.0.0.1:8080/messages.
+   - A customer clicks **Message the developer** on an F-Store app page or on the developer list in Projects.
+   - Each project has one conversation between the customer and the provider; old project messages are moved into it.
+   - Messages arrive without reloading the page (Server-Sent Events). Each message can carry one file of up to 20 MB, scanned for malware before it can be downloaded.
+   - Developers can block a direct conversation; anyone can report one. Support admins review reports at `/admin/chat-reports`.
+   - Notifications and emails only say "New message from …", never the content, at most once every 15 minutes per conversation. Turn the emails off in the notification settings, group "Messages".
+
 ### 13. Stop and wipe data
 
 - Stop `feco-server` and the sample app with `Ctrl+C`.
@@ -579,6 +605,11 @@ The main `feco-server` APIs:
 | `POST /v1/launch-codes/exchange` | Sub-app: `{"code", "client_id", "redirect_uri", "code_challenge", "scope"}` → an `authorization_code` to exchange for a token at Hydra with PKCE. Only re-issues scopes the user has already consented to; if not yet consented it returns `consent_required` |
 | `/wallet`, `/wallet/stats`, `POST /wallet/topup`, `POST /wallet/withdraw` | F-Coin wallet: balance, top-up, withdrawal, history, statistics |
 | `GET /v1/library` | F-Launcher token only (desktop or mobile): "My apps" as JSON |
+| `GET /v1/chat/unread` | F-Launcher token: total unread messages |
+| `GET`, `POST /v1/chat/conversations` | F-Launcher token: list conversations; start one with `{"developer"}` or `{"app_id"}` |
+| `GET`, `POST /v1/chat/conversations/{id}/messages` | F-Launcher token: messages after `?after=<id>`; send `{"body"}` |
+| `POST /v1/chat/conversations/{id}/read` | F-Launcher token: `{"up_to"}`, mark as read |
+| `PUT /v1/dev/versions/{id}/source` | `fdev_` token: source code as a zip (header `X-Feco-Sha256`) |
 | `GET /v1/wallet`, `POST /v1/wallet/purchases` | F-Launcher token only: balance, owned apps, prices; buy an app `{"app_id", "expected_price"}` |
 | `/account/role`, `/projects`, `/projects/{id}`, `/library` | Role requests, software projects, my apps |
 | `/admin/wallet`, `/admin/projects` | F-Coin wallet admin (Finance) and projects (Project manager) |
@@ -615,6 +646,9 @@ The main `feco-server` APIs:
 | `FECO_LAUNCHER_CLIENT_ID` | not set | The F-Launcher client ID in Hydra. If set, it enables sub-app launch codes (`/v1/launch-codes`) and the launcher does not have to go through the consent screen |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | not set | Dev/staging may only point to the payment gateway's sandbox |
 | `FECO_MOBILE_CLIENT_ID` | | OAuth client of the mobile F-Launcher (first party: no consent screen, may call launcher APIs) |
+| `FECO_OSV_URL` | `https://api.osv.dev` | Service used to look up library vulnerabilities when scanning source code. Only the ecosystem, name and version of each library are sent |
+| `FECO_OSV` | on | `off` skips the vulnerability lookup (versions with source code go to manual review) |
+| `FECO_SOURCE_FETCH_URL` | `https://codeload.github.com` | Where source code declared as a GitHub repository and commit is downloaded from |
 | `FECO_ADMIN_EMAIL` | dev: `admin@f-eco.local` | Email of the default administrator account; required outside dev |
 | `FECO_ADMIN_PASSWORD_FILE` | dev: `.dev/admin-password` (generated) | Secret file with the initial password (≥ 12 characters), used only when the account is created; required outside dev |
 | `FECO_WALLET_WITHDRAWALS` | `true` | `false`: stop accepting new F-Coin withdrawals (pending ones are still processed) |
@@ -636,6 +670,12 @@ npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
 
 ```bash
 FECO_E2E=1 cargo test -p feco-server --test e2e_auth
+```
+
+Chat and source scanning have their own E2E suites, each on its own database (`feco_chat_e2e`, `feco_scan_e2e`, created automatically). `FECO_E2E_DATABASE_URL` runs `e2e_auth` on a database other than `feco`:
+
+```bash
+FECO_E2E=1 cargo test -p feco-server --test e2e_chat --test e2e_source_scan
 ```
 
 The F-SDK E2E (`sdk_end_to_end`) also runs the Python sample app (needs `python` and the `fsdk_c` library; the test builds it if missing) and the TypeScript one (needs `node` ≥ 22.6); it is skipped on machines without them, unless `FECO_E2E_SDKS=1` is set. `standard_oidc_library_integration` (a Python app using Authlib, not F-SDK) runs once you have done `pip install authlib requests`. Each binding's own tests:
@@ -708,6 +748,7 @@ Questions awaiting a decision are in [`QUESTIONS.md`](QUESTIONS.md).
 | `crates/feco-config` | Reads and validates configuration at startup |
 | `crates/feco-manifest` | The schema and validator for `f-app.toml` (shared by the portal, the CLI and moderation) |
 | `crates/feco-tuf` | The TUF repository (build, sign, revoke, rotate keys) and the verifying client for the launcher; the `feco-tuf` tool |
+| `crates/feco-codescan` | Source code scanning (leaked secrets, suspicious code, library vulnerabilities via OSV.dev, licenses); the `feco-codescan` command |
 | `services/feco-server` | The HTTP service (axum): account pages, OAuth login/consent, `/v1/me`, webhooks, data export, F-Store, build-to-order requests (`/orders`); the `feco-catalog` tool; `migrations/` is the PostgreSQL schema; `templates/` is the UI |
 | `clients/f-builder` | F-Builder: a tool for building apps yourself with a coding agent, developed from Craft Anything 0.6.0 (its own Cargo workspace; see `clients/f-builder/README.md` and `NOTICE`) |
 | `clients/feco-mobile` | Mobile F-Launcher (Flutter, Android 10+, iOS 18+) |
@@ -719,7 +760,7 @@ Questions awaiting a decision are in [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/f-dev` | CLI for developers: `f-dev validate`, `f-dev pack`, `f-dev publish` |
 | `tools/feco-license-check` | Checks service and container image licenses |
 | `infra/` | Dev infrastructure: `docker-compose.yml`, the Kratos configuration (schema, email templates) and Hydra |
-| `scripts/` | `dev-local.sh`: runs the infrastructure without Docker; `tuf-drill.sh`: drills the TUF chain of trust; `dev-launcher.sh`: the TUF repository and OAuth clients for trying the launcher; `dev-apps.sh`: puts sample apps, open-source apps from GitHub, the ThesisAI web app and Mentor into the dev repository |
+| `scripts/` | `dev-local.sh`: runs the infrastructure without Docker; `tuf-drill.sh`: drills the TUF chain of trust; `dev-launcher.sh`: the TUF repository and OAuth clients for trying the launcher; `dev-apps.sh`: puts sample apps, open-source apps from GitHub, the ThesisAI web app and Mentor into the dev repository; `scan-integration.sh`: scans an outside repository before integrating it |
 | `integrations/` | Integrations with outside apps: `thesisai/` (the "Sign in with F-Eco" patch for ThesisAI, guide, provenance); `mentor/` (the "Sign in with F-Eco" patch for Mentor, desktop build script, guide, provenance) |
 | `docs/security/` | Incident response procedure, TUF key management, drill reports |
 | `third_party/` | License declarations and approved exceptions |

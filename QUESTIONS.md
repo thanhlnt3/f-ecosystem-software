@@ -431,3 +431,27 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 108. **Ký số app desktop Mentor.** `Mentor.exe` chưa ký số, nên Windows SmartScreen có thể cảnh báo.
      Gói vẫn được xác minh bằng chữ ký TUF của F-Eco. Có cần chứng thư ký mã cho app bên thứ ba
      không?
+
+## Thay đổi chat-and-source-scan (bản 1.12.0)
+
+109. **Lỗ hổng nghiêm trọng của thư viện.** OSV xếp CRITICAL thì bộ quét vẫn chỉ ghi mức `high`
+     (chuyển duyệt tay, không tự từ chối), vì app có thể không dùng tới đoạn mã lỗi. Quét ThesisAI
+     (frontend, commit `8f3735e`) thấy Next.js 16.4.0 có hai lỗ hổng chạy mã từ xa không cần đăng nhập
+     (GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr). Có nên tự từ chối khi OSV ghi CRITICAL không? Và cần
+     báo tác giả ThesisAI nâng Next.js trước khi đưa ra ngoài môi trường dev.
+110. **Repo mã nguồn không tải được.** Repo riêng tư hoặc commit không tồn tại (GitHub trả 404) hiện bị
+     từ chối với `source_scan`. Có nên chuyển duyệt tay thay vì từ chối không?
+111. **Thư viện chỉ dùng khi phát triển.** Lỗ hổng trong thư viện dev (test, công cụ dựng) hiện cũng
+     chuyển duyệt tay. Có nên bỏ qua nhóm này không?
+112. **`[source]` và liên kết mã nguồn công khai.** Mã nguồn khai bằng `[source]` chỉ dùng cho kiểm
+     duyệt. Có nên hiện nó thành liên kết "Mã nguồn" trên trang app không?
+113. **Tắt nhóm "Tin nhắn".** Hiện tắt nhóm chỉ dừng email; thông báo trong trung tâm thông báo vẫn có,
+     giống các nhóm tùy chọn khác. Có nên dừng cả thông báo trong app không?
+114. **Chủ app trong F-Store.** Nút "Nhắn nhà phát triển" chỉ hiện khi app thuộc một tài khoản nhà phát
+     triển có chủ đang hoạt động. App đưa vào bằng `scripts/dev-apps.sh` (như Mentor) không có tài khoản
+     nhà phát triển nên không có nút. Có nên cho quản trị gán người nhận tin cho các app này không?
+115. **Hỗ trợ xem tệp đính kèm.** Quản trị Hỗ trợ xem hội thoại bị báo cáo ở chế độ chỉ đọc, nhưng
+     không tải được tệp đính kèm. Có cần cho tải (tệp đã quét sạch) để xử lý báo cáo không?
+116. **Nhiều máy chủ.** "Không báo khi đang mở hội thoại" chỉ đếm kết nối trên từng máy chủ. Khi chạy
+     nhiều máy chủ, người đang xem trên máy chủ khác vẫn có thể nhận thông báo. Có cần lưu người đang
+     xem vào cơ sở dữ liệu không?
