@@ -19,6 +19,7 @@ Thay đổi OpenSpec `mentor-integration`: Mentor trong F-Eco.
 - **Thư viện của máy chủ** (cảnh báo RustSec mới):
   - `lettre` 0.11.23 lên 0.11.24 (RUSTSEC-2026-0560 tới 0565);
   - bỏ `humantime` (ngừng bảo trì, RUSTSEC-2026-0542), đọc và ghi thời điểm RFC 3339 bằng thư viện `time` sẵn có.
+- **F-Builder**: `wasmtime` 49.0.5 lên 49.0.6 (RUSTSEC-2026-0566 tới 0570).
 
 ## 1.10.0 (17/11/2026)
 
