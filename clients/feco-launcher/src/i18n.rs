@@ -364,6 +364,37 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("Thêm {} vào Thư viện?", "Add {} to your Library?", "Ajouter {} à la Bibliothèque ?"),
     ("App web mở bằng trình duyệt tại {} và đăng nhập bằng tài khoản F-Eco.", "This web app opens in your browser at {} and signs in with your F-Eco account.", "Cette app web s’ouvre dans le navigateur à l’adresse {} et se connecte avec votre compte F-Eco."),
     ("Đã mở {} trong trình duyệt", "Opened {} in your browser", "{} ouverte dans le navigateur"),
+    ("Tin nhắn", "Messages", "Messages"),
+    ("Tin nhắn  ({})", "Messages  ({})", "Messages  ({})"),
+    ("Phiên đăng nhập đã hết hạn, hãy đăng nhập lại.", "Your session has expired. Please sign in again.", "Votre session a expiré. Reconnectez-vous."),
+    ("Không kết nối được máy chủ. Tin nhắn sẽ được tải lại khi có mạng.", "Cannot reach the server. Messages will reload when you are back online.", "Impossible de joindre le serveur. Les messages seront rechargés une fois la connexion rétablie."),
+    ("Đang kiểm tra", "Checking", "Vérification en cours"),
+    ("Đã quét, an toàn", "Scanned, safe", "Analysé, sans danger"),
+    ("Có mã độc, đã chặn tải", "Malware found, download blocked", "Logiciel malveillant détecté, téléchargement bloqué"),
+    ("Chưa kiểm tra được, chưa tải được", "Could not be checked, not available for download", "Vérification impossible, téléchargement indisponible"),
+    ("Nhà phát triển đã chặn hội thoại này. Bạn không gửi được tin.", "The developer has blocked this conversation. You cannot send messages.", "Le développeur a bloqué cette conversation. Vous ne pouvez pas envoyer de messages."),
+    ("Tin quá dài: tối đa 5.000 ký tự.", "Message too long: 5,000 characters at most.", "Message trop long : 5 000 caractères au maximum."),
+    ("Hãy nhập nội dung tin nhắn.", "Please type a message.", "Veuillez saisir un message."),
+    ("Bạn gửi quá nhanh. Hãy chờ một phút rồi gửi lại.", "You are sending too fast. Wait a minute and try again.", "Vous envoyez trop vite. Attendez une minute puis réessayez."),
+    ("Bạn không tham gia hội thoại này.", "You are not a participant in this conversation.", "Vous ne participez pas à cette conversation."),
+    ("Không tìm thấy hội thoại.", "Conversation not found.", "Conversation introuvable."),
+    ("Không gửi hoặc tải được tin nhắn. Hãy thử lại.", "Could not send or load messages. Please try again.", "Impossible d'envoyer ou de charger les messages. Réessayez."),
+    ("Dự án", "Project", "Projet"),
+    ("Trực tiếp", "Direct", "Direct"),
+    ("Quản trị F-Eco", "F-Eco admin", "Administration F-Eco"),
+    ("Mở tệp", "Open file", "Ouvrir le fichier"),
+    ("Mở bằng trình duyệt", "Open in the browser", "Ouvrir dans le navigateur"),
+    ("Tải lại", "Reload", "Recharger"),
+    ("Chưa có hội thoại nào. Bấm \"Nhắn nhà phát triển\" ở trang app trên web để bắt đầu.", "No conversations yet. Click \"Message the developer\" on an app page on the web to start one.", "Aucune conversation pour l'instant. Cliquez sur « Écrire au développeur » sur la page d'une app sur le web pour commencer."),
+    ("Chọn một hội thoại để xem tin nhắn.", "Select a conversation to see its messages.", "Sélectionnez une conversation pour voir ses messages."),
+    ("Mở trên web", "Open on the web", "Ouvrir sur le web"),
+    ("Mở hội thoại trên web, nơi gửi được tệp đính kèm", "Open the conversation on the web, where you can send attachments", "Ouvrir la conversation sur le web, où vous pouvez envoyer des pièces jointes"),
+    ("Chưa có tin nhắn nào. Hãy gửi lời chào.", "No messages yet. Say hello.", "Aucun message pour l'instant. Dites bonjour."),
+    ("Nhập tin nhắn... (Ctrl+Enter để gửi)", "Type a message... (Ctrl+Enter to send)", "Saisissez un message... (Ctrl+Entrée pour envoyer)"),
+    ("Gửi", "Send", "Envoyer"),
+    ("Gửi tệp đính kèm trên web", "Send an attachment on the web", "Envoyer une pièce jointe sur le web"),
+    ("Tệp đính kèm chỉ gửi được trên web", "Attachments can only be sent on the web", "Les pièces jointes ne peuvent être envoyées que sur le web"),
+    ("Đăng nhập để nhắn tin với nhà phát triển và bên nhận dự án của bạn.", "Sign in to message developers and the teams working on your projects.", "Connectez-vous pour écrire aux développeurs et aux prestataires de vos projets."),
 ];
 
 #[cfg(test)]
@@ -511,7 +542,8 @@ mod tests {
         out
     }
 
-    const SOURCES: [(&str, &str); 4] = [
+    const SOURCES: [(&str, &str); 5] = [
+        ("chat.rs", include_str!("chat.rs")),
         ("main.rs", include_str!("main.rs")),
         ("library.rs", include_str!("library.rs")),
         ("prefs.rs", include_str!("prefs.rs")),

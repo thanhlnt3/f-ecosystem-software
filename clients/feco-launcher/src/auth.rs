@@ -8,6 +8,7 @@
 //!   mở launcher thì dùng refresh token để vào lại, không phải đăng nhập lại.
 
 use crate::broker::LaunchCode;
+use crate::chat::{self, ChatError, Conversation, Message};
 use base64::Engine;
 use jiff::{SignedDuration, Timestamp};
 use serde_json::Value;
@@ -590,6 +591,140 @@ impl Auth {
         }
         serde_json::from_value(body.clone())
             .map_err(|_| AuthError::Failed(format!("{status}: {body}")))
+    }
+
+    // ---- Tin nhắn (`/v1/chat`, thay đổi chat-and-source-scan, design C4).
+
+    fn chat_url(&self, path: &str) -> Result<Url, ChatError> {
+        self.server
+            .join(&format!("v1/chat/{path}"))
+            .map_err(|e| ChatError::Auth(AuthError::Failed(e.to_string())))
+    }
+
+    fn conversation_url(&self, id: &str, tail: &str) -> Result<Url, ChatError> {
+        if !chat::safe_id(id) {
+            return Err(ChatError::Api {
+                status: 404,
+                code: "chat_not_found".into(),
+            });
+        }
+        self.chat_url(&format!("conversations/{id}/{tail}"))
+    }
+
+    /// Gửi yêu cầu chat; 401 thành [`AuthError::Expired`], lỗi khác thành mã `{"error": …}`.
+    async fn chat_send_request(
+        &self,
+        req: reqwest::RequestBuilder,
+        access: &str,
+    ) -> Result<Value, ChatError> {
+        let res = req
+            .bearer_auth(access)
+            .send()
+            .await
+            .map_err(|e| ChatError::Auth(AuthError::Offline(e.to_string())))?;
+        let status = res.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(ChatError::Auth(AuthError::Expired));
+        }
+        if status == reqwest::StatusCode::NO_CONTENT {
+            return Ok(Value::Null);
+        }
+        let body: Value = res.json().await.unwrap_or(Value::Null);
+        if status.is_success() {
+            Ok(body)
+        } else {
+            Err(ChatError::Api {
+                status: status.as_u16(),
+                code: body["error"].as_str().unwrap_or("unknown").to_owned(),
+            })
+        }
+    }
+
+    /// Tổng số tin chưa đọc (`GET /v1/chat/unread`).
+    pub async fn chat_unread(&self, access: &str) -> Result<usize, ChatError> {
+        let url = self.chat_url("unread")?;
+        let body = self.chat_send_request(self.http.get(url), access).await?;
+        Ok(chat::parse_unread(&body))
+    }
+
+    /// Các hội thoại, mới nhất trước (`GET /v1/chat/conversations`).
+    pub async fn chat_conversations(&self, access: &str) -> Result<Vec<Conversation>, ChatError> {
+        let url = self.chat_url("conversations")?;
+        let body = self.chat_send_request(self.http.get(url), access).await?;
+        Ok(chat::parse_conversations(&body))
+    }
+
+    /// Một trang tin sau tin `after`, cũ trước (`GET …/messages?after=&limit=`).
+    pub async fn chat_messages(
+        &self,
+        access: &str,
+        conversation: &str,
+        after: i64,
+        limit: usize,
+    ) -> Result<Vec<Message>, ChatError> {
+        let mut url = self.conversation_url(conversation, "messages")?;
+        url.query_pairs_mut()
+            .append_pair("after", &after.max(0).to_string())
+            .append_pair("limit", &limit.clamp(1, chat::PAGE_LIMIT).to_string());
+        let body = self.chat_send_request(self.http.get(url), access).await?;
+        Ok(chat::parse_messages(&body))
+    }
+
+    /// Mọi tin sau tin `after`: tải từng trang 200 tin tới khi trang cuối không đầy (tối đa 50
+    /// trang mỗi lần, phần còn lại lấy ở lần hỏi sau).
+    pub async fn chat_messages_after(
+        &self,
+        access: &str,
+        conversation: &str,
+        after: i64,
+    ) -> Result<Vec<Message>, ChatError> {
+        let mut out: Vec<Message> = Vec::new();
+        let mut cursor = after;
+        for _ in 0..50 {
+            let page = self
+                .chat_messages(access, conversation, cursor, chat::PAGE_LIMIT)
+                .await?;
+            let full = page.len() >= chat::PAGE_LIMIT;
+            let last = page.iter().map(|m| m.id).max().unwrap_or(cursor);
+            chat::merge_messages(&mut out, page);
+            if !full || last <= cursor {
+                break;
+            }
+            cursor = last;
+        }
+        Ok(out)
+    }
+
+    /// Gửi tin văn bản (`POST …/messages`); trả tin máy chủ đã lưu.
+    pub async fn chat_send(
+        &self,
+        access: &str,
+        conversation: &str,
+        body: &str,
+    ) -> Result<Message, ChatError> {
+        let url = self.conversation_url(conversation, "messages")?;
+        let req = self
+            .http
+            .post(url)
+            .json(&serde_json::json!({ "body": body }));
+        let res = self.chat_send_request(req, access).await?;
+        chat::parse_message(&res)
+            .ok_or_else(|| ChatError::Auth(AuthError::Failed(format!("tin không hợp lệ: {res}"))))
+    }
+
+    /// Đánh dấu đã đọc tới tin `up_to` (`POST …/read`).
+    pub async fn chat_read(
+        &self,
+        access: &str,
+        conversation: &str,
+        up_to: i64,
+    ) -> Result<(), ChatError> {
+        let url = self.conversation_url(conversation, "read")?;
+        let req = self
+            .http
+            .post(url)
+            .json(&serde_json::json!({ "up_to": up_to }));
+        self.chat_send_request(req, access).await.map(|_| ())
     }
 }
 

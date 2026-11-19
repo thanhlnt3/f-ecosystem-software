@@ -1,7 +1,7 @@
 //! Giao diện F-Launcher (egui). Mọi logic nằm trong thư viện `feco_launcher`; tệp này chỉ vẽ
 //! giao diện và chạy các thao tác trên một runtime tokio riêng để giao diện không bị treo.
 //!
-//! Bố cục: thanh bên (Thư viện, Cửa hàng, Thông báo, Cài đặt, tài khoản) và vùng chính. Thư viện
+//! Bố cục: thanh bên (Thư viện, Cửa hàng, Tin nhắn, Thông báo, Cài đặt, tài khoản) và vùng chính. Thư viện
 //! và Cửa hàng xem theo lưới hoặc danh sách, có tìm, lọc nhóm, sắp xếp; cài đặt giao diện lưu
 //! trong `settings.json` (spec launcher của thay đổi improve-launcher-experience).
 //!
@@ -15,6 +15,7 @@ mod icons;
 use eframe::egui;
 use feco_launcher::auth::{Auth, AuthError, KeyringStore, PurchaseError, Session, WalletInfo};
 use feco_launcher::broker::{Broker, Issuer};
+use feco_launcher::chat::{self, ChatError, Conversation, Due, Message, Thread};
 use feco_launcher::i18n::{self, t, tf, Language};
 use feco_launcher::launch::{command, LaunchEnv};
 use feco_launcher::library::{self, SortKey};
@@ -444,6 +445,72 @@ struct Done {
     synced: bool,
 }
 
+/// Kết quả một lời gọi `/v1/chat` chạy nền (không chặn giao diện, không chiếm `busy`).
+enum ChatDone {
+    Unread(Result<usize, ChatError>),
+    Conversations(Result<Vec<Conversation>, ChatError>),
+    /// Tin sau mốc `poll_after` của hội thoại (lần tải đầu: mọi tin).
+    Messages {
+        conversation: String,
+        result: Result<Vec<Message>, ChatError>,
+    },
+    Sent {
+        conversation: String,
+        /// Nội dung đã gửi (trả lại ô soạn tin khi gửi không được).
+        body: String,
+        result: Result<Message, ChatError>,
+    },
+    Read {
+        conversation: String,
+        result: Result<(), ChatError>,
+    },
+}
+
+/// Trang Tin nhắn (thay đổi chat-and-source-scan).
+#[derive(Default)]
+struct ChatState {
+    /// Tổng tin chưa đọc (huy hiệu ở thanh bên).
+    unread: usize,
+    conversations: Vec<Conversation>,
+    /// Đã tải danh sách ít nhất một lần.
+    listed: bool,
+    listing: bool,
+    selected: Option<String>,
+    thread: Option<Thread>,
+    draft: String,
+    sending: bool,
+    error: Option<String>,
+    schedule: chat::Schedule,
+}
+
+impl ChatState {
+    fn selected_conversation(&self) -> Option<&Conversation> {
+        let id = self.selected.as_deref()?;
+        self.conversations.iter().find(|c| c.id == id)
+    }
+
+    fn has_data(&self) -> bool {
+        self.unread > 0 || !self.conversations.is_empty() || self.selected.is_some()
+    }
+
+    /// Dòng cuối của hội thoại trong danh sách theo tin mới nhất trong luồng.
+    fn touch(&mut self, conversation: &str) {
+        let Some(last) = self
+            .thread
+            .as_ref()
+            .filter(|t| t.conversation == conversation)
+            .and_then(|t| t.messages.last())
+        else {
+            return;
+        };
+        let (body, at) = (last.body.chars().take(120).collect(), last.at.clone());
+        if let Some(c) = self.conversations.iter_mut().find(|c| c.id == conversation) {
+            c.last_message = Some(body);
+            c.last_message_at = at;
+        }
+    }
+}
+
 enum Action {
     Login,
     Logout,
@@ -538,6 +605,9 @@ struct LauncherApp {
     next_sync: Instant,
     /// Đã vẽ khung hình đầu tiên.
     probed: bool,
+    chat: ChatState,
+    chat_tx: mpsc::Sender<ChatDone>,
+    chat_rx: mpsc::Receiver<ChatDone>,
 }
 
 impl LauncherApp {
@@ -604,6 +674,7 @@ impl LauncherApp {
         let view = rt.block_on(snapshot(&shared));
         register_icons(&view.catalog);
         let (tx, rx) = mpsc::channel();
+        let (chat_tx, chat_rx) = mpsc::channel();
         let mut app = Self {
             rt,
             shared,
@@ -634,6 +705,9 @@ impl LauncherApp {
             confirm_uninstall: None,
             next_sync: Instant::now() + SYNC_OFFLINE,
             probed: false,
+            chat: ChatState::default(),
+            chat_tx,
+            chat_rx,
         };
         app.run(t("Đang đăng nhập lại và đồng bộ..."), true, startup);
         Ok(app)
@@ -664,6 +738,10 @@ impl LauncherApp {
     fn drain(&mut self) {
         while let Ok(done) = self.rx.try_recv() {
             self.busy = None;
+            // Vừa đồng bộ hoặc vừa đăng nhập: cập nhật số tin chưa đọc ngay.
+            if done.synced || done.view.sign_in != self.view.sign_in {
+                self.chat.schedule.refresh_unread_now(Instant::now());
+            }
             self.view = done.view;
             register_icons(&self.view.catalog);
             match done.result {
@@ -1153,7 +1231,8 @@ impl eframe::App for LauncherApp {
             self.next_sync = Instant::now() + SYNC_OFFLINE;
             self.run(t("Đang đồng bộ..."), true, sync);
         }
-        ctx.request_repaint_after(Duration::from_secs(30));
+        let wake = self.chat_tick().unwrap_or(Duration::MAX);
+        ctx.request_repaint_after(wake.min(Duration::from_secs(30)));
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -1204,6 +1283,7 @@ impl eframe::App for LauncherApp {
         egui::CentralPanel::default().show(ui, |ui| match self.page {
             Page::Library => self.library_page(ui, &mut actions),
             Page::Store => self.store_page(ui, &mut actions),
+            Page::Messages => self.messages_page(ui, &mut actions),
             Page::Notifications => self.notifications(ui, &mut actions),
         });
         let ctx = ui.ctx().clone();
@@ -1389,6 +1469,7 @@ impl LauncherApp {
 enum Page {
     Library,
     Store,
+    Messages,
     Notifications,
 }
 
@@ -1754,7 +1835,7 @@ impl LauncherApp {
     }
 
     /// Mục điều hướng: icon, trang, tên, số cần báo (bản cập nhật, thông báo chưa đọc).
-    fn nav_entries(&self) -> [(Icon, Page, &'static str, usize); 3] {
+    fn nav_entries(&self) -> [(Icon, Page, &'static str, usize); 4] {
         let unread = self.view.notifications.iter().filter(|n| !n.read).count();
         let updates = self
             .view
@@ -1765,6 +1846,7 @@ impl LauncherApp {
         [
             (Icon::Library, Page::Library, t("Thư viện"), updates),
             (Icon::Store, Page::Store, t("Cửa hàng"), 0),
+            (Icon::Chat, Page::Messages, t("Tin nhắn"), self.chat.unread),
             (Icon::Bell, Page::Notifications, t("Thông báo"), unread),
         ]
     }
@@ -1816,6 +1898,7 @@ impl LauncherApp {
                 (t("Ứng dụng của tôi"), "library"),
                 (t("Dự án phần mềm"), "projects"),
                 (t("Đơn xây app"), "orders"),
+                (t("Tin nhắn"), "messages"),
                 (t("Thông báo"), "notifications"),
             ] {
                 if ui.button(label).clicked() {
@@ -1897,6 +1980,7 @@ impl LauncherApp {
             let label = match (page, count) {
                 (_, 0) => name.to_owned(),
                 (Page::Library, n) => tf("Thư viện  ({} cập nhật)", &[&n]),
+                (Page::Messages, n) => tf("Tin nhắn  ({})", &[&n]),
                 (_, n) => tf("Thông báo  ({})", &[&n]),
             };
             let selected = self.page == page;
@@ -1906,7 +1990,7 @@ impl LauncherApp {
                 egui::RichText::new(label)
             };
             if icons::labeled(ui, icon, text, selected, width).clicked() {
-                self.page = page;
+                self.go(page);
             }
         }
         // Cài đặt mở trong cửa sổ riêng.
@@ -1993,7 +2077,7 @@ impl LauncherApp {
                 let response = icons::button(ui, icon, &tip, self.page == page, true);
                 icons::badge(ui, response.rect, count, badge_fill);
                 if response.clicked() {
-                    self.page = page;
+                    self.go(page);
                 }
             }
             if icons::button(ui, Icon::Gear, t("Cài đặt"), self.settings_open, true).clicked() {
@@ -3198,6 +3282,647 @@ impl LauncherApp {
                     &[&t(ISOLATION_NOTICE)],
                 ));
             });
+    }
+}
+
+// ---- Tin nhắn (thay đổi chat-and-source-scan: spec launcher "Tin nhắn trong F-Launcher").
+
+/// Giờ địa phương của thời điểm RFC 3339 máy chủ trả: hôm nay thì chỉ giờ, ngày khác kèm ngày.
+fn chat_time(at: &str) -> String {
+    match at.parse::<Timestamp>() {
+        Ok(ts) => {
+            let tz = jiff::tz::TimeZone::system();
+            let local = ts.to_zoned(tz.clone());
+            if local.date() == Timestamp::now().to_zoned(tz).date() {
+                local.strftime("%H:%M").to_string()
+            } else {
+                local.strftime("%H:%M %d/%m/%Y").to_string()
+            }
+        }
+        Err(_) => at.chars().take(16).collect(),
+    }
+}
+
+fn kind_label(kind: chat::Kind) -> &'static str {
+    match kind {
+        chat::Kind::Project => t("Dự án"),
+        chat::Kind::Direct => t("Trực tiếp"),
+    }
+}
+
+async fn chat_token(s: &Shared) -> Result<String, ChatError> {
+    s.identity.access_token().await.map_err(ChatError::Auth)
+}
+
+/// Một tin trong luồng: của mình bên phải (màu nhấn), của bên kia bên trái, của quản trị có viền
+/// và nhãn riêng, tin hệ thống ở giữa (chữ nghiêng).
+fn chat_bubble(ui: &mut egui::Ui, m: &Message, prefs: &Prefs, actions: &mut Vec<Action>) {
+    let time = chat_time(&m.at);
+    if m.side == chat::Side::System {
+        ui.vertical_centered(|ui| {
+            ui.label(egui::RichText::new(&m.body).italics().weak());
+            ui.label(egui::RichText::new(time).small().weak());
+        });
+        ui.add_space(6.0);
+        return;
+    }
+    let max = (ui.available_width() * 0.72).max(160.0);
+    let admin = m.side == chat::Side::Admin;
+    let warn = warn_color(ui);
+    let (fill, color, align) = if m.mine {
+        (accent(prefs), on_accent(prefs), egui::Align::Max)
+    } else if admin {
+        (
+            warn.gamma_multiply(0.18),
+            ui.visuals().text_color(),
+            egui::Align::Min,
+        )
+    } else {
+        (
+            ui.visuals().widgets.inactive.weak_bg_fill,
+            ui.visuals().text_color(),
+            egui::Align::Min,
+        )
+    };
+    let stroke = if admin {
+        egui::Stroke::new(1.0, warn)
+    } else {
+        egui::Stroke::NONE
+    };
+    ui.with_layout(egui::Layout::top_down(align), |ui| {
+        egui::Frame::new()
+            .fill(fill)
+            .stroke(stroke)
+            .corner_radius(10.0)
+            .inner_margin(8.0)
+            .show(ui, |ui| {
+                ui.set_max_width(max);
+                if admin {
+                    ui.label(
+                        egui::RichText::new(t("Quản trị F-Eco"))
+                            .small()
+                            .strong()
+                            .color(warn),
+                    );
+                }
+                ui.add(egui::Label::new(egui::RichText::new(&m.body).color(color)).wrap());
+                if let Some(a) = &m.attachment {
+                    chat_attachment(ui, a, color, actions);
+                }
+                ui.label(
+                    egui::RichText::new(time)
+                        .small()
+                        .color(color.gamma_multiply(0.75)),
+                );
+            });
+    });
+    ui.add_space(6.0);
+}
+
+/// Tệp đính kèm: tên, dung lượng, trạng thái quét; chỉ tệp sạch mới mở được (bằng trình duyệt).
+fn chat_attachment(
+    ui: &mut egui::Ui,
+    a: &chat::Attachment,
+    color: egui::Color32,
+    actions: &mut Vec<Action>,
+) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            egui::RichText::new(format!("{} · {}", a.name, chat::file_size(a.size)))
+                .strong()
+                .color(color),
+        );
+        ui.label(
+            egui::RichText::new(chat::scan_label(a.status))
+                .small()
+                .color(color),
+        );
+        if let Some(url) = a.open_url() {
+            if ui
+                .button(t("Mở tệp"))
+                .on_hover_text(t("Mở bằng trình duyệt"))
+                .clicked()
+            {
+                actions.push(Action::OpenLink(url.to_owned()));
+            }
+        }
+    });
+}
+
+impl LauncherApp {
+    /// Chuyển trang; vào trang Tin nhắn thì tải lại danh sách hội thoại và số chưa đọc.
+    fn go(&mut self, page: Page) {
+        if page == Page::Messages && self.page != Page::Messages {
+            self.chat_load_list();
+            self.chat.schedule.refresh_unread_now(Instant::now());
+        }
+        self.page = page;
+    }
+
+    /// Chạy một lời gọi chat trên runtime nền; kết quả về qua `chat_rx`.
+    fn chat_task<Fut>(&self, fut: Fut)
+    where
+        Fut: Future<Output = ChatDone> + Send + 'static,
+    {
+        let tx = self.chat_tx.clone();
+        let ctx = self.ctx.clone();
+        self.rt.spawn(async move {
+            let _ = tx.send(fut.await);
+            ctx.request_repaint();
+        });
+    }
+
+    fn chat_load_list(&mut self) {
+        if self.chat.listing || !self.signed_in() {
+            return;
+        }
+        self.chat.listing = true;
+        let s = self.shared.clone();
+        self.chat_task(async move {
+            let result = async {
+                let token = chat_token(&s).await?;
+                s.identity.auth.chat_conversations(&token).await
+            }
+            .await;
+            ChatDone::Conversations(result)
+        });
+    }
+
+    /// Lịch hỏi máy chủ (design C3): số chưa đọc mỗi 60 giây khi đã đăng nhập, tin mới mỗi 5 giây
+    /// khi đang mở hội thoại. Trả thời gian tới lần hỏi kế tiếp.
+    fn chat_tick(&mut self) -> Option<Duration> {
+        self.chat_drain();
+        let now = Instant::now();
+        let signed_in = self.signed_in();
+        if !signed_in && self.chat.has_data() {
+            // Đăng xuất: bỏ tin của tài khoản cũ.
+            self.chat = ChatState::default();
+        }
+        let open = if self.page == Page::Messages {
+            self.chat.selected.clone()
+        } else {
+            None
+        };
+        self.chat.schedule.set_open(open.as_deref(), now);
+        for due in self.chat.schedule.due(now, signed_in) {
+            match due {
+                Due::Unread => {
+                    let s = self.shared.clone();
+                    self.chat_task(async move {
+                        let result = async {
+                            let token = chat_token(&s).await?;
+                            s.identity.auth.chat_unread(&token).await
+                        }
+                        .await;
+                        ChatDone::Unread(result)
+                    });
+                    if self.page == Page::Messages {
+                        self.chat_load_list();
+                    }
+                }
+                Due::Poll(id) => {
+                    let after = self
+                        .chat
+                        .thread
+                        .as_ref()
+                        .filter(|t| t.conversation == id)
+                        .map_or(0, Thread::poll_after);
+                    let s = self.shared.clone();
+                    self.chat_task(async move {
+                        let result = async {
+                            let token = chat_token(&s).await?;
+                            s.identity
+                                .auth
+                                .chat_messages_after(&token, &id, after)
+                                .await
+                        }
+                        .await;
+                        ChatDone::Messages {
+                            conversation: id,
+                            result,
+                        }
+                    });
+                }
+            }
+        }
+        self.chat.schedule.wake_in(now, signed_in)
+    }
+
+    fn chat_drain(&mut self) {
+        while let Ok(done) = self.chat_rx.try_recv() {
+            let now = Instant::now();
+            match done {
+                ChatDone::Unread(result) => {
+                    self.chat.schedule.unread_done(now);
+                    match result {
+                        Ok(n) => self.chat.unread = n,
+                        Err(e) => eprintln!("không lấy được số tin chưa đọc: {e}"),
+                    }
+                }
+                ChatDone::Conversations(result) => {
+                    self.chat.listing = false;
+                    match result {
+                        Ok(list) => {
+                            self.chat.conversations = list;
+                            self.chat.listed = true;
+                            if let Some(id) = self.chat.selected.clone() {
+                                self.chat.touch(&id);
+                            }
+                        }
+                        Err(e) => self.chat.error = Some(e.message()),
+                    }
+                }
+                ChatDone::Messages {
+                    conversation,
+                    result,
+                } => {
+                    self.chat.schedule.poll_done(&conversation, now);
+                    let Some(thread) = self
+                        .chat
+                        .thread
+                        .as_mut()
+                        .filter(|t| t.conversation == conversation)
+                    else {
+                        continue;
+                    };
+                    match result {
+                        Ok(page) => {
+                            thread.apply(page);
+                            let due = thread.read_due();
+                            self.chat.touch(&conversation);
+                            if let Some(up_to) = due {
+                                self.chat_mark_read(conversation, up_to);
+                            }
+                        }
+                        Err(e) => self.chat.error = Some(e.message()),
+                    }
+                }
+                ChatDone::Sent {
+                    conversation,
+                    body,
+                    result,
+                } => {
+                    self.chat.sending = false;
+                    match result {
+                        Ok(message) => {
+                            if let Some(thread) = self
+                                .chat
+                                .thread
+                                .as_mut()
+                                .filter(|t| t.conversation == conversation)
+                            {
+                                thread.push_sent(message);
+                            }
+                            self.chat.error = None;
+                            self.chat.touch(&conversation);
+                            // Hội thoại vừa có tin lên đầu danh sách (mới nhất trước).
+                            if let Some(i) = self
+                                .chat
+                                .conversations
+                                .iter()
+                                .position(|c| c.id == conversation)
+                            {
+                                let c = self.chat.conversations.remove(i);
+                                self.chat.conversations.insert(0, c);
+                            }
+                        }
+                        Err(e) => {
+                            if matches!(&e, ChatError::Api { code, .. } if code == "chat_blocked") {
+                                if let Some(c) = self
+                                    .chat
+                                    .conversations
+                                    .iter_mut()
+                                    .find(|c| c.id == conversation)
+                                {
+                                    c.blocked = true;
+                                }
+                            }
+                            // Gửi không được: trả lại nội dung vào ô soạn tin.
+                            if self.chat.selected.as_deref() == Some(conversation.as_str())
+                                && self.chat.draft.is_empty()
+                            {
+                                self.chat.draft = body;
+                            }
+                            self.chat.error = Some(e.message());
+                        }
+                    }
+                }
+                ChatDone::Read {
+                    conversation,
+                    result,
+                } => match result {
+                    Ok(()) => {
+                        if let Some(c) = self
+                            .chat
+                            .conversations
+                            .iter_mut()
+                            .find(|c| c.id == conversation)
+                        {
+                            c.unread = 0;
+                        }
+                        self.chat.schedule.refresh_unread_now(now);
+                    }
+                    Err(e) => eprintln!("không đánh dấu đã đọc được: {e}"),
+                },
+            }
+        }
+    }
+
+    fn chat_mark_read(&mut self, conversation: String, up_to: i64) {
+        if let Some(thread) = self.chat.thread.as_mut() {
+            thread.read_up_to = thread.read_up_to.max(up_to);
+        }
+        let s = self.shared.clone();
+        self.chat_task(async move {
+            let result = async {
+                let token = chat_token(&s).await?;
+                s.identity
+                    .auth
+                    .chat_read(&token, &conversation, up_to)
+                    .await
+            }
+            .await;
+            ChatDone::Read {
+                conversation,
+                result,
+            }
+        });
+    }
+
+    fn chat_select(&mut self, id: &str) {
+        if self.chat.selected.as_deref() == Some(id) {
+            return;
+        }
+        self.chat.selected = Some(id.to_owned());
+        self.chat.thread = Some(Thread::new(id));
+        self.chat.draft.clear();
+        self.chat.error = None;
+        self.chat.sending = false;
+    }
+
+    fn chat_send(&mut self) {
+        let Some(id) = self.chat.selected.clone() else {
+            return;
+        };
+        if self.chat.sending {
+            return;
+        }
+        let body = match chat::validate_body(&self.chat.draft) {
+            Ok(body) => body,
+            Err(code) => {
+                self.chat.error = Some(chat::error_message(code).to_owned());
+                return;
+            }
+        };
+        self.chat.draft.clear();
+        self.chat.sending = true;
+        self.chat.error = None;
+        let s = self.shared.clone();
+        self.chat_task(async move {
+            let result = async {
+                let token = chat_token(&s).await?;
+                s.identity.auth.chat_send(&token, &id, &body).await
+            }
+            .await;
+            ChatDone::Sent {
+                conversation: id,
+                body,
+                result,
+            }
+        });
+    }
+
+    /// Trang Tin nhắn: danh sách hội thoại bên trái, luồng tin của hội thoại đang chọn bên phải.
+    fn messages_page(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        if !self.signed_in() {
+            ui.heading(t("Tin nhắn"));
+            ui.add_space(6.0);
+            ui.label(t(
+                "Đăng nhập để nhắn tin với nhà phát triển và bên nhận dự án của bạn.",
+            ));
+            ui.add_space(8.0);
+            if primary_button(
+                ui,
+                &self.prefs,
+                self.busy.is_none(),
+                Icon::SignIn,
+                t("Đăng nhập"),
+            ) {
+                actions.push(Action::Login);
+            }
+            return;
+        }
+        if !self.chat.listed && !self.chat.listing && self.chat.error.is_none() {
+            self.chat_load_list();
+        }
+        egui::Panel::left("chat_list")
+            .resizable(true)
+            .default_size(280.0)
+            .size_range(200.0..=440.0)
+            .show(ui, |ui| self.conversation_list(ui));
+        self.thread_view(ui, actions);
+    }
+
+    fn conversation_list(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.heading(t("Tin nhắn"));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if icons::button(ui, Icon::Sync, t("Tải lại"), false, !self.chat.listing).clicked()
+                {
+                    self.chat.error = None;
+                    self.chat_load_list();
+                    self.chat.schedule.refresh_unread_now(Instant::now());
+                }
+            });
+        });
+        ui.add_space(4.0);
+        if self.chat.conversations.is_empty() {
+            if self.chat.listing {
+                ui.spinner();
+            } else {
+                ui.weak(t("Chưa có hội thoại nào. Bấm \"Nhắn nhà phát triển\" ở trang app trên web để bắt đầu."));
+            }
+            return;
+        }
+        let mut clicked = None;
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                for c in &self.chat.conversations {
+                    if self.conversation_row(ui, c) {
+                        clicked = Some(c.id.clone());
+                    }
+                }
+            });
+        if let Some(id) = clicked {
+            self.chat_select(&id);
+        }
+    }
+
+    /// Một dòng của danh sách: tiêu đề, loại và tên bên kia, dòng cuối, số chưa đọc, thời gian.
+    fn conversation_row(&self, ui: &mut egui::Ui, c: &Conversation) -> bool {
+        let selected = self.chat.selected.as_deref() == Some(c.id.as_str());
+        let fill = if selected {
+            ui.visuals().selection.bg_fill.gamma_multiply(0.35)
+        } else {
+            ui.visuals().faint_bg_color
+        };
+        let inner = egui::Frame::new()
+            .fill(fill)
+            .corner_radius(6.0)
+            .inner_margin(8.0)
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if c.unread > 0 {
+                            ui.label(
+                                egui::RichText::new(format!(" {} ", c.unread))
+                                    .small()
+                                    .strong()
+                                    .color(on_accent(&self.prefs))
+                                    .background_color(accent(&self.prefs)),
+                            );
+                        }
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            let title = egui::RichText::new(&c.title);
+                            let title = if c.unread > 0 { title.strong() } else { title };
+                            ui.add(egui::Label::new(title).truncate());
+                        });
+                    });
+                });
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(format!(
+                                "{} · {}",
+                                kind_label(c.kind),
+                                c.peer_name
+                            ))
+                            .small()
+                            .weak(),
+                        )
+                        .truncate(),
+                    );
+                });
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            egui::RichText::new(chat_time(&c.last_message_at))
+                                .small()
+                                .weak(),
+                        );
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            let last = c.last_message.clone().unwrap_or_default();
+                            ui.add(egui::Label::new(egui::RichText::new(last).weak()).truncate());
+                        });
+                    });
+                });
+            });
+        let response = ui
+            .interact(
+                inner.response.rect,
+                ui.scope_id().with(("chat", &c.id)),
+                egui::Sense::click(),
+            )
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+        ui.add_space(4.0);
+        response.clicked()
+    }
+
+    fn thread_view(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
+        let Some(conv) = self.chat.selected_conversation().cloned() else {
+            if let Some(e) = &self.chat.error {
+                ui.colored_label(danger_color(ui), e.as_str());
+            }
+            ui.centered_and_justified(|ui| {
+                ui.weak(t("Chọn một hội thoại để xem tin nhắn."));
+            });
+            return;
+        };
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.strong(&conv.title);
+                ui.weak(format!("{} · {}", kind_label(conv.kind), conv.peer_name));
+            });
+            if let Some(url) = &conv.web_url {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .button(t("Mở trên web"))
+                        .on_hover_text(t("Mở hội thoại trên web, nơi gửi được tệp đính kèm"))
+                        .clicked()
+                    {
+                        actions.push(Action::OpenLink(url.clone()));
+                    }
+                });
+            }
+        });
+        ui.separator();
+        egui::Panel::bottom("chat_composer")
+            .resizable(false)
+            .show(ui, |ui| self.composer(ui, &conv, actions));
+        egui::ScrollArea::vertical()
+            .stick_to_bottom(true)
+            .auto_shrink([false, false])
+            .show(ui, |ui| match &self.chat.thread {
+                Some(thread) if thread.loaded => {
+                    if thread.messages.is_empty() {
+                        ui.weak(t("Chưa có tin nhắn nào. Hãy gửi lời chào."));
+                    }
+                    for m in &thread.messages {
+                        chat_bubble(ui, m, &self.prefs, actions);
+                    }
+                }
+                _ => {
+                    ui.spinner();
+                }
+            });
+    }
+
+    /// Ô soạn tin nhiều dòng và nút Gửi (Ctrl+Enter cũng gửi). Tệp đính kèm chỉ gửi trên web.
+    fn composer(&mut self, ui: &mut egui::Ui, conv: &Conversation, actions: &mut Vec<Action>) {
+        ui.add_space(4.0);
+        if let Some(e) = &self.chat.error {
+            ui.colored_label(danger_color(ui), e.as_str());
+        }
+        if conv.send_blocked() {
+            ui.colored_label(warn_color(ui), chat::error_message("chat_blocked"));
+            ui.add_space(4.0);
+            return;
+        }
+        let id = ui.make_persistent_id("chat_draft");
+        let shortcut = egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::Enter);
+        let mut send =
+            ui.memory(|m| m.has_focus(id)) && ui.input_mut(|i| i.consume_shortcut(&shortcut));
+        ui.add(
+            egui::TextEdit::multiline(&mut self.chat.draft)
+                .id(id)
+                .desired_rows(3)
+                .desired_width(f32::INFINITY)
+                .hint_text(t("Nhập tin nhắn... (Ctrl+Enter để gửi)")),
+        );
+        ui.horizontal(|ui| {
+            let ready = !self.chat.sending && !self.chat.draft.trim().is_empty();
+            if primary_button(ui, &self.prefs, ready, Icon::Send, t("Gửi")) {
+                send = true;
+            }
+            if self.chat.sending {
+                ui.spinner();
+            }
+            if let Some(url) = &conv.web_url {
+                if ui
+                    .link(t("Gửi tệp đính kèm trên web"))
+                    .on_hover_text(t("Tệp đính kèm chỉ gửi được trên web"))
+                    .clicked()
+                {
+                    actions.push(Action::OpenLink(url.clone()));
+                }
+            }
+        });
+        ui.add_space(4.0);
+        if send {
+            self.chat_send();
+        }
     }
 }
 

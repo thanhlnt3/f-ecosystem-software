@@ -39,11 +39,17 @@ pub enum Icon {
     Menu,
     /// Khung có cột bên trái: thu gọn thanh bên.
     PanelLeft,
+    /// Bong bóng hội thoại: trang Tin nhắn.
+    Chat,
+    /// Máy bay giấy: gửi tin.
+    Send,
 }
 
 #[cfg(test)]
 impl Icon {
-    pub const ALL: [Icon; 25] = [
+    pub const ALL: [Icon; 27] = [
+        Icon::Chat,
+        Icon::Send,
         Icon::Menu,
         Icon::PanelLeft,
         Icon::Wallet,
@@ -357,6 +363,34 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
                 &[(0.24, 0.26), (0.3, 0.86), (0.7, 0.86), (0.76, 0.26)],
             );
         }
+        Icon::Chat => {
+            // Bong bóng bo góc có đuôi ở dưới bên trái, ba chấm bên trong.
+            p.rect_stroke(
+                Rect::from_min_max(at(r, 0.14, 0.18), at(r, 0.86, 0.66)),
+                r.width() * 0.1,
+                s,
+                egui::StrokeKind::Middle,
+            );
+            line(p, r, s, &[(0.3, 0.66), (0.26, 0.86), (0.48, 0.66)]);
+            for x in [0.34, 0.5, 0.66] {
+                p.circle_filled(at(r, x, 0.42), w * 0.7, color);
+            }
+        }
+        Icon::Send => {
+            line(
+                p,
+                r,
+                s,
+                &[
+                    (0.12, 0.46),
+                    (0.88, 0.14),
+                    (0.6, 0.86),
+                    (0.46, 0.56),
+                    (0.12, 0.46),
+                ],
+            );
+            line(p, r, s, &[(0.46, 0.56), (0.88, 0.14)]);
+        }
         Icon::Undo => {
             let c = at(r, 0.52, 0.56);
             arc(p, c, r.width() * 0.28, PI, TAU + FRAC_PI_2 * 0.6, s);
@@ -396,14 +430,8 @@ pub fn button(ui: &mut Ui, icon: Icon, tooltip: &str, selected: bool, enabled: b
     response
 }
 
-/// Chữ của huy hiệu số: không có khi `n` = 0, "9+" khi lớn hơn 9.
-pub fn badge_text(n: usize) -> Option<String> {
-    match n {
-        0 => None,
-        1..=9 => Some(n.to_string()),
-        _ => Some("9+".into()),
-    }
-}
+/// Chữ của huy hiệu số (nằm trong thư viện để kiểm thử cùng lần đồng bộ số chưa đọc).
+pub use feco_launcher::library::badge_text;
 
 /// Vẽ huy hiệu số ở góc trên bên phải của `rect` (icon ở thanh bên thu gọn).
 pub fn badge(ui: &Ui, rect: Rect, n: usize, fill: Color32) {

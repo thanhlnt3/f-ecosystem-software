@@ -12,10 +12,12 @@
 //!   cho đúng app mà launcher đã khởi chạy. App có cờ `terminal` mở trong cửa sổ terminal riêng.
 //! - [`library`]: tìm, lọc, sắp xếp app; biểu tượng chữ cái đầu. [`prefs`]: cài đặt giao diện
 //!   (`settings.json`).
+//! - [`chat`]: tin nhắn giữa khách hàng và nhà phát triển (đọc JSON, gộp tin, lịch hỏi máy chủ).
 
 pub mod auth;
 pub mod broker;
 pub mod catalog;
+pub mod chat;
 pub mod config;
 pub mod events;
 pub mod i18n;
