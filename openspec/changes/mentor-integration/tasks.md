@@ -34,8 +34,19 @@
     - chạy thật gateway Mentor (cổng 8100, Authlib thật, Hydra dev) và app web (cổng 5173) với tài khoản F-Eco thử mới tạo trên máy dev;
     - "Đăng nhập bằng F-Eco" → trang đăng nhập F-Eco → màn hình đồng ý ghi "Mentor by katD2707", chia sẻ tên → quay về Mentor đã đăng nhập (màn hình chọn ngôn ngữ lần đầu), không còn `feco_code` trong địa chỉ;
     - gateway: `/v1/me` 200, callback 303, exchange 200; tài khoản `feco-…` vai trò học sinh, tên lấy từ F-Eco, đã tạo không gian học tập; bảng mã đăng nhập trống.
-- [ ] 2.2 Job CI `mentor-desktop`, `release.yml` đính kèm gói desktop; xác minh bằng scenario "Bản vá còn áp được" và "App desktop"
+- [x] 2.2 Job CI `mentor-desktop`, `release.yml` đính kèm gói desktop; xác minh bằng scenario "Bản vá còn áp được" và "App desktop"
+  - Xác minh: CI chạy 44494054718, job `mentor-desktop` trên Windows:
+    - tải Mentor tại `0a3b8b7`, hai bản vá áp sạch;
+    - pytest của gateway và vitest của app qua;
+    - `tauri build --no-bundle` dựng được `Mentor.exe`, đóng gói `mentor-0.0.0-ci-windows-x64.zip`.
+
+    Job `mentor` của release.yml dùng cùng script. Scenario "App desktop" trên launcher chưa chạy tay, vì cần tải gói từ bản phát hành về máy dev. Launcher đã có test cho app có cả gói Windows và bản web (`web_apps_show_everywhere_and_open_their_url`).
 
 ## 3. Tài liệu và phát hành
 
-- [ ] 3.1 README, CHANGELOG, QUESTIONS.md; phát hành 1.11.0
+- [x] 3.1 README, CHANGELOG, QUESTIONS.md; phát hành 1.11.0
+  - Xác minh:
+    - `scripts/check-docs-i18n.py`;
+    - README mục 6.17 (Việt, Anh), `integrations/mentor/README.md`, CHANGELOG 1.11.0, QUESTIONS.md 104–108;
+    - máy chủ: 168 unit test và 40 E2E qua sau khi nâng `lettre` và bỏ `humantime`;
+    - CI xanh; release.yml của tag `v1.11.0`.
