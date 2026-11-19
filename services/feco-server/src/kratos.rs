@@ -272,7 +272,16 @@ impl KratosClient {
         .await?;
         let r = Self::into_response(res).await?;
         Ok(match r.status {
-            StatusCode::OK => Whoami::Session(r.body),
+            StatusCode::OK => {
+                // Thanh trên cùng hiện số tin chưa đọc của người này (chat_web::nav_badge).
+                if let Some(id) = r.body["identity"]["id"]
+                    .as_str()
+                    .and_then(|s| s.parse().ok())
+                {
+                    crate::chat_web::remember_viewer(id);
+                }
+                Whoami::Session(r.body)
+            }
             StatusCode::FORBIDDEN if r.body["error"]["id"] == "session_aal2_required" => {
                 Whoami::NeedsSecondFactor(
                     r.body["redirect_browser_to"]

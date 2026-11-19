@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ i18n.t("admin.nav.chat_reports") }}{% endblock %}
+{% block page %}
+<div class="admin-shell">
+  <aside class="admin-side">
+    <div class="admin-who">
+      <strong>{{ i18n.t("admin.title") }}</strong>
+      <span class="muted" id="admin-me">{{ me }} · {{ roles }}</span>
+    </div>
+    <nav id="admin-nav" aria-label="{{ i18n.t("admin.title") }}">
+      <a href="/admin">{{ i18n.t("admin.nav.home") }}</a>
+      {% for n in nav %}<a href="{{ n.href }}"{% if n.current %} aria-current="page"{% endif %}>{{ n.label }}</a>{% endfor %}
+    </nav>
+  </aside>
+  <main class="admin-main">
+{% if dev_no_passkey %}<div class="msg warn" role="alert">{{ i18n.t("admin.dev_no_passkey") }}</div>{% endif %}
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<h1>{{ i18n.t("admin.nav.chat_reports") }}</h1>
+{% match detail %}
+{% when Some with (d) %}
+<section class="card" id="admin-chat-report" data-report="{{ d.id }}" data-handled="{{ d.handled }}">
+  <h2>{{ detail_title }}</h2>
+  <p><strong>{{ i18n.t("chat.report_reason") }}:</strong> {{ d.reason }} <span class="muted">· {{ d.at }}</span></p>
+  {% if d.handled %}<p><span class="badge ok">{{ i18n.t("chat.report_handled") }}</span> <span class="muted">{{ d.handled_note }}</span></p>
+  {% else %}
+  <form method="post" action="/admin/chat-reports/{{ d.id }}/handled" id="handled-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <button type="submit">{{ i18n.t("chat.mark_handled") }}</button>
+  </form>
+  {% endif %}
+  <h3>{{ i18n.t("chat.read_only") }}</h3>
+  <div class="chat-thread" id="admin-chat-thread">{{ thread_html|safe }}</div>
+</section>
+{% when None %}{% endmatch %}
+{% if reports.is_empty() %}<p class="muted" id="no-reports">{{ i18n.t("chat.no_reports") }}</p>{% endif %}
+<table id="chat-report-list">
+{% for r in reports %}<tr class="chat-report" data-report="{{ r.id }}" data-handled="{{ r.handled }}"><td><a href="/admin/chat-reports/{{ r.id }}">#{{ r.id }} · {{ r.reason }}</a><br><span class="muted">{{ r.at }}{% if r.handled %} · {{ i18n.t("chat.report_handled") }}{% endif %}</span></td></tr>
+{% endfor %}
+</table>
+  </main>
+</div>
+{% endblock %}

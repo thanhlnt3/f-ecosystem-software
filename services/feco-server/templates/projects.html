@@ -50,6 +50,7 @@
     {% if !p.headline.is_empty() %}<p>{{ p.headline }}</p>{% endif %}
     {% if !p.skills.is_empty() %}<p class="muted">{{ p.skills }}</p>{% endif %}
     {% if can_commission %}<a class="btn" href="/projects/new?provider={{ p.id }}">{{ i18n.t("proj.request") }}</a>{% endif %}
+    <form method="post" action="/messages/start" class="message-developer"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="hidden" name="developer" value="{{ p.id }}"><button type="submit" class="secondary">{{ i18n.t("chat.message_developer") }}</button></form>
   </div>
 {% endfor %}
 </div>

@@ -61,6 +61,18 @@ pub const CODES: &[(&str, u16, &str, &str)] = &[
     ("not_in_manual_review", 409, "Phiên bản không ở hàng chờ duyệt thủ công.", "The version is not in the manual review queue."),
     ("reviewer_is_developer", 403, "Người duyệt là thành viên của nhà phát triển app nên không được tự duyệt.", "The reviewer is a member of the app's developer account and can't approve it."),
     ("csrf", 403, "Biểu mẫu hết hạn; tải lại trang.", "The form expired; reload the page."),
+    // Chat (thay đổi chat-and-source-scan, design C2, C4).
+    ("chat_not_found", 404, "Không có hội thoại (hoặc tệp đính kèm) này.", "No such conversation (or attachment)."),
+    ("chat_forbidden", 403, "Bạn không tham gia hội thoại này, hoặc hội thoại dự án đã đóng.", "You are not part of this conversation, or the project conversation is closed."),
+    ("chat_blocked", 409, "Nhà phát triển đã chặn hội thoại này; không gửi được tin.", "The developer blocked this conversation; messages can't be sent."),
+    ("chat_too_long", 422, "Tin dài quá 5.000 ký tự.", "The message is longer than 5,000 characters."),
+    ("chat_empty", 422, "Tin trống.", "The message is empty."),
+    ("chat_rate_limited", 429, "Quá 30 tin mỗi phút hoặc 20 hội thoại mới mỗi ngày. Chờ rồi thử lại.", "More than 30 messages a minute or 20 new conversations a day. Wait and retry."),
+    ("chat_attachment_too_large", 413, "Tệp đính kèm lớn hơn 20 MB.", "The attachment is larger than 20 MB."),
+    ("chat_attachment_pending", 409, "Tệp đang được kiểm tra mã độc; thử lại sau ít phút.", "The attachment is still being scanned; retry in a few minutes."),
+    ("chat_attachment_blocked", 403, "Tệp có mã độc nên bị chặn tải.", "The attachment contains malware and can't be downloaded."),
+    ("chat_not_developer", 422, "Người này không phải nhà phát triển nên không nhận hội thoại trực tiếp.", "This person isn't a developer, so they can't receive direct conversations."),
+    ("chat_self", 422, "Không nhắn cho chính mình.", "You can't message yourself."),
 ];
 
 /// Mã lỗi có trong danh mục không.

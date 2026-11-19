@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ i18n.t("chat.title") }}{% endblock %}
+{% block content %}
+<h1>{{ i18n.t("chat.title") }}</h1>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+<nav class="filters" id="chat-filters" aria-label="{{ i18n.t("chat.filter") }}">
+  <a class="btn{% if !kind.is_empty() %} secondary{% endif %}" href="/messages"{% if kind.is_empty() %} aria-current="page"{% endif %}>{{ i18n.t("chat.filter.all") }}</a>
+  <a class="btn{% if kind != "direct" %} secondary{% endif %}" href="/messages?kind=direct"{% if kind == "direct" %} aria-current="page"{% endif %}>{{ i18n.t("chat.filter.direct") }}</a>
+  <a class="btn{% if kind != "project" %} secondary{% endif %}" href="/messages?kind=project"{% if kind == "project" %} aria-current="page"{% endif %}>{{ i18n.t("chat.filter.project") }}</a>
+</nav>
+{% if items.is_empty() %}<p class="muted" id="no-conversations">{{ i18n.t("chat.none") }}</p>{% endif %}
+<table id="chat-list">
+{% for c in items %}<tr class="conversation" data-id="{{ c.id }}" data-kind="{{ c.kind }}" data-unread="{{ c.unread }}"><td><a href="/messages/{{ c.id }}"><strong>{{ c.peer }}</strong> · {{ c.title }}</a>{% if c.unread > 0 %} <span class="badge brand unread">{{ c.unread }}</span>{% endif %}{% if c.blocked %} <span class="badge warn">{{ i18n.t("chat.blocked") }}</span>{% endif %}<br><span class="muted">{% if c.kind == "project" %}{{ i18n.t("chat.filter.project") }}{% else %}{{ i18n.t("chat.filter.direct") }}{% endif %} · {{ c.at }}</span>{% if !c.preview.is_empty() %}<div class="chat-preview">{{ c.preview }}</div>{% endif %}</td></tr>
+{% endfor %}
+</table>
+<script src="/messages/chat.js" defer></script>
+{% endblock %}
