@@ -676,6 +676,119 @@ pub async fn home(
     }
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AfterLoginQuery {
+    pub next: Option<String>,
+}
+
+/// Đích sau đăng nhập: chỉ nhận đường dẫn trong F-Eco, còn lại về trang chủ.
+fn safe_next(public_url: &url::Url, next: Option<&str>) -> String {
+    let Some(next) = next.filter(|n| !n.is_empty()) else {
+        return "/".into();
+    };
+    if let Some(rest) = next.strip_prefix(public_url.as_str()) {
+        return format!("/{rest}");
+    }
+    let local = next.starts_with('/') && !next.starts_with("//") && !next.contains('\\');
+    if local {
+        next.to_owned()
+    } else {
+        "/".into()
+    }
+}
+
+/// Phiên vừa xác thực (trong 5 phút) bằng Google/GitHub: trả phương thức `oidc` của phiên.
+fn fresh_oidc_method(session: &Value, now: std::time::SystemTime) -> Option<&Value> {
+    let at = session["authenticated_at"]
+        .as_str()
+        .and_then(account::parse_rfc3339)?;
+    let age = now.duration_since(at).unwrap_or_default();
+    if age > std::time::Duration::from_secs(300) {
+        return None;
+    }
+    session["authentication_methods"]
+        .as_array()?
+        .iter()
+        .find(|m| m["method"] == "oidc")
+}
+
+/// GET /auth/after-login?next=: đích của mọi luồng đăng nhập và đăng ký (thay đổi
+/// oidc-login-and-token-reuse, design O3). Đăng nhập bằng Google/GitHub đi thẳng qua
+/// Kratos, nên nhật ký kiểm toán, báo thiết bị mới và hủy yêu cầu xóa tài khoản làm ở đây,
+/// mỗi phiên một lần. Đăng nhập bằng mật khẩu đã làm các việc này lúc gửi biểu mẫu.
+pub async fn after_login(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<AfterLoginQuery>,
+    client: ClientInfo,
+    headers: HeaderMap,
+) -> Response {
+    let mut next = safe_next(&state.public_url, q.next.as_deref());
+    let session = match state.kratos.whoami(cookie(&headers)).await {
+        Ok(Whoami::Session(s)) => s,
+        Ok(Whoami::NeedsSecondFactor(to)) => return redirect(&to, &[]),
+        _ => return redirect(&next, &[]),
+    };
+    let Some(method) = fresh_oidc_method(&session, std::time::SystemTime::now()) else {
+        return redirect(&next, &[]);
+    };
+    let (Some(session_id), Some(subject)) = (
+        session["id"].as_str(),
+        session["identity"]["id"]
+            .as_str()
+            .and_then(|s| s.parse::<uuid::Uuid>().ok()),
+    ) else {
+        return redirect(&next, &[]);
+    };
+    let done: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM audit_log WHERE action = 'auth.login' AND details->>'session' = $1)",
+    )
+    .bind(session_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(true);
+    if done {
+        return redirect(&next, &[]);
+    }
+    audit::record(
+        &state.db,
+        Actor::User(subject),
+        "auth.login",
+        Some(&subject.to_string()),
+        client.ip.as_deref(),
+        serde_json::json!({
+            "aal": session["authenticator_assurance_level"],
+            "methods": ["oidc"],
+            "provider": method["provider"],
+            "session": session_id,
+        }),
+    )
+    .await;
+    let st = state.clone();
+    let s2 = session.clone();
+    tokio::spawn(async move {
+        if let Err(e) = alerts::on_login(&st, &s2).await {
+            tracing::error!(error = %e, "không kiểm tra được thiết bị đăng nhập");
+        }
+    });
+    match account::cancel_deletion_if_pending(&state.kratos, &subject.to_string()).await {
+        Ok(true) => {
+            audit::record(
+                &state.db,
+                Actor::User(subject),
+                "account.deletion_cancelled",
+                Some(&subject.to_string()),
+                client.ip.as_deref(),
+                serde_json::json!({}),
+            )
+            .await;
+            next = "/?notice=deletion_cancelled".into();
+        }
+        Ok(false) => {}
+        Err(e) => tracing::error!(error = %e, "không kiểm tra được yêu cầu xóa tài khoản"),
+    }
+    redirect(&next, &[])
+}
+
 pub async fn logout(
     State(state): State<Arc<AppState>>,
     lang: Lang,

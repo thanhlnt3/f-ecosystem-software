@@ -156,7 +156,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Khởi động PostgreSQL, Valkey, Mailpit, Kratos, Hydra
-        run: docker compose -f infra/docker-compose.yml up -d --wait --wait-timeout 180
+        # docker-compose.e2e.yml: Kratos dùng mạng của máy và thêm nhà cung cấp OIDC giả của E2E
+        # (thay đổi oidc-login-and-token-reuse).
+        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.e2e.yml up -d --wait --wait-timeout 180
       - name: Kiểm tra endpoint sức khỏe
         run: |
           curl -fsS http://127.0.0.1:4433/health/ready
@@ -180,6 +182,8 @@ jobs:
         env:
           FECO_E2E: "1"
           FECO_E2E_SDKS: "1"
+          # Bắt buộc chạy E2E đăng nhập Google/GitHub với nhà cung cấp OIDC giả.
+          FECO_E2E_OIDC: "1"
           FSDK_C_EXAMPLE: ${{ github.workspace }}/target/debug/fsdk-login
         run: cargo test -p feco-server --test e2e_auth --test e2e_chat --test e2e_source_scan -- --nocapture
       - name: feco-server chạy và trả lời /healthz
@@ -194,7 +198,7 @@ jobs:
           exit 1
       - name: Nhật ký khi lỗi
         if: failure()
-        run: docker compose -f infra/docker-compose.yml logs --no-color --tail 200
+        run: docker compose -f infra/docker-compose.yml -f infra/docker-compose.e2e.yml logs --no-color --tail 200
 
   mobile-android:
     # mobile-launcher: F-Launcher di động trên Android 10 (API 29) và Android 16 (API 36).

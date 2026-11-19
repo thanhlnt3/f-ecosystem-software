@@ -161,6 +161,10 @@ Mở http://127.0.0.1:8080 trong trình duyệt. Giao diện theo ngôn ngữ c�
 8. **Chống dò mật khẩu**: đăng nhập sai 5 lần liên tiếp. Mỗi lần sai bị làm chậm dần, và từ lần thứ 5 xuất hiện ô "Tôi không phải robot" (thử thách thử nghiệm, chỉ có ở dev). Chủ tài khoản nhận email cảnh báo trong Mailpit.
 9. **Xuất dữ liệu** tại http://127.0.0.1:8080/account/export: liên kết tải file ZIP được gửi tới Mailpit.
 10. **Xóa tài khoản** tại http://127.0.0.1:8080/account/delete: tài khoản chờ xóa 30 ngày; đăng nhập lại trong thời gian đó để hủy.
+11. **Đăng nhập bằng Google hoặc GitHub**: nút hiện ở trang đăng nhập và đăng ký khi nhà cung cấp đã được khai báo (mục Cấu hình).
+    - Tài khoản mới nhận email đã xác minh từ nhà cung cấp. Email chưa được nhà cung cấp xác minh thì không được dùng.
+    - Email trùng một tài khoản có sẵn: F-Eco yêu cầu đăng nhập bằng mật khẩu cũ một lần để liên kết.
+12. **Cảnh báo refresh token bị dùng lại**: khi một refresh token cũ của F-Launcher hay app con được dùng lại, phiên đó bị đăng xuất và bạn nhận email "Phiên đăng nhập … có dấu hiệu bị sao chép" kèm thiết bị và IP.
 
 ### 5. Dùng thử đăng nhập một lần với app mẫu
 
@@ -592,6 +596,8 @@ Các API chính của `feco-server`:
 | `/sessions`, `/apps`, `/account/export`, `/account/delete`, `/lang/{vi\|en}` | Trang do feco-server xử lý |
 | `/security/not-me/{token}` | Nút "Không phải tôi" trong email cảnh báo thiết bị mới |
 | `/oauth/login`, `/oauth/consent`, `/oauth/logout` | Login & consent provider của Hydra |
+| `POST /oauth2/token` | Điểm nhận token: chuyển tiếp tới Hydra, ghi băm refresh token để phát hiện dùng lại. Tài liệu discovery của Hydra trỏ `token_endpoint` về đây |
+| `GET /auth/after-login?next=` | Đích sau đăng nhập và đăng ký: ghi nhật ký và báo thiết bị mới cho đăng nhập Google/GitHub, rồi chuyển tới `next` (chỉ trong F-Eco) |
 | `POST /v1/launch-codes` | Chỉ token của F-Launcher: `{"client_id"}` → mã khởi chạy dùng một lần, sống 60 giây |
 | `/store`, `/store/{id}` | F-Store: danh mục, tìm kiếm (`?q=&category=&os=windows\|macos&price=free\|paid&verified=1`), trang chi tiết; `POST /store/{id}/reviews`, `/store/{id}/reviews/{rid}/reply`, `/store/{id}/report` |
 | `GET /v1/catalog`, `GET /v1/catalog/{id}` | Danh mục dạng JSON (cùng tham số tìm kiếm); chi tiết kèm scope, mục đích, phiên bản, nhận xét |
@@ -653,6 +659,11 @@ Các API chính của `feco-server`:
 | `FECO_WALLET_WITHDRAWALS` | `true` | `false`: tạm ngừng nhận lệnh rút F-Coin mới (lệnh đang chờ vẫn xử lý) |
 | `RUST_LOG` | `info` | Mức nhật ký, ví dụ `debug` |
 
+**Kratos và Hydra khi triển khai** (không phải biến của `feco-server`):
+
+- `SELFSERVICE_METHODS_OIDC_CONFIG_PROVIDERS` (Kratos): mảng JSON các nhà cung cấp Google và GitHub, gồm `client_id`, `client_secret` và `mapper_url: file:///etc/config/kratos/oidc/mapper.jsonnet`. Mẫu ở `openspec/changes/oidc-login-and-token-reuse/design.md` (O2). Không đặt thì không có nút đăng nhập ngoài.
+- `WEBFINGER_OIDC_DISCOVERY_TOKEN_URL` (Hydra): `https://<máy chủ F-Eco>/oauth2/token`, để app dùng thư viện OIDC chuẩn đổi token qua F-Eco.
+
 Mọi bí mật (mật khẩu CSDL, khóa) được in ra nhật ký dưới dạng `***`. Không commit bí mật thật vào kho mã; CI có bước quét bí mật.
 
 ## Kiểm thử
@@ -675,6 +686,14 @@ Chat và quét mã nguồn có E2E riêng, mỗi bộ dùng cơ sở dữ liệu
 
 ```bash
 FECO_E2E=1 cargo test -p feco-server --test e2e_chat --test e2e_source_scan
+```
+
+Đăng nhập Google/GitHub chạy với nhà cung cấp OIDC giả trong test (`127.0.0.1:4499`). Kratos cần thêm `infra/kratos/kratos.e2e-oidc.yml`; thiếu thì test bỏ qua, trừ khi đặt `FECO_E2E_OIDC=1` (CI):
+
+```bash
+FECO_KRATOS_E2E_OIDC=1 scripts/dev-local.sh kratos                                # Kratos chạy trực tiếp trên máy
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.e2e.yml up -d  # hoặc bằng docker
+FECO_E2E=1 FECO_E2E_OIDC=1 cargo test -p feco-server --test e2e_auth -- external_login refresh_token_reuse
 ```
 
 E2E của F-SDK (`sdk_end_to_end`) còn chạy app mẫu Python (cần `python` và thư viện `fsdk_c`, test tự dựng nếu thiếu) và TypeScript (cần `node` ≥ 22.6); máy không có thì bỏ qua, trừ khi đặt `FECO_E2E_SDKS=1`. `standard_oidc_library_integration` (app Python dùng Authlib, không dùng F-SDK) chạy khi đã `pip install authlib requests`. Test riêng của từng binding:

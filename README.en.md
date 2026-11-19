@@ -161,6 +161,10 @@ Open http://127.0.0.1:8080 in a browser. The UI follows the browser language; ch
 8. **Password-guessing protection**: enter a wrong password 5 times in a row. Each failure is slowed down progressively, and from the 5th failure an "I am not a robot" box appears (a test challenge, available only in dev). The account owner receives a warning email in Mailpit.
 9. **Data export** at http://127.0.0.1:8080/account/export: a link to download a ZIP file is sent to Mailpit.
 10. **Delete account** at http://127.0.0.1:8080/account/delete: the account waits 30 days before deletion; sign in again during that time to cancel.
+11. **Sign in with Google or GitHub**: the buttons appear on the sign-in and sign-up pages once the providers are configured (Configuration section).
+    - A new account gets the email verified by the provider. An email the provider has not verified is not used.
+    - If the email matches an existing account, F-Eco asks you to sign in with the old password once to link them.
+12. **Refresh token reuse alert**: when an old refresh token of F-Launcher or a child app is used again, that session is signed out and you get the email "Your … session may have been copied" with the device and IP.
 
 ### 5. Try single sign-on with the sample app
 
@@ -593,6 +597,8 @@ The main `feco-server` APIs:
 | `/sessions`, `/apps`, `/account/export`, `/account/delete`, `/lang/{vi\|en}` | Pages handled by feco-server |
 | `/security/not-me/{token}` | The "This wasn't me" button in the new-device alert email |
 | `/oauth/login`, `/oauth/consent`, `/oauth/logout` | Hydra's login & consent provider |
+| `POST /oauth2/token` | Token endpoint: forwards to Hydra and records refresh token hashes to detect reuse. Hydra's discovery document points `token_endpoint` here |
+| `GET /auth/after-login?next=` | Destination after sign-in and sign-up: records the audit log and new-device check for Google/GitHub sign-ins, then redirects to `next` (inside F-Eco only) |
 | `POST /v1/launch-codes` | F-Launcher tokens only: `{"client_id"}` → a one-time launch code, valid for 60 seconds |
 | `/store`, `/store/{id}` | F-Store: catalog, search (`?q=&category=&os=windows\|macos&price=free\|paid&verified=1`), detail page; `POST /store/{id}/reviews`, `/store/{id}/reviews/{rid}/reply`, `/store/{id}/report` |
 | `GET /v1/catalog`, `GET /v1/catalog/{id}` | The catalog as JSON (same search parameters); the detail includes scopes, purposes, versions, reviews |
@@ -654,6 +660,11 @@ The main `feco-server` APIs:
 | `FECO_WALLET_WITHDRAWALS` | `true` | `false`: stop accepting new F-Coin withdrawals (pending ones are still processed) |
 | `RUST_LOG` | `info` | Log level, for example `debug` |
 
+**Kratos and Hydra in deployment** (not `feco-server` variables):
+
+- `SELFSERVICE_METHODS_OIDC_CONFIG_PROVIDERS` (Kratos): a JSON array of the Google and GitHub providers with `client_id`, `client_secret` and `mapper_url: file:///etc/config/kratos/oidc/mapper.jsonnet`. Example in `openspec/changes/oidc-login-and-token-reuse/design.md` (O2). Without it there are no external sign-in buttons.
+- `WEBFINGER_OIDC_DISCOVERY_TOKEN_URL` (Hydra): `https://<F-Eco server>/oauth2/token`, so apps using standard OIDC libraries exchange tokens through F-Eco.
+
 All secrets (database password, keys) are printed to the log as `***`. Do not commit real secrets to the repository; CI has a secret-scanning step.
 
 ## Testing
@@ -676,6 +687,14 @@ Chat and source scanning have their own E2E suites, each on its own database (`f
 
 ```bash
 FECO_E2E=1 cargo test -p feco-server --test e2e_chat --test e2e_source_scan
+```
+
+Google/GitHub sign-in runs against a fake OIDC provider inside the test (`127.0.0.1:4499`). Kratos needs `infra/kratos/kratos.e2e-oidc.yml` as well; without it the test is skipped, unless `FECO_E2E_OIDC=1` is set (CI):
+
+```bash
+FECO_KRATOS_E2E_OIDC=1 scripts/dev-local.sh kratos                                # Kratos run directly on the machine
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.e2e.yml up -d  # or with docker
+FECO_E2E=1 FECO_E2E_OIDC=1 cargo test -p feco-server --test e2e_auth -- external_login refresh_token_reuse
 ```
 
 The F-SDK E2E (`sdk_end_to_end`) also runs the Python sample app (needs `python` and the `fsdk_c` library; the test builds it if missing) and the TypeScript one (needs `node` ≥ 22.6); it is skipped on machines without them, unless `FECO_E2E_SDKS=1` is set. `standard_oidc_library_integration` (a Python app using Authlib, not F-SDK) runs once you have done `pip install authlib requests`. Each binding's own tests:

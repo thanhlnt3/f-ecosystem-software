@@ -18,6 +18,8 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
    Cloud Console và GitHub (Settings → Developer settings → OAuth Apps), với địa chỉ chuyển
    hướng `http://127.0.0.1:4433/self-service/methods/oidc/callback/google` (và `.../github`)
    cho dev, rồi cung cấp client ID và secret qua biến môi trường. Không đưa secret vào mã nguồn.
+   Cập nhật 1.13.0: phần lập trình đã xong và được kiểm với nhà cung cấp OIDC giả. Chỉ còn đặt
+   `SELFSERVICE_METHODS_OIDC_CONFIG_PROVIDERS` cho Kratos khi có client ID thật (README, mục Cấu hình).
 5. **Passkey khi phát triển.** WebAuthn không chạy trên địa chỉ IP, nên muốn thử passkey ở máy
    cần chuyển dev sang tên miền `localhost` (Kratos, feco-server, cookie). Có làm ngay không?
 6. **Kratos ở staging và production dùng PostgreSQL.** Dev và CI dùng SQLite trong bộ nhớ, vốn
@@ -455,3 +457,17 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 116. **Nhiều máy chủ.** "Không báo khi đang mở hội thoại" chỉ đếm kết nối trên từng máy chủ. Khi chạy
      nhiều máy chủ, người đang xem trên máy chủ khác vẫn có thể nhận thông báo. Có cần lưu người đang
      xem vào cơ sở dữ liệu không?
+117. **Thu hồi rồi dùng lại refresh token.** App tự gọi `/oauth2/revoke` của Hydra rồi lại gửi chính
+     refresh token đó tới F-Eco sẽ làm người dùng nhận cảnh báo "có dấu hiệu bị sao chép" nhầm. App
+     chuẩn không làm vậy, và F-Launcher chỉ thu hồi khi đăng xuất. Có cần chuyển cả `/oauth2/revoke`
+     qua F-Eco để tránh trường hợp này không?
+118. **Chặn gọi thẳng điểm nhận token của Hydra.** Khi triển khai thật, có nên để proxy phía trước chỉ
+     mở `/oauth2/token` của F-Eco, không mở `/oauth2/token` của Hydra ra Internet không? Hiện gọi thẳng
+     Hydra vẫn chạy; F-Eco vẫn cảnh báo khi chủ token gửi token đã bị dùng lén lên F-Eco, nhưng không
+     thấy được lần dùng lén đó.
+119. **Đăng nhập Google/GitHub khi đang đăng nhập vào app con.** Khi người dùng bấm "Đăng nhập bằng
+     Google" ở màn hình đăng nhập của một app con (luồng Hydra), F-Eco vẫn ghi nhật ký và kiểm tra
+     thiết bị mới. Có cần hiện lại màn hình đồng ý của app ngay sau lần liên kết tài khoản đầu tiên không?
+120. **Kratos trong CI dùng cơ sở dữ liệu bộ nhớ.** Hai lần CI gặp lỗi 500 "Could not update flow" của
+     Kratos (`DSN=memory`) khi nhiều test chạy cùng lúc; chạy lại thì qua. Có nên chuyển Kratos của CI
+     sang SQLite trên đĩa hoặc PostgreSQL không?

@@ -12,6 +12,13 @@ urls:
   consent: http://127.0.0.1:8080/oauth/consent
   logout: http://127.0.0.1:8080/oauth/logout
 
+# Tài liệu discovery trỏ token_endpoint về điểm nhận token của F-Eco, để F-Eco nhận ra
+# refresh token bị dùng lại (thay đổi oidc-login-and-token-reuse, design T1). Triển khai thật:
+# WEBFINGER_OIDC_DISCOVERY_TOKEN_URL=https://<máy chủ F-Eco>/oauth2/token.
+webfinger:
+  oidc_discovery:
+    token_url: http://127.0.0.1:8080/oauth2/token
+
 ttl:
   # Spec account-identity, "Phiên đăng nhập": access token tối đa 15 phút,
   # refresh token tối đa 30 ngày (720h).

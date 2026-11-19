@@ -298,7 +298,12 @@ impl Auth {
     }
 
     async fn token_request(&self, form: &[(&str, &str)]) -> Result<Value, AuthError> {
-        let url = self.hydra.join("oauth2/token").expect("URL Hydra hợp lệ");
+        // Đổi token qua điểm nhận token của F-Eco (chuyển tiếp tới Hydra), để F-Eco nhận ra
+        // refresh token bị dùng lại (thay đổi oidc-login-and-token-reuse, design T1).
+        let url = self
+            .server
+            .join("oauth2/token")
+            .expect("URL máy chủ hợp lệ");
         let res = self
             .http
             .post(url)
@@ -313,7 +318,7 @@ impl Auth {
             .map_err(|e| AuthError::Offline(e.to_string()))?;
         if status.is_success() {
             Ok(body)
-        } else if body["error"] == "invalid_grant" {
+        } else if body["error"] == "invalid_grant" || body["error"] == "token_inactive" {
             Err(AuthError::Expired)
         } else {
             Err(AuthError::Failed(format!("{status}: {body}")))

@@ -19,15 +19,25 @@
   - Đã xác minh: giao diện tiếng Việt và tiếng Anh (theo `Accept-Language`, đổi bằng `/lang/vi|en`), 6 test E2E trong `services/feco-server/tests/e2e_auth.rs` với Kratos và Mailpit thật: đăng ký → email xác minh → mở liên kết → đã xác minh → đăng nhập; kiểm tra giao diện tiếng Anh. Hydra đã chạy trong hạ tầng dev, dùng tới ở nhóm 3.
 - [x] 2.2 Kiểm tra mật khẩu bị lộ, làm chậm dần và thử thách chống bot sau 5 lần sai; xác minh bằng các scenario trong spec
   - Đã xác minh bằng E2E: Kratos chặn mật khẩu bị lộ (HIBP) và mật khẩu dưới 10 ký tự; feco-server làm chậm 0,25 → 4 giây, yêu cầu thử thách từ lần sai thứ 5 trong 15 phút, gửi email cảnh báo cho chủ tài khoản, không khóa cứng. Giới hạn: bộ đếm trong bộ nhớ (cần Valkey khi chạy nhiều bản) và chỉ có thử thách thử nghiệm (nhà cung cấp thật là câu hỏi mở trong QUESTIONS.md).
-- [ ] 2.3 Đăng nhập Google và GitHub, liên kết với tài khoản có sẵn sau khi xác thực lại; xác minh bằng test với nhà cung cấp OIDC giả lập
-  - Chưa làm: cần client ID và secret của ứng dụng OAuth Google và GitHub do chủ dự án tạo (QUESTIONS.md). Kratos đã có sẵn cơ chế liên kết tài khoản trùng email sau khi xác thực lại.
+- [x] 2.3 Đăng nhập Google và GitHub, liên kết với tài khoản có sẵn sau khi xác thực lại; xác minh bằng test với nhà cung cấp OIDC giả lập
+  - Xác minh (1.13.0, thay đổi `oidc-login-and-token-reuse`): E2E `external_login_with_fake_oidc_provider` với nhà cung cấp OIDC giả (Kratos thật, `infra/kratos/kratos.e2e-oidc.yml`):
+    - nút Google/GitHub bốn thứ tiếng;
+    - lần đầu tạo tài khoản với email đã xác minh, có nhật ký `auth.login` phương thức `oidc`;
+    - email trùng tài khoản có sẵn phải nhập mật khẩu cũ rồi mới liên kết; lần sau vào thẳng đúng tài khoản;
+    - email chưa xác minh không được dùng.
+  - Khi triển khai: đặt `SELFSERVICE_METHODS_OIDC_CONFIG_PROVIDERS` với client ID thật (QUESTIONS.md 4).
 - [x] 2.4 TOTP, passkey, mã khôi phục; bắt buộc hai lớp cho nhà phát triển và quản trị; xác minh bằng test E2E
   - Xác minh (16/11/2026, change production-readiness):
     - E2E `totp_recovery_codes_and_second_factor_login`: TOTP, mã khôi phục dùng một lần, đăng nhập bắt buộc bước hai;
     - E2E `developer_portal_end_to_end`: nhà phát triển chưa bật hai lớp thì không đăng ký được ("Bạn cần bật xác thực hai lớp");
     - E2E `admin_console_end_to_end` (qua `admin_with_passkey`): quản trị viên chưa có passkey bị chặn 403; thêm passkey bằng khóa mềm WebAuthn trong Cài đặt rồi đăng nhập bằng mật khẩu và passkey thì vào được.
-- [ ] 2.5 Phiên đăng nhập: access token 15 phút, refresh token xoay vòng, danh sách thiết bị, đăng xuất từ xa, phát hiện refresh token bị dùng lại; xác minh bằng các scenario trong spec
-  - Trạng thái: danh sách thiết bị (trình duyệt, hệ điều hành, IP, vị trí), đăng xuất từng thiết bị và mọi thiết bị khác đã xác minh bằng E2E `device_list_and_remote_logout`. Access token 15 phút và refresh token xoay vòng 30 ngày đã cấu hình trong Hydra, kiểm chứng khi có luồng OAuth ở nhóm 3. Chưa làm: email cảnh báo khi refresh token bị dùng lại.
+- [x] 2.5 Phiên đăng nhập: access token 15 phút, refresh token xoay vòng, danh sách thiết bị, đăng xuất từ xa, phát hiện refresh token bị dùng lại; xác minh bằng các scenario trong spec
+  - Trạng thái: danh sách thiết bị (trình duyệt, hệ điều hành, IP, vị trí), đăng xuất từng thiết bị và mọi thiết bị khác đã xác minh bằng E2E `device_list_and_remote_logout`. Access token 15 phút và refresh token xoay vòng 30 ngày đã cấu hình trong Hydra, kiểm chứng khi có luồng OAuth ở nhóm 3.
+  - Xác minh (1.13.0, thay đổi `oidc-login-and-token-reuse`): E2E `refresh_token_reuse_alert` với Hydra thật:
+    - token đã xoay vòng gửi lại: bị từ chối, token mới nhất cũng hết hiệu lực;
+    - đúng một email và một thông báo Bảo mật; gửi lại lần nữa không có email thứ hai;
+    - token bị dùng thẳng với Hydra rồi chủ token gửi lên F-Eco: vẫn cảnh báo;
+    - gỡ quyền app không gây cảnh báo; F-Eco chỉ lưu băm SHA-256.
 - [x] 2.6 Đặt lại mật khẩu, xóa tài khoản sau 30 ngày chờ, chặn xóa khi còn đơn đang thực hiện; xác minh bằng test tích hợp
   - Đã xác minh bằng E2E: khôi phục bằng mã 30 phút qua email, đặt mật khẩu mới thì mọi phiên khác bị đăng xuất (`password_recovery_signs_out_other_sessions`); xóa tài khoản cần phiên xác thực trong 15 phút, chờ 30 ngày, đăng nhập lại thì hủy, sau 30 ngày bị xóa hẳn (`account_deletion_cancel_and_purge`). Chặn xóa khi còn đơn hàng sẽ nối vào nhóm 12 (`account::has_open_orders`).
 

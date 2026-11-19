@@ -137,6 +137,9 @@ pub struct KratosClient {
     http: reqwest::Client,
     public: Url,
     admin: Url,
+    /// `/auth/after-login` của feco-server: đích sau đăng nhập và đăng ký (thay đổi
+    /// oidc-login-and-token-reuse, design O3). `None` thì giữ nguyên `return_to`.
+    after_login: Option<Url>,
 }
 
 impl KratosClient {
@@ -151,7 +154,16 @@ impl KratosClient {
             http,
             public,
             admin,
+            after_login: None,
         }
+    }
+
+    /// Đưa trình duyệt qua `after_login` sau khi đăng nhập hoặc đăng ký, kèm đích cũ ở
+    /// tham số `next`. Đăng nhập bằng Google/GitHub về thẳng Kratos, không qua bước gửi
+    /// biểu mẫu của feco-server, nên các việc sau đăng nhập được làm ở đó.
+    pub fn with_after_login(mut self, url: Url) -> Self {
+        self.after_login = Some(url);
+        self
     }
 
     fn public_url(&self, path: &str) -> Url {
@@ -163,7 +175,17 @@ impl KratosClient {
         let mut url = self.public_url(&format!("self-service/{}/browser", kind.path()));
         {
             let mut q = url.query_pairs_mut();
-            if let Some(r) = &opts.return_to {
+            let return_to = match (kind, &self.after_login) {
+                (FlowKind::Login | FlowKind::Registration, Some(after)) => {
+                    let mut u = after.clone();
+                    if let Some(r) = &opts.return_to {
+                        u.query_pairs_mut().append_pair("next", r);
+                    }
+                    Some(u.to_string())
+                }
+                _ => opts.return_to.clone(),
+            };
+            if let Some(r) = &return_to {
                 q.append_pair("return_to", r);
             }
             if kind == FlowKind::Login {

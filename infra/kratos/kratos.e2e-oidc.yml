@@ -1,0 +1,24 @@
+# Bổ sung cho kratos.yml, chỉ dùng cho E2E (tests/e2e_auth.rs, external_login_with_fake_oidc_provider):
+# hai nhà cung cấp "google" và "github" trỏ tới nhà cung cấp OIDC giả mà test chạy ở 127.0.0.1:4499.
+# Giá trị là giả. Triển khai thật khai báo nhà cung cấp bằng SELFSERVICE_METHODS_OIDC_CONFIG_PROVIDERS.
+selfservice:
+  methods:
+    oidc:
+      config:
+        providers:
+          - id: google
+            provider: generic
+            label: Google
+            client_id: feco-e2e-google
+            client_secret: feco-e2e-not-a-secret
+            issuer_url: http://127.0.0.1:4499/google
+            mapper_url: file:///etc/config/kratos/oidc/mapper.jsonnet
+            scope: [openid, email, profile]
+          - id: github
+            provider: generic
+            label: GitHub
+            client_id: feco-e2e-github
+            client_secret: feco-e2e-not-a-secret
+            issuer_url: http://127.0.0.1:4499/github
+            mapper_url: file:///etc/config/kratos/oidc/mapper.jsonnet
+            scope: [openid, email, profile]

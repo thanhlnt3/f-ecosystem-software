@@ -37,6 +37,14 @@ selfservice:
       enabled: true
       config:
         lifespan: 30m
+    # Đăng nhập bằng Google và GitHub (spec account-identity, "Đăng nhập bằng tài khoản bên
+    # ngoài"). Client ID và secret không nằm trong repo: khi triển khai, đặt
+    # SELFSERVICE_METHODS_OIDC_CONFIG_PROVIDERS (README, mục cấu hình). E2E dùng thêm
+    # kratos.e2e-oidc.yml với nhà cung cấp giả.
+    oidc:
+      enabled: true
+      config:
+        providers: []
     webauthn:
       enabled: true
       config:
@@ -83,6 +91,12 @@ selfservice:
       enable_legacy_one_step: true
       # Không tự đăng nhập sau khi đăng ký: đăng ký mới và đăng ký trùng email phải
       # hiện cùng một thông báo (spec account-identity, "Email đã được dùng").
+      # Đăng ký bằng Google/GitHub thì đăng nhập luôn: email đến từ nhà cung cấp nên không
+      # có rủi ro lộ email đã tồn tại.
+      after:
+        oidc:
+          hooks:
+            - hook: session
 
 session:
   whoami:

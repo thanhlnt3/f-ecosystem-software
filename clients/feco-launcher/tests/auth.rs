@@ -180,6 +180,21 @@ async fn restart_restores_session_from_stored_refresh_token() {
     assert!(a.restore().await.unwrap().is_some());
 }
 
+/// Thay đổi oidc-login-and-token-reuse: đổi token qua máy chủ F-Eco, không gọi thẳng Hydra.
+#[tokio::test]
+async fn token_requests_go_through_feco_server() {
+    let valid = Arc::new(Mutex::new("refresh-0".to_owned()));
+    let server = fake_server(valid.clone()).await;
+    // Hydra không nghe ở cổng này: nếu launcher gọi thẳng Hydra thì không làm mới được.
+    let hydra = url::Url::parse(&format!("http://127.0.0.1:{}/", free_port())).unwrap();
+    let store = Arc::new(MemoryStore::default());
+    store.save("refresh-0").unwrap();
+    let a = Auth::new(hydra, server, "launcher", free_port(), store.clone());
+    let session = a.restore().await.unwrap().expect("làm mới qua F-Eco");
+    assert_eq!(session.name.as_deref(), Some("Lan Nguyễn"));
+    assert_eq!(store.load().unwrap().unwrap(), *valid.lock().unwrap());
+}
+
 /// Ngoại tuyến: giữ refresh token để thử lại; token bị thu hồi: xóa và yêu cầu đăng nhập lại.
 #[tokio::test]
 async fn offline_keeps_token_and_revoked_token_is_cleared() {

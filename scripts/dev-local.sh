@@ -30,7 +30,13 @@ case "${1:-}" in
       "${KRATOS_BIN:-kratos}" migrate sql -e --yes >/dev/null
     fi
     export COURIER_SMTP_CONNECTION_URI="smtp://127.0.0.1:1025/?disable_starttls=true"
-    exec "${KRATOS_BIN:-kratos}" serve --config "$local_cfg" --dev --watch-courier
+    extra=()
+    # FECO_KRATOS_E2E_OIDC=1: thêm nhà cung cấp OIDC giả cho E2E (infra/kratos/kratos.e2e-oidc.yml).
+    if [ "${FECO_KRATOS_E2E_OIDC:-}" = 1 ]; then
+      "$py" "$native_root/scripts/inline-kratos-config.py" "$native_root/infra/kratos"         "$native_root/infra/.data/kratos.e2e-oidc.local.yml" kratos.e2e-oidc.yml
+      extra=(--config "$native_root/infra/.data/kratos.e2e-oidc.local.yml")
+    fi
+    exec "${KRATOS_BIN:-kratos}" serve --config "$local_cfg" "${extra[@]}" --dev --watch-courier
     ;;
   hydra)
     native_root="$root"

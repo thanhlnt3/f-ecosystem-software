@@ -19,6 +19,9 @@ use regex::Regex;
 use scraper::{Html, Selector};
 use serde_json::Value;
 
+#[path = "support/fake_oidc.rs"]
+mod fake_oidc;
+
 const BASE: &str = "http://127.0.0.1:8080";
 const MAILPIT: &str = "http://127.0.0.1:8025";
 const UA_WINDOWS_CHROME: &str =
@@ -49,6 +52,8 @@ const ZP_KEY2: &str = "e2e-fake-key2";
 /// Cổng VNPAY và MoMo giả (khóa chỉ dùng cho cổng giả).
 static VNPAY: OnceLock<feco_server::vnpay::testing::FakeVnpay> = OnceLock::new();
 static MOMO: OnceLock<feco_server::momo::testing::FakeMomo> = OnceLock::new();
+/// Nhà cung cấp OIDC giả (Google, GitHub) ở 127.0.0.1:4499 (thay đổi oidc-login-and-token-reuse).
+static FAKE_OIDC: OnceLock<fake_oidc::FakeOidc> = OnceLock::new();
 const VNP_TMN: &str = "FECOTEST";
 const VNP_SECRET: &str = "e2e-fake-vnpay-secret";
 const MOMO_PARTNER: &str = "MOMOFECOTEST";
@@ -209,6 +214,7 @@ fn e2e_ready() -> bool {
                 .unwrap();
                 let momo_endpoint = momo.endpoint();
                 let _ = MOMO.set(momo);
+                let _ = FAKE_OIDC.set(fake_oidc::FakeOidc::serve().await);
                 let mut vars: HashMap<String, String> = [
                     ("FECO_ENV", "dev".to_owned()),
                     // Mọi test gửi từ 127.0.0.1 tới cùng một máy chủ: hạn mức theo IP (1.200/phút)
@@ -9531,4 +9537,331 @@ async fn mobile_client_uses_launcher_apis() {
         .await
         .unwrap();
     assert_eq!(res.status().as_u16(), 401);
+}
+
+// ---------- Thay đổi oidc-login-and-token-reuse ----------
+
+/// Kratos có nhà cung cấp OIDC giả (infra/kratos/kratos.e2e-oidc.yml) không. CI bắt buộc
+/// (`FECO_E2E_OIDC=1`); trên máy thì chạy Kratos bằng `FECO_KRATOS_E2E_OIDC=1 scripts/dev-local.sh kratos`.
+async fn kratos_has_fake_oidc() -> bool {
+    let flow: Value = reqwest::Client::new()
+        .get("http://127.0.0.1:4433/self-service/login/api")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let has = flow["ui"]["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|n| n["group"] == "oidc" && n["attributes"]["value"] == "google");
+    if !has {
+        assert!(
+            std::env::var("FECO_E2E_OIDC").is_err(),
+            "FECO_E2E_OIDC=1 nhưng Kratos chưa có nhà cung cấp OIDC giả"
+        );
+        eprintln!("bỏ qua: Kratos chưa chạy với infra/kratos/kratos.e2e-oidc.yml");
+    }
+    has
+}
+
+/// Bấm nút đăng nhập bằng `provider` trên trang `/login` (hoặc `/registration`) của F-Eco;
+/// trả trang cuối cùng sau mọi chuyển hướng.
+async fn sign_in_with(c: &reqwest::Client, page_path: &str, provider: &str) -> String {
+    let page = get(c, page_path).await;
+    let form = parse_group_form(&page, "oidc");
+    submit(c, &form, &[("provider", provider)]).await
+}
+
+async fn identity_of(email: &str) -> Option<Value> {
+    kratos()
+        .list_identities()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|i| i["traits"]["email"] == email)
+}
+
+/// Spec account-identity, "Đăng nhập bằng tài khoản bên ngoài" và "Nhà cung cấp đăng nhập
+/// ngoài": nút trên trang, tài khoản mới có email đã xác minh, nhật ký kiểm toán, liên kết với
+/// tài khoản có sẵn sau khi nhập mật khẩu, email chưa xác minh không được dùng.
+#[tokio::test]
+async fn external_login_with_fake_oidc_provider() {
+    if !e2e_ready() || !kratos_has_fake_oidc().await {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let oidc = FAKE_OIDC.get().unwrap();
+
+    // Nút đăng nhập Google, bốn thứ tiếng.
+    let page = get(&browser(), "/login").await;
+    assert!(page.contains("Đăng nhập bằng Google"), "{page}");
+    assert!(page.contains("Đăng nhập bằng GitHub"), "{page}");
+    let page = get(&browser_with(UA_WINDOWS_CHROME, "ja"), "/registration").await;
+    assert!(page.contains("Google で登録"), "{page}");
+
+    // Đăng nhập Google lần đầu: tài khoản mới, email đã xác minh, vào thẳng trang chủ.
+    let (email, _) = unique("google");
+    let stamp = uuid::Uuid::new_v4().simple().to_string();
+    oidc.next_user(
+        "google",
+        serde_json::json!({"sub": format!("g-{stamp}"), "email": email, "email_verified": true, "name": "Lan Google"}),
+    );
+    let c = browser();
+    let home = sign_in_with(&c, "/login", "google").await;
+    assert!(home.contains(&email), "{home}");
+    let identity = identity_of(&email).await.expect("tài khoản mới");
+    assert_eq!(identity["traits"]["name"], "Lan Google");
+    let address = &identity["verifiable_addresses"][0];
+    assert_eq!(
+        (address["value"].as_str(), address["verified"].as_bool()),
+        (Some(email.as_str()), Some(true)),
+        "{identity}"
+    );
+    // Nhật ký kiểm toán: auth.login với phương thức oidc, một lần cho mỗi phiên.
+    let subject = identity["id"].as_str().unwrap().to_owned();
+    let st = local_state();
+    let rows: Vec<Value> = sqlx::query_scalar(
+        "SELECT details FROM audit_log WHERE action = 'auth.login' AND target = $1",
+    )
+    .bind(&subject)
+    .fetch_all(&st.db)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(
+        (rows[0]["methods"][0].as_str(), rows[0]["provider"].as_str()),
+        (Some("oidc"), Some("google"))
+    );
+    get(&c, "/auth/after-login?next=/").await;
+    let again: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'auth.login' AND target = $1",
+    )
+    .bind(&subject)
+    .fetch_one(&st.db)
+    .await
+    .unwrap();
+    assert_eq!(again, 1, "mỗi phiên chỉ ghi một lần");
+    // `next` lạ không đưa người dùng ra ngoài F-Eco.
+    let res = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap()
+        .get(format!(
+            "{BASE}/auth/after-login?next=https://evil.example/"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.headers()["location"], "/");
+
+    // Liên kết với tài khoản có sẵn: GitHub cùng email thì phải nhập mật khẩu cũ.
+    let (email, password) = unique("link");
+    register_and_login(&email, &password, UA_WINDOWS_CHROME).await;
+    let old_id = identity_of(&email).await.unwrap()["id"].clone();
+    oidc.next_user(
+        "github",
+        serde_json::json!({"sub": format!("gh-{stamp}"), "email": email, "email_verified": true}),
+    );
+    let c2 = browser();
+    let page = sign_in_with(&c2, "/login", "github").await;
+    assert!(
+        page.contains(&format!("Email {email} đã có tài khoản F-Eco")),
+        "{page}"
+    );
+    assert!(!get(&c2, "/").await.contains(&email), "chưa được đăng nhập");
+    let form = parse_group_form(&page, "password");
+    let home = submit(
+        &c2,
+        &form,
+        &[
+            ("identifier", &email),
+            ("password", &password),
+            ("method", "password"),
+        ],
+    )
+    .await;
+    assert!(home.contains(&email), "{home}");
+    let linked = identity_of(&email).await.unwrap();
+    assert_eq!(linked["id"], old_id, "không tạo tài khoản mới");
+    // Lần sau GitHub vào thẳng đúng tài khoản cũ.
+    let c3 = browser();
+    let home = sign_in_with(&c3, "/login", "github").await;
+    assert!(home.contains(&email), "{home}");
+    let same_email = kratos()
+        .list_identities()
+        .await
+        .unwrap()
+        .iter()
+        .filter(|i| i["traits"]["email"] == email)
+        .count();
+    assert_eq!(same_email, 1);
+
+    // Email chưa xác minh ở nhà cung cấp: không tạo tài khoản với email đó, hỏi email.
+    let (unverified, _) = unique("unverified");
+    oidc.next_user(
+        "google",
+        serde_json::json!({"sub": format!("g2-{stamp}"), "email": unverified, "email_verified": false}),
+    );
+    let c4 = browser();
+    let page = sign_in_with(&c4, "/registration", "google").await;
+    assert!(page.contains(r#"name="traits.email""#), "{page}");
+    assert!(!page.contains(&unverified), "{page}");
+    assert!(identity_of(&unverified).await.is_none());
+}
+
+/// Gửi yêu cầu tới một điểm nhận token; trả mã và thân JSON.
+async fn token_request(endpoint: &str, form: &[(&str, &str)]) -> (u16, Value) {
+    let body = form_urlencoded::Serializer::new(String::new())
+        .extend_pairs(form.iter())
+        .finish();
+    let res = reqwest::Client::new()
+        .post(endpoint)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("user-agent", UA_LINUX_FIREFOX)
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+    (
+        res.status().as_u16(),
+        res.json().await.unwrap_or(Value::Null),
+    )
+}
+
+/// Đăng nhập launcher và đổi mã qua điểm nhận token của F-Eco; trả refresh token.
+async fn launcher_refresh_token(user: &reqwest::Client, launcher: &str) -> String {
+    let a = authorize(user, launcher, "openid offline_access profile").await;
+    let cb = a.callback.as_ref().expect("launcher về thẳng callback");
+    let code = query(cb, "code").unwrap();
+    let (status, tokens) = token_request(
+        &format!("{BASE}/oauth2/token"),
+        &[
+            ("grant_type", "authorization_code"),
+            ("code", &code),
+            ("redirect_uri", APP_CALLBACK),
+            ("client_id", launcher),
+            ("code_verifier", &a.verifier),
+        ],
+    )
+    .await;
+    assert_eq!(status, 200, "{tokens}");
+    tokens["refresh_token"].as_str().unwrap().to_owned()
+}
+
+async fn refresh_at(endpoint: &str, launcher: &str, token: &str) -> (u16, Value) {
+    token_request(
+        endpoint,
+        &[
+            ("grant_type", "refresh_token"),
+            ("refresh_token", token),
+            ("client_id", launcher),
+        ],
+    )
+    .await
+}
+
+/// Spec account-identity, "Refresh token bị dùng lại" và "Nhận biết refresh token bị dùng lại".
+#[tokio::test]
+async fn refresh_token_reuse_alert() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let launcher = LAUNCHER.get().unwrap().clone();
+    let proxy = format!("{BASE}/oauth2/token");
+    let hydra = format!("{HYDRA_PUBLIC}/oauth2/token");
+    const ALERT: &str = "có dấu hiệu bị sao chép";
+
+    // Tài liệu discovery trỏ token_endpoint về F-Eco.
+    let discovery: Value = reqwest::get(format!("{HYDRA_PUBLIC}/.well-known/openid-configuration"))
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(discovery["token_endpoint"], proxy.as_str());
+
+    let (email, password) = unique("reuse");
+    let user = app_browser();
+    register_in(&user, &email, &password, "Minh Trần").await;
+    let subject = subject_of(&email).await;
+
+    // Dùng lại token đã xoay vòng: A → B → C, rồi gửi lại A.
+    let a = launcher_refresh_token(&user, &launcher).await;
+    let (s, t) = refresh_at(&proxy, &launcher, &a).await;
+    assert_eq!(s, 200, "{t}");
+    let b = t["refresh_token"].as_str().unwrap().to_owned();
+    let (s, t) = refresh_at(&proxy, &launcher, &b).await;
+    assert_eq!(s, 200, "{t}");
+    let c = t["refresh_token"].as_str().unwrap().to_owned();
+    let (s, t) = refresh_at(&proxy, &launcher, &a).await;
+    assert!(s >= 400, "token cũ phải bị từ chối: {s} {t}");
+    let mail = wait_mail(&email, ALERT).await;
+    assert!(
+        mail.contains("refresh token") && mail.contains("/sessions"),
+        "{mail}"
+    );
+    assert!(mail.contains("Linux") || mail.contains("Firefox"), "{mail}");
+    assert!(!mail.contains(&a), "email không chứa token");
+    // Hydra đã thu hồi cả chuỗi: token mới nhất cũng hết hiệu lực.
+    let (s, _) = refresh_at(&proxy, &launcher, &c).await;
+    assert!(s >= 400);
+    let st = local_state();
+    let notes: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM notifications WHERE subject = $1 AND category = 'security' AND link = '/sessions'",
+    )
+    .bind(subject)
+    .fetch_one(&st.db)
+    .await
+    .unwrap();
+    assert_eq!(notes, 1);
+    assert!(audit_actions(&subject.to_string())
+        .await
+        .contains(&"auth.refresh_token_reused".to_owned()));
+    // Không lưu token gốc.
+    let stored: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM oauth_refresh_tokens WHERE token_hash = $1 OR token_hash = $2",
+    )
+    .bind(&a)
+    .bind(feco_server::token_proxy::hash(&a))
+    .fetch_one(&st.db)
+    .await
+    .unwrap();
+    assert_eq!(stored, 1, "chỉ có băm");
+
+    // Gửi lại lần nữa: vẫn bị từ chối, không có email thứ hai.
+    let (s, _) = refresh_at(&proxy, &launcher, &a).await;
+    assert!(s >= 400);
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(mail_count(&email, ALERT).await, 1);
+
+    // Token bị dùng thẳng với Hydra (bỏ qua F-Eco) rồi chủ token gửi lên: vẫn cảnh báo.
+    let d = launcher_refresh_token(&user, &launcher).await;
+    let (s, t) = refresh_at(&hydra, &launcher, &d).await;
+    assert_eq!(s, 200, "{t}");
+    let (s, _) = refresh_at(&proxy, &launcher, &d).await;
+    assert!(s >= 400);
+    for _ in 0..20 {
+        if mail_count(&email, ALERT).await == 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    assert_eq!(mail_count(&email, ALERT).await, 2);
+
+    // Gỡ quyền app không gây cảnh báo.
+    let e = launcher_refresh_token(&user, &launcher).await;
+    let (s, t) = refresh_at(&proxy, &launcher, &e).await;
+    assert_eq!(s, 200, "{t}");
+    let f = t["refresh_token"].as_str().unwrap().to_owned();
+    feco_server::connected::revoke_app(&st, subject, &launcher)
+        .await
+        .unwrap();
+    let (s, _) = refresh_at(&proxy, &launcher, &f).await;
+    assert!(s >= 400);
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(mail_count(&email, ALERT).await, 2);
 }

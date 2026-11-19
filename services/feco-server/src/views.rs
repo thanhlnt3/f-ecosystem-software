@@ -198,13 +198,44 @@ pub fn translate(lang: Lang, id: i64, text: &str) -> String {
     vi.to_owned()
 }
 
+/// Nhãn và thông báo của đăng nhập bằng Google/GitHub, có tên nhà cung cấp trong `context`
+/// (thay đổi oidc-login-and-token-reuse, design O3). Bốn thứ tiếng; id khác thì như [`translate`].
+pub fn translate_with(lang: Lang, id: i64, text: &str, context: &Value) -> String {
+    let p = context["provider"].as_str().unwrap_or_default();
+    let email = context["duplicate_identifier"].as_str().unwrap_or_default();
+    match (id, lang) {
+        (1010002, Lang::Vi) => format!("Đăng nhập bằng {p}"),
+        (1010002, Lang::Ja) => format!("{p} でログイン"),
+        (1010002, Lang::Fr) => format!("Se connecter avec {p}"),
+        (1040002, Lang::Vi) => format!("Đăng ký bằng {p}"),
+        (1040002, Lang::Ja) => format!("{p} で登録"),
+        (1040002, Lang::Fr) => format!("S'inscrire avec {p}"),
+        (1010016, Lang::Vi) => format!(
+            "Email {email} đã có tài khoản F-Eco. Hãy đăng nhập bằng cách bạn vẫn dùng để liên kết {p} với tài khoản này; lần sau bạn đăng nhập bằng {p} được ngay."
+        ),
+        (1010016, Lang::En) => format!(
+            "The email {email} already has an F-Eco account. Sign in the way you usually do to link {p} to that account; next time you can sign in with {p} directly."
+        ),
+        (1010016, Lang::Ja) => format!(
+            "メールアドレス {email} には既に F-Eco アカウントがあります。いつもの方法でログインすると {p} がこのアカウントに連携され、次回から {p} でログインできます。"
+        ),
+        (1010016, Lang::Fr) => format!(
+            "L'adresse {email} a déjà un compte F-Eco. Connectez-vous comme d'habitude pour lier {p} à ce compte ; la prochaine fois, vous pourrez vous connecter directement avec {p}."
+        ),
+        (4000027, Lang::Vi) => "Đã có tài khoản dùng email này.".into(),
+        (4000027, Lang::Ja) => "このメールアドレスのアカウントは既に存在します。".into(),
+        (4000027, Lang::Fr) => "Un compte existe déjà avec cette adresse e-mail.".into(),
+        _ => translate(lang, id, text),
+    }
+}
+
 fn label_of(lang: Lang, node: &Value) -> String {
     let label = &node["meta"]["label"];
     let text = label["text"].as_str().unwrap_or_default();
     // Nhãn 1070002 là tiêu đề lấy từ schema danh tính.
     match label["id"].as_i64() {
         Some(1070002) | None => schema_label(lang, text),
-        Some(id) => translate(lang, id, text),
+        Some(id) => translate_with(lang, id, text, &label["context"]),
     }
 }
 
@@ -245,10 +276,11 @@ fn messages_of(lang: Lang, v: &Value) -> Vec<Msg> {
         .flatten()
         .map(|m| Msg {
             kind: m["type"].as_str().unwrap_or("info").to_owned(),
-            text: translate(
+            text: translate_with(
                 lang,
                 m["id"].as_i64().unwrap_or_default(),
                 m["text"].as_str().unwrap_or_default(),
+                &m["context"],
             ),
         })
         .collect()
@@ -513,6 +545,52 @@ fn urlencode(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn oidc_labels_in_four_languages() {
+        let ctx = json!({"provider": "Google", "provider_id": "google", "duplicate_identifier": "lan@example.com"});
+        let cases = [
+            (Lang::Vi, "Đăng nhập bằng Google", "Đăng ký bằng Google"),
+            (Lang::En, "Sign in with Google", "Sign up with Google"),
+            (Lang::Ja, "Google でログイン", "Google で登録"),
+            (
+                Lang::Fr,
+                "Se connecter avec Google",
+                "S'inscrire avec Google",
+            ),
+        ];
+        for (lang, sign_in, sign_up) in cases {
+            assert_eq!(
+                translate_with(lang, 1010002, "Sign in with Google", &ctx),
+                sign_in
+            );
+            assert_eq!(
+                translate_with(lang, 1040002, "Sign up with Google", &ctx),
+                sign_up
+            );
+            let link = translate_with(lang, 1010016, "You tried to sign in with Google", &ctx);
+            assert!(
+                link.contains("lan@example.com") && link.contains("Google"),
+                "{lang:?}: {link}"
+            );
+        }
+        // Nút trong biểu mẫu lấy nhãn theo id và context của Kratos.
+        let flow = json!({"id": "f", "ui": {"nodes": [
+            {"type": "input", "group": "default", "attributes": {"name": "csrf_token", "type": "hidden", "value": "tok"}},
+            {"type": "input", "group": "oidc", "attributes": {"name": "provider", "type": "submit", "value": "github"},
+             "meta": {"label": {"id": 1010002, "text": "Sign in with GitHub", "context": {"provider": "GitHub"}}}}
+        ], "messages": [{"id": 1010016, "type": "info", "text": "You tried…", "context": {"provider": "GitHub", "duplicate_identifier": "lan@example.com"}}]}});
+        let view = flow_view(Lang::Vi, FlowKind::Login, &flow);
+        let oidc = view
+            .forms
+            .iter()
+            .find(|f| f.group == "oidc")
+            .expect("nhóm oidc");
+        assert_eq!(oidc.buttons[0].label, "Đăng nhập bằng GitHub");
+        assert!(view.messages[0]
+            .text
+            .starts_with("Email lan@example.com đã có tài khoản F-Eco"));
+    }
+
     use serde_json::json;
 
     use super::*;

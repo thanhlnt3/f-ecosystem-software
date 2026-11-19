@@ -163,6 +163,7 @@ pub async fn delete_subject_data(db: &Db, subject: Uuid) -> sqlx::Result<()> {
         "DELETE FROM catalog_reviews WHERE subject = $1",
         "DELETE FROM catalog_reports WHERE reporter = $1",
         "DELETE FROM entitlements WHERE subject = $1",
+        "DELETE FROM oauth_token_families WHERE subject = $1",
     ] {
         sqlx::query(q).bind(subject).execute(&mut *tx).await?;
     }

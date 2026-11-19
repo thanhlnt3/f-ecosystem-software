@@ -239,6 +239,10 @@ pub async fn revoke_app(state: &AppState, subject: Uuid, client_id: &str) -> Res
         .revoke_consent(&subject.to_string(), Some(client_id))
         .await
         .map_err(|e| e.to_string())?;
+    // Token của app bị từ chối sau đó không phải dùng lại (oidc-login-and-token-reuse, T3).
+    crate::token_proxy::revoke_families(&state.db, subject, Some(client_id))
+        .await
+        .map_err(|e| e.to_string())?;
     store::record_consent(
         &state.db,
         subject,

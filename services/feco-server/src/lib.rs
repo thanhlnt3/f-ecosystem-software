@@ -59,6 +59,7 @@ pub mod source_scan;
 pub mod store;
 pub mod store_web;
 pub mod throttle;
+pub mod token_proxy;
 pub mod views;
 pub mod vnpay;
 pub mod wallet;
@@ -208,7 +209,12 @@ impl AppState {
         Ok(AppState {
             environment: config.environment,
             public_url: a.public_url.clone(),
-            kratos: KratosClient::new(a.kratos_public_url.clone(), a.kratos_admin_url.clone()),
+            kratos: KratosClient::new(a.kratos_public_url.clone(), a.kratos_admin_url.clone())
+                .with_after_login(
+                    a.public_url
+                        .join("auth/after-login")
+                        .expect("đường dẫn hợp lệ"),
+                ),
             throttle: LoginThrottle::default(),
             challenge: Challenge::from_config(&a.challenge),
             mailer: Mailer::smtp(&a.smtp_url, &a.email_from)?,
@@ -293,6 +299,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/healthz", get(healthz))
         .route("/", get(auth::home))
         .route("/logout", get(auth::logout))
+        .route("/auth/after-login", get(auth::after_login))
+        .route("/oauth2/token", post(token_proxy::token))
         .route("/error", get(auth::error))
         .route("/lang/{code}", get(auth::set_lang))
         .route("/ui.css", get(ui_prefs::stylesheet))

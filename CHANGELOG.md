@@ -1,5 +1,40 @@
 # Nhật ký thay đổi
 
+## 1.13.0 (20/11/2026)
+
+Thay đổi OpenSpec `oidc-login-and-token-reuse`: xong phần lập trình của task 2.3 và 2.5 trong `add-f-ecosystem-platform`.
+
+### Đăng nhập bằng Google và GitHub
+
+- Kratos bật phương thức `oidc`. Nhà cung cấp khai báo khi triển khai bằng `SELFSERVICE_METHODS_OIDC_CONFIG_PROVIDERS`; client ID và secret không nằm trong repo.
+- Nút "Đăng nhập bằng Google/GitHub" và "Đăng ký bằng …" bốn thứ tiếng.
+- **Email**:
+  - chỉ nhận email nhà cung cấp đã xác minh, và tính là đã xác minh trên F-Eco (`infra/kratos/oidc/mapper.jsonnet`);
+  - email chưa xác minh thì phải nhập email và xác minh như thường.
+- **Liên kết tài khoản**: email trùng tài khoản có sẵn thì phải đăng nhập bằng mật khẩu cũ một lần, không tự gộp.
+- **Sau khi đăng nhập**: `/auth/after-login` ghi nhật ký kiểm toán `auth.login` (phương thức `oidc`), báo thiết bị mới, hủy yêu cầu xóa tài khoản đang chờ. Mỗi phiên một lần; chỉ chuyển tới đường dẫn trong F-Eco.
+
+### Cảnh báo refresh token bị dùng lại
+
+- **`POST /oauth2/token` của F-Eco**:
+  - chuyển nguyên yêu cầu tới Hydra;
+  - tài liệu discovery của Hydra trỏ `token_endpoint` về đây (`webfinger.oidc_discovery.token_url`);
+  - F-Launcher máy tính đổi token qua đây.
+- **F-Eco chỉ lưu băm SHA-256** của refresh token (`0021_refresh_tokens.sql`), xóa sau 31 ngày.
+- **Khi Hydra từ chối một refresh token đã biết, còn hạn**:
+  - người dùng nhận một thông báo và email "Bảo mật" cho mỗi chuỗi phiên, ghi app, thời điểm, thiết bị và IP;
+  - có nhật ký kiểm toán `auth.refresh_token_reused`;
+  - Hydra đã thu hồi cả chuỗi; các thiết bị khác không bị đăng xuất.
+- Gỡ quyền app ở "Ứng dụng đã kết nối" không gây cảnh báo.
+
+### Kiểm thử và CI
+
+- **E2E**:
+  - `external_login_with_fake_oidc_provider`: nhà cung cấp OIDC giả chạy trong test, ID token ES256;
+  - `refresh_token_reuse_alert`.
+- CI chạy Kratos với `infra/docker-compose.e2e.yml` (mạng của máy, `kratos.e2e-oidc.yml`) và bắt buộc test OIDC (`FECO_E2E_OIDC=1`).
+- `scripts/dev-local.sh kratos` nhận `FECO_KRATOS_E2E_OIDC=1`.
+
 ## 1.12.0 (19/11/2026)
 
 Thay đổi OpenSpec `chat-and-source-scan`: chat giữa khách hàng và nhà phát triển, quét mã nguồn trước khi duyệt và trước khi tích hợp.

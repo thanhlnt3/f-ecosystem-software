@@ -191,6 +191,9 @@ fn spawn_background_jobs(state: Arc<AppState>) {
             if let Err(e) = store::purge_expired_exports(&state.db).await {
                 tracing::error!(error = %e, "không dọn được file xuất hết hạn");
             }
+            if let Err(e) = feco_server::token_proxy::purge_old(&state.db).await {
+                tracing::error!(error = %e, "không dọn được băm refresh token cũ");
+            }
             if let Err(e) = feco_server::audit::purge_older_than_one_year(&state.db).await {
                 tracing::error!(error = %e, "không dọn được nhật ký kiểm toán quá 1 năm");
             }
