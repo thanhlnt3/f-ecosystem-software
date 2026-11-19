@@ -18,13 +18,15 @@ here="$(cd "$(dirname "$0")" && pwd)"
 commit="$(tr -d '\r\n' < "$here/MENTOR_COMMIT")"
 repo="katD2707/agent-mentor-maximum-experience"
 work="${MENTOR_WORK:-${RUNNER_TEMP:-/tmp}/mentor-src}"
+# Trên Windows, RUNNER_TEMP là đường dẫn có ổ đĩa (D:...): đổi sang dạng POSIX, vì tar hiểu "D:" là máy từ xa.
+command -v cygpath >/dev/null && work="$(cygpath -u "$work")"
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 
 rm -rf "$work"
 mkdir -p "$work"
-curl -sSfL "https://codeload.github.com/$repo/tar.gz/$commit" | tar -xz -C "$work" --strip-components=1
 cd "$work"
+curl -sSfL "https://codeload.github.com/$repo/tar.gz/$commit" | tar -xz --strip-components=1
 git apply "$here/mentor-gateway.patch"
 git apply "$here/mentor-app.patch"
 

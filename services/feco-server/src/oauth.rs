@@ -229,7 +229,7 @@ pub async fn login(
     // đăng nhập lại (Kratos refresh) rồi quay về đúng yêu cầu này.
     let authenticated_at = session["authenticated_at"]
         .as_str()
-        .and_then(|t| humantime::parse_rfc3339(t).ok());
+        .and_then(crate::account::parse_rfc3339);
     if needs_reauth(
         request["request_url"].as_str().unwrap_or_default(),
         authenticated_at,

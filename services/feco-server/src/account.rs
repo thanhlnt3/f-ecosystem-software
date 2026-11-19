@@ -374,11 +374,27 @@ async fn audit_revoke(
     .await;
 }
 
+/// Thời điểm RFC 3339 của Kratos (`authenticated_at`, metadata), ví dụ `2026-11-09T08:00:00.517Z`.
+pub fn parse_rfc3339(s: &str) -> Option<SystemTime> {
+    time::OffsetDateTime::parse(s, &time::format_description::well_known::Rfc3339)
+        .ok()
+        .map(SystemTime::from)
+}
+
+/// RFC 3339 theo UTC, làm tròn xuống giây: `2026-11-09T08:00:00Z`.
+pub fn format_rfc3339_seconds(t: SystemTime) -> String {
+    let utc = time::OffsetDateTime::from(t);
+    utc.replace_nanosecond(0)
+        .unwrap_or(utc)
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_default()
+}
+
 /// Phiên được xác thực đủ gần để làm thao tác nhạy cảm.
 pub fn is_privileged(session: &Value, now: SystemTime) -> bool {
     session["authenticated_at"]
         .as_str()
-        .and_then(|t| humantime::parse_rfc3339(t).ok())
+        .and_then(parse_rfc3339)
         .and_then(|at| now.duration_since(at).ok())
         .is_some_and(|age| age <= PRIVILEGED_MAX_AGE)
 }
@@ -549,7 +565,7 @@ pub async fn request_deletion(
         Value::Object(m) => Value::Object(m.clone()),
         _ => json!({}),
     };
-    meta[META_KEY] = json!(humantime::format_rfc3339_seconds(now).to_string());
+    meta[META_KEY] = json!(format_rfc3339_seconds(now));
     kratos.set_metadata_admin(id, &meta).await?;
     kratos.revoke_identity_sessions(id).await
 }
@@ -576,7 +592,7 @@ pub async fn cancel_deletion_if_pending(
 fn deletion_due(identity: &Value, now: SystemTime) -> bool {
     identity["metadata_admin"][META_KEY]
         .as_str()
-        .and_then(|t| humantime::parse_rfc3339(t).ok())
+        .and_then(parse_rfc3339)
         .and_then(|at| now.duration_since(at).ok())
         .is_some_and(|age| age >= DELETION_GRACE)
 }
@@ -666,8 +682,19 @@ mod tests {
     }
 
     #[test]
+    fn rfc3339_round_trip() {
+        let at = parse_rfc3339("2026-11-09T08:00:00.517Z").unwrap();
+        assert_eq!(format_rfc3339_seconds(at), "2026-11-09T08:00:00Z");
+        assert_eq!(
+            parse_rfc3339("2026-11-09T15:00:00+07:00"),
+            parse_rfc3339("2026-11-09T08:00:00Z")
+        );
+        assert!(parse_rfc3339("hôm qua").is_none());
+    }
+
+    #[test]
     fn privileged_only_within_fifteen_minutes() {
-        let at = humantime::parse_rfc3339("2026-11-09T08:00:00Z").unwrap();
+        let at = parse_rfc3339("2026-11-09T08:00:00Z").unwrap();
         let s = json!({"authenticated_at": "2026-11-09T08:00:00.517Z"});
         assert!(is_privileged(&s, at + Duration::from_secs(14 * 60)));
         assert!(!is_privileged(&s, at + Duration::from_secs(16 * 60)));
@@ -676,7 +703,7 @@ mod tests {
 
     #[test]
     fn deletion_is_due_only_after_thirty_days() {
-        let at = humantime::parse_rfc3339("2026-11-09T08:00:00Z").unwrap();
+        let at = parse_rfc3339("2026-11-09T08:00:00Z").unwrap();
         let identity = json!({"metadata_admin": {"deletion_requested_at": "2026-11-09T08:00:00Z"}});
         assert!(!deletion_due(
             &identity,

@@ -16,6 +16,9 @@ Thay đổi OpenSpec `mentor-integration`: Mentor trong F-Eco.
 - **CI và bản phát hành**:
   - job `mentor-desktop` lấy Mentor đúng commit, áp bản vá, chạy pytest và vitest của Mentor, rồi dựng app desktop bằng Tauri;
   - bản phát hành kèm `mentor-<phiên bản>-windows-x64.zip`.
+- **Thư viện của máy chủ** (cảnh báo RustSec mới):
+  - `lettre` 0.11.23 lên 0.11.24 (RUSTSEC-2026-0560 tới 0565);
+  - bỏ `humantime` (ngừng bảo trì, RUSTSEC-2026-0542), đọc và ghi thời điểm RFC 3339 bằng thư viện `time` sẵn có.
 
 ## 1.10.0 (17/11/2026)
 
