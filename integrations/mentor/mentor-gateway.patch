@@ -1,0 +1,872 @@
+diff --git a/services/gateway/pyproject.toml b/services/gateway/pyproject.toml
+index f550ebf..f783e94 100644
+--- a/services/gateway/pyproject.toml
++++ b/services/gateway/pyproject.toml
+@@ -18,6 +18,8 @@ dependencies = [
+     "httpx>=0.27",
+     "arxiv>=2.1",
+     "defusedxml>=0.7.1",
++    "authlib>=1.6",  # BSD-3-Clause; Sign in with F-Eco (OIDC client)
++    "itsdangerous>=2.2",  # BSD-3-Clause; signed cookie of Starlette's SessionMiddleware (F-Eco sign-in state)
+     "pypdf>=6.21.3",  # text of paper PDFs for questions (same library as the sandbox pdf_extract script)
+ ]
+ 
+diff --git a/services/gateway/src/mentor_gateway/api/auth.py b/services/gateway/src/mentor_gateway/api/auth.py
+index 125c593..a7b5369 100644
+--- a/services/gateway/src/mentor_gateway/api/auth.py
++++ b/services/gateway/src/mentor_gateway/api/auth.py
+@@ -40,6 +40,11 @@ async def login(body: LoginBody, gw: Gateway = Depends(get_gw)) -> dict | JSONRe
+         return _error(401, "invalid_credentials")
+     if user.role != body.role:
+         return _error(403, "role_mismatch")
++    return await issue_session(gw, user)
++
++
++async def issue_session(gw: Gateway, user: User) -> dict:
++    """`{token, user}` for a signed-in user (password or F-Eco). A student's workspace is created first if needed."""
+     if user.role == "student" and user.provisioned_at is None:
+         # the learner workspace (practice evidence lives in it) is created on the first login
+         warnings = await asyncio.to_thread(
+diff --git a/services/gateway/src/mentor_gateway/api/feco_auth.py b/services/gateway/src/mentor_gateway/api/feco_auth.py
+new file mode 100644
+index 0000000..0b3e75f
+--- /dev/null
++++ b/services/gateway/src/mentor_gateway/api/feco_auth.py
+@@ -0,0 +1,176 @@
++"""Sign in with an F-Eco account: `/api/auth/feco/*`.
++
++OIDC authorization code + PKCE with a confidential client. Authlib does the OAuth part (state, nonce, PKCE, code
++exchange with the client secret, ID token signature through the issuer's JWKS); its state lives in a short signed
++cookie (Starlette `SessionMiddleware`, see `app.py`).
++
++1. The app (web or desktop webview) or F-Launcher opens `GET /api/auth/feco/login?return=<app origin>`.
++2. F-Eco signs the person in and returns to `GET /api/auth/feco/callback`.
++3. The callback finds the Mentor account linked to the F-Eco subject, or creates a student account, and sends the
++   browser back to `<app origin>/?feco_code=<one-time code>` (or `?feco_error=<code>`).
++4. The app trades the code for the usual session token: `POST /api/auth/feco/exchange`.
++
++The return address must be one of the gateway's allowed origins (`Settings.allowed_origins`: the web app, the Tauri
++webviews, `CORS_ORIGINS`), so the code cannot be sent anywhere else. Teacher accounts are never created here: an
++admin promotes an account with `python -m mentor_gateway.cli set-role`.
++"""
++
++import hashlib
++import logging
++import secrets
++from datetime import timedelta
++from urllib.parse import urlencode
++
++from authlib.integrations.starlette_client import OAuth, OAuthError
++from fastapi import APIRouter, Depends, Request
++from fastapi.responses import JSONResponse, RedirectResponse
++from pydantic import BaseModel, Field
++from sqlalchemy import delete
++from sqlalchemy.exc import IntegrityError
++
++from mentor_gateway.api.auth import issue_session
++from mentor_gateway.api.deps import get_gw
++from mentor_gateway.context import Gateway
++from mentor_gateway.db import FecoLoginCode, User
++from mentor_gateway.security import hash_token, new_token
++from mentor_gateway.settings import Settings
++
++log = logging.getLogger(__name__)
++router = APIRouter(prefix="/auth/feco", tags=["auth"])
++
++_SESSION_SECRET: dict[int, str] = {}
++
++
++def session_secret(settings: Settings) -> str:
++    """FECO_SESSION_SECRET, or a random secret for this process (a login started before a restart then fails
++    with `feco_state` and the person simply tries again)."""
++    if settings.feco_session_secret:
++        return settings.feco_session_secret
++    return _SESSION_SECRET.setdefault(id(settings), secrets.token_urlsafe(32))
++
++
++def _oauth(request: Request):
++    """The registered Authlib client, or None when F-Eco sign-in is off."""
++    settings: Settings = request.app.state.gw.settings
++    if not settings.feco_enabled:
++        return None
++    oauth = getattr(request.app.state, "feco_oauth", None)
++    if oauth is None:
++        oauth = OAuth()
++        oauth.register(
++            name="feco",
++            client_id=settings.feco_client_id,
++            client_secret=settings.feco_client_secret,
++            server_metadata_url=settings.feco_issuer_url.rstrip("/") + "/.well-known/openid-configuration",
++            client_kwargs={
++                "scope": "openid profile",
++                "code_challenge_method": "S256",
++                "token_endpoint_auth_method": "client_secret_basic",
++            },
++        )
++        request.app.state.feco_oauth = oauth
++    return oauth.create_client("feco")
++
++
++def _return_origin(settings: Settings, value: str | None) -> str | None:
++    origin = (value or settings.web_url).strip().rstrip("/")
++    return origin if origin in settings.allowed_origins else None
++
++
++def _back(origin: str, **params: str) -> RedirectResponse:
++    return RedirectResponse(origin + "/?" + urlencode(params), status_code=303)
++
++
++@router.get("/status")
++def status(gw: Gateway = Depends(get_gw)) -> dict:
++    """Whether the sign-in screen shows "Sign in with F-Eco"."""
++    return {"enabled": gw.settings.feco_enabled}
++
++
++@router.get("/login", response_model=None)
++async def login(request: Request, gw: Gateway = Depends(get_gw)) -> RedirectResponse | JSONResponse:
++    origin = _return_origin(gw.settings, request.query_params.get("return"))
++    if origin is None:
++        return JSONResponse({"error": "bad_return"}, status_code=400)
++    client = _oauth(request)
++    if client is None:
++        return _back(origin, feco_error="feco_disabled")
++    request.session.clear()
++    request.session["feco_return"] = origin
++    try:
++        return await client.authorize_redirect(request, gw.settings.feco_callback_url)
++    except Exception:  # F-Eco unreachable (discovery document)
++        log.exception("F-Eco sign-in: authorize redirect failed")
++        return _back(origin, feco_error="feco_unavailable")
++
++
++@router.get("/callback", response_model=None)
++async def callback(request: Request, gw: Gateway = Depends(get_gw)) -> RedirectResponse | JSONResponse:
++    started = request.session.get("feco_return")  # set by /login; absent = not started here, or older than 10 min
++    origin = _return_origin(gw.settings, started) if started else None
++    client = _oauth(request)
++    if origin is None or client is None:
++        return JSONResponse({"error": "feco_state"}, status_code=400)
++    if request.query_params.get("error"):  # the person declined, or F-Eco refused the request
++        request.session.clear()
++        return _back(origin, feco_error="feco_denied")
++    try:
++        token = await client.authorize_access_token(request)
++    except OAuthError as exc:
++        log.warning("F-Eco sign-in failed: %s", exc.error)
++        request.session.clear()
++        return _back(origin, feco_error="feco_state" if exc.error == "mismatching_state" else "feco_failed")
++    request.session.clear()
++    subject = str((token.get("userinfo") or {}).get("sub") or "")
++    if not subject:
++        return _back(origin, feco_error="feco_failed")
++    name = ""
++    try:
++        me = await client.get(gw.settings.feco_server_url.rstrip("/") + "/v1/me", token=token)
++        if me.status_code == 200:
++            name = str(me.json().get("name") or "").strip()
++    except Exception:  # the name is only a nicety; the account works without it
++        log.warning("F-Eco sign-in: GET /v1/me failed", exc_info=True)
++    user = _account(gw, subject, name)
++    code = new_token()
++    now = gw.clock()
++    with gw.db.session() as s:
++        s.execute(delete(FecoLoginCode).where(FecoLoginCode.expires_at <= now))  # codes nobody traded
++        s.add(FecoLoginCode(code_hash=hash_token(code), user_id=user.id,
++                            expires_at=now + timedelta(seconds=gw.settings.feco_code_seconds)))
++    return _back(origin, feco_code=code)
++
++
++def _account(gw: Gateway, subject: str, name: str) -> User:
++    """The account linked to this F-Eco subject; a new student account on the first sign-in."""
++    user = gw.users.by_feco_subject(subject)
++    if user is not None:
++        return user
++    username = "feco-" + hashlib.sha256(subject.encode()).hexdigest()[:12]
++    try:
++        user = gw.users.create(username=username, password=secrets.token_urlsafe(32), role="student",
++                               display_name=(name or "F-Eco")[:200])
++        return gw.users.update(user.id, feco_subject=subject)
++    except IntegrityError:  # two first sign-ins at once: the other one created it
++        found = gw.users.by_feco_subject(subject) or gw.users.by_username(username)
++        if found is None:
++            raise
++        return found
++
++
++class ExchangeBody(BaseModel):
++    code: str = Field(min_length=10, max_length=200)
++
++
++@router.post("/exchange", response_model=None)
++async def exchange(body: ExchangeBody, gw: Gateway = Depends(get_gw)) -> dict | JSONResponse:
++    """One-time code from the callback -> `{token, user}` like `/api/auth/login`. A code works once."""
++    with gw.db.session() as s:
++        row = s.get(FecoLoginCode, hash_token(body.code))
++        if row is not None:
++            s.delete(row)
++        valid = row is not None and row.expires_at > gw.clock()
++        user = s.get(User, row.user_id) if valid else None
++    if user is None:
++        return JSONResponse({"error": "invalid_code"}, status_code=401)
++    return await issue_session(gw, user)
+diff --git a/services/gateway/src/mentor_gateway/app.py b/services/gateway/src/mentor_gateway/app.py
+index a524ad0..345b9e5 100644
+--- a/services/gateway/src/mentor_gateway/app.py
++++ b/services/gateway/src/mentor_gateway/app.py
+@@ -14,8 +14,9 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request
+ from fastapi.exception_handlers import http_exception_handler
+ from fastapi.middleware.cors import CORSMiddleware
+ from fastapi.responses import JSONResponse
++from starlette.middleware.sessions import SessionMiddleware
+ 
+-from mentor_gateway.api import account, ask, auth, courses, goals, guide, nudges, plan, teacher, workspace
++from mentor_gateway.api import account, ask, auth, courses, feco_auth, goals, guide, nudges, plan, teacher, workspace
+ from mentor_gateway.api import research as research_api
+ from mentor_gateway.api import practice as practice_api
+ from mentor_gateway.content.service import ContentService
+@@ -94,8 +95,15 @@ def create_app(settings: Settings | None = None, *, clock: Clock = utc_now,
+         expose_headers=["ETag", "Content-Range", "Accept-Ranges", "Content-Length"],  # the app reads ETag (catalog revalidation)
+     )
+ 
++    # Short signed cookie (state, nonce, PKCE verifier, where to return) for "Sign in with F-Eco" only.
++    app.add_middleware(
++        SessionMiddleware, secret_key=feco_auth.session_secret(settings), session_cookie="mentor_feco",
++        max_age=600, same_site="lax", https_only=settings.public_base_url.startswith("https://"),
++    )
++
+     api = APIRouter(prefix="/api")
+     api.include_router(auth.router)
++    api.include_router(feco_auth.router)  # /api/auth/feco (Sign in with F-Eco)
+     api.include_router(account.router)
+     api.include_router(workspace.router)
+     api.include_router(practice_api.router)  # /api/practice
+diff --git a/services/gateway/src/mentor_gateway/cli.py b/services/gateway/src/mentor_gateway/cli.py
+index eb490df..d0a5517 100644
+--- a/services/gateway/src/mentor_gateway/cli.py
++++ b/services/gateway/src/mentor_gateway/cli.py
+@@ -73,6 +73,30 @@ def _rotate(settings: Settings, generate: bool) -> None:
+     print("Done. Set MENTOR_MASTER_KEY to the new key before starting the gateway.", file=sys.stderr)
+ 
+ 
++def _set_role(settings: Settings, username: str, role: str) -> None:
++    """Teacher accounts are never created by F-Eco sign-in: an admin promotes the account here. Sessions of the
++    account end, so the app signs in again with the new role."""
++    from sqlalchemy import delete
++
++    from mentor_gateway.db import Database, WebSession
++    from mentor_gateway.gitrepo import UserLocks
++    from mentor_gateway.mirror import Mirror
++    from mentor_gateway.settings import utc_now
++    from mentor_gateway.users import UserService
++
++    db = Database(settings.ops_db_url)
++    db.create_all()
++    users = UserService(db, Mirror(settings.mirrors_dir, UserLocks()), settings, utc_now)
++    user = users.by_username(username)
++    if user is None:
++        sys.exit(f"no such user: {username}")
++    if user.role != role:
++        users.update(user.id, role=role)
++        with db.session() as s:
++            s.execute(delete(WebSession).where(WebSession.user_id == user.id))
++    print(json.dumps({"username": user.username, "role": role}))
++
++
+ def main(argv: list[str] | None = None, settings: Settings | None = None) -> None:
+     parser = argparse.ArgumentParser(prog="mentor_gateway.cli")
+     sub = parser.add_subparsers(dest="cmd", required=True)
+@@ -82,6 +106,9 @@ def main(argv: list[str] | None = None, settings: Settings | None = None) -> Non
+     cu.add_argument("--display-name")
+     cu.add_argument("--birth-year", type=int)
+     cu.add_argument("--language", choices=["vi", "en"])
++    sr = sub.add_parser("set-role", help="change an account's role (F-Eco accounts start as student)")
++    sr.add_argument("--username", required=True)
++    sr.add_argument("--role", required=True, choices=["student", "teacher"])
+     sb = sub.add_parser("set-birth-year")
+     sb.add_argument("--username", required=True)
+     sb.add_argument("--year", required=True, type=int)
+@@ -109,6 +136,8 @@ def main(argv: list[str] | None = None, settings: Settings | None = None) -> Non
+ 
+     if args.cmd == "create-user":
+         _create_user(settings, args)
++    elif args.cmd == "set-role":
++        _set_role(settings, args.username, args.role)
+     elif args.cmd == "set-birth-year":
+         _set_birth_year(settings, args.username, args.year)
+     elif args.cmd == "backup-run":
+diff --git a/services/gateway/src/mentor_gateway/db.py b/services/gateway/src/mentor_gateway/db.py
+index 5435a49..cf9cd88 100644
+--- a/services/gateway/src/mentor_gateway/db.py
++++ b/services/gateway/src/mentor_gateway/db.py
+@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
+ 
+ # Columns added after first release (Nghiên cứu, CONTRACTS 15.8): study_goals.source / milestones
+ _ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
++    "users": [("feco_subject", "VARCHAR(255)")],
+     "study_goals": [("source", "VARCHAR(10) NOT NULL DEFAULT 'learning'"), ("milestones", "JSON")],
+ }
+ 
+@@ -78,6 +79,8 @@ class User(Base):
+     theme: Mapped[str] = mapped_column(String(8), default="system")  # light | dark | system
+     quiet_until: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)  # no notifications before this
+     provisioned_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)  # learner workspace created
++    # `sub` of the linked F-Eco account (pairwise per client); set by "Sign in with F-Eco"
++    feco_subject: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
+     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
+ 
+     @property
+@@ -88,6 +91,17 @@ class User(Base):
+         return band_for_birth_year(self.birth_year)
+ 
+ 
++class FecoLoginCode(Base):
++    """One-time code from "Sign in with F-Eco": the callback hands it to the app in the URL, the app trades it
++    (POST /api/auth/feco/exchange) for a session token, so the long-lived token never appears in a URL."""
++
++    __tablename__ = "feco_login_codes"
++
++    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
++    user_id: Mapped[str] = mapped_column(String(64), ForeignKey("users.id", ondelete="CASCADE"))
++    expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
++
++
+ class WebSession(Base):
+     """A login token (only its hash is stored). Table name kept from the cookie era."""
+ 
+@@ -276,6 +290,14 @@ class Database:
+         Base.metadata.create_all(self.engine)
+         self._add_birth_year()
+         self._add_columns(_ADDED_COLUMNS)
++        self._add_indexes()
++
++    def _add_indexes(self) -> None:
++        """Unique index for `users.feco_subject` on databases that got the column from `_add_columns`."""
++        from sqlalchemy import text
++
++        with self.engine.begin() as conn:
++            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_feco_subject ON users (feco_subject)"))
+ 
+     def _add_columns(self, wanted: dict[str, list[tuple[str, str]]]) -> None:
+         """Idempotent `ALTER TABLE ... ADD COLUMN` for columns added to a table after databases already had it
+diff --git a/services/gateway/src/mentor_gateway/settings.py b/services/gateway/src/mentor_gateway/settings.py
+index c8e09de..a7de879 100644
+--- a/services/gateway/src/mentor_gateway/settings.py
++++ b/services/gateway/src/mentor_gateway/settings.py
+@@ -73,6 +73,24 @@ class Settings(BaseModel):
+     backup_keep_daily: int = 14
+     backup_keep_weekly: int = 8
+ 
++    # Sign in with an F-Eco account (OIDC authorization code + PKCE, confidential client). Off unless
++    # FECO_CLIENT_ID and FECO_CLIENT_SECRET are set (integrations/mentor in the F-Eco repository).
++    feco_issuer_url: str = "http://127.0.0.1:4444/"  # FECO_ISSUER_URL: Hydra public URL
++    feco_server_url: str = "http://127.0.0.1:8080/"  # FECO_SERVER_URL: F-Eco server (GET /v1/me)
++    feco_client_id: str | None = None  # FECO_CLIENT_ID
++    feco_client_secret: str | None = None  # FECO_CLIENT_SECRET
++    feco_redirect_uri: str | None = None  # FECO_REDIRECT_URI; default $PUBLIC_BASE_URL/api/auth/feco/callback
++    feco_session_secret: str | None = None  # FECO_SESSION_SECRET: signs the short login cookie; default random per process
++    feco_code_seconds: int = 120  # the one-time code the app trades for a session token
++
++    @property
++    def feco_enabled(self) -> bool:
++        return bool(self.feco_client_id and self.feco_client_secret)
++
++    @property
++    def feco_callback_url(self) -> str:
++        return self.feco_redirect_uri or self.public_base_url.rstrip("/") + "/api/auth/feco/callback"
++
+     @property
+     def builder_dir(self) -> Path:
+         return self.data_dir / "builder"
+@@ -150,6 +168,12 @@ class Settings(BaseModel):
+             "backup_hour_utc": "BACKUP_HOUR_UTC",
+             "backup_keep_daily": "BACKUP_KEEP_DAILY",
+             "backup_keep_weekly": "BACKUP_KEEP_WEEKLY",
++            "feco_issuer_url": "FECO_ISSUER_URL",
++            "feco_server_url": "FECO_SERVER_URL",
++            "feco_client_id": "FECO_CLIENT_ID",
++            "feco_client_secret": "FECO_CLIENT_SECRET",
++            "feco_redirect_uri": "FECO_REDIRECT_URI",
++            "feco_session_secret": "FECO_SESSION_SECRET",
+         }
+         values = {field: e[var] for field, var in mapping.items() if e.get(var) not in (None, "")}
+         if "model_router_key" not in values and e.get("MODEL_ROUTER_MASTER_KEY"):
+diff --git a/services/gateway/src/mentor_gateway/users.py b/services/gateway/src/mentor_gateway/users.py
+index b6881a2..3e278b1 100644
+--- a/services/gateway/src/mentor_gateway/users.py
++++ b/services/gateway/src/mentor_gateway/users.py
+@@ -59,6 +59,10 @@ class UserService:
+         with self.db.session() as s:
+             return s.scalars(select(User).where(User.username == username.strip().lower())).first()
+ 
++    def by_feco_subject(self, subject: str) -> User | None:
++        with self.db.session() as s:
++            return s.scalars(select(User).where(User.feco_subject == subject)).first()
++
+     def create(self, *, username: str, password: str, role: Role, display_name: str,
+                birth_year: int | None = None, language: str | None = None) -> User:
+         with self.db.session() as s:
+diff --git a/services/gateway/tests/test_gw_feco_auth.py b/services/gateway/tests/test_gw_feco_auth.py
+new file mode 100644
+index 0000000..a3ff15e
+--- /dev/null
++++ b/services/gateway/tests/test_gw_feco_auth.py
+@@ -0,0 +1,210 @@
++"""Sign in with an F-Eco account (`/api/auth/feco/*`, F-Eco change `mentor-integration`).
++
++F-Eco itself is replaced by a fake Authlib client: these tests cover what Mentor does with the result (return
++address whitelist, account mapping, one-time code). The OIDC round trip against a real F-Eco runs in the F-Eco
++repository (integrations/mentor/README.md).
++"""
++
++from urllib.parse import parse_qs, urlsplit
++
++import pytest
++from authlib.integrations.starlette_client import OAuthError
++from fastapi.responses import RedirectResponse
++from fastapi.testclient import TestClient
++
++from mentor_gateway.api import feco_auth
++from mentor_gateway.app import create_app
++from mentor_gateway.cli import main as cli_main
++from mentor_gateway.db import FecoLoginCode, User, WebSession
++
++
++class FakeResponse:
++    def __init__(self, status_code: int, body: dict):
++        self.status_code = status_code
++        self._body = body
++
++    def json(self) -> dict:
++        return self._body
++
++
++class FakeFeco:
++    """Stands in for the registered Authlib client: `subject` is who signs in at F-Eco."""
++
++    def __init__(self):
++        self.subject = "pairwise-sub-1"
++        self.name = "Nguyễn Văn An"
++        self.fail: str | None = None
++        self.me_status = 200
++        self.redirect_uri: str | None = None
++
++    async def authorize_redirect(self, request, redirect_uri):
++        self.redirect_uri = redirect_uri
++        request.session["_state_feco_x"] = {"data": {"code_verifier": "v"}}
++        return RedirectResponse("https://feco.test/oauth2/auth?state=x", status_code=302)
++
++    async def authorize_access_token(self, request):
++        if self.fail:
++            raise OAuthError(error=self.fail)
++        return {"access_token": "at", "userinfo": {"sub": self.subject}}
++
++    async def get(self, url, token=None):
++        assert url == "http://feco.test:8080/v1/me" and token["access_token"] == "at"
++        return FakeResponse(self.me_status, {"name": self.name})
++
++
++@pytest.fixture
++def feco_settings(settings):
++    return settings.model_copy(update={
++        "feco_client_id": "mentor-client", "feco_client_secret": "test-secret",
++        "feco_server_url": "http://feco.test:8080/", "extra_origins": "http://other.test",
++    })
++
++
++@pytest.fixture
++def fake(monkeypatch) -> FakeFeco:
++    f = FakeFeco()
++    monkeypatch.setattr(feco_auth, "_oauth", lambda request: f if request.app.state.gw.settings.feco_enabled else None)
++    return f
++
++
++@pytest.fixture
++def fclient(feco_settings, clock, executor, fake):
++    with TestClient(create_app(feco_settings, clock=clock, executor=executor)) as c:
++        yield c
++
++
++def _sign_in(client, origin="http://web.test") -> dict:
++    """login -> callback; returns the query of the redirect back to the app."""
++    r = client.get("/api/auth/feco/login", params={"return": origin}, follow_redirects=False)
++    assert r.status_code == 302 and r.headers["location"].startswith("https://feco.test/"), r.text
++    r = client.get("/api/auth/feco/callback", params={"code": "c", "state": "x"}, follow_redirects=False)
++    assert r.status_code == 303, r.text
++    loc = urlsplit(r.headers["location"])
++    assert f"{loc.scheme}://{loc.netloc}" == origin and loc.path == "/"
++    return {k: v[0] for k, v in parse_qs(loc.query).items()}
++
++
++def test_status_reports_whether_feco_sign_in_is_on(client, fclient):
++    assert client.get("/api/auth/feco/status").json() == {"enabled": False}
++    assert fclient.get("/api/auth/feco/status").json() == {"enabled": True}
++
++
++def test_first_sign_in_creates_a_student_and_the_code_works_once(fclient, fake):
++    q = _sign_in(fclient)
++    assert set(q) == {"feco_code"}
++    assert fake.redirect_uri == "http://testserver/api/auth/feco/callback"
++    r = fclient.post("/api/auth/feco/exchange", json={"code": q["feco_code"]})
++    assert r.status_code == 200, r.text
++    body = r.json()
++    assert body["user"]["role"] == "student" and body["user"]["display_name"] == "Nguyễn Văn An"
++    assert body["user"]["username"].startswith("feco-")
++    me = fclient.get("/api/me", headers={"Authorization": f"Bearer {body['token']}"})
++    assert me.status_code == 200 and me.json()["id"] == body["user"]["id"]
++    # the code is single-use
++    again = fclient.post("/api/auth/feco/exchange", json={"code": q["feco_code"]})
++    assert again.status_code == 401 and again.json() == {"error": "invalid_code"}
++    gw = fclient.app.state.gw
++    user = gw.users.by_feco_subject(fake.subject)
++    assert user is not None and user.provisioned_at is not None  # workspace created like a password login
++
++
++def test_next_sign_in_uses_the_linked_account(fclient, fake):
++    first = fclient.post("/api/auth/feco/exchange", json={"code": _sign_in(fclient)["feco_code"]}).json()
++    fake.name = "Tên mới"
++    second = fclient.post("/api/auth/feco/exchange", json={"code": _sign_in(fclient)["feco_code"]}).json()
++    assert second["user"]["id"] == first["user"]["id"]
++    fake.subject = "pairwise-sub-2"
++    third = fclient.post("/api/auth/feco/exchange", json={"code": _sign_in(fclient)["feco_code"]}).json()
++    assert third["user"]["id"] != first["user"]["id"]
++
++
++def test_teacher_linked_account_signs_in_as_teacher(fclient, fake):
++    gw = fclient.app.state.gw
++    teacher = gw.users.by_username("giaovien")
++    gw.users.update(teacher.id, feco_subject=fake.subject)
++    body = fclient.post("/api/auth/feco/exchange", json={"code": _sign_in(fclient)["feco_code"]}).json()
++    assert body["user"]["id"] == teacher.id and body["user"]["role"] == "teacher"
++
++
++def test_return_address_must_be_an_allowed_origin(fclient):
++    for bad in ("https://evil.test", "http://web.test.evil.test", "javascript:alert(1)"):
++        r = fclient.get("/api/auth/feco/login", params={"return": bad}, follow_redirects=False)
++        assert r.status_code == 400 and r.json() == {"error": "bad_return"}, bad
++    # the Tauri webview, CORS_ORIGINS and the web app (default) are allowed
++    assert "feco_code" in _sign_in(fclient, "http://tauri.localhost")
++    assert "feco_code" in _sign_in(fclient, "http://other.test")
++    r = fclient.get("/api/auth/feco/login", follow_redirects=False)
++    assert r.status_code == 302
++
++
++def test_callback_without_a_started_login_is_refused(fclient):
++    r = fclient.get("/api/auth/feco/callback", params={"code": "c", "state": "x"}, follow_redirects=False)
++    assert r.status_code == 400 and r.json() == {"error": "feco_state"}
++
++
++def test_errors_go_back_to_the_app(fclient, fake):
++    fclient.get("/api/auth/feco/login", params={"return": "http://web.test"}, follow_redirects=False)
++    r = fclient.get("/api/auth/feco/callback", params={"error": "access_denied"}, follow_redirects=False)
++    assert r.headers["location"] == "http://web.test/?feco_error=feco_denied"
++    fake.fail = "mismatching_state"
++    fclient.get("/api/auth/feco/login", params={"return": "http://web.test"}, follow_redirects=False)
++    r = fclient.get("/api/auth/feco/callback", params={"code": "c", "state": "y"}, follow_redirects=False)
++    assert r.headers["location"] == "http://web.test/?feco_error=feco_state"
++    fake.fail = "invalid_grant"
++    fclient.get("/api/auth/feco/login", params={"return": "http://web.test"}, follow_redirects=False)
++    r = fclient.get("/api/auth/feco/callback", params={"code": "c", "state": "x"}, follow_redirects=False)
++    assert r.headers["location"] == "http://web.test/?feco_error=feco_failed"
++
++
++def test_profile_name_is_optional(fclient, fake):
++    fake.me_status = 500
++    body = fclient.post("/api/auth/feco/exchange", json={"code": _sign_in(fclient)["feco_code"]}).json()
++    assert body["user"]["display_name"] == "F-Eco"
++
++
++def test_expired_code_is_refused_and_cleaned_up(fclient, fake, clock):
++    code = _sign_in(fclient)["feco_code"]
++    clock.advance(minutes=3)
++    r = fclient.post("/api/auth/feco/exchange", json={"code": code})
++    assert r.status_code == 401
++    old = _sign_in(fclient)["feco_code"]
++    clock.advance(minutes=3)
++    _sign_in(fclient)  # a new callback removes codes nobody traded
++    gw = fclient.app.state.gw
++    with gw.db.session() as s:
++        assert s.query(FecoLoginCode).count() == 1
++    assert fclient.post("/api/auth/feco/exchange", json={"code": old}).status_code == 401
++
++
++def test_disabled_without_client(client):
++    r = client.get("/api/auth/feco/login", params={"return": "http://web.test"}, follow_redirects=False)
++    assert r.headers["location"] == "http://web.test/?feco_error=feco_disabled"
++
++
++def test_password_login_still_works(fclient):
++    r = fclient.post("/api/auth/login", json={"username": "hocsinh", "password": "123456", "role": "student"})
++    assert r.status_code == 200
++
++
++def test_cli_set_role_promotes_and_ends_sessions(fclient, fake, feco_settings, capsys):
++    body = fclient.post("/api/auth/feco/exchange", json={"code": _sign_in(fclient)["feco_code"]}).json()
++    username = body["user"]["username"]
++    cli_main(["set-role", "--username", username, "--role", "teacher"], settings=feco_settings)
++    assert '"role": "teacher"' in capsys.readouterr().out
++    gw = fclient.app.state.gw
++    with gw.db.session() as s:
++        assert s.query(WebSession).filter(WebSession.user_id == body["user"]["id"]).count() == 0
++        assert s.get(User, body["user"]["id"]).role == "teacher"
++    again = fclient.post("/api/auth/feco/exchange", json={"code": _sign_in(fclient)["feco_code"]}).json()
++    assert again["user"]["role"] == "teacher"
++    with pytest.raises(SystemExit):
++        cli_main(["set-role", "--username", "nobody", "--role", "teacher"], settings=feco_settings)
++
++
++def test_settings_from_env():
++    from mentor_gateway.settings import Settings
++
++    s = Settings.from_env({"FECO_CLIENT_ID": "id", "FECO_CLIENT_SECRET": "sec", "PUBLIC_BASE_URL": "http://localhost:8100",
++                           "FECO_ISSUER_URL": "http://127.0.0.1:4444/"})
++    assert s.feco_enabled and s.feco_callback_url == "http://localhost:8100/api/auth/feco/callback"
++    assert not Settings.from_env({"FECO_CLIENT_ID": "id"}).feco_enabled
+diff --git a/uv.lock b/uv.lock
+index b8e62d9..5d104d2 100644
+--- a/uv.lock
++++ b/uv.lock
+@@ -1,5 +1,5 @@
+ version = 1
+-revision = 5
++revision = 3
+ requires-python = ">=3.11"
+ resolution-markers = [
+     "python_full_version >= '3.14' and sys_platform == 'emscripten'",
+@@ -298,6 +298,19 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548, upload-time = "2026-03-19T14:22:23.645Z" },
+ ]
+ 
++[[package]]
++name = "authlib"
++version = "1.9.9"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "cryptography" },
++    { name = "joserfc" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/73/69/0215a1818edb1fb6b9dd59b8a3870601f11603b6db1f830ff3f3ea62612f/authlib-1.9.9.tar.gz", hash = "sha256:cca3dffa51c8d80d6df19aee2279e47219dc996f5a527c06ac2e39d0757c99ef", size = 184173, upload-time = "2026-11-17T20:35:21.058Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/ba/a5/e79946bc081bfd2e8c0c6125b5a6ae90f8d1541bb224cd7f16ccbb8e71d8/authlib-1.9.9-py2.py3-none-any.whl", hash = "sha256:0199649865fefb4304fc57683eaebb15614523073e41e09d98c72f3268ce5cbc", size = 267584, upload-time = "2026-11-17T20:35:19.249Z" },
++]
++
+ [[package]]
+ name = "beautifulsoup4"
+ version = "4.15.0"
+@@ -682,7 +695,7 @@ name = "cuda-bindings"
+ version = "13.5.0"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "cuda-pathfinder" },
++    { name = "cuda-pathfinder", marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/12/09/74e159fbe67b081cca842871addce6d2b493f9bb48ce85124f023eb5f1c9/cuda_bindings-13.5.0-cp311-cp311-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:71c15ed97099a8ef416515d80ddd10770e0f6339234e16855a526d2896516631", size = 7434875, upload-time = "2026-11-05T12:05:50.666Z" },
+@@ -719,40 +732,40 @@ wheels = [
+ 
+ [package.optional-dependencies]
+ cublas = [
+-    { name = "nvidia-cublas", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
+-    { name = "nvidia-cuda-nvrtc", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-cublas", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
++    { name = "nvidia-cuda-nvrtc", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ cudart = [
+-    { name = "nvidia-cuda-runtime", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-cuda-runtime", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ cufft = [
+-    { name = "nvidia-cufft", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
+-    { name = "nvidia-nvjitlink", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-cufft", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
++    { name = "nvidia-nvjitlink", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ cufile = [
+-    { name = "nvidia-cufile", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-cufile", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ cupti = [
+-    { name = "nvidia-cuda-cupti", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-cuda-cupti", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ cusolver = [
+-    { name = "nvidia-cublas", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
+-    { name = "nvidia-cusolver", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
+-    { name = "nvidia-cusparse", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
+-    { name = "nvidia-nvjitlink", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-cublas", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
++    { name = "nvidia-cusolver", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
++    { name = "nvidia-cusparse", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
++    { name = "nvidia-nvjitlink", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ cusparse = [
+-    { name = "nvidia-cusparse", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
+-    { name = "nvidia-nvjitlink", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-cusparse", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
++    { name = "nvidia-nvjitlink", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ nvjitlink = [
+-    { name = "nvidia-nvjitlink", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-nvjitlink", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ nvrtc = [
+-    { name = "nvidia-cuda-nvrtc", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-cuda-nvrtc", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ nvtx = [
+-    { name = "nvidia-nvtx", marker = "platform_machine == 'aarch64' or platform_machine == 'x86_64'" },
++    { name = "nvidia-nvtx", marker = "(python_full_version >= '3.12' and platform_machine == 'AMD64' and sys_platform == 'win32') or (platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+ ]
+ 
+ [[package]]
+@@ -1212,8 +1225,8 @@ name = "httpcore2"
+ version = "2.16.0"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "h11" },
+-    { name = "truststore" },
++    { name = "h11", marker = "sys_platform != 'emscripten'" },
++    { name = "truststore", marker = "sys_platform != 'emscripten'" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/c0/61/afa9d6b7452f9eca73f73d45324eb0bb52f098fd5e6049bf6b8263be9b4e/httpcore2-2.16.0.tar.gz", hash = "sha256:c72cd0413563b17e1cd8354677dff887466f8ec2551679759e93126534428643", size = 69886, upload-time = "2026-10-21T07:09:45.31Z" }
+ wheels = [
+@@ -1398,6 +1411,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/56/43/4ca9e49d27a1fcf6bece6f6aec0ea46bb9112489b93d4b688fb415457bdb/iniconfig-2.3.1-py3-none-any.whl", hash = "sha256:9121e2c1fdb355232495be3194c8dfe87ccc2d5dee45947b78e68f499790d7a7", size = 7552, upload-time = "2026-10-06T22:48:36.959Z" },
+ ]
+ 
++[[package]]
++name = "itsdangerous"
++version = "2.2.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/9c/cb/8ac0172223afbccb63986cc25049b154ecfb5e85932587206f42317be31d/itsdangerous-2.2.0.tar.gz", hash = "sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173", size = 54410, upload-time = "2024-04-16T21:28:15.614Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl", hash = "sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef", size = 16234, upload-time = "2024-04-16T21:28:14.499Z" },
++]
++
+ [[package]]
+ name = "jinja2"
+ version = "3.1.6"
+@@ -1523,6 +1545,18 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/93/51/e57dbc6c264ec6557a677189755fe4525d83439237418e3ae59771ac1cde/jiter-0.18.0-graalpy312-graalpy250_312_native-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ebb0c346b6c5d9c033fe9e9b6ed6a1ff6dac0288fe681c3434dde6eb9c264fa1", size = 301141, upload-time = "2026-10-23T13:51:11.882Z" },
+ ]
+ 
++[[package]]
++name = "joserfc"
++version = "1.8.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "cryptography" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/74/31/5c3f27e82c92a7bbe1f028033ff19e0251540395c9be244c01a50de42bdb/joserfc-1.8.0.tar.gz", hash = "sha256:cbf03cb2c6db8cc5289f1ef8718842e53dba244b4c0de5fefa0c0eaee4bde8db", size = 241023, upload-time = "2026-11-03T10:45:57.948Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/5e/7e/7ffaae13415e8f51c8e8d5d1845f2de7a27ebf2717e97a38d7e7446d6030/joserfc-1.8.0-py3-none-any.whl", hash = "sha256:176b836ac7ed9a46a88629e24076314b475f33a75d0bad7f26146e572eed7c79", size = 73147, upload-time = "2026-11-03T10:45:56.531Z" },
++]
++
+ [[package]]
+ name = "jsonref"
+ version = "1.1.0"
+@@ -1937,12 +1971,14 @@ version = "0.1.0"
+ source = { editable = "services/gateway" }
+ dependencies = [
+     { name = "arxiv" },
++    { name = "authlib" },
+     { name = "croniter" },
+     { name = "cryptography" },
+     { name = "defusedxml" },
+     { name = "fastapi" },
+     { name = "fsrs" },
+     { name = "httpx" },
++    { name = "itsdangerous" },
+     { name = "mentor-schemas" },
+     { name = "mentor-scripts" },
+     { name = "pypdf" },
+@@ -1957,12 +1993,14 @@ dependencies = [
+ [package.metadata]
+ requires-dist = [
+     { name = "arxiv", specifier = ">=2.1" },
++    { name = "authlib", specifier = ">=1.6" },
+     { name = "croniter", specifier = ">=2.0" },
+     { name = "cryptography", specifier = ">=43" },
+     { name = "defusedxml", specifier = ">=0.7.1" },
+     { name = "fastapi", specifier = ">=0.115" },
+     { name = "fsrs", specifier = ">=6.0" },
+     { name = "httpx", specifier = ">=0.27" },
++    { name = "itsdangerous", specifier = ">=2.2" },
+     { name = "mentor-schemas", editable = "packages/mentor-schemas" },
+     { name = "mentor-scripts", editable = "sandbox-image/scripts" },
+     { name = "pypdf", specifier = ">=6.21.3" },
+@@ -2459,7 +2497,7 @@ name = "nvidia-cublas"
+ version = "13.4.1.3"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-cuda-nvrtc" },
++    { name = "nvidia-cuda-nvrtc", marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/d0/a0/5cd9d4b08a8320f7ca150ee0d66c97e98092922e338336cb4b62da7500c3/nvidia_cublas-13.4.1.3-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:4eb1472bf92b741e7cf24da7978dde251b58ddec2092d9f6a04f3623eb4e9a15", size = 513048232, upload-time = "2026-07-16T09:45:07.751Z" },
+@@ -2507,7 +2545,7 @@ name = "nvidia-cudnn-cu13"
+ version = "9.26.0.51"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-cublas" },
++    { name = "nvidia-cublas", marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/c5/1c/01e1dd3dec6ffe0baaff7e722b8946d867353d05a01301f128f1730fde0b/nvidia_cudnn_cu13-9.26.0.51-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:8e5b4f5eccff721416f70ecf4353172fc4d5cdd8ca869fe6f983a4a5b0147b20", size = 595329497, upload-time = "2026-09-10T16:45:39.945Z" },
+@@ -2519,7 +2557,7 @@ name = "nvidia-cufft"
+ version = "12.2.0.57"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-nvjitlink" },
++    { name = "nvidia-nvjitlink", marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/07/8d/f650e6d527f9d22b5ded906c000eaebb037721c06d4ecd906df62f300979/nvidia_cufft-12.2.0.57-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:1ed438568ae1088ba2c25789d10205d4104b8b140b7bd942e39a787947a0fb74", size = 218244742, upload-time = "2026-07-16T09:47:08.76Z" },
+@@ -2540,9 +2578,9 @@ name = "nvidia-cusolver"
+ version = "12.2.0.11"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-cublas" },
+-    { name = "nvidia-cusparse" },
+-    { name = "nvidia-nvjitlink" },
++    { name = "nvidia-cublas", marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
++    { name = "nvidia-cusparse", marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
++    { name = "nvidia-nvjitlink", marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/60/df/9e6b603f1d64040ce3e076e9bce1b78e2d588d0aabc9783f351cecd861ab/nvidia_cusolver-12.2.0.11-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:8be097fca28de6be0990ab216ee9b804dd51077e1d1d83acf6c9850650bdc64d", size = 250383075, upload-time = "2026-07-16T09:50:16.355Z" },
+@@ -2554,7 +2592,7 @@ name = "nvidia-cusparse"
+ version = "12.7.10.12"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-nvjitlink" },
++    { name = "nvidia-nvjitlink", marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/60/35/abbd278fb6d039fcfb5175efa10a21007a11878bec59920d84854b47d766/nvidia_cusparse-12.7.10.12-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:597eff2cd83e3ab1d1e3a0dce9c9c879d77cf64ec2659bfdb5af6a5d02e7aaa9", size = 169043093, upload-time = "2026-07-16T09:51:37.058Z" },
+@@ -2593,7 +2631,7 @@ name = "nvidia-nvshmem-cu13"
+ version = "3.7.2"
+ source = { registry = "https://pypi.org/simple" }
+ dependencies = [
+-    { name = "nvidia-cuda-cccl" },
++    { name = "nvidia-cuda-cccl", marker = "(python_full_version >= '3.12' and sys_platform == 'win32') or (sys_platform != 'emscripten' and sys_platform != 'win32')" },
+ ]
+ wheels = [
+     { url = "https://files.pythonhosted.org/packages/81/11/1767ef120299972822a43aceffbc81ac813aad2089d817e36e4e12aa4c9c/nvidia_nvshmem_cu13-3.7.2-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:0e748308b9e0a8a8d81859353f3e6c98fbe85a85f652a915a2ba60149a0bd124", size = 135174619, upload-time = "2026-07-17T19:24:15.404Z" },
+@@ -3970,7 +4008,7 @@ resolution-markers = [
+     "python_full_version < '3.11.5' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+ ]
+ dependencies = [
+-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
++    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/7a/97/5a3609c4f8d58b039179648e62dd220f89864f56f7357f5d4f45c29eb2cc/scipy-1.17.1.tar.gz", hash = "sha256:95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0", size = 30573822, upload-time = "2026-02-23T00:26:24.851Z" }
+ wheels = [
+@@ -4047,7 +4085,7 @@ resolution-markers = [
+     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten'",
+ ]
+ dependencies = [
+-    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" } },
++    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+ ]
+ sdist = { url = "https://files.pythonhosted.org/packages/7e/74/66de6258867beb2ef08f35f9f2ac017a52cacd5081714d239ff1a442d458/scipy-1.18.1.tar.gz", hash = "sha256:52c4b7422442aba924d03ad4019852b08a92e64ea187b933135687bfe2747307", size = 30781235, upload-time = "2026-08-21T23:28:50.599Z" }
+ wheels = [

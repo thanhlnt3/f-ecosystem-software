@@ -300,6 +300,16 @@ app repository; it is used only to try single sign-on in step 5.
     ```
 
     Add `--dart-define=FECO_DEMO=true` to try it with sample data and no server. Details in [clients/feco-mobile/README.md](clients/feco-mobile/README.md).
+17. **Mentor**: a learning app for students and teachers, as both a web app and a Windows desktop app, signing in with your F-Eco account.
+
+    ```bash
+    scripts/dev-apps.sh mentor
+    ```
+
+    - The command creates a server-side OAuth client, signs Mentor's web target and writes the catalog. Set `MENTOR_DESKTOP_ZIP` to the release's `mentor-<version>-windows-x64.zip` to add the desktop app.
+    - Run the Mentor gateway (port 8100) and web app (port 5173) as in [integrations/mentor/README.md](integrations/mentor/README.md), with the `FECO_*` variables the command prints.
+    - In the launcher: **Sync**, Store → Mentor → **Add** → **Open**. Or open `http://localhost:5173` and click "Sign in with F-Eco".
+    - On first sign-in Mentor creates a student account. A Mentor admin promotes teachers.
 
 Launcher variables: `FECO_LAUNCHER_SERVER` (default `http://127.0.0.1:8080/` in debug builds only; required in release builds unless `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, same rule), `FECO_LAUNCHER_DATA_DIR` (data directory), `FECO_LAUNCHER_TRUSTED_ROOT`
@@ -709,8 +719,8 @@ Questions awaiting a decision are in [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/f-dev` | CLI for developers: `f-dev validate`, `f-dev pack`, `f-dev publish` |
 | `tools/feco-license-check` | Checks service and container image licenses |
 | `infra/` | Dev infrastructure: `docker-compose.yml`, the Kratos configuration (schema, email templates) and Hydra |
-| `scripts/` | `dev-local.sh`: runs the infrastructure without Docker; `tuf-drill.sh`: drills the TUF chain of trust; `dev-launcher.sh`: the TUF repository and OAuth clients for trying the launcher; `dev-apps.sh`: puts sample apps, open-source apps from GitHub and the ThesisAI web app into the dev repository |
-| `integrations/` | Integrations with outside apps: `thesisai/` (the "Sign in with F-Eco" patch for ThesisAI, guide, provenance) |
+| `scripts/` | `dev-local.sh`: runs the infrastructure without Docker; `tuf-drill.sh`: drills the TUF chain of trust; `dev-launcher.sh`: the TUF repository and OAuth clients for trying the launcher; `dev-apps.sh`: puts sample apps, open-source apps from GitHub, the ThesisAI web app and Mentor into the dev repository |
+| `integrations/` | Integrations with outside apps: `thesisai/` (the "Sign in with F-Eco" patch for ThesisAI, guide, provenance); `mentor/` (the "Sign in with F-Eco" patch for Mentor, desktop build script, guide, provenance) |
 | `docs/security/` | Incident response procedure, TUF key management, drill reports |
 | `third_party/` | License declarations and approved exceptions |
 | `openspec/` | Requirements, design, plan |

@@ -266,3 +266,26 @@ jobs:
           xcrun simctl bootstatus "$udid" -b
           xcrun simctl list devices booted
           flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true             || flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true
+
+  mentor-desktop:
+    # mentor-integration: bản vá Mentor còn áp được lên commit đã ghi, test của Mentor qua, dựng được
+    # app desktop Windows (scenario "Bản vá còn áp được").
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g pnpm@9.15.9
+      - uses: astral-sh/setup-uv@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Áp bản vá, test và dựng Mentor
+        run: integrations/mentor/build-desktop.sh dist "0.0.0-ci"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mentor-desktop-ci
+          path: dist/*.zip
+          retention-days: 7

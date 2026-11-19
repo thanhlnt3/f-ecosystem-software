@@ -413,3 +413,21 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 103. **App di động thật trong danh mục.** Hiện F-Store chỉ có app desktop và app web. Có cần thêm nền
      tảng `android`, `ios` để nhà phát triển đăng app di động (mở trang Google Play hoặc App Store
      từ F-Launcher di động) không?
+
+## Thay đổi mentor-integration (bản 1.11.0)
+
+104. **Giấy phép của Mentor.** Repo Mentor chưa có tệp LICENSE. Chủ dự án xác nhận tác giả cho phép F-Eco
+     tải, dựng, sửa phần đăng nhập và dùng logo, có ghi nguồn. Tác giả có thể thêm LICENSE (ví dụ MIT
+     hoặc Apache-2.0) vào repo để F-Store ghi đúng giấy phép không?
+105. **Khóa FPT AI của Mentor.** Hỏi đáp, soạn khóa học và nghiên cứu của Mentor gọi FPT AI Factory
+     (`FPT_API_KEY`). F-Eco không giữ khóa này: người chạy gateway Mentor tự điền. Khi Mentor chạy cho
+     nhiều người dùng F-Eco, ai trả chi phí AI? Có tính vào F-Coin không?
+106. **Vai trò giáo viên.** Đăng nhập bằng F-Eco chỉ tạo tài khoản học sinh. Có nên dựa vào vai trò F-Eco
+     (ví dụ một vai trò "giáo viên" được quản trị F-Eco duyệt) để tự cấp vai trò giáo viên trong Mentor
+     không? Hiện quản trị Mentor nâng vai trò bằng `set-role`.
+107. **Gateway Mentor dùng chung.** App desktop và web hiện gọi gateway ở `http://localhost:8100`, nên
+     gateway phải chạy trên cùng máy. Có cần máy chủ Mentor chung (HTTPS) cho người dùng F-Eco không?
+     Nếu có thì đặt ở đâu, và ai vận hành?
+108. **Ký số app desktop Mentor.** `Mentor.exe` chưa ký số, nên Windows SmartScreen có thể cảnh báo.
+     Gói vẫn được xác minh bằng chữ ký TUF của F-Eco. Có cần chứng thư ký mã cho app bên thứ ba
+     không?

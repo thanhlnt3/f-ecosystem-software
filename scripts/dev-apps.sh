@@ -17,6 +17,9 @@
 #   scripts/dev-apps.sh thesisai    # app web ThesisAI: client OAuth phía máy chủ (có secret), gói app
 #                                   # web, logo, danh mục; in biến môi trường cho backend ThesisAI
 #                                   # (integrations/thesisai/README.md)
+#   scripts/dev-apps.sh mentor      # Mentor: client OAuth phía máy chủ, target web; có
+#                                   # MENTOR_DESKTOP_ZIP thì thêm target desktop; logo, danh mục; in biến
+#                                   # môi trường cho gateway Mentor (integrations/mentor/README.md)
 #
 # Mã nguồn tải về và bản dựng nằm ngoài repo, trong $FECO_EXT_DIR (mặc định ~/.feco-dev-ext), để
 # Cargo không coi chúng là một phần workspace của F-Eco. Chỉ dùng cho dev: bản phát hành thật đi
@@ -318,9 +321,76 @@ thesisai() {
 ENVEOF
 }
 
+# Mentor (thay đổi mentor-integration): một app, hai target. Target `web` mở thẳng đăng nhập F-Eco
+# của gateway Mentor; target desktop (Windows) lấy từ gói `mentor-<phiên bản>-windows-x64.zip` do CI
+# của F-Eco dựng (đặt MENTOR_DESKTOP_ZIP). Mã Mentor không nằm trong gói web.
+mentor() {
+  need_repo
+  build
+  local id=mentor name="Mentor" version="${MENTOR_VERSION:-0.2.0}"
+  local front="${MENTOR_WEB:-http://localhost:5173}" back="${MENTOR_API:-http://localhost:8100}"
+  local secret_file="$DEV/mentor-client-secret" id_file="$DEV/mentor-client-id" client
+  # Client phía máy chủ: secret do script tạo, chỉ lưu trong .dev/ (không commit).
+  [[ -s "$secret_file" ]] || "$PY" -I -c 'import secrets; print(secrets.token_urlsafe(32))' > "$secret_file"
+  client="$(cat "$id_file" 2>/dev/null || true)"
+  if [[ -z "$client" ]] || ! curl -sf -o /dev/null "$HYDRA_ADMIN/admin/clients/$client"; then
+    create_client "{\"client_name\":\"Mentor\",\"client_secret\":$(json_str "$(cat "$secret_file" | tr -d '\r\n')"),
+      \"grant_types\":[\"authorization_code\"],\"response_types\":[\"code\"],
+      \"scope\":\"openid profile\",
+      \"redirect_uris\":[\"$back/api/auth/feco/callback\"],\"token_endpoint_auth_method\":\"client_secret_basic\",
+      \"subject_type\":\"pairwise\",\"policy_uri\":\"$front/\",
+      \"metadata\":{\"developer\":\"katD2707\",\"scopes\":{
+        \"profile\":{\"required\":true,\"purpose_vi\":\"Hiện tên của bạn trong Mentor\",\"purpose_en\":\"Show your name in Mentor\"}}}}" \
+      > "$id_file"
+    client="$(cat "$id_file")"
+  fi
+  local pkg="$EXT/pkg/$id"
+  local license="Chưa công bố giấy phép (tác giả cho phép F-Eco tích hợp)"
+  local source="https://github.com/katD2707/agent-mentor-maximum-experience"
+  local summary="Học tập cho học sinh lớp 1 tới đại học và giáo viên: khóa học, luyện tập, hỏi đáp, kế hoạch học."
+  ICON="$ROOT/assets/logos/mentor-128.png"
+  WEBSITE=""
+  DESCRIPTION="Mentor là ứng dụng học tập cho học sinh từ lớp 1 tới đại học và cho giáo viên. Học sinh có khóa học, luyện tập, hỏi đáp với trợ lý Mực và theo dõi tiến độ; giáo viên đưa tài liệu lên và duyệt khóa học do AI soạn. Đăng nhập bằng tài khoản F-Eco. Dùng trên trình duyệt, hoặc cài app desktop trên Windows."
+  FEATURES="Khóa học theo độ tuổi, bài học từng bước|Luyện tập có ôn tập ngắt quãng|Hỏi đáp với trợ lý Mực|Kế hoạch học và nhắc giờ học|Giáo viên soạn khóa học cùng AI|Đăng nhập bằng tài khoản F-Eco"
+  NOTES="Bản tích hợp đầu tiên với F-Eco: đăng nhập bằng tài khoản F-Eco (bản vá trong integrations/mentor)."
+  # Target desktop trước: catalog_entry của target web ghi web_url sau cùng.
+  if [[ -n "${MENTOR_DESKTOP_ZIP:-}" ]]; then
+    [[ -f "$MENTOR_DESKTOP_ZIP" ]] || { echo "không thấy $MENTOR_DESKTOP_ZIP" >&2; exit 1; }
+    rm -rf "$pkg"
+    mkdir -p "$pkg"
+    "$PY" -I -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$MENTOR_DESKTOP_ZIP" "$pkg"
+    [[ -f "$pkg/Mentor.exe" ]] || { echo "gói desktop thiếu Mentor.exe" >&2; exit 1; }
+    WEB_URL=""
+    publish_app "$id" "$name" "$version" "$pkg" "Mentor.exe" "" "$summary" education "katD2707" \
+      "$license" "$source" "false" "$client"
+  fi
+  rm -rf "$pkg"
+  mkdir -p "$pkg"
+  WEB_URL="$back/api/auth/feco/login?return=$front"
+  "$PY" -I -c 'import json,sys; json.dump({"name": sys.argv[1], "url": sys.argv[2]}, open(sys.argv[3], "w", encoding="utf-8"), ensure_ascii=False)' \
+    "$name" "$WEB_URL" "$pkg/webapp.json"
+  printf 'Mentor: %s\nGói này chỉ chứa thông tin app web; ứng dụng chạy trong trình duyệt.\n' "$source" > "$pkg/NOTICE.txt"
+  publish_app "$id" "$name" "$version" "$pkg" "webapp.json" "" "$summary" education "katD2707" \
+    "$license" "$source" "false" "$client"
+  WEB_URL=""
+  cat >&2 <<ENVEOF
+
+Đã đưa Mentor vào kho TUF và danh mục dev. Chạy gateway Mentor (đã áp bản vá) với các biến sau
+(client secret nằm trong $secret_file, không commit):
+  MENTOR_ENV=dev
+  PUBLIC_BASE_URL=$back
+  WEB_ORIGIN=$front
+  FECO_ISSUER_URL=${HYDRA_PUBLIC:-http://127.0.0.1:4444}/
+  FECO_SERVER_URL=${FECO_SERVER_URL:-http://127.0.0.1:8080/}
+  FECO_CLIENT_ID=$client
+  FECO_CLIENT_SECRET=<nội dung tệp $secret_file>
+ENVEOF
+}
+
 case "${1:-}" in
   samples) samples ;;
   thesisai) thesisai ;;
+  mentor) mentor ;;
   icons) icons ;;
   github) shift; github "$@" ;;
   opensource) opensource ;;

@@ -299,6 +299,16 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
     ```
 
     Thêm `--dart-define=FECO_DEMO=true` để xem với dữ liệu mẫu, không cần máy chủ. Chi tiết trong [clients/feco-mobile/README.md](clients/feco-mobile/README.md).
+17. **Mentor**: ứng dụng học tập cho học sinh và giáo viên, có cả app web và app desktop Windows, đăng nhập bằng tài khoản F-Eco.
+
+    ```bash
+    scripts/dev-apps.sh mentor
+    ```
+
+    - Lệnh trên tạo client OAuth phía máy chủ, ký target web của Mentor và ghi danh mục. Đặt `MENTOR_DESKTOP_ZIP` tới gói `mentor-<phiên bản>-windows-x64.zip` của bản phát hành để thêm app desktop.
+    - Chạy gateway Mentor (cổng 8100) và app web (cổng 5173) theo [integrations/mentor/README.md](integrations/mentor/README.md), với các biến `FECO_*` mà lệnh trên in ra.
+    - Trong launcher: **Đồng bộ**, Cửa hàng → Mentor → **Thêm** → **Mở**. Hoặc mở `http://localhost:5173` rồi bấm "Đăng nhập bằng F-Eco".
+    - Lần đầu đăng nhập, Mentor tạo tài khoản học sinh. Giáo viên do quản trị Mentor nâng vai trò.
 
 Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/` chỉ ở bản debug; bản release bắt buộc đặt, trừ khi `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, cùng quy tắc), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
@@ -708,8 +718,8 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/f-dev` | CLI cho nhà phát triển: `f-dev validate`, `f-dev pack`, `f-dev publish` |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |
 | `infra/` | Hạ tầng dev: `docker-compose.yml`, cấu hình Kratos (schema, mẫu email) và Hydra |
-| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher; `dev-apps.sh`: đưa app mẫu, app mã nguồn mở từ GitHub và app web ThesisAI vào kho dev |
-| `integrations/` | Tích hợp app bên ngoài: `thesisai/` (bản vá "Đăng nhập bằng F-Eco" cho ThesisAI, hướng dẫn, nguồn gốc) |
+| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher; `dev-apps.sh`: đưa app mẫu, app mã nguồn mở từ GitHub, app web ThesisAI và Mentor vào kho dev |
+| `integrations/` | Tích hợp app bên ngoài: `thesisai/` (bản vá "Đăng nhập bằng F-Eco" cho ThesisAI, hướng dẫn, nguồn gốc); `mentor/` (bản vá "Đăng nhập bằng F-Eco" cho Mentor, script dựng app desktop, hướng dẫn, nguồn gốc) |
 | `docs/security/` | Quy trình xử lý sự cố, quản lý khóa TUF, biên bản diễn tập |
 | `third_party/` | Khai báo license và ngoại lệ đã duyệt |
 | `openspec/` | Yêu cầu, thiết kế, kế hoạch |

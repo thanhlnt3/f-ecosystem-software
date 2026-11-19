@@ -1,5 +1,22 @@
 # Nhật ký thay đổi
 
+## 1.11.0 (19/11/2026)
+
+Thay đổi OpenSpec `mentor-integration`: Mentor trong F-Eco.
+
+- **Mentor** (https://github.com/katD2707/agent-mentor-maximum-experience), ứng dụng học tập cho học sinh từ lớp 1 tới đại học và cho giáo viên. Mentor vào F-Store và F-Launcher dưới hai dạng:
+  - app web (mọi máy, kể cả F-Launcher di động);
+  - app desktop Windows.
+- **Đăng nhập Mentor bằng tài khoản F-Eco** (`integrations/mentor/`, bản vá cho gateway và app Mentor):
+  - OIDC authorization code + PKCE, client phía máy chủ, thư viện Authlib;
+  - chỉ quay về địa chỉ app được phép, trả mã dùng một lần sống 120 giây; token phiên không nằm trong địa chỉ;
+  - lần đầu đăng nhập tạo tài khoản học sinh; giáo viên do quản trị Mentor nâng vai trò (`set-role`);
+  - đăng nhập bằng mật khẩu của Mentor vẫn giữ.
+- **`scripts/dev-apps.sh mentor`**: client OAuth, target web (mở thẳng đăng nhập F-Eco), target desktop khi có `MENTOR_DESKTOP_ZIP`, logo, danh mục F-Store.
+- **CI và bản phát hành**:
+  - job `mentor-desktop` lấy Mentor đúng commit, áp bản vá, chạy pytest và vitest của Mentor, rồi dựng app desktop bằng Tauri;
+  - bản phát hành kèm `mentor-<phiên bản>-windows-x64.zip`.
+
 ## 1.10.0 (17/11/2026)
 
 Thay đổi OpenSpec `mobile-launcher`: F-Launcher trên điện thoại.

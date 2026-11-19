@@ -1,0 +1,393 @@
+diff --git a/apps/app/src/api/http.ts b/apps/app/src/api/http.ts
+index 1e9a97f..0e023b1 100644
+--- a/apps/app/src/api/http.ts
++++ b/apps/app/src/api/http.ts
+@@ -21,7 +21,7 @@ export async function request<T>(method: string, path: string, opts: { token?: s
+     let code: ApiErrorCode = res.status === 401 ? "unauthorized" : res.status === 404 ? "not_found" : "unknown";
+     try {
+       const j = (await res.json()) as { error?: string };
+-      if (j.error === "invalid_credentials" || j.error === "role_mismatch" || j.error === "birth_year_locked" || j.error === "bad_request" || j.error === "bad_time" || j.error === "bedtime" || j.error === "quiet") code = j.error;
++      if (j.error === "invalid_credentials" || j.error === "role_mismatch" || j.error === "invalid_code" || j.error === "birth_year_locked" || j.error === "bad_request" || j.error === "bad_time" || j.error === "bedtime" || j.error === "quiet") code = j.error;
+     } catch {
+       /* no JSON body */
+     }
+@@ -31,6 +31,9 @@ export async function request<T>(method: string, path: string, opts: { token?: s
+   return (await res.json()) as T;
+ }
+ 
++/** Where "Sign in with F-Eco" starts: the gateway sends the browser to F-Eco and back to `returnTo`. */
++export const fecoLoginUrl = (returnTo: string) => `${API_BASE}/auth/feco/login?return=${encodeURIComponent(returnTo)}`;
++
+ export const qs = (o: Record<string, string | undefined>) => {
+   const p = new URLSearchParams();
+   for (const [k, v] of Object.entries(o)) if (v) p.set(k, v);
+@@ -57,6 +60,8 @@ const catalogCache = new Map<string, { etag: string; body: Catalog }>();
+ export const httpApi: Api = {
+   login: (username, password, role) => request<LoginResult>("POST", "/auth/login", { body: { username, password, role } }),
+   logout: (token) => request<void>("POST", "/auth/logout", { token }),
++  fecoStatus: () => request<{ enabled: boolean }>("GET", "/auth/feco/status"),
++  fecoExchange: (code) => request<LoginResult>("POST", "/auth/feco/exchange", { body: { code } }),
+   getMe: (token) => request<User>("GET", "/me", { token }),
+   patchMe: (token, patch) => request<User>("PATCH", "/me", { token, body: patch }),
+   putQuiet: (token, until) => request<{ until: string | null }>("PUT", "/me/quiet", { token, body: { until } }),
+diff --git a/apps/app/src/api/index.ts b/apps/app/src/api/index.ts
+index 32b581b..dd79cda 100644
+--- a/apps/app/src/api/index.ts
++++ b/apps/app/src/api/index.ts
+@@ -1,6 +1,7 @@
+ import { mockTeacherApi } from "./mock-teacher-api";
+ import { httpTeacherApi } from "./teacher-http";
+ import { httpApi } from "./http";
++export { fecoLoginUrl } from "./http";
+ import { mockApi, mockUserOf } from "./mock";
+ import type { Api } from "./types";
+ import { setPracticeApi } from "./practice";
+diff --git a/apps/app/src/api/mock.ts b/apps/app/src/api/mock.ts
+index 15b212a..18f8319 100644
+--- a/apps/app/src/api/mock.ts
++++ b/apps/app/src/api/mock.ts
+@@ -72,6 +72,15 @@ export const mockApi: Api = {
+   async logout() {
+     await delay();
+   },
++  async fecoStatus() {
++    return { enabled: false };
++  },
++  async fecoExchange(code) {
++    await delay();
++    const hit = load()["hocsinh"];
++    if (code !== "mock-feco" || !hit) throw new ApiError(401, "invalid_code");
++    return { token: `mock-${hit.user.id}`, user: fresh(hit).user };
++  },
+   async getMe(token) {
+     await delay();
+     return byToken(load(), token).user;
+diff --git a/apps/app/src/api/types.ts b/apps/app/src/api/types.ts
+index 7d63237..b9458a2 100644
+--- a/apps/app/src/api/types.ts
++++ b/apps/app/src/api/types.ts
+@@ -31,6 +31,10 @@ export interface LoginResult {
+ export interface Api {
+   login(username: string, password: string, role: Role): Promise<LoginResult>;
+   logout(token: string): Promise<void>;
++  /** GET /auth/feco/status: whether "Sign in with F-Eco" is offered. */
++  fecoStatus(): Promise<{ enabled: boolean }>;
++  /** POST /auth/feco/exchange: the one-time code from the F-Eco callback -> a session like `login`. */
++  fecoExchange(code: string): Promise<LoginResult>;
+   getMe(token: string): Promise<User>;
+   patchMe(token: string, patch: UserPatch): Promise<User>;
+   putQuiet(token: string, until: string | null): Promise<{ until: string | null }>;
+@@ -71,7 +75,7 @@ export interface Api {
+   pushSubscribe(token: string, subscription: PushSubscriptionJson): Promise<void>;
+ }
+ 
+-export type ApiErrorCode = "invalid_credentials" | "role_mismatch" | "unauthorized" | "not_found" | "coming_soon" | "birth_year_locked" | "bad_request" | "bad_time" | "bedtime" | "quiet" | "network" | "unknown";
++export type ApiErrorCode = "invalid_credentials" | "role_mismatch" | "invalid_code" | "unauthorized" | "not_found" | "coming_soon" | "birth_year_locked" | "bad_request" | "bad_time" | "bedtime" | "quiet" | "network" | "unknown";
+ 
+ export class ApiError extends Error {
+   constructor(
+diff --git a/apps/app/src/feco-login.test.tsx b/apps/app/src/feco-login.test.tsx
+new file mode 100644
+index 0000000..7d0e538
+--- /dev/null
++++ b/apps/app/src/feco-login.test.tsx
+@@ -0,0 +1,84 @@
++// "Sign in with F-Eco" (F-Eco change `mentor-integration`): the button, the one-time code on the way back, errors.
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { render, screen, waitFor } from "@testing-library/react";
++import userEvent from "@testing-library/user-event";
++import { MemoryRouter } from "react-router-dom";
++import i18n from "./i18n";
++import { App } from "./App";
++import { AuthProvider, takeFecoReturn } from "./state/auth";
++import { api, fecoLoginUrl } from "./api";
++
++function renderApp() {
++  return render(
++    <MemoryRouter>
++      <AuthProvider>
++        <App />
++      </AuthProvider>
++    </MemoryRouter>,
++  );
++}
++
++function at(search: string) {
++  window.history.replaceState(null, "", "/" + search + "#/");
++}
++
++describe("sign in with F-Eco", () => {
++  beforeEach(async () => {
++    await i18n.changeLanguage("vi");
++    localStorage.clear();
++  });
++  afterEach(() => {
++    vi.restoreAllMocks();
++    at("");
++  });
++
++  it("shows the button only when the gateway has F-Eco sign-in on", async () => {
++    renderApp();
++    await screen.findByRole("radiogroup");
++    expect(screen.queryByRole("button", { name: "Đăng nhập bằng F-Eco" })).toBeNull();
++  });
++
++  it("the button sends the browser to the gateway with this app's origin to come back to", async () => {
++    vi.spyOn(api, "fecoStatus").mockResolvedValue({ enabled: true });
++    const assign = vi.fn();
++    vi.spyOn(window, "location", "get").mockReturnValue({ ...window.location, origin: "http://tauri.localhost", assign } as Location);
++    const ui = userEvent.setup();
++    renderApp();
++    await ui.click(await screen.findByRole("button", { name: "Đăng nhập bằng F-Eco" }));
++    expect(assign).toHaveBeenCalledWith(fecoLoginUrl("http://tauri.localhost"));
++    expect(fecoLoginUrl("http://tauri.localhost")).toMatch(/\/auth\/feco\/login\?return=http%3A%2F%2Ftauri\.localhost$/);
++  });
++
++  it("trades the one-time code for a session and removes it from the address bar", async () => {
++    at("?feco_code=mock-feco&x=1");
++    const exchange = vi.spyOn(api, "fecoExchange");
++    renderApp();
++    await waitFor(() => expect(screen.queryByRole("radiogroup")).toBeNull());
++    expect(exchange).toHaveBeenCalledWith("mock-feco");
++    expect(window.location.search).toBe("?x=1");
++    expect(localStorage.length).toBeGreaterThan(0); // the session token is saved like a password login
++  });
++
++  it("a used or expired code shows a message on the sign-in screen", async () => {
++    at("?feco_code=used-code");
++    renderApp();
++    expect(await screen.findByRole("alert")).toHaveTextContent("Mã đăng nhập F-Eco đã hết hạn. Thử lại nhé.");
++    expect(window.location.search).toBe("");
++  });
++
++  it("an error from the gateway is shown; an unknown one falls back to the generic message", async () => {
++    at("?feco_error=feco_denied");
++    const { unmount } = renderApp();
++    expect(await screen.findByRole("alert")).toHaveTextContent("Bạn đã hủy đăng nhập bằng F-Eco.");
++    unmount();
++    at("?feco_error=<script>");
++    renderApp();
++    expect(await screen.findByRole("alert")).toHaveTextContent("Đăng nhập bằng F-Eco không thành công. Thử lại nhé.");
++  });
++
++  it("takeFecoReturn leaves other addresses alone", () => {
++    at("?x=1");
++    expect(takeFecoReturn()).toEqual({ code: null, error: null });
++    expect(window.location.search).toBe("?x=1");
++  });
++});
+diff --git a/apps/app/src/i18n/en.ts b/apps/app/src/i18n/en.ts
+index 1212bcf..ad26ffc 100644
+--- a/apps/app/src/i18n/en.ts
++++ b/apps/app/src/i18n/en.ts
+@@ -19,6 +19,18 @@ export const en: Messages = {
+       network: "Can't reach the server. Try again in a moment.",
+       unknown: "Something went wrong. Try again in a moment.",
+     },
++    feco: {
++      button: "Sign in with F-Eco",
++      errors: {
++        feco_denied: "You cancelled signing in with F-Eco.",
++        feco_failed: "Signing in with F-Eco didn't work. Try again.",
++        feco_state: "The F-Eco sign-in expired. Try again.",
++        feco_disabled: "This Mentor server hasn't turned on F-Eco sign-in.",
++        feco_unavailable: "Can't reach F-Eco. Try again in a moment.",
++        invalid_code: "The F-Eco sign-in code expired. Try again.",
++        network: "Can't reach the server. Try again in a moment.",
++      },
++    },
+   },
+   first: {
+     chooseLanguage: "Choose a language",
+diff --git a/apps/app/src/i18n/vi.ts b/apps/app/src/i18n/vi.ts
+index e4199c1..b7eb756 100644
+--- a/apps/app/src/i18n/vi.ts
++++ b/apps/app/src/i18n/vi.ts
+@@ -17,6 +17,18 @@ export const vi = {
+       network: "Không kết nối được máy chủ. Thử lại sau nhé.",
+       unknown: "Có lỗi xảy ra. Thử lại sau nhé.",
+     },
++    feco: {
++      button: "Đăng nhập bằng F-Eco",
++      errors: {
++        feco_denied: "Bạn đã hủy đăng nhập bằng F-Eco.",
++        feco_failed: "Đăng nhập bằng F-Eco không thành công. Thử lại nhé.",
++        feco_state: "Phiên đăng nhập F-Eco đã hết hạn. Thử lại nhé.",
++        feco_disabled: "Máy chủ Mentor chưa bật đăng nhập bằng F-Eco.",
++        feco_unavailable: "Không kết nối được F-Eco. Thử lại sau nhé.",
++        invalid_code: "Mã đăng nhập F-Eco đã hết hạn. Thử lại nhé.",
++        network: "Không kết nối được máy chủ. Thử lại sau nhé.",
++      },
++    },
+   },
+   first: {
+     chooseLanguage: "Chọn ngôn ngữ",
+diff --git a/apps/app/src/screens/Login.tsx b/apps/app/src/screens/Login.tsx
+index 9063bc2..41e5f81 100644
+--- a/apps/app/src/screens/Login.tsx
++++ b/apps/app/src/screens/Login.tsx
+@@ -1,6 +1,6 @@
+-import { useRef, useState, type FormEvent } from "react";
++import { useEffect, useRef, useState, type FormEvent } from "react";
+ import { useTranslation } from "react-i18next";
+-import { ApiError, type Role } from "../api";
++import { api, ApiError, fecoLoginUrl, type Role } from "../api";
+ import { useAuth } from "../state/auth";
+ import { setLang } from "../i18n";
+ import { Icon } from "../components/Icon";
+@@ -10,7 +10,15 @@ type ErrKey = "noRole" | "role_mismatch" | "invalid_credentials" | "network" | "
+ 
+ export function Login() {
+   const { t, i18n } = useTranslation();
+-  const { login } = useAuth();
++  const { login, fecoError } = useAuth();
++  const [feco, setFeco] = useState(false);
++  useEffect(() => {
++    let alive = true;
++    api.fecoStatus().then((s) => alive && setFeco(s.enabled), () => undefined);
++    return () => {
++      alive = false;
++    };
++  }, []);
+   const [role, setRole] = useState<Role | null>(null);
+   const [account, setAccount] = useState("");
+   const [password, setPassword] = useState("");
+@@ -148,6 +156,23 @@ export function Login() {
+         <button className="btn btn-primary btn-big submit" type="submit" disabled={busy}>
+           {t("login.submit")}
+         </button>
++
++        {fecoError && !error && (
++          <div className="alert" role="alert">
++            <Icon name="x" />
++            <span>{t(`login.feco.errors.${fecoError}`, { defaultValue: t("login.feco.errors.feco_failed") })}</span>
++          </div>
++        )}
++
++        {feco && (
++          <button
++            type="button"
++            className="btn btn-big feco"
++            onClick={() => window.location.assign(fecoLoginUrl(window.location.origin))}
++          >
++            {t("login.feco.button")}
++          </button>
++        )}
+       </form>
+     </div>
+   );
+diff --git a/apps/app/src/state/auth.tsx b/apps/app/src/state/auth.tsx
+index faa4bdc..3dc1737 100644
+--- a/apps/app/src/state/auth.tsx
++++ b/apps/app/src/state/auth.tsx
+@@ -1,5 +1,5 @@
+ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+-import { api, ApiError, hasMediaToken, localTokenStorage, setMediaToken, setMediaTokenSource, type Role, type User, type UserPatch } from "../api";
++import { api, ApiError, hasMediaToken, localTokenStorage, setMediaToken, setMediaTokenSource, type LoginResult, type Role, type User, type UserPatch } from "../api";
+ import { setLang } from "../i18n";
+ import { flushOutbox } from "../lib/enrollments";
+ import { bandForBirthYear } from "../lib/age";
+@@ -7,12 +7,45 @@ import type { AgeBand } from "../api/types";
+ 
+ type Status = "loading" | "anon" | "authed";
+ 
++const FECO_ERRORS = ["feco_denied", "feco_failed", "feco_state", "feco_disabled", "feco_unavailable", "invalid_code"];
++
++/** `?feco_code=` / `?feco_error=` that the gateway appends when F-Eco sends the browser back. Both are removed
++ * from the address bar at once, so the one-time code is not kept in history or bookmarks. */
++export function takeFecoReturn(): { code: string | null; error: string | null } {
++  const params = new URLSearchParams(window.location.search);
++  const code = params.get("feco_code");
++  const error = params.get("feco_error");
++  if (code === null && error === null) return { code: null, error: null };
++  params.delete("feco_code");
++  params.delete("feco_error");
++  const rest = params.toString();
++  try {
++    window.history.replaceState(window.history.state, "", window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash);
++  } catch {
++    /* keep going: the code works once anyway */
++  }
++  return { code, error: error === null ? null : FECO_ERRORS.includes(error) ? error : "feco_failed" };
++}
++
++type FecoReturn = { code: string | null; error: string | null; result?: Promise<LoginResult> };
++let fecoPending: FecoReturn | null = null;
++
++/** The F-Eco return of this page load, read and traded once: the start-up effect may run twice (StrictMode,
++ * remounts) and a code only works once. Cleared by the run that applies it. */
++function fecoReturnOnce(): FecoReturn | null {
++  const r = takeFecoReturn();
++  if (r.code !== null || r.error !== null) fecoPending = { ...r, result: r.code ? api.fecoExchange(r.code) : undefined };
++  return fecoPending;
++}
++
+ interface AuthValue {
+   status: Status;
+   user: User | null;
+   /** Session token (for course/media calls). */
+   token: string | null;
+   login(username: string, password: string, role: Role): Promise<User>;
++  /** Error code of the last "Sign in with F-Eco" attempt (from the return URL), shown on the sign-in screen. */
++  fecoError: string | null;
+   logout(): Promise<void>;
+   updateMe(patch: UserPatch): Promise<void>;
+   setQuiet(until: string | null): Promise<void>;
+@@ -47,6 +80,7 @@ export function AuthProvider({ children, storage = localTokenStorage }: { childr
+   const [tick, setTick] = useState(0);
+   const bandRef = useRef<AgeBand | null>(null);
+   const [token, setToken] = useState<string | null>(null);
++  const [fecoError, setFecoError] = useState<string | null>(null);
+ 
+   // The band comes from the birth year and today's date, so it is worked out here on every launch (the server
+   // value is only the fallback) and re-checked on focus and every few minutes: the density switches on its own
+@@ -79,6 +113,28 @@ export function AuthProvider({ children, storage = localTokenStorage }: { childr
+   useEffect(() => {
+     let alive = true;
+     (async () => {
++      const feco = fecoReturnOnce();
++      if (feco?.result) {
++        try {
++          const res = await feco.result;
++          if (!alive) return;
++          fecoPending = null;
++          await api.mediaToken(res.token).then(setMediaToken, () => undefined);
++          await storage.set(res.token);
++          setToken(res.token);
++          setUser(res.user);
++          setStatus("authed");
++          return;
++        } catch (e) {
++          if (!alive) return;
++          fecoPending = null;
++          setFecoError(e instanceof ApiError && e.code === "network" ? "network" : "invalid_code");
++        }
++      } else if (feco?.error) {
++        if (!alive) return;
++        fecoPending = null;
++        setFecoError(feco.error);
++      }
+       const saved = await storage.get();
+       if (!saved) return alive && setStatus("anon");
+       try {
+@@ -179,7 +235,7 @@ export function AuthProvider({ children, storage = localTokenStorage }: { childr
+     [token],
+   );
+ 
+-  const value = useMemo(() => ({ status, user, token, login, logout, updateMe, setQuiet }), [status, user, token, login, logout, updateMe, setQuiet]);
++  const value = useMemo(() => ({ status, user, token, login, fecoError, logout, updateMe, setQuiet }), [status, user, token, login, fecoError, logout, updateMe, setQuiet]);
+   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+ }
+ 
+diff --git a/apps/app/src/styles/screens.css b/apps/app/src/styles/screens.css
+index c87b9ee..f2bffdc 100644
+--- a/apps/app/src/styles/screens.css
++++ b/apps/app/src/styles/screens.css
+@@ -36,6 +36,7 @@
+ .alert { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 16px; background: var(--do-soft); color: var(--ink); }
+ .alert svg { flex: none; width: 22px; height: 22px; color: var(--do); margin-top: 1px; }
+ .submit { width: 100%; }
++.oli .feco { width: 100%; margin-top: 10px; border: 1.5px solid var(--ink-3); background: transparent; color: var(--ink); }
+ 
+ /* ---------- First run (hs-02) ---------- */
+ .first-stage { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px 48px; }
