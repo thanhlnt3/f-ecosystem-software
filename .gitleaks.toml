@@ -1,0 +1,13 @@
+# Cấu hình gitleaks của job CI `secrets` (tasks.md 1.3): luật mặc định của gitleaks, cộng ngoại lệ
+# cho tệp kiểm thử của bộ quét mã nguồn (thay đổi chat-and-source-scan). Các tệp này ghép khóa giả
+# lúc chạy để thử luật phát hiện bí mật; chúng không chứa bí mật thật.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Khóa giả của test feco-codescan và E2E quét mã nguồn"
+paths = [
+    '''crates/feco-codescan/src/rules\.rs''',
+    '''crates/feco-codescan/tests/scan\.rs''',
+    '''services/feco-server/tests/e2e_source_scan\.rs''',
+]
