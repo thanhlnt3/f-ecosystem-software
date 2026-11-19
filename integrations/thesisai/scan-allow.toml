@@ -1,0 +1,6 @@
+# Phát hiện của feco-codescan trong ThesisAI (thesisai-fe và thesisai-be) đã được người xem xét
+# (xem SCAN.md). scripts/scan-integration.sh và job CI integration-scan dùng tệp này cho cả hai repo.
+# Mỗi mục: rule (tên luật), path (glob theo đường dẫn trong repo), reason (bắt buộc).
+# Chỉ ghi phát hiện sai (không phải vấn đề thật). Lỗ hổng thư viện thật không được ghi vào đây.
+#
+# Lần quét 2026-11-19: không có phát hiện sai nào cần cho phép.

@@ -1,0 +1,14 @@
+# Phát hiện của feco-codescan trong Mentor đã được người xem xét (xem SCAN.md).
+# scripts/scan-integration.sh, job CI integration-scan và build-desktop.sh dùng tệp này.
+# Mỗi mục: rule (tên luật), path (glob theo đường dẫn trong repo), reason (bắt buộc).
+# Chỉ ghi phát hiện sai (không phải vấn đề thật). Lỗ hổng thư viện thật không được ghi vào đây.
+
+[[allow]]
+rule = "suspicious.download_exec"
+path = "infra/linux-app.Dockerfile"
+reason = "Dòng 24 cài Rust bằng trình cài chính thức qua HTTPS (curl -fsSL https://sh.rustup.rs | sh) trong image dựng bản Linux; chỉ chạy lúc dựng image, không nằm trong app. F-Eco dựng Mentor bằng build-desktop.sh, không dùng Dockerfile này."
+
+[[allow]]
+rule = "suspicious.download_exec"
+path = "README.md"
+reason = "Hướng dẫn cài uv bằng trình cài chính thức của Astral (irm https://astral.sh/uv/install.ps1 | iex) trong tài liệu cho người dùng, không phải mã được chạy."

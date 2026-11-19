@@ -3,6 +3,8 @@
 #
 #   integrations/mentor/build-desktop.sh <thư-mục-ra> <phiên-bản-F-Eco>
 #
+# 0. Quét Mentor tại đúng commit bằng scripts/scan-integration.sh (spec source-scan); dừng nếu có
+#    phát hiện critical chưa được cho phép trong scan-allow.toml.
 # 1. Tải Mentor đúng commit trong MENTOR_COMMIT, áp mentor-gateway.patch và mentor-app.patch.
 # 2. Chạy test của gateway (pytest) và của app (vitest), trừ khi MENTOR_SKIP_TESTS=1.
 # 3. Dựng app Tauri (--no-bundle) với VITE_API_BASE (mặc định http://localhost:8100/api) và
@@ -22,6 +24,9 @@ work="${MENTOR_WORK:-${RUNNER_TEMP:-/tmp}/mentor-src}"
 command -v cygpath >/dev/null && work="$(cygpath -u "$work")"
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
+
+# Quét trước khi dựng: set -e dừng script khi quét thất bại (mã 2: có phát hiện critical mới).
+"$here/../../scripts/scan-integration.sh" "$repo" "$commit" "$here/scan-allow.toml"
 
 rm -rf "$work"
 mkdir -p "$work"
