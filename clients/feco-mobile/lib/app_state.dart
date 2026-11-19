@@ -1,10 +1,11 @@
-/// Trạng thái của app: đăng nhập, danh mục, ví, thư viện, thông báo, ngôn ngữ.
+/// Trạng thái của app: đăng nhập, danh mục, ví, thư viện, thông báo, tin nhắn, ngôn ngữ.
 library;
 
 import 'package:flutter/foundation.dart';
 
 import 'api.dart';
 import 'auth.dart';
+import 'chat.dart';
 import 'config.dart';
 import 'i18n.dart';
 import 'models.dart';
@@ -85,6 +86,39 @@ class AppState extends ChangeNotifier {
       busy = false;
       notifyListeners();
     }
+    // Tin nhắn tải riêng: lỗi của chat không che các tab khác.
+    if (auth.signedIn) {
+      await refreshChat();
+    } else {
+      chatUnread = 0;
+      conversations = const [];
+      chatError = null;
+      notifyListeners();
+    }
+  }
+
+  /// Tổng số tin chưa đọc (huy hiệu của tab Tin nhắn).
+  int chatUnread = 0;
+  List<Conversation> conversations = const [];
+
+  /// Mã lỗi khi tải tin nhắn (hiện bằng `chatErrorMessage`).
+  String? chatError;
+
+  /// Số chưa đọc và danh sách hội thoại: khi mở app, kéo làm mới, rời một hội thoại (C3).
+  Future<void> refreshChat() async {
+    if (!auth.signedIn) return;
+    try {
+      final results = await Future.wait([
+        backend.chatUnread(),
+        backend.conversations(),
+      ]);
+      chatUnread = results[0] as int;
+      conversations = results[1] as List<Conversation>;
+      chatError = null;
+    } on Exception catch (e) {
+      chatError = chatErrorCode(e);
+    }
+    notifyListeners();
   }
 
   Future<void> signIn() async {

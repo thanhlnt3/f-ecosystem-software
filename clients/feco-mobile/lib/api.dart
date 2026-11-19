@@ -34,7 +34,35 @@ abstract class Backend {
 
   /// Logo của app (null: dùng chữ cái đầu).
   Uri? iconUrl(String appId);
+
+  // Tin nhắn (`/v1/chat`, design C4 của thay đổi chat-and-source-scan). Lỗi là [ApiException]
+  // với mã của máy chủ (`chat_blocked`, `chat_too_long`...).
+
+  /// Tổng số tin chưa đọc.
+  Future<int> chatUnread();
+
+  /// Hội thoại, mới nhất trước.
+  Future<List<Conversation>> conversations();
+
+  /// Tin có `id` lớn hơn [after], cũ trước; tối đa [limit] (máy chủ giới hạn 200).
+  Future<List<ChatMessage>> messages(
+    String conversation, {
+    int after = 0,
+    int limit = chatPageLimit,
+  });
+
+  /// Gửi tin; trả tin đã lưu.
+  Future<ChatMessage> sendMessage(String conversation, String body);
+
+  /// Đánh dấu đã đọc tới tin [upTo].
+  Future<void> markRead(String conversation, int upTo);
 }
+
+/// Số tin tối đa mỗi lần tải (C4).
+const chatPageLimit = 200;
+
+/// Mã hội thoại không an toàn để đặt vào đường dẫn: coi như không tìm thấy.
+const _badConversation = ApiException(404, 'chat_not_found', '', '');
 
 class HttpBackend implements Backend {
   HttpBackend(this.config, this.auth, {http.Client? client})
@@ -165,4 +193,55 @@ class HttpBackend implements Backend {
   @override
   Uri? iconUrl(String appId) =>
       _api('store/${Uri.encodeComponent(appId)}/icon.png');
+
+  String _conv(String id) {
+    if (!safeChatId(id)) throw _badConversation;
+    return 'v1/chat/conversations/$id';
+  }
+
+  @override
+  Future<int> chatUnread() async {
+    final v = _json(await _authed('GET', 'v1/chat/unread'))['unread'];
+    return v is num && v > 0 ? v.toInt() : 0;
+  }
+
+  @override
+  Future<List<Conversation>> conversations() async => Conversation.listFromJson(
+    _json(await _authed('GET', 'v1/chat/conversations')),
+  );
+
+  @override
+  Future<List<ChatMessage>> messages(
+    String conversation, {
+    int after = 0,
+    int limit = chatPageLimit,
+  }) async {
+    final a = after < 0 ? 0 : after;
+    final l = limit.clamp(1, chatPageLimit);
+    return ChatMessage.listFromJson(
+      _json(
+        await _authed(
+          'GET',
+          '${_conv(conversation)}/messages?after=$a&limit=$l',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Future<ChatMessage> sendMessage(String conversation, String body) async {
+    final r = await _authed(
+      'POST',
+      '${_conv(conversation)}/messages',
+      body: {'body': body},
+    );
+    final m = ChatMessage.tryFromJson(_json(r));
+    if (m == null) throw const FormatException('chat: bad message');
+    return m;
+  }
+
+  @override
+  Future<void> markRead(String conversation, int upTo) async {
+    await _authed('POST', '${_conv(conversation)}/read', body: {'up_to': upTo});
+  }
 }

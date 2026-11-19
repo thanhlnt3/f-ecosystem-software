@@ -338,6 +338,15 @@ pub fn tile_color(app_id: &str) -> [u8; 3] {
     TILE_COLORS[(hash % TILE_COLORS.len() as u32) as usize]
 }
 
+/// Chữ của huy hiệu số ở thanh bên: không có khi `n` = 0, "9+" khi lớn hơn 9.
+pub fn badge_text(n: usize) -> Option<String> {
+    match n {
+        0 => None,
+        1..=9 => Some(n.to_string()),
+        _ => Some("9+".into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
