@@ -211,6 +211,10 @@ fn e2e_ready() -> bool {
                 let _ = MOMO.set(momo);
                 let mut vars: HashMap<String, String> = [
                     ("FECO_ENV", "dev".to_owned()),
+                    // Mọi test gửi từ 127.0.0.1 tới cùng một máy chủ: hạn mức theo IP (1.200/phút)
+                    // làm bộ test chạy nhanh trên CI bị 429. Giới hạn theo IP có unit test riêng
+                    // trong lib.rs; hạn mức theo người dùng và theo app giữ mặc định.
+                    ("FECO_RATE_IP_PER_MIN", "100000".to_owned()),
                     ("FECO_LAUNCHER_CLIENT_ID", launcher.clone()),
                     ("FECO_MOBILE_CLIENT_ID", mobile.clone()),
                     ("FECO_DNS_SERVERS", dns.to_string()),
