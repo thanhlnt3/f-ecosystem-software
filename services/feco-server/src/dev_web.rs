@@ -4,6 +4,8 @@
 //! API cho CLI `f-dev` (token nhà phát triển `Authorization: Bearer fdev_...`):
 //! - `POST /v1/dev/apps/{app}/versions`: thân là `f-app.toml` → phiên bản nháp.
 //! - `PUT /v1/dev/versions/{id}/packages/{platform}`: thân là gói zip, header `X-Feco-Sha256`.
+//! - `PUT /v1/dev/versions/{id}/source`: thân là zip mã nguồn (tối đa 200 MB), header
+//!   `X-Feco-Sha256` (thay đổi chat-and-source-scan).
 //! - `POST /v1/dev/versions/{id}/submit`: gửi duyệt → trạng thái `pending_review`.
 //!
 //! API cho launcher và app: `GET /v1/catalog/{id}/update` (phát hành dần),
@@ -93,6 +95,8 @@ pub struct VersionView {
     pub released: bool,
     pub note: String,
     pub appealable: bool,
+    /// Báo cáo quét mã nguồn (thay đổi chat-and-source-scan).
+    pub source: Option<crate::source_scan::SourceView>,
 }
 
 #[derive(Template)]
@@ -185,7 +189,8 @@ fn status_label(lang: Lang, status: &str) -> String {
 }
 
 fn ok_message(lang: Lang, key: Option<&str>) -> Vec<Msg> {
-    const KEYS: [&str; 13] = [
+    const KEYS: [&str; 14] = [
+        "source",
         "price",
         "role_requested",
         "appealed",
@@ -343,7 +348,7 @@ async fn render_app(
         let app = dev::app(&state.db, m, app_id).await?;
         let redirects = dev::redirect_uris(state, &app).await?.join("\n");
         let metrics = dev::metrics(&state.db, app_id).await?;
-        let versions = dev::versions(&state.db, app_id)
+        let mut versions: Vec<VersionView> = dev::versions(&state.db, app_id)
             .await?
             .into_iter()
             .map(|v| VersionView {
@@ -372,8 +377,14 @@ async fn render_app(
                 platforms: v.platforms.join(", "),
                 version: v.version,
                 note: v.review_note.unwrap_or_default(),
+                source: None,
             })
             .collect();
+        for v in &mut versions {
+            if let Ok(id) = v.id.parse() {
+                v.source = crate::source_scan::view(&state.db, lang, id).await?;
+            }
+        }
         Ok(AppPage {
             i18n: lang,
             messages,
@@ -942,6 +953,17 @@ pub async fn version_action(
                 crate::review::appeal(&state.db, &m, id, form.get("message")).await?;
                 "appealed"
             }
+            "source-git" => {
+                crate::source_scan::set_git(
+                    &state.db,
+                    &m,
+                    id,
+                    form.get("repository"),
+                    form.get("commit"),
+                )
+                .await?;
+                "source"
+            }
             _ => {
                 return Err(DevError::Problem(Problem {
                     status: StatusCode::NOT_FOUND,
@@ -968,9 +990,18 @@ struct Incoming {
     file: tokio::fs::File,
     hasher: sha2::Sha256,
     size: u64,
+    /// Mã nguồn (giới hạn 200 MB) thay vì gói (2 GB).
+    source: bool,
 }
 
 impl Incoming {
+    /// File tạm cho mã nguồn: chặn ở 200 MB.
+    async fn create_source(state: &AppState) -> DevResult<Self> {
+        let mut incoming = Self::create(state).await?;
+        incoming.source = true;
+        Ok(incoming)
+    }
+
     async fn create(state: &AppState) -> DevResult<Self> {
         let dir = state.package_dir.join(".incoming");
         tokio::fs::create_dir_all(&dir)
@@ -985,11 +1016,20 @@ impl Incoming {
             file,
             hasher: sha2::Sha256::new(),
             size: 0,
+            source: false,
         })
     }
 
     async fn push(&mut self, chunk: &[u8]) -> DevResult<()> {
         self.size += chunk.len() as u64;
+        if self.source && self.size > crate::source_scan::MAX_SOURCE_BYTES {
+            return Err(DevError::Problem(Problem {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                code: "source_too_large",
+                vi: "Mã nguồn vượt quá 200 MB.".into(),
+                en: "The source code is larger than 200 MB.".into(),
+            }));
+        }
         if self.size > dev::MAX_PACKAGE_BYTES {
             return Err(DevError::Problem(Problem {
                 status: StatusCode::PAYLOAD_TOO_LARGE,
@@ -1094,6 +1134,85 @@ pub async fn upload_package(
     .await;
     match result {
         Ok(()) => see_other(&format!("/developer/apps/{app_id}?ok=package")),
+        Err(e) => {
+            let (status, msg) = explain(lang, e);
+            render_app(&state, lang, &headers, &m, &app_id, vec![msg], None, status).await
+        }
+    }
+}
+
+/// POST /developer/versions/{id}/source (multipart: feco_csrf, file): tải `source.zip`.
+pub async fn upload_source(
+    State(state): State<Arc<AppState>>,
+    lang: Lang,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    mut multipart: Multipart,
+) -> Response {
+    let (_, m) = match member(&state, lang, &headers, "/developer").await {
+        Ok(x) => x,
+        Err(r) => return *r,
+    };
+    let app_id = match dev::version(&state.db, &m, id).await {
+        Ok((info, _)) => info.app_id,
+        Err(e) => {
+            let (status, msg) = explain(lang, e);
+            return (status, msg.text).into_response();
+        }
+    };
+    let result: DevResult<()> = async {
+        let bad = |e: axum::extract::multipart::MultipartError| DevError::Upstream(e.to_string());
+        let (mut csrf_ok, mut stored) = (false, None);
+        while let Some(mut field) = multipart.next_field().await.map_err(bad)? {
+            match field.name().unwrap_or_default() {
+                csrf::FIELD => {
+                    csrf_ok = csrf::verify(&headers, Some(&field.text().await.map_err(bad)?))
+                }
+                "file" => {
+                    // Biểu mẫu đặt token CSRF trước file: chưa hợp lệ thì không nhận dữ liệu.
+                    if !csrf_ok {
+                        break;
+                    }
+                    let mut incoming = Incoming::create_source(&state).await?;
+                    while let Some(chunk) = field.chunk().await.map_err(bad)? {
+                        if let Err(e) = incoming.push(&chunk).await {
+                            let _ = tokio::fs::remove_file(&incoming.path).await;
+                            return Err(e);
+                        }
+                    }
+                    stored = Some(incoming.finish().await?);
+                }
+                _ => {}
+            }
+        }
+        let Some((path, sha, size)) = stored else {
+            return Err(DevError::Problem(Problem {
+                status: StatusCode::FORBIDDEN,
+                code: "csrf",
+                vi: lang.t("error.csrf").into(),
+                en: lang.t("error.csrf").into(),
+            }));
+        };
+        let result = crate::source_scan::store_upload(
+            &state,
+            &m,
+            id,
+            dev::Upload {
+                path: &path,
+                declared_sha256: None,
+                sha256: &sha,
+                size,
+            },
+        )
+        .await;
+        if result.is_err() {
+            let _ = tokio::fs::remove_file(&path).await;
+        }
+        result
+    }
+    .await;
+    match result {
+        Ok(()) => see_other(&format!("/developer/apps/{app_id}?ok=source")),
         Err(e) => {
             let (status, msg) = explain(lang, e);
             render_app(&state, lang, &headers, &m, &app_id, vec![msg], None, status).await
@@ -1246,6 +1365,61 @@ pub async fn api_package(
             &m,
             id,
             &platform,
+            dev::Upload {
+                path: &path,
+                declared_sha256: declared.as_deref(),
+                sha256: &sha,
+                size,
+            },
+        )
+        .await;
+        if result.is_err() {
+            let _ = tokio::fs::remove_file(&path).await;
+        }
+        result
+    }
+    .await;
+    match result {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => api_problem(e),
+    }
+}
+
+/// PUT /v1/dev/versions/{id}/source: thân là zip mã nguồn, header `X-Feco-Sha256`.
+pub async fn api_source(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let m = match token_member(&state, &headers).await {
+        Ok(m) => m,
+        Err(r) => return *r,
+    };
+    let declared = headers
+        .get("x-feco-sha256")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let result: DevResult<()> = async {
+        // Kiểm quyền trước khi nhận dữ liệu.
+        dev::version(&state.db, &m, id).await?;
+        let mut incoming = Incoming::create_source(&state).await?;
+        let mut stream = body.into_data_stream();
+        while let Some(chunk) = stream.next().await {
+            let pushed = match chunk {
+                Ok(c) => incoming.push(&c).await,
+                Err(e) => Err(DevError::Upstream(e.to_string())),
+            };
+            if let Err(e) = pushed {
+                let _ = tokio::fs::remove_file(&incoming.path).await;
+                return Err(e);
+            }
+        }
+        let (path, sha, size) = incoming.finish().await?;
+        let result = crate::source_scan::store_upload(
+            &state,
+            &m,
+            id,
             dev::Upload {
                 path: &path,
                 declared_sha256: declared.as_deref(),

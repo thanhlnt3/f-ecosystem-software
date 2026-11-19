@@ -4,7 +4,7 @@
 //! ```text
 //! f-dev validate --manifest f-app.toml
 //! f-dev pack     --manifest f-app.toml --package build/ [--out dist/]
-//! f-dev publish  --manifest f-app.toml --package dist/ [--server URL] [--token TOKEN]
+//! f-dev publish  --manifest f-app.toml --package dist/ [--source src/] [--server URL] [--token TOKEN]
 //! ```
 //!
 //! `--package` là một file `.zip` (khi manifest chỉ có một nền tảng), hoặc một thư mục chứa
@@ -14,6 +14,11 @@
 //! Manifest có `source` (app dựng từ mã nguồn bên ngoài, ví dụ trên GitHub) thì mỗi gói phải có
 //! file giấy phép gốc (`LICENSE*`, `COPYING*` hoặc `NOTICE*`); `pack` và `publish` từ chối gói
 //! thiếu file này.
+//!
+//! `--source <thư-mục>` (thay đổi chat-and-source-scan): nén thư mục mã nguồn (bỏ `.git`, `target`,
+//! `node_modules`, `dist`, `build`, `vendor`, `.venv`, `__pycache__`, symlink và tệp `.env` cục bộ)
+//! thành zip tối đa 200 MB rồi tải lên `PUT /v1/dev/versions/{id}/source` trước khi gửi duyệt;
+//! máy chủ quét mã nguồn khi duyệt.
 //!
 //! Token lấy từ `--token` hoặc biến môi trường `FDEV_TOKEN`; máy chủ từ `--server` hoặc
 //! `FDEV_SERVER` (mặc định `http://127.0.0.1:8080/`).
@@ -34,7 +39,8 @@ f-dev: công cụ cho nhà phát triển F-Eco
   f-dev validate --manifest f-app.toml
   f-dev pack     --manifest f-app.toml --package build/ [--out dist/]
                  đóng gói <os>-<arch>.zip và kiểm tra trước khi nộp
-  f-dev publish  --manifest f-app.toml --package dist/ [--server URL] [--token TOKEN]
+  f-dev publish  --manifest f-app.toml --package dist/ [--source src/] [--server URL] [--token TOKEN]
+                 --source: kèm mã nguồn (zip, tối đa 200 MB) để quét khi duyệt
 
 Biến môi trường: FDEV_TOKEN (token tạo ở Cổng nhà phát triển), FDEV_SERVER.
 ";
@@ -243,6 +249,97 @@ fn packages(
     Ok(out)
 }
 
+/// Thư mục không đưa vào zip mã nguồn (mã bên thứ ba, sản phẩm dựng, lịch sử git).
+const SOURCE_SKIP_DIRS: [&str; 8] = [
+    ".git",
+    "node_modules",
+    "target",
+    "vendor",
+    "dist",
+    "build",
+    ".venv",
+    "__pycache__",
+];
+/// Mã nguồn tối đa 200 MB (máy chủ cũng chặn ở mức này).
+pub const MAX_SOURCE_BYTES: u64 = 200 * 1024 * 1024;
+
+/// Tệp `.env` cục bộ (chứa khóa thật của máy nhà phát triển) không được tải lên; tệp mẫu thì giữ.
+fn local_env_file(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    (n == ".env" || n.starts_with(".env."))
+        && ![".example", ".sample", ".template", ".dist"]
+            .iter()
+            .any(|s| n.ends_with(s))
+}
+
+/// Nén thư mục mã nguồn thành `out`; trả số tệp đã nén.
+pub fn zip_source(dir: &Path, out: &Path) -> Result<usize, String> {
+    fn walk(
+        zip: &mut zip::ZipWriter<std::fs::File>,
+        root: &Path,
+        dir: &Path,
+        total: &mut u64,
+        count: &mut usize,
+    ) -> Result<(), String> {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .map_err(|e| format!("{}: {e}", dir.display()))?
+            .flatten()
+            .collect();
+        entries.sort_by_key(|e| e.file_name());
+        for entry in entries {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let kind = entry.file_type().map_err(|e| e.to_string())?;
+            let path = entry.path();
+            if kind.is_symlink() {
+                continue;
+            }
+            if kind.is_dir() {
+                if !SOURCE_SKIP_DIRS.contains(&name.as_str()) {
+                    walk(zip, root, &path, total, count)?;
+                }
+                continue;
+            }
+            if local_env_file(&name) {
+                continue;
+            }
+            *total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            if *total > MAX_SOURCE_BYTES {
+                return Err(format!(
+                    "mã nguồn trong {} lớn hơn 200 MB: bỏ tệp dựng và dữ liệu lớn rồi thử lại",
+                    root.display()
+                ));
+            }
+            let rel = path
+                .strip_prefix(root)
+                .map_err(|e| e.to_string())?
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            zip.start_file(rel, options).map_err(|e| e.to_string())?;
+            let mut file =
+                std::fs::File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            std::io::copy(&mut file, zip).map_err(|e| e.to_string())?;
+            *count += 1;
+        }
+        Ok(())
+    }
+    if !dir.is_dir() {
+        return Err(format!("--source phải là thư mục: {}", dir.display()));
+    }
+    let file = std::fs::File::create(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let (mut total, mut count) = (0, 0);
+    walk(&mut zip, dir, dir, &mut total, &mut count)?;
+    zip.finish()
+        .map_err(|e| e.to_string())?
+        .flush()
+        .map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
 fn sha256_file(path: &Path) -> Result<String, String> {
     let mut file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut hasher = sha2::Sha256::new();
@@ -300,7 +397,17 @@ async fn publish(flags: &HashMap<String, String>) -> Result<String, String> {
 
     let work = std::env::temp_dir().join(format!("f-dev-{}", std::process::id()));
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
-    let result = upload(&server, &token, &toml, &manifest, &package, &work).await;
+    let source = flags.get("source").map(PathBuf::from);
+    let result = upload(
+        &server,
+        &token,
+        &toml,
+        &manifest,
+        &package,
+        source.as_deref(),
+        &work,
+    )
+    .await;
     let _ = std::fs::remove_dir_all(&work);
     result
 }
@@ -311,9 +418,19 @@ async fn upload(
     toml: &str,
     manifest: &Manifest,
     package: &Path,
+    source: Option<&Path>,
     work: &Path,
 ) -> Result<String, String> {
     let packages = packages(manifest, package, work)?;
+    // Nén mã nguồn trước khi gọi máy chủ, để lỗi (quá lớn, không phải thư mục) báo ngay.
+    let source_zip = match source {
+        Some(dir) => {
+            let out = work.join("source.zip");
+            let files = zip_source(dir, &out)?;
+            Some((out, files))
+        }
+        None => None,
+    };
     let mut out = String::new();
     let http = reqwest::Client::new();
     let version = expect(
@@ -350,6 +467,29 @@ async fn upload(
                 .await
                 .map_err(|e| e.to_string())?,
             &format!("gói {platform}"),
+        )
+        .await?;
+    }
+    if let Some((path, files)) = &source_zip {
+        let sha = sha256_file(path)?;
+        let file = tokio::fs::File::open(path)
+            .await
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let size = file.metadata().await.map_err(|e| e.to_string())?.len();
+        out.push_str(&format!(
+            "mã nguồn: {files} tệp, {size} byte, sha256 {sha}
+"
+        ));
+        expect(
+            http.put(format!("{server}v1/dev/versions/{id}/source"))
+                .bearer_auth(token)
+                .header("x-feco-sha256", &sha)
+                .header("content-length", size)
+                .body(reqwest::Body::from(file))
+                .send()
+                .await
+                .map_err(|e| e.to_string())?,
+            "mã nguồn",
         )
         .await?;
     }
@@ -434,6 +574,35 @@ mod tests {
                 "licenses/LICENSE-MIT"
             ]
         );
+    }
+
+    /// `--source`: bỏ thư mục dựng, `.git`, symlink và `.env` cục bộ; giữ tệp mẫu.
+    #[test]
+    fn source_zip_skips_build_dirs_and_local_env() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        for f in [
+            "Cargo.toml",
+            "src/main.rs",
+            ".env.example",
+            ".env",
+            ".env.local",
+            "target/debug/app.exe",
+            "node_modules/x/index.js",
+            ".git/config",
+            "web/dist/app.js",
+        ] {
+            let p = src.join(f);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, b"x").unwrap();
+        }
+        let out = dir.path().join("source.zip");
+        assert_eq!(zip_source(&src, &out).unwrap(), 3);
+        let zip = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
+        let mut names: Vec<String> = zip.file_names().flatten().map(|n| n.into_owned()).collect();
+        names.sort();
+        assert_eq!(names, [".env.example", "Cargo.toml", "src/main.rs"]);
+        assert!(zip_source(&src.join("Cargo.toml"), &out).is_err());
     }
 
     #[test]

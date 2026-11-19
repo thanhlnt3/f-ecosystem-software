@@ -1,0 +1,12 @@
+{# Báo cáo quét mã nguồn của một phiên bản (thay đổi chat-and-source-scan); cần biến `s` (SourceView). #}
+<details class="source-report"{% if !s.findings.is_empty() %} open{% endif %}>
+  <summary>{{ i18n.t("source.title") }}{% if !s.origin.is_empty() %} · <code>{{ s.origin }}</code>{% endif %} · <span class="source-summary">{{ s.summary }}</span></summary>
+  {% if s.findings.is_empty() %}{% if s.scanned %}<p class="muted">{{ i18n.t("source.no_findings") }}</p>{% endif %}{% else %}
+  <table class="source-findings">
+    <thead><tr><th>{{ i18n.t("source.col.severity") }}</th><th>{{ i18n.t("source.col.rule") }}</th><th>{{ i18n.t("source.col.file") }}</th><th>{{ i18n.t("source.col.message") }}</th><th>{{ i18n.t("source.col.excerpt") }}</th></tr></thead>
+    <tbody>{% for f in s.findings %}
+      <tr class="sev-{{ f.severity }}"><td>{{ f.severity }}</td><td><code>{{ f.rule }}</code></td><td><code>{{ f.place }}</code></td><td>{{ f.message }}</td><td>{% if !f.excerpt.is_empty() %}<code>{{ f.excerpt }}</code>{% endif %}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</details>

@@ -141,7 +141,7 @@ impl Role {
     }
 }
 
-fn need_edit(role: Role) -> DevResult<()> {
+pub(crate) fn need_edit(role: Role) -> DevResult<()> {
     if role.can_edit() {
         Ok(())
     } else {
@@ -203,7 +203,7 @@ pub struct Membership {
 }
 
 impl Membership {
-    fn need_agreement(&self) -> DevResult<()> {
+    pub(crate) fn need_agreement(&self) -> DevResult<()> {
         if self.account.suspended {
             return Err(problem(
                 StatusCode::FORBIDDEN,
@@ -1058,6 +1058,8 @@ pub async fn save_manifest(
             id
         }
     };
+    // `[source]` trong manifest: mã nguồn trên GitHub được quét khi duyệt (design S2).
+    crate::source_scan::record_manifest(db, id, &manifest).await?;
     Ok(version(db, m, id).await?.0)
 }
 
@@ -1263,6 +1265,8 @@ pub async fn submit(db: &Db, m: &Membership, version_id: Uuid) -> DevResult<Vers
     .bind(version_id)
     .execute(db)
     .await?;
+    // Nộp lại sau khi bị từ chối: mã nguồn được quét lại.
+    crate::source_scan::reset(db, version_id).await?;
     // Kiểm tra tự động (nhóm 9) chạy ở worker nền; xem `review::process_due`.
     crate::review::enqueue(db, version_id, "submit").await?;
     Ok(version(db, m, version_id).await?.0)

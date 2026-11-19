@@ -55,6 +55,7 @@ pub mod review;
 pub mod roles;
 pub mod scan;
 pub mod security;
+pub mod source_scan;
 pub mod store;
 pub mod store_web;
 pub mod throttle;
@@ -126,6 +127,10 @@ pub struct AppState {
     pub clamd: Option<std::net::SocketAddr>,
     /// Địa chỉ nhận cảnh báo kiểm duyệt.
     pub admin_emails: Vec<String>,
+    /// OSV.dev để tra lỗ hổng thư viện khi quét mã nguồn; `None` khi `FECO_OSV=off`.
+    pub osv_url: Option<Url>,
+    /// Nơi tải mã nguồn GitHub tại một commit (codeload.github.com).
+    pub source_fetch_url: Url,
     /// Bảng quản trị không bắt buộc passkey (chỉ dev; feco-config đã kiểm).
     pub admin_passkey_optional: bool,
     /// Số người dùng đếm gần nhất cho dashboard quản trị (QUESTIONS 80): (lúc đếm, số).
@@ -228,6 +233,8 @@ impl AppState {
             tuf_lock: tokio::sync::Mutex::new(()),
             clamd: config.developer.clamd,
             admin_emails: config.developer.admin_emails.clone(),
+            osv_url: config.developer.osv_url.clone(),
+            source_fetch_url: config.developer.source_fetch_url.clone(),
             admin_passkey_optional: config.security.admin_passkey_optional,
             user_count: std::sync::Mutex::new(None),
             zalopay: config.payments.zalopay.as_ref().map(zalopay::ZaloPay::new),
@@ -322,6 +329,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/v1/dev/versions/{id}/packages/{platform}",
             axum::routing::put(dev_web::api_package),
         )
+        .route(
+            "/v1/dev/versions/{id}/source",
+            axum::routing::put(dev_web::api_source),
+        )
         .route("/v1/dev/versions/{id}/submit", post(dev_web::api_submit))
         .route("/developer", get(dev_web::home))
         .route("/developer/docs", get(dev_web::docs))
@@ -333,6 +344,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/developer/versions/{id}/packages",
             post(dev_web::upload_package).layer(axum::extract::DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/developer/versions/{id}/source",
+            post(dev_web::upload_source).layer(axum::extract::DefaultBodyLimit::disable()),
         )
         .route(
             "/developer/versions/{id}/{action}",
@@ -563,6 +578,8 @@ mod tests {
             tuf_lock: tokio::sync::Mutex::new(()),
             clamd: None,
             admin_emails: Vec::new(),
+            osv_url: None,
+            source_fetch_url: url("http://127.0.0.1:9/"),
             admin_passkey_optional: false,
             user_count: std::sync::Mutex::new(None),
             zalopay: None,

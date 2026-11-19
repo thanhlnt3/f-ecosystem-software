@@ -47,6 +47,7 @@
 <div class="review version" data-version="{{ v.version }}">
   <div><strong>{{ v.version }}</strong> · <span class="status">{{ v.status }}</span>{% if !v.channel.is_empty() %} · {{ v.channel }} {{ v.percent }}%{% endif %} · <span class="muted">{{ v.platforms }}</span></div>
   {% if !v.note.is_empty() %}<p class="muted review-note" style="white-space:pre-line">{{ v.note }}</p>{% endif %}
+  {% if let Some(s) = v.source %}{% include "source_report.html" %}{% endif %}
   {% if v.appealable && can_edit %}
   <details><summary>{{ i18n.t("dev.appeal") }}</summary>
   <form method="post" action="/developer/versions/{{ v.id }}/appeal" class="appeal-form">
@@ -67,6 +68,23 @@
     <button type="submit" class="secondary">{{ i18n.t("dev.upload") }}</button>
   </form>
   {% endfor %}
+  <details class="source-forms"><summary>{{ i18n.t("source.attach") }}</summary>
+  <p class="muted">{{ i18n.t("source.note") }}</p>
+  <form method="post" action="/developer/versions/{{ v.id }}/source" enctype="multipart/form-data" class="source-upload">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label>{{ i18n.t("source.upload") }}</label>
+    <input type="file" name="file" accept=".zip" required>
+    <button type="submit" class="secondary">{{ i18n.t("dev.upload") }}</button>
+  </form>
+  <form method="post" action="/developer/versions/{{ v.id }}/source-git" class="source-git">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <label>{{ i18n.t("source.repository") }}</label>
+    <input type="url" name="repository" placeholder="https://github.com/…" required>
+    <label>{{ i18n.t("source.commit") }}</label>
+    <input type="text" name="commit" pattern="[0-9a-fA-F]{40}" required>
+    <button type="submit" class="secondary">{{ i18n.t("source.save_git") }}</button>
+  </form>
+  </details>
   {% if v.missing.is_empty() %}
   <form method="post" action="/developer/versions/{{ v.id }}/submit">
     <input type="hidden" name="feco_csrf" value="{{ csrf }}">

@@ -267,6 +267,39 @@ jobs:
           xcrun simctl list devices booted
           flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true             || flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true
 
+  integration-scan:
+    # chat-and-source-scan (design S3): quét lại mọi app bên ngoài đã tích hợp ở đúng commit đã ghi
+    # (Mentor: MENTOR_COMMIT; ThesisAI: bảng commit trong README). Có phát hiện critical chưa được
+    # cho phép trong integrations/<app>/scan-allow.toml thì job thất bại (scenario "Commit mới có bí
+    # mật"). Báo cáo Markdown được đính kèm làm artifact.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Quét Mentor và ThesisAI
+        run: |
+          set -u
+          status=0
+          scripts/scan-integration.sh katD2707/agent-mentor-maximum-experience \
+            "$(tr -d '\r\n' < integrations/mentor/MENTOR_COMMIT)" integrations/mentor/scan-allow.toml || status=1
+          # Repo và commit của ThesisAI lấy từ bảng trong integrations/thesisai/README.md.
+          targets="$(sed -nE 's#.*https://github\.com/([A-Za-z0-9_.-]+/thesisai-(fe|be)) \| `([0-9a-f]{40})`.*#\1 \3#p' integrations/thesisai/README.md)"
+          if [ "$(printf '%s\n' "$targets" | grep -c .)" != 2 ]; then
+            echo "không đọc được repo và commit ThesisAI từ README" >&2
+            exit 1
+          fi
+          while read -r repo commit; do
+            scripts/scan-integration.sh "$repo" "$commit" integrations/thesisai/scan-allow.toml || status=1
+          done <<< "$targets"
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-scan
+          path: .dev/scans/*/scan-report.md
+          retention-days: 30
+
   mentor-desktop:
     # mentor-integration: bản vá Mentor còn áp được lên commit đã ghi, test của Mentor qua, dựng được
     # app desktop Windows (scenario "Bản vá còn áp được").

@@ -5,6 +5,7 @@ members = [
     "crates/feco-config",
     "crates/feco-tuf",
     "crates/feco-manifest",
+    "crates/feco-codescan",
     "clients/feco-launcher",
     "services/feco-server",
     "tools/feco-license-check",

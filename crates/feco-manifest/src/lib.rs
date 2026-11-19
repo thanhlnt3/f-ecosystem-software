@@ -32,6 +32,13 @@
 //! network = true
 //! microphone = true
 //! user_folders = ["music"]
+//!
+//! # Mã nguồn để quét khi duyệt (không bắt buộc; thay đổi chat-and-source-scan): repo GitHub
+//! # công khai và commit đủ 40 ký tự hex. Không dùng cùng dòng `source = "..."` ở trên (TOML
+//! # không cho một khóa vừa là chuỗi vừa là bảng).
+//! [source]
+//! repository = "https://github.com/soundlab/soundlab"
+//! commit = "0a3b8b708cf435f730a77453b8203fbff280d198"
 //! ```
 
 use feco_core::Scope;
@@ -101,6 +108,46 @@ pub struct Permissions {
     pub user_folders: Vec<String>,
 }
 
+/// Mã nguồn trên GitHub tại một commit (`[source]` trong `f-app.toml`), được quét khi duyệt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceGit {
+    /// `https://github.com/<owner>/<repo>`
+    pub repository: String,
+    /// Commit đủ 40 ký tự hex (chữ thường).
+    pub commit: String,
+}
+
+impl SourceGit {
+    /// (chủ repo, tên repo).
+    pub fn owner_repo(&self) -> Option<(String, String)> {
+        github_repo(&self.repository)
+    }
+}
+
+/// Tên chủ repo hoặc repo GitHub hợp lệ.
+fn github_name(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 100
+        && s != "."
+        && s != ".."
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// `https://github.com/<owner>/<repo>` (có thể kết thúc bằng `/` hoặc `.git`) → (owner, repo).
+pub fn github_repo(url: &str) -> Option<(String, String)> {
+    let rest = url.trim().strip_prefix("https://github.com/")?;
+    let rest = rest.trim_end_matches('/');
+    let rest = rest.strip_suffix(".git").unwrap_or(rest);
+    let (owner, repo) = rest.split_once('/')?;
+    (github_name(owner) && github_name(repo)).then(|| (owner.to_owned(), repo.to_owned()))
+}
+
+/// Commit đủ 40 ký tự hex.
+pub fn valid_commit(commit: &str) -> bool {
+    commit.len() == 40 && commit.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
     pub id: String,
@@ -119,6 +166,9 @@ pub struct Manifest {
     /// Địa chỉ mã nguồn (HTTPS). Có trường này thì gói phải kèm giấy phép gốc.
     #[serde(default)]
     pub source: Option<String>,
+    /// Repo GitHub và commit của mã nguồn (`[source]`), được quét khi duyệt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_git: Option<SourceGit>,
     /// App chạy trong cửa sổ terminal.
     #[serde(default)]
     pub terminal: bool,
@@ -295,10 +345,7 @@ pub fn parse(text: &str) -> Result<Manifest, Vec<String>> {
     }
     let description = c.optional_string(&table, "description", "description");
     let category = c.optional_string(&table, "category", "category");
-    let source = c.optional_string(&table, "source", "source");
-    if source.as_ref().is_some_and(|u| !https(u)) {
-        c.invalid("source", "phải là địa chỉ https://");
-    }
+    let (source, source_git) = source(&mut c, &table);
     let terminal = c.boolean(&table, "terminal", "terminal");
     let website = c.optional_string(&table, "website", "website");
     if website.as_ref().is_some_and(|u| !https(u)) {
@@ -335,11 +382,53 @@ pub fn parse(text: &str) -> Result<Manifest, Vec<String>> {
         scopes,
         permissions,
         source,
+        source_git,
         terminal,
         website,
         features,
         release_notes,
     })
+}
+
+/// `source`: chuỗi địa chỉ HTTPS, hoặc bảng `[source]` với `repository` (repo GitHub) và `commit`.
+fn source(c: &mut Checker, table: &Table) -> (Option<String>, Option<SourceGit>) {
+    let Some(Value::Table(t)) = table.get("source") else {
+        let url = c.optional_string(table, "source", "source");
+        if url.as_ref().is_some_and(|u| !https(u)) {
+            c.invalid("source", "phải là địa chỉ https://");
+        }
+        return (url, None);
+    };
+    for key in t.keys() {
+        if key != "repository" && key != "commit" {
+            c.errors
+                .push(format!("source.{key} không phải trường của [source]"));
+        }
+    }
+    let repository = c.string(t, "repository", "source.repository");
+    let commit = c.string(t, "commit", "source.commit");
+    let repo = repository.as_deref().and_then(github_repo);
+    if repository.is_some() && repo.is_none() {
+        c.invalid(
+            "source.repository",
+            "phải là repo GitHub công khai dạng https://github.com/<chủ>/<repo>",
+        );
+    }
+    if commit.as_ref().is_some_and(|x| !valid_commit(x)) {
+        c.invalid("source.commit", "phải là mã commit đủ 40 ký tự hex");
+    }
+    match (repo, commit) {
+        // `[source]` chỉ khai mã nguồn để quét; không đặt `source` (địa chỉ mã nguồn bên ngoài,
+        // vốn bắt gói phải kèm giấy phép gốc).
+        (Some((owner, name)), Some(commit)) if valid_commit(&commit) => (
+            None,
+            Some(SourceGit {
+                repository: format!("https://github.com/{owner}/{name}"),
+                commit: commit.to_ascii_lowercase(),
+            }),
+        ),
+        _ => (None, None),
+    }
 }
 
 /// `features`: danh sách chuỗi không rỗng, tối đa [`MAX_FEATURES`] dòng, mỗi dòng ≤ 120 ký tự.
@@ -740,6 +829,75 @@ terminal = \"yes\"
                 .any(|e| e.starts_with("terminal không hợp lệ")),
             "{errors:?}"
         );
+    }
+
+    /// `[source]`: repo GitHub và commit để quét mã nguồn khi duyệt (thay đổi chat-and-source-scan).
+    #[test]
+    fn source_table() {
+        let commit = "0A3B8B708CF435F730A77453B8203FBFF280D198";
+        let text = format!(
+            "{FULL}
+[source]
+repository = \"https://github.com/soundlab/soundlab.git\"
+commit = \"{commit}\"
+"
+        );
+        let m = parse(&text).unwrap();
+        let git = m.source_git.clone().unwrap();
+        assert_eq!(git.repository, "https://github.com/soundlab/soundlab");
+        assert_eq!(git.commit, commit.to_ascii_lowercase());
+        assert_eq!(
+            git.owner_repo(),
+            Some(("soundlab".into(), "soundlab".into()))
+        );
+        assert_eq!(
+            m.source, None,
+            "[source] không bật quy tắc giấy phép gốc của `source`"
+        );
+        // Lưu và đọc lại dạng JSON (CSDL) vẫn giữ nguyên; manifest cũ không có trường này.
+        let back: Manifest = serde_json::from_value(serde_json::to_value(&m).unwrap()).unwrap();
+        assert_eq!(back, m);
+        assert_eq!(parse(FULL).unwrap().source_git, None);
+
+        let bad = format!(
+            "{FULL}
+[source]
+repository = \"https://gitlab.com/a/b\"
+commit = \"main\"
+branch = \"x\"
+"
+        );
+        let e = errors(&bad);
+        assert!(
+            e.iter()
+                .any(|m| m == "source.branch không phải trường của [source]"),
+            "{e:?}"
+        );
+        assert!(
+            e.iter()
+                .any(|m| m.starts_with("source.repository không hợp lệ")),
+            "{e:?}"
+        );
+        assert!(
+            e.iter()
+                .any(|m| m.starts_with("source.commit không hợp lệ")),
+            "{e:?}"
+        );
+        let e = errors(&format!(
+            "{FULL}
+[source]
+commit = \"{commit}\"
+"
+        ));
+        assert_eq!(e, ["source.repository là bắt buộc"]);
+        for bad in [
+            "https://github.com/a",
+            "https://github.com/a/b/c",
+            "http://github.com/a/b",
+            "https://github.com/../b",
+        ] {
+            assert_eq!(github_repo(bad), None, "{bad}");
+        }
     }
 
     /// Scenario "Phát hành có ghi chú" (phần manifest) và "Tính năng quá dài".
