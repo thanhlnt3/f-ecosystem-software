@@ -1,6 +1,7 @@
 // Unit test của F-Launcher di động (thay đổi mobile-launcher, design M5).
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:feco_mobile/api.dart';
 import 'package:feco_mobile/auth.dart';
@@ -46,6 +47,12 @@ AppConfig cfg() => AppConfig(
 );
 
 void main() {
+  test('app_version_matches_pubspec', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    final version = RegExp(r'^version: ([0-9.]+)\+', multiLine: true).firstMatch(pubspec)!.group(1);
+    expect(appVersion, version);
+  });
+
   test('every_key_has_four_languages', () {
     for (final e in strings.entries) {
       expect(e.value.length, 4, reason: e.key);

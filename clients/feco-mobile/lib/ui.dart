@@ -1,6 +1,7 @@
 /// Giao diện: sáu tab (spec mobile-launcher, "Năm tab" và "Tin nhắn trên điện thoại").
 library;
 
+import 'config.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_state.dart';
@@ -733,7 +734,7 @@ class AccountPage extends StatelessWidget {
           ),
         const SizedBox(height: 8),
         Text(
-          s.t('version', {'v': '1.10.0'}),
+          s.t('version', {'v': appVersion}),
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],

@@ -1,6 +1,9 @@
 /// Cấu hình đặt lúc dựng bằng `--dart-define` (design M3 của thay đổi mobile-launcher).
 library;
 
+/// Phiên bản app, trùng `version` trong pubspec.yaml (test `app_version_matches_pubspec`).
+const appVersion = '1.12.0';
+
 class AppConfig {
   const AppConfig({
     required this.server,
