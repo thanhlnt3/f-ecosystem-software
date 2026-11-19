@@ -3,6 +3,7 @@
 // mạng.
 
 import 'package:feco_mobile/config.dart';
+import 'package:feco_mobile/demo.dart';
 import 'package:feco_mobile/i18n.dart';
 import 'package:feco_mobile/main.dart';
 import 'package:feco_mobile/ui.dart';
@@ -41,11 +42,12 @@ void main() {
     await state.start();
     await tester.pumpAndSettle();
 
-    // Năm tab.
+    // Sáu tab.
     for (final k in [
       'library',
       'store',
       'wallet',
+      'messages',
       'notifications',
       'account',
     ]) {
@@ -70,6 +72,15 @@ void main() {
     await tapKey(tester, 'add-thesisai');
     await tapKey(tester, 'tab-library');
     expect(find.byKey(const Key('library-thesisai')), findsOneWidget);
+
+    // Tin nhắn: mở hội thoại, gửi tin, tin hiện trong luồng.
+    await tapKey(tester, 'tab-messages');
+    await tapKey(tester, 'conv-${DemoBackend.projectChat}');
+    await tester.enterText(find.byKey(const Key('chat-input')), 'Cảm ơn anh');
+    await tapKey(tester, 'chat-send');
+    expect(find.text('Cảm ơn anh'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     // Đổi ngôn ngữ.
     await tapKey(tester, 'tab-account');

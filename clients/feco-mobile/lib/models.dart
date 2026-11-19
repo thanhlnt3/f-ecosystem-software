@@ -1,5 +1,8 @@
-/// Dữ liệu từ API của F-Eco (`/v1/catalog`, `/v1/wallet`, `/v1/library`, `/v1/notifications`).
+/// Dữ liệu từ API của F-Eco (`/v1/catalog`, `/v1/wallet`, `/v1/library`, `/v1/notifications`,
+/// `/v1/chat`).
 library;
+
+import 'web_url.dart';
 
 String _s(Object? v) => v is String ? v : '';
 int _i(Object? v) => v is int ? v : (v is num ? v.toInt() : 0);
@@ -205,4 +208,212 @@ class PurchaseFailed extends PurchaseResult {
   /// Mã lỗi của máy chủ, ví dụ `insufficient_funds`, `price_changed`, `wallet_frozen`.
   final String code;
   final String message;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tin nhắn (`/v1/chat`, design C4 của thay đổi chat-and-source-scan).
+
+/// Mã hội thoại dùng trong đường dẫn API: chỉ chữ, số, `-`, `_` (uuid của máy chủ).
+final _safeId = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
+
+bool safeChatId(String id) => _safeId.hasMatch(id);
+
+/// Độ dài tối đa của một tin (C2), tính theo ký tự sau khi bỏ khoảng trắng hai đầu.
+const chatMaxChars = 5000;
+
+/// Kiểm tin trước khi gửi (máy chủ vẫn kiểm lại): trả mã lỗi `chat_empty`, `chat_too_long`, hoặc
+/// null khi gửi được.
+String? validateChatBody(String body) {
+  final t = body.trim();
+  if (t.isEmpty) return 'chat_empty';
+  if (t.runes.length > chatMaxChars) return 'chat_too_long';
+  return null;
+}
+
+String? _url(Object? v) => v is String && validWebUrl(v) ? v.trim() : null;
+String? _opt(Object? v) => v is String && v.isNotEmpty ? v : null;
+
+enum ConversationKind { direct, project }
+
+enum ChatRole { customer, developer }
+
+/// Một hội thoại (`GET /v1/chat/conversations`).
+class Conversation {
+  const Conversation({
+    required this.id,
+    required this.kind,
+    required this.role,
+    required this.peerName,
+    required this.title,
+    this.projectId,
+    this.appId,
+    this.blocked = false,
+    this.lastMessage,
+    this.lastMessageAt,
+    this.unread = 0,
+    this.webUrl,
+  });
+
+  final String id;
+  final ConversationKind kind;
+
+  /// Vai trò của mình trong hội thoại.
+  final ChatRole role;
+  final String peerName;
+  final String title;
+  final String? projectId;
+  final String? appId;
+  final bool blocked;
+  final String? lastMessage;
+  final DateTime? lastMessageAt;
+  final int unread;
+
+  /// Trang hội thoại trên web (gửi tệp đính kèm); null khi địa chỉ không hợp lệ.
+  final String? webUrl;
+
+  /// Khách hàng trong hội thoại `direct` bị nhà phát triển chặn: không gửi được.
+  bool get customerBlocked =>
+      blocked && kind == ConversationKind.direct && role == ChatRole.customer;
+
+  Conversation copyWith({bool? blocked}) => Conversation(
+    id: id,
+    kind: kind,
+    role: role,
+    peerName: peerName,
+    title: title,
+    projectId: projectId,
+    appId: appId,
+    blocked: blocked ?? this.blocked,
+    lastMessage: lastMessage,
+    lastMessageAt: lastMessageAt,
+    unread: unread,
+    webUrl: webUrl,
+  );
+
+  /// Null khi mục hỏng (mã không an toàn, `kind` hoặc `role` lạ).
+  static Conversation? tryFromJson(Object? raw) {
+    if (raw is! Map<String, Object?>) return null;
+    final id = raw['id'];
+    if (id is! String || !safeChatId(id)) return null;
+    final kind = ConversationKind.values.asNameMap()[raw['kind']];
+    final role = ChatRole.values.asNameMap()[raw['role']];
+    if (kind == null || role == null) return null;
+    final unread = _i(raw['unread']);
+    return Conversation(
+      id: id,
+      kind: kind,
+      role: role,
+      peerName: _s(raw['peer_name']),
+      title: _s(raw['title']),
+      projectId: _opt(raw['project_id']),
+      appId: _opt(raw['app_id']),
+      blocked: _b(raw['blocked']),
+      lastMessage: _opt(raw['last_message']),
+      lastMessageAt: DateTime.tryParse(_s(raw['last_message_at'])),
+      unread: unread < 0 ? 0 : unread,
+      webUrl: _url(raw['web_url']),
+    );
+  }
+
+  /// `{"conversations": [...]}`, giữ thứ tự của máy chủ (mới nhất trước), bỏ mục hỏng.
+  static List<Conversation> listFromJson(Map<String, Object?> j) =>
+      (j['conversations'] is List ? j['conversations'] as List : const [])
+          .map(tryFromJson)
+          .whereType<Conversation>()
+          .toList();
+}
+
+enum MessageSide { customer, developer, admin, system }
+
+enum AttachmentStatus { pending, clean, infected, error }
+
+/// Tệp đính kèm (chỉ xem trên điện thoại; gửi tệp qua web).
+class ChatAttachment {
+  const ChatAttachment({
+    required this.name,
+    required this.size,
+    required this.status,
+    this.url,
+  });
+
+  final String name;
+  final int size;
+
+  /// Trạng thái lạ thì coi như `error` (không mở).
+  final AttachmentStatus status;
+  final String? url;
+
+  /// Chỉ tệp đã quét sạch và có địa chỉ hợp lệ mới mở được.
+  bool get canOpen => status == AttachmentStatus.clean && url != null;
+
+  static ChatAttachment? tryFromJson(Object? raw) {
+    if (raw is! Map<String, Object?>) return null;
+    final size = _i(raw['size']);
+    return ChatAttachment(
+      name: _s(raw['name']).isEmpty ? '?' : _s(raw['name']),
+      size: size < 0 ? 0 : size,
+      status:
+          AttachmentStatus.values.asNameMap()[raw['status']] ??
+          AttachmentStatus.error,
+      url: _url(raw['url']),
+    );
+  }
+}
+
+/// Một tin (`GET /v1/chat/conversations/{id}/messages`).
+class ChatMessage {
+  const ChatMessage({
+    required this.id,
+    required this.side,
+    required this.mine,
+    required this.body,
+    this.at,
+    this.attachment,
+  });
+
+  final int id;
+  final MessageSide side;
+  final bool mine;
+  final String body;
+  final DateTime? at;
+  final ChatAttachment? attachment;
+
+  /// Null khi mục hỏng (không có `id` dương, `side` lạ).
+  static ChatMessage? tryFromJson(Object? raw) {
+    if (raw is! Map<String, Object?>) return null;
+    final id = raw['id'];
+    if (id is! int || id <= 0) return null;
+    final side = MessageSide.values.asNameMap()[raw['side']];
+    if (side == null) return null;
+    return ChatMessage(
+      id: id,
+      side: side,
+      mine: _b(raw['mine']),
+      body: _s(raw['body']),
+      at: DateTime.tryParse(_s(raw['at'])),
+      attachment: ChatAttachment.tryFromJson(raw['attachment']),
+    );
+  }
+
+  /// `{"messages": [...]}`, bỏ mục hỏng, sắp theo `id` tăng dần, không trùng.
+  static List<ChatMessage> listFromJson(Map<String, Object?> j) =>
+      mergeMessages(
+        const [],
+        (j['messages'] is List ? j['messages'] as List : const [])
+            .map(tryFromJson)
+            .whereType<ChatMessage>(),
+      );
+}
+
+/// Gộp tin mới vào luồng: theo `id`, không trùng (tin mới thay tin cũ cùng `id`, ví dụ khi
+/// trạng thái quét đính kèm đổi), sắp tăng dần.
+List<ChatMessage> mergeMessages(
+  Iterable<ChatMessage> current,
+  Iterable<ChatMessage> incoming,
+) {
+  final byId = <int, ChatMessage>{
+    for (final m in current) m.id: m,
+    for (final m in incoming) m.id: m,
+  };
+  return byId.values.toList()..sort((a, b) => a.id.compareTo(b.id));
 }

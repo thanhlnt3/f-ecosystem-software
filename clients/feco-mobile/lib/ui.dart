@@ -1,9 +1,10 @@
-/// Giao diện: năm tab (spec mobile-launcher, "Năm tab").
+/// Giao diện: sáu tab (spec mobile-launcher, "Năm tab" và "Tin nhắn trên điện thoại").
 library;
 
 import 'package:material_ui/material_ui.dart';
 
 import 'app_state.dart';
+import 'chat_ui.dart';
 import 'i18n.dart';
 import 'models.dart';
 
@@ -49,6 +50,23 @@ class _HomePageState extends State<HomePage> {
   // Chưa đăng nhập thì mở ở Cửa hàng (xem được không cần đăng nhập).
   int _tab = 1;
 
+  // Quay lại app (từ nền): cập nhật số tin chưa đọc (C3: di động cập nhật khi mở app).
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => widget.state.refreshChat(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.state;
@@ -56,10 +74,12 @@ class _HomePageState extends State<HomePage> {
       s.t('tab.library'),
       s.t('tab.store'),
       s.t('tab.wallet'),
+      s.t('tab.messages'),
       s.t('tab.notifications'),
       s.t('tab.account'),
     ];
     final unread = s.notifications.where((n) => !n.read).length;
+    final chatUnread = s.chatUnread;
     final pages = [
       _NeedSignIn(
         state: s,
@@ -69,6 +89,13 @@ class _HomePageState extends State<HomePage> {
       _NeedSignIn(
         state: s,
         child: WalletPage(state: s),
+      ),
+      KeyedSubtree(
+        key: const Key('page-messages'),
+        child: _NeedSignIn(
+          state: s,
+          child: MessagesPage(state: s),
+        ),
       ),
       _NeedSignIn(
         state: s,
@@ -127,19 +154,34 @@ class _HomePageState extends State<HomePage> {
             label: titles[2],
           ),
           NavigationDestination(
+            key: const Key('tab-messages'),
+            icon: Badge(
+              key: const Key('chat-unread-badge'),
+              isLabelVisible: chatUnread > 0,
+              label: Text(chatUnread > 9 ? '9+' : '$chatUnread'),
+              child: const Icon(Icons.chat_bubble_outline),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: chatUnread > 0,
+              label: Text(chatUnread > 9 ? '9+' : '$chatUnread'),
+              child: const Icon(Icons.chat_bubble),
+            ),
+            label: titles[3],
+          ),
+          NavigationDestination(
             key: const Key('tab-notifications'),
             icon: Badge(
               isLabelVisible: unread > 0,
               label: Text(unread > 9 ? '9+' : '$unread'),
               child: const Icon(Icons.notifications_outlined),
             ),
-            label: titles[3],
+            label: titles[4],
           ),
           NavigationDestination(
             key: const Key('tab-account'),
             icon: const Icon(Icons.person_outline),
             selectedIcon: const Icon(Icons.person),
-            label: titles[4],
+            label: titles[5],
           ),
         ],
       ),

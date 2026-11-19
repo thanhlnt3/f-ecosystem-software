@@ -53,11 +53,12 @@ void main() {
   testWidgets('scenario_chua_dang_nhap', (tester) async {
     final h = Harness();
     await h.pump(tester);
-    // Năm tab; Cửa hàng xem được khi chưa đăng nhập.
+    // Sáu tab; Cửa hàng xem được khi chưa đăng nhập.
     for (final k in [
       'library',
       'store',
       'wallet',
+      'messages',
       'notifications',
       'account',
     ]) {
@@ -125,5 +126,183 @@ void main() {
     expect(h.state.lang, Lang.ja);
     expect(find.text('ストア'), findsOneWidget);
     expect(find.text('アカウント'), findsWidgets);
+    expect(find.text('メッセージ'), findsOneWidget);
+  });
+
+  // ---- Tin nhắn (thay đổi chat-and-source-scan, spec mobile-launcher "Tin nhắn trên điện thoại").
+
+  /// Đăng nhập, mở tab Tin nhắn rồi mở hội thoại [id].
+  Future<Harness> openConversation(WidgetTester tester, String id) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.state.signIn();
+    await tester.pumpAndSettle();
+    await tapKey(tester, 'tab-messages');
+    await tapKey(tester, 'conv-$id');
+    return h;
+  }
+
+  Finder chatBadge(String label) => find.descendant(
+    of: find.byKey(const Key('tab-messages')),
+    matching: find.text(label),
+  );
+
+  // Scenario "Gửi tin từ điện thoại": mở hội thoại trong tab Tin nhắn, gõ "Cảm ơn anh", bấm Gửi
+  // thì tin hiện ở cuối luồng.
+  testWidgets('scenario_gui_tin_tu_dien_thoai', (tester) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.state.signIn();
+    await tester.pumpAndSettle();
+    // Huy hiệu số chưa đọc trên tab.
+    expect(chatBadge('2'), findsOneWidget);
+    await tapKey(tester, 'tab-messages');
+    expect(find.text('Website bán hàng'), findsOneWidget);
+    expect(
+      find.byKey(const Key('conv-unread-${DemoBackend.projectChat}')),
+      findsOneWidget,
+    );
+    await tapKey(tester, 'conv-${DemoBackend.projectChat}');
+    // Mở hội thoại thì đánh dấu đã đọc tới tin cuối, huy hiệu cập nhật.
+    expect(h.backend.lastRead, (DemoBackend.projectChat, 5));
+    expect(h.state.chatUnread, 0);
+
+    await tester.enterText(find.byKey(const Key('chat-input')), 'Cảm ơn anh');
+    await tester.tap(find.text('Gửi'));
+    await tester.pumpAndSettle();
+
+    final sent = find.text('Cảm ơn anh');
+    expect(sent, findsOneWidget, reason: 'tin trong luồng, ô soạn đã xóa');
+    final previous = find.text('Được chị, em làm xong trong tuần này.');
+    expect(
+      tester.getTopLeft(sent).dy,
+      greaterThan(tester.getBottomLeft(previous).dy),
+      reason: 'tin mới ở cuối luồng',
+    );
+    expect(
+      tester.getCenter(sent).dx,
+      greaterThan(
+        tester.view.physicalSize.width / tester.view.devicePixelRatio / 2,
+      ),
+      reason: 'tin của mình bên phải',
+    );
+    final stored = await h.backend.messages(DemoBackend.projectChat);
+    expect((stored.last.body, stored.last.mine), ('Cảm ơn anh', true));
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(chatBadge('2'), findsNothing);
+  });
+
+  // Scenario "Chưa đăng nhập": tab Tin nhắn hiện nút "Đăng nhập".
+  testWidgets('scenario_tin_nhan_chua_dang_nhap', (tester) async {
+    final h = Harness();
+    await h.pump(tester);
+    await tapKey(tester, 'tab-messages');
+    final page = find.byKey(const Key('page-messages'));
+    final button = find.descendant(
+      of: page,
+      matching: find.byKey(const Key('sign-in')),
+    );
+    expect(button, findsOneWidget);
+    expect(
+      find.descendant(of: button, matching: find.text('Đăng nhập')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('conversation-list')), findsNothing);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(h.state.signedIn, isTrue);
+    expect(
+      find.byKey(const Key('conv-${DemoBackend.projectChat}')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('chat_polls_every_5_seconds_while_open', (tester) async {
+    final h = await openConversation(tester, DemoBackend.appChat);
+    final calls = h.backend.messageCalls;
+    final m = h.backend.receive(DemoBackend.appChat, 'Bạn cần gì thêm không?');
+    expect(find.text('Bạn cần gì thêm không?'), findsNothing);
+    // Mở hội thoại chưa tới 5 giây: lần hỏi đầu tiên trong 5 giây tới.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Bạn cần gì thêm không?'), findsOneWidget);
+    expect(h.backend.messageCalls, calls + 1);
+    // Có tin mới thì đánh dấu đã đọc.
+    expect(h.backend.lastRead, (DemoBackend.appChat, m.id));
+    // Không trùng khi hỏi lại.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Bạn cần gì thêm không?'), findsOneWidget);
+
+    // Rời hội thoại thì ngừng hỏi.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    final after = h.backend.messageCalls;
+    await tester.pump(const Duration(seconds: 20));
+    expect(h.backend.messageCalls, after);
+  });
+
+  testWidgets('chat_client_validation_and_blocked_customer', (tester) async {
+    final h = await openConversation(tester, DemoBackend.appChat);
+    await tester.tap(find.byKey(const Key('chat-send')));
+    await tester.pumpAndSettle();
+    expect(find.text('Hãy nhập nội dung tin nhắn.'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('chat-input')), 'x' * 5001);
+    await tester.tap(find.byKey(const Key('chat-send')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chat-error')), findsOneWidget);
+    expect(
+      find.text(
+        'Tin nhắn dài quá 5.000 ký tự. Hãy rút gọn hoặc chia thành nhiều tin.',
+      ),
+      findsOneWidget,
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Bị nhà phát triển chặn: ô soạn tắt, có giải thích.
+    await tapKey(tester, 'conv-${DemoBackend.blockedChat}');
+    expect(find.byKey(const Key('chat-blocked')), findsOneWidget);
+    final field = tester.widget<TextField>(find.byKey(const Key('chat-input')));
+    expect(field.enabled, isFalse);
+    final send = tester.widget<FilledButton>(
+      find.byKey(const Key('chat-send')),
+    );
+    expect(send.onPressed, isNull);
+    // Không gửi gì vào hội thoại bị chặn.
+    expect((await h.backend.messages(DemoBackend.blockedChat)).length, 1);
+  });
+
+  testWidgets('chat_attachments_are_view_only', (tester) async {
+    final h = await openConversation(tester, DemoBackend.projectChat);
+    // Tệp sạch: mở bằng trình duyệt.
+    expect(find.text('471 KB · Đã kiểm tra, an toàn'), findsOneWidget);
+    await tapKey(tester, 'att-open-2');
+    expect(
+      h.opened.last,
+      Uri.parse(
+        'https://f-eco.example/messages/${DemoBackend.projectChat}/files/a1',
+      ),
+    );
+    // Đang quét: không mở được.
+    expect(find.text('118 KB · Đang kiểm tra'), findsOneWidget);
+    expect(find.byKey(const Key('att-open-5')), findsNothing);
+    // Gửi tệp qua web.
+    await tapKey(tester, 'chat-attach-web');
+    expect(
+      h.opened.last,
+      Uri.parse('https://f-eco.example/messages/${DemoBackend.projectChat}'),
+    );
+    // Tin quản trị viên và tin hệ thống.
+    expect(find.text('Quản trị F-Eco'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Có mã độc: chặn, không mở.
+    await tapKey(tester, 'conv-${DemoBackend.appChat}');
+    expect(find.text('2 KB · Có mã độc, đã chặn'), findsOneWidget);
+    expect(find.byKey(const Key('att-open-7')), findsNothing);
   });
 }
