@@ -46,7 +46,8 @@ Thay đổi OpenSpec `chat-and-source-scan`: chat giữa khách hàng và nhà p
   - job CI `integration-scan`;
   - `build-desktop.sh` quét Mentor trước khi dựng.
 - **Cấu hình mới**: `FECO_OSV_URL`, `FECO_OSV`, `FECO_SOURCE_FETCH_URL`.
-- **Kiểm thử**: E2E `e2e_chat`, `e2e_source_scan` (cơ sở dữ liệu riêng); `FECO_E2E_DATABASE_URL` cho `e2e_auth`.
+- **Kiểm thử**: E2E `e2e_chat`, `e2e_source_scan` (cơ sở dữ liệu riêng); `FECO_E2E_DATABASE_URL` cho `e2e_auth`;
+  máy chủ E2E nâng hạn mức theo IP; integration test iOS có hạn 20 phút mỗi lần thử để Simulator treo không giữ CI 6 giờ.
 
 ## 1.11.0 (19/11/2026)
 

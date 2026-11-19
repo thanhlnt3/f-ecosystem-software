@@ -258,6 +258,9 @@ jobs:
       - name: Dựng cho iOS Simulator (không ký)
         run: flutter build ios --simulator --debug
       - name: Integration test trên iOS Simulator
+        # Lần chạy 44509620488: Simulator treo sau khi dựng xong, job chờ tới hạn 6 giờ của GitHub.
+        # Mỗi lần thử tối đa 20 phút (perl alarm, macOS không có `timeout`), cả bước tối đa 60 phút.
+        timeout-minutes: 60
         run: |
           udid=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for r,v in sorted(d.items(), reverse=True) if 'iOS' in r for x in v if x['name'].startswith('iPhone')))")
           xcrun simctl boot "$udid"
@@ -265,7 +268,8 @@ jobs:
           # tới VM Service.
           xcrun simctl bootstatus "$udid" -b
           xcrun simctl list devices booted
-          flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true             || flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true
+          run_once() { perl -e 'alarm shift; exec @ARGV' 1200 flutter test integration_test -d "$udid" --dart-define=FECO_DEMO=true; }
+          run_once || run_once
 
   integration-scan:
     # chat-and-source-scan (design S3): quét lại mọi app bên ngoài đã tích hợp ở đúng commit đã ghi
