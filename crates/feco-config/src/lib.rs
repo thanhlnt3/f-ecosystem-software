@@ -190,6 +190,12 @@ pub struct DeveloperConfig {
     pub clamd: Option<SocketAddr>,
     /// Địa chỉ nhận cảnh báo kiểm duyệt (mã độc, phát hiện muộn).
     pub admin_emails: Vec<String>,
+    /// API OSV.dev để tra lỗ hổng thư viện khi quét mã nguồn (`FECO_OSV_URL`, mặc định
+    /// `https://api.osv.dev`); `None` khi `FECO_OSV=off` (thay đổi chat-and-source-scan).
+    pub osv_url: Option<Url>,
+    /// Nơi tải mã nguồn GitHub tại một commit (`FECO_SOURCE_FETCH_URL`, mặc định
+    /// `https://codeload.github.com`; kiểm thử dùng máy chủ giả).
+    pub source_fetch_url: Url,
 }
 
 /// Tài khoản quản trị viên mặc định, luôn hoạt động (thay đổi production-readiness).
@@ -739,12 +745,28 @@ fn developer_config<'a>(
     if environment.is_production() && admin_emails.is_empty() {
         return Err(ConfigError::Missing("FECO_ADMIN_EMAILS"));
     }
+    let osv_url = if get("FECO_OSV").is_some_and(|v| v.trim().eq_ignore_ascii_case("off")) {
+        None
+    } else {
+        Some(gateway_url(
+            environment,
+            "FECO_OSV_URL",
+            get("FECO_OSV_URL").unwrap_or("https://api.osv.dev"),
+        )?)
+    };
+    let source_fetch_url = gateway_url(
+        environment,
+        "FECO_SOURCE_FETCH_URL",
+        get("FECO_SOURCE_FETCH_URL").unwrap_or("https://codeload.github.com"),
+    )?;
     Ok(DeveloperConfig {
         dns_servers,
         package_dir,
         tuf,
         clamd,
         admin_emails,
+        osv_url,
+        source_fetch_url,
     })
 }
 
@@ -1065,6 +1087,45 @@ mod tests {
         assert_eq!(c.auth.kratos_admin_url.as_str(), "http://127.0.0.1:4434/");
         assert_eq!(c.auth.smtp_url.as_str(), "smtp://127.0.0.1:1025");
         assert_eq!(c.auth.challenge, ChallengeProvider::Test);
+    }
+
+    /// Quét mã nguồn (thay đổi chat-and-source-scan): OSV.dev và nơi tải mã nguồn GitHub.
+    #[test]
+    fn source_scan_urls() {
+        let c = Config::from_vars(&with_env("dev", &[])).unwrap();
+        assert_eq!(
+            c.developer.osv_url.as_ref().map(Url::as_str),
+            Some("https://api.osv.dev/")
+        );
+        assert_eq!(
+            c.developer.source_fetch_url.as_str(),
+            "https://codeload.github.com/"
+        );
+        let c = Config::from_vars(&with_env(
+            "dev",
+            &[
+                ("FECO_OSV", "off"),
+                ("FECO_SOURCE_FETCH_URL", "http://127.0.0.1:9100"),
+            ],
+        ))
+        .unwrap();
+        assert_eq!(c.developer.osv_url, None);
+        assert_eq!(
+            c.developer.source_fetch_url.as_str(),
+            "http://127.0.0.1:9100/"
+        );
+        let c = Config::from_vars(&with_env(
+            "dev",
+            &[("FECO_OSV_URL", "http://127.0.0.1:9200")],
+        ))
+        .unwrap();
+        assert_eq!(
+            c.developer.osv_url.as_ref().map(Url::as_str),
+            Some("http://127.0.0.1:9200/")
+        );
+        assert!(
+            Config::from_vars(&with_env("dev", &[("FECO_OSV_URL", "http://osv.example")])).is_err()
+        );
     }
 
     #[test]

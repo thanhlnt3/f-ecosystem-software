@@ -48,6 +48,7 @@
   <h3>{{ i18n.t("admin.diff") }}</h3>
   <ul class="diff">{% for d in r.diff %}<li>{{ d }}</li>{% endfor %}</ul>
   {% if !r.checks.is_empty() %}<details><summary>{{ i18n.t("admin.checks") }}</summary><ul>{% for c in r.checks %}<li><code>{{ c }}</code></li>{% endfor %}</ul></details>{% endif %}
+  {% if let Some(s) = r.source %}{% include "source_report.html" %}{% endif %}
   <p class="muted">{{ i18n.t("admin.vm_note") }}</p>
   <form method="post" action="/admin/reviews/{{ r.version_id }}/approve" class="approve">
     <input type="hidden" name="feco_csrf" value="{{ csrf }}">

@@ -123,6 +123,33 @@ async fn init_tuf(work: &std::path::Path) -> (std::path::PathBuf, String) {
     (repo.dir().to_path_buf(), keys)
 }
 
+/// Tạo CSDL của `url` nếu chưa có (qua kết nối quản trị tới CSDL `postgres`).
+async fn ensure_database(url: &str) {
+    use sqlx::Connection;
+    let parsed = url::Url::parse(url).expect("FECO_E2E_DATABASE_URL hợp lệ");
+    let name = parsed.path().trim_start_matches('/').to_owned();
+    assert!(
+        !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
+        "tên CSDL E2E không hợp lệ: {name:?}"
+    );
+    let mut admin_url = parsed.clone();
+    admin_url.set_path("/postgres");
+    let mut conn = sqlx::PgConnection::connect(admin_url.as_str())
+        .await
+        .expect("kết nối Postgres (CSDL postgres)");
+    let exists: Option<i32> = sqlx::query_scalar("SELECT 1 FROM pg_database WHERE datname = $1")
+        .bind(&name)
+        .fetch_optional(&mut conn)
+        .await
+        .unwrap();
+    if exists.is_none() {
+        sqlx::query(&format!("CREATE DATABASE \"{name}\""))
+            .execute(&mut conn)
+            .await
+            .unwrap_or_else(|e| panic!("không tạo được CSDL E2E {name}: {e}"));
+    }
+}
+
 /// Kiểm thử E2E chỉ chạy khi đặt FECO_E2E=1. Lần đầu gọi sẽ dựng feco-server ở cổng
 /// 8080 trên một luồng riêng, dùng chung cho mọi test trong file.
 fn e2e_ready() -> bool {
@@ -211,6 +238,12 @@ fn e2e_ready() -> bool {
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v))
                 .collect();
+                let mut vars = vars;
+                // CSDL riêng cho E2E (nhánh có migration mà CSDL `feco` dùng chung chưa có).
+                if let Ok(url) = std::env::var("FECO_E2E_DATABASE_URL") {
+                    ensure_database(&url).await;
+                    vars.insert("FECO_DATABASE_URL".into(), url);
+                }
                 let _ = SERVER_VARS.set(vars.clone());
                 let config = Config::from_vars(&vars).unwrap();
                 let state = std::sync::Arc::new(AppState::from_config(&config).unwrap());

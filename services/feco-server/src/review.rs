@@ -4,11 +4,14 @@
 //! 2. [`process_due`] chạy kiểm tra tự động cho từng gói ([`crate::scan`]): mã độc (ít nhất hai
 //!    engine), chữ ký mã, tệp chạy và kiến trúc khớp manifest, packer. Không qua thì bị từ chối;
 //!    phát hiện mã độc thì tài khoản nhà phát triển bị tạm khóa và quản trị viên nhận cảnh báo.
-//! 3. Qua kiểm tra: phiên bản đầu của app, hoặc thêm scope dữ liệu hay quyền hệ thống, vào hàng
+//! 3. Gói sạch thì quét mã nguồn nếu phiên bản có kèm ([`crate::source_scan`], thay đổi
+//!    chat-and-source-scan): phát hiện `critical` thì từ chối (`reject_code = source_scan`);
+//!    `high` hoặc OSV không trả lời thì duyệt thủ công.
+//! 4. Qua kiểm tra: phiên bản đầu của app, hoặc thêm scope dữ liệu hay quyền hệ thống, vào hàng
 //!    chờ duyệt thủ công ([`manual_reason`]); các phiên bản khác được duyệt tự động.
-//! 4. Người duyệt duyệt hoặc từ chối theo một điều khoản của chính sách nội dung ([`CLAUSES`]);
+//! 5. Người duyệt duyệt hoặc từ chối theo một điều khoản của chính sách nội dung ([`CLAUSES`]);
 //!    nhà phát triển nhận email nêu điều khoản và cách sửa, và kháng nghị được một lần.
-//! 5. Gỡ khẩn cấp ([`revoke`]) và quét lại định kỳ 7 ngày ([`enqueue_rescans`]).
+//! 6. Gỡ khẩn cấp ([`revoke`]) và quét lại định kỳ 7 ngày ([`enqueue_rescans`]).
 //!
 //! Bảng quản trị (nhóm 14) sẽ gọi các hàm ở đây; tạm thời dùng công cụ `feco-catalog`.
 
@@ -26,6 +29,7 @@ use crate::{
     catalog,
     developer::{self, problem, DevError, DevResult},
     scan::{self, Engine},
+    source_scan::{self, Outcome},
     store::Db,
     AppState,
 };
@@ -137,6 +141,25 @@ pub async fn enqueue(db: &Db, version_id: Uuid, kind: &str) -> sqlx::Result<()> 
         .bind(kind)
         .execute(db)
         .await?;
+    Ok(())
+}
+
+/// Xếp lại job sau `delay_secs` giây (lỗi tạm thời như tải mã nguồn thất bại).
+pub async fn enqueue_after(
+    db: &Db,
+    version_id: Uuid,
+    kind: &str,
+    delay_secs: i64,
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "INSERT INTO review_jobs (version_id, kind, not_before)
+         VALUES ($1, $2, now() + make_interval(secs => $3))",
+    )
+    .bind(version_id)
+    .bind(kind)
+    .bind(delay_secs as f64)
+    .execute(db)
+    .await?;
     Ok(())
 }
 
@@ -284,6 +307,7 @@ pub async fn process_due(state: &AppState) -> sqlx::Result<usize> {
         let job: Option<(i64, Uuid, String)> = sqlx::query_as(
             "UPDATE review_jobs SET status = 'running', started_at = now(), attempts = attempts + 1
              WHERE id = (SELECT id FROM review_jobs WHERE status = 'queued'
+                           AND (not_before IS NULL OR not_before <= now())
                          ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1)
              RETURNING id, version_id, kind",
         )
@@ -449,9 +473,10 @@ async fn run_submit(state: &AppState, version_id: Uuid) -> Result<JobResult, Str
     }
     let reports = scan_all(state, &v, true).await?;
     let db_err = |e: sqlx::Error| e.to_string();
+    // `checks.packages`: kết quả quét gói; `checks.source`: tóm tắt quét mã nguồn (design S2).
     sqlx::query("UPDATE app_versions SET checks = $2, last_scanned_at = now() WHERE id = $1")
         .bind(version_id)
-        .bind(serde_json::to_value(&reports).unwrap_or(Value::Null))
+        .bind(json!({ "packages": serde_json::to_value(&reports).unwrap_or(Value::Null) }))
         .execute(&state.db)
         .await
         .map_err(db_err)?;
@@ -540,6 +565,57 @@ async fn run_submit(state: &AppState, version_id: Uuid) -> Result<JobResult, Str
         });
     }
 
+    // Quét mã nguồn (design S2): sau khi gói sạch, trước quy tắc duyệt thủ công.
+    let source_reason = match source_scan::review(state, version_id, &v.manifest).await? {
+        Outcome::Retry(e) => {
+            // Tải repo lỗi mạng: như engine quét lỗi, chưa kết luận và chạy lại sau.
+            enqueue_after(&state.db, version_id, "submit", source_scan::RETRY_SECS)
+                .await
+                .map_err(db_err)?;
+            return Err(format!(
+                "quét mã nguồn chưa chạy được, sẽ chạy lại sau {} giây: {e}",
+                source_scan::RETRY_SECS
+            ));
+        }
+        Outcome::NoSource(summary) | Outcome::Clean(summary) => {
+            set_source_check(state, version_id, &summary)
+                .await
+                .map_err(db_err)?;
+            None
+        }
+        Outcome::Manual { reason, summary } => {
+            set_source_check(state, version_id, &summary)
+                .await
+                .map_err(db_err)?;
+            Some(reason)
+        }
+        Outcome::Reject { note, summary } => {
+            // Scenario "Bí mật lộ bị từ chối": email nêu luật và tệp, không chép bí mật.
+            set_source_check(state, version_id, &summary)
+                .await
+                .map_err(db_err)?;
+            reject_version(state, version_id, "source_scan", &note)
+                .await
+                .map_err(db_err)?;
+            audit::record(
+                &state.db,
+                Actor::System,
+                "review.source_scan",
+                Some(&v.app_id),
+                None,
+                json!({ "version": v.version, "source": summary }),
+            )
+            .await;
+            let c = clause("technical").expect("điều khoản kỹ thuật");
+            let (subject, body) = rejection_email(state, &v.app_id, &v.version, c, &note);
+            notify_developer(state, &v.app_id, &subject, &body).await;
+            return Ok(JobResult {
+                outcome: "source_scan".into(),
+                reports,
+            });
+        }
+    };
+
     // Quy tắc duyệt thủ công hay tự động.
     let previous: Option<Value> = sqlx::query_scalar(
         "SELECT manifest FROM app_versions
@@ -552,7 +628,11 @@ async fn run_submit(state: &AppState, version_id: Uuid) -> Result<JobResult, Str
     .await
     .map_err(db_err)?;
     let previous: Option<Manifest> = previous.and_then(|m| serde_json::from_value(m).ok());
-    match manual_reason(previous.as_ref(), &v.manifest) {
+    let reason = match (source_reason, manual_reason(previous.as_ref(), &v.manifest)) {
+        (Some(source), Some(manifest)) => Some(format!("{source}; {manifest}")),
+        (source, manifest) => source.or(manifest),
+    };
+    match reason {
         Some(reason) => {
             sqlx::query(
                 "UPDATE app_versions SET review_stage = 'manual', manual_reason = $2 WHERE id = $1",
@@ -583,6 +663,21 @@ async fn run_submit(state: &AppState, version_id: Uuid) -> Result<JobResult, Str
             })
         }
     }
+}
+
+/// Ghi tóm tắt quét mã nguồn vào `app_versions.checks.source`.
+async fn set_source_check(state: &AppState, version_id: Uuid, summary: &Value) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE app_versions
+         SET checks = jsonb_set(CASE WHEN jsonb_typeof(checks) = 'object' THEN checks ELSE '{}'::jsonb END,
+                                '{source}', $2)
+         WHERE id = $1",
+    )
+    .bind(version_id)
+    .bind(summary)
+    .execute(&state.db)
+    .await?;
+    Ok(())
 }
 
 async fn run_rescan(state: &AppState, version_id: Uuid) -> Result<JobResult, String> {

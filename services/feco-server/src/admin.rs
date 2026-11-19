@@ -285,6 +285,8 @@ pub struct ReviewView {
     pub reason: String,
     pub checks: Vec<String>,
     pub diff: Vec<String>,
+    /// Báo cáo quét mã nguồn (thay đổi chat-and-source-scan).
+    pub source: Option<crate::source_scan::SourceView>,
 }
 
 pub struct OrderRow {
@@ -864,6 +866,13 @@ async fn review_queue(
             .map(|c| manifest_diff(lang, prev.as_ref(), c))
             .unwrap_or_default();
         let checks = match checks {
+            // `{"packages": [...], "source": {...}}`: mỗi gói một dòng; mã nguồn hiện ở bảng riêng.
+            Some(Value::Object(m)) if m.contains_key("packages") => m["packages"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|v| v.to_string())
+                .collect(),
             Some(Value::Object(m)) => m
                 .iter()
                 .map(|(k, v)| {
@@ -898,6 +907,7 @@ async fn review_queue(
             reason: q.reason,
             checks,
             diff,
+            source: crate::source_scan::view(&state.db, lang, q.version_id).await?,
         });
     }
     Ok(out)
