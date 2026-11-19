@@ -35,13 +35,16 @@ pub enum Category {
     AppUpdates,
     Recommendations,
     Newsletter,
+    /// Tin nhắn chat (thay đổi chat-and-source-scan): tùy chọn, bật mặc định.
+    Messages,
 }
 
 impl Category {
-    pub const OPTIONAL: [Category; 3] = [
+    pub const OPTIONAL: [Category; 4] = [
         Category::AppUpdates,
         Category::Recommendations,
         Category::Newsletter,
+        Category::Messages,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -54,6 +57,7 @@ impl Category {
             Category::AppUpdates => "app_updates",
             Category::Recommendations => "recommendations",
             Category::Newsletter => "newsletter",
+            Category::Messages => "messages",
         }
     }
 
@@ -67,6 +71,7 @@ impl Category {
             Category::AppUpdates,
             Category::Recommendations,
             Category::Newsletter,
+            Category::Messages,
         ]
         .into_iter()
         .find(|c| c.as_str() == s)
@@ -87,6 +92,7 @@ impl Category {
             Category::AppUpdates => "notify.cat.app_updates",
             Category::Recommendations => "notify.cat.recommendations",
             Category::Newsletter => "notify.cat.newsletter",
+            Category::Messages => "notify.cat.messages",
             _ => "notify.cat.mandatory",
         }
     }
@@ -597,5 +603,18 @@ mod tests {
             "bản tin mặc định tắt"
         );
         assert_eq!(Category::parse("newsletter"), Some(Category::Newsletter));
+    }
+
+    /// Spec notifications (chat-and-source-scan), "Thông báo tin nhắn": nhóm "Tin nhắn" bật mặc
+    /// định và tắt được (nên có trong trang cài đặt, nơi liệt kê `Category::OPTIONAL`).
+    #[test]
+    fn messages_category_is_optional_and_on_by_default() {
+        let c = Category::Messages;
+        assert!(!c.mandatory() && c.default_enabled());
+        assert!(Category::OPTIONAL.contains(&c));
+        assert_eq!(Category::parse("messages"), Some(c));
+        for lang in Lang::ALL {
+            assert!(!lang.t(c.label_key()).is_empty());
+        }
     }
 }

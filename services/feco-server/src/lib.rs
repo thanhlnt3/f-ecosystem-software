@@ -12,6 +12,9 @@ pub mod auth;
 pub mod bootstrap;
 pub mod catalog;
 pub mod challenge;
+pub mod chat;
+pub mod chat_api;
+pub mod chat_web;
 pub mod codesign;
 pub mod connected;
 pub mod crypto;
@@ -140,6 +143,8 @@ pub struct AppState {
     pub withdrawals_enabled: bool,
     /// Proxy được tin `X-Forwarded-For` (`FECO_TRUSTED_PROXIES`).
     pub trusted_proxies: Vec<std::net::IpAddr>,
+    /// Chat: sự kiện tin mới (từ `LISTEN feco_chat`) và người đang mở hội thoại.
+    pub chat: chat::Hub,
 }
 
 /// Ngưỡng giới hạn tần suất (yêu cầu mỗi phút).
@@ -236,6 +241,7 @@ impl AppState {
                 .unwrap_or_else(|| a.public_url.clone()),
             withdrawals_enabled: !config.payments.withdrawals_disabled,
             trusted_proxies: config.security.trusted_proxies.clone(),
+            chat: chat::Hub::default(),
         })
     }
 }
@@ -451,6 +457,43 @@ pub fn router(state: Arc<AppState>) -> Router {
             post(store_web::submit_reply),
         )
         .route("/store/{id}/report", post(store_web::submit_report))
+        // Chat (thay đổi chat-and-source-scan).
+        .route("/messages", get(chat_web::list))
+        .route("/messages/start", post(chat_web::start))
+        .route("/messages/events", get(chat_web::events))
+        .route("/messages/chat.js", get(chat_web::script))
+        .route(
+            "/messages/{id}",
+            get(chat_web::show)
+                .post(chat_web::send)
+                // Một tệp đính kèm tối đa 20 MB (chat::send chặn tệp lớn hơn) và phần còn lại.
+                .layer(axum::extract::DefaultBodyLimit::max(
+                    chat::MAX_ATTACHMENT + 1024 * 1024,
+                )),
+        )
+        .route("/messages/{id}/after/{last}", get(chat_web::after))
+        .route("/messages/{id}/files/{att}", get(chat_web::download))
+        .route("/messages/{id}/{action}", post(chat_web::action))
+        .route("/admin/chat-reports", get(chat_web::admin_reports))
+        .route("/admin/chat-reports/{id}", get(chat_web::admin_report))
+        .route(
+            "/admin/chat-reports/{id}/handled",
+            post(chat_web::admin_handled),
+        )
+        .route(
+            "/admin/projects/{id}/message",
+            post(projects_web::admin_message),
+        )
+        .route("/v1/chat/unread", get(chat_api::unread))
+        .route(
+            "/v1/chat/conversations",
+            get(chat_api::conversations).post(chat_api::start),
+        )
+        .route(
+            "/v1/chat/conversations/{id}/messages",
+            get(chat_api::messages).post(chat_api::send),
+        )
+        .route("/v1/chat/conversations/{id}/read", post(chat_api::read))
         .route("/v1/launch-codes", post(launch::issue))
         .route("/v1/account/role", get(launch::account_role))
         .route("/v1/launch-codes/exchange", post(launch::exchange))
@@ -467,12 +510,16 @@ pub fn router(state: Arc<AppState>) -> Router {
     ] {
         r = flow_routes(r, kind);
     }
-    r.layer(axum::middleware::from_fn(ui_prefs::apply))
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            security::layer,
-        ))
-        .with_state(state)
+    r.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        chat_web::nav_badge,
+    ))
+    .layer(axum::middleware::from_fn(ui_prefs::apply))
+    .layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        security::layer,
+    ))
+    .with_state(state)
 }
 
 #[cfg(test)]
@@ -525,6 +572,7 @@ mod tests {
             payment_callback_base: Url::parse("http://127.0.0.1:8080/").unwrap(),
             withdrawals_enabled: true,
             trusted_proxies: Vec::new(),
+            chat: chat::Hub::default(),
         }
     }
 

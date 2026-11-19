@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::{
     admin::{self, Role},
+    chat,
     connected::{current_subject, format_time},
     csrf,
     i18n::Lang,
@@ -552,12 +553,6 @@ pub struct OfferView {
     pub at: String,
 }
 
-pub struct MessageView {
-    pub side: &'static str,
-    pub body: String,
-    pub at: String,
-}
-
 pub struct EventView {
     pub status: &'static str,
     pub actor: String,
@@ -594,7 +589,12 @@ struct ProjectPage {
     escrow: String,
     balance: String,
     offers: Vec<OfferView>,
-    messages_list: Vec<MessageView>,
+    /// Hội thoại dự án (thay đổi chat-and-source-scan): luồng tin dạng HTML, id hội thoại, id tin
+    /// cuối, người xem gửi được không.
+    thread_html: String,
+    chat_id: Option<String>,
+    chat_last: i64,
+    chat_can_send: bool,
     events: Vec<EventView>,
     contract: Option<ContractView>,
     can_contract: bool,
@@ -620,13 +620,29 @@ async fn project_page(
     messages: Vec<Msg>,
 ) -> ProjectPage {
     let db = &state.db;
-    let (offers, msgs, events, contract) = tokio::join!(
+    let (offers, conversation, events, contract) = tokio::join!(
         projects::offers(db, p.id),
-        projects::messages(db, p.id),
+        chat::of_project(db, p.id),
         projects::events(db, p.id),
         projects::contract(db, p.id)
     );
     let side = viewer.map(|v| v.1);
+    let (mut thread_html, mut chat_last, mut chat_id) = (String::new(), 0, None);
+    if let Ok(Some(c)) = conversation {
+        // Người tham gia mở dự án thì coi như đã đọc hội thoại dự án.
+        if let Some(role) = viewer.and_then(|v| c.role_of(v.0)) {
+            if let Err(e) = chat::mark_read(db, &c, role, None).await {
+                tracing::error!(error = %e, "không đánh dấu được đã đọc");
+            }
+        }
+        (thread_html, chat_last) =
+            crate::chat_web::thread(state, lang, &c, viewer.map(|v| v.0)).await;
+        chat_id = Some(c.id.to_string());
+    }
+    // Dự án đã hủy hoặc hoàn tiền quá 30 ngày thì hội thoại chỉ còn đọc.
+    let chat_can_send = viewer.is_some()
+        && !(matches!(p.status.as_str(), "cancelled" | "refunded")
+            && p.updated_at < time::OffsetDateTime::now_utc() - time::Duration::days(30));
     let (role, balance) = match viewer {
         Some((s, Side::Customer)) => (
             roles::role_of(db, s).await.unwrap_or(PlatformRole::User),
@@ -709,15 +725,10 @@ async fn project_page(
                 at: format_time(o.created_at),
             })
             .collect(),
-        messages_list: msgs
-            .unwrap_or_default()
-            .into_iter()
-            .map(|m| MessageView {
-                side: side_key(&m.side),
-                body: m.body,
-                at: format_time(m.at),
-            })
-            .collect(),
+        thread_html,
+        chat_id,
+        chat_last,
+        chat_can_send,
         events: events
             .unwrap_or_default()
             .into_iter()
@@ -1008,5 +1019,28 @@ pub async fn admin_resolve(
             Ok(()) => (vec![Msg::success(lang.t("admin.saved"))], StatusCode::OK),
             Err(e) => explain(lang, e).swap(),
         };
+    render_admin(&state, lang, &headers, &a, Some(id), messages, status).await
+}
+
+/// POST /admin/projects/{id}/message: Quản lý dự án nhắn trong hội thoại dự án (`side = 'admin'`).
+pub async fn admin_message(
+    State(state): State<Arc<AppState>>,
+    lang: Lang,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let f = form(&body);
+    if !csrf::verify(&headers, Some(get(&f, csrf::FIELD))) {
+        return (StatusCode::FORBIDDEN, lang.t("error.csrf")).into_response();
+    }
+    let a = match pm_gate(&state, lang, &headers, "/admin/projects").await {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    let (messages, status) = match chat::send_admin(&state, id, a.subject, get(&f, "body")).await {
+        Ok(_) => (vec![Msg::success(lang.t("admin.saved"))], StatusCode::OK),
+        Err(e) => (vec![Msg::error(e.text(lang))], e.status()),
+    };
     render_admin(&state, lang, &headers, &a, Some(id), messages, status).await
 }

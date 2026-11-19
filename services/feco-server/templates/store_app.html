@@ -8,6 +8,7 @@
 <p class="muted">{{ card.developer }}{% if card.verified %}<span class="badge ok" id="verified">{{ i18n.t("store.verified") }}</span>{% endif %} · {{ card.rating }}</p>
 {% for m in messages %}<div class="msg {{ m.kind }}">{{ m.text }}</div>{% endfor %}
 <p>{{ card.summary }}</p>
+{% if can_message %}<form method="post" action="/messages/start" id="message-developer"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><input type="hidden" name="app_id" value="{{ card.id }}"><button type="submit" class="secondary">{{ i18n.t("chat.message_developer") }}</button></form>{% endif %}
 {% if !screenshots.is_empty() %}
 <h2>{{ i18n.t("store.screenshots") }}</h2>
 <div class="shots">{% for s in screenshots %}<img src="{{ s }}" alt="{{ card.name }}" loading="lazy">{% endfor %}</div>

@@ -37,7 +37,12 @@
   </form>
   {% endif %}
   <h3>{{ i18n.t("proj.messages") }}</h3>
-  <table>{% for m in d.messages_list %}<tr><td><strong>{{ i18n.t(m.side) }}</strong> <span class="muted">{{ m.at }}</span><div style="white-space:pre-wrap">{{ m.body }}</div></td></tr>{% endfor %}</table>
+  <div class="chat-thread" id="admin-project-chat">{{ d.thread_html|safe }}</div>
+  <form method="post" action="/admin/projects/{{ d.p.id }}/message" id="admin-message-form">
+    <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+    <textarea name="body" maxlength="5000" required aria-label="{{ i18n.t("proj.messages") }}"></textarea>
+    <button type="submit" class="secondary">{{ i18n.t("chat.send_as_admin") }}</button>
+  </form>
   <h3>{{ i18n.t("proj.history") }}</h3>
   <table>{% for e in d.events %}<tr><td>{{ i18n.t(e.status) }}{% if !e.note.is_empty() %} · {{ e.note }}{% endif %}<br><span class="muted">{{ e.actor }} · {{ e.at }}</span></td></tr>{% endfor %}</table>
 </section>

@@ -131,6 +131,19 @@ fn spawn_background_jobs(state: Arc<AppState>) {
             }
         }
     });
+    // Chat: nghe `LISTEN feco_chat` để phát sự kiện tin mới; mỗi phút quét lại tệp đính kèm chưa
+    // quét xong (thay đổi chat-and-source-scan).
+    feco_server::chat::start_listener(&state);
+    let s = state.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            tick.tick().await;
+            if let Err(e) = feco_server::chat::rescan_due(&s).await {
+                tracing::error!(error = %e, "không quét lại được tệp đính kèm của chat");
+            }
+        }
+    });
     // Thanh toán: mỗi phút truy vấn chủ động giao dịch quá 15 phút và lệnh hoàn đang xử lý; mỗi
     // giờ kiểm xem đã tới lúc đối soát ngày hôm trước chưa.
     let s = state.clone();

@@ -400,6 +400,7 @@ pub async fn create(
         ));
     }
     let id = Uuid::new_v4();
+    let customer_name = crate::chat::person_name(state, customer).await;
     let mut tx = state.db.begin().await?;
     let n: i64 = sqlx::query_scalar("SELECT nextval('project_seq')")
         .fetch_one(&mut *tx)
@@ -422,6 +423,16 @@ pub async fn create(
     .execute(&mut *tx)
     .await?;
     event(&mut tx, id, None, "requested", customer_email, "").await?;
+    // Mỗi dự án có một hội thoại giữa khách hàng và người nhận việc (chat-and-source-scan).
+    crate::chat::ensure_project(
+        &mut tx,
+        id,
+        customer,
+        provider,
+        &customer_name,
+        &pro.display_name,
+    )
+    .await?;
     tx.commit().await?;
     audit::record(
         &state.db,
@@ -471,20 +482,6 @@ pub async fn offers(db: &Db, project: Uuid) -> sqlx::Result<Vec<Offer>> {
 }
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
-pub struct Message {
-    pub side: String,
-    pub body: String,
-    pub at: OffsetDateTime,
-}
-
-pub async fn messages(db: &Db, project: Uuid) -> sqlx::Result<Vec<Message>> {
-    sqlx::query_as("SELECT side, body, at FROM project_messages WHERE project_id = $1 ORDER BY id")
-        .bind(project)
-        .fetch_all(db)
-        .await
-}
-
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct Event {
     pub from_status: Option<String>,
     pub to_status: String,
@@ -502,49 +499,35 @@ pub async fn events(db: &Db, project: Uuid) -> sqlx::Result<Vec<Event>> {
     .await
 }
 
-async fn add_message(tx: &mut Tx<'_>, id: Uuid, side: &str, body: &str) -> sqlx::Result<()> {
-    sqlx::query("INSERT INTO project_messages (project_id, side, body) VALUES ($1, $2, $3)")
-        .bind(id)
-        .bind(side)
-        .bind(body)
-        .execute(&mut **tx)
-        .await?;
-    sqlx::query("UPDATE projects SET updated_at = now() WHERE id = $1")
-        .bind(id)
-        .execute(&mut **tx)
-        .await?;
+/// Ghi một tin vào hội thoại dự án (thay `project_messages`, thay đổi chat-and-source-scan).
+async fn add_message(
+    tx: &mut Tx<'_>,
+    id: Uuid,
+    sender: Option<Uuid>,
+    side: &str,
+    body: &str,
+) -> sqlx::Result<()> {
+    crate::chat::project_message(tx, id, sender, side, body).await?;
     Ok(())
 }
 
-/// Tin nhắn trong dự án.
+/// Tin nhắn trong dự án: gửi vào hội thoại dự án. Thông báo cho bên kia chỉ ghi tên người gửi và
+/// đường dẫn, không chép nội dung (spec notifications, "Không lộ nội dung").
 pub async fn message(state: &AppState, id: Uuid, subject: Uuid, body: &str) -> OrderResult<()> {
-    let body = clip(body, 5_000);
-    if body.is_empty() {
-        return Err(bad(
-            "invalid_request",
-            "Tin nhắn trống.",
-            "The message is empty.",
-        ));
+    for_party(&state.db, id, subject).await?;
+    let conv = crate::chat::of_project(&state.db, id)
+        .await?
+        .ok_or_else(not_found)?;
+    match crate::chat::send(state, conv.id, subject, body, None).await {
+        Ok(_) => Ok(()),
+        Err(crate::chat::ChatError::Db(e)) => Err(OrderError::Db(e)),
+        Err(e) => Err(problem(
+            e.status(),
+            e.code(),
+            e.text(Lang::Vi),
+            e.text(Lang::En),
+        )),
     }
-    let mut tx = state.db.begin().await?;
-    let (p, side) = lock_party(&mut tx, id, subject).await?;
-    add_message(&mut tx, id, side.as_str(), &body).await?;
-    tx.commit().await?;
-    tell(
-        state,
-        &p,
-        side.other(),
-        (
-            format!("Tin nhắn mới ở dự án {}", p.code),
-            body.chars().take(300).collect(),
-        ),
-        (
-            format!("New message on project {}", p.code),
-            body.chars().take(300).collect(),
-        ),
-    )
-    .await;
-    Ok(())
 }
 
 /// Đưa đề nghị giá và thời hạn; đề nghị mới thay mọi đề nghị đang mở.
@@ -1084,7 +1067,7 @@ pub async fn request_revision(
     if p.status != "delivered" {
         return Err(wrong_state());
     }
-    add_message(&mut tx, id, "customer", &reason).await?;
+    add_message(&mut tx, id, Some(subject), "customer", &reason).await?;
     set_status(&mut tx, &p, "in_progress", &p.customer_email, &reason).await?;
     tx.commit().await?;
     tell(
@@ -1166,7 +1149,7 @@ pub async fn dispute(state: &AppState, id: Uuid, subject: Uuid, reason: &str) ->
         .execute(&mut *tx)
         .await?;
     let actor = p.party(side).1.to_owned();
-    add_message(&mut tx, id, side.as_str(), &reason).await?;
+    add_message(&mut tx, id, Some(subject), side.as_str(), &reason).await?;
     set_status(&mut tx, &p, "disputed", &actor, &reason).await?;
     tx.commit().await?;
     crate::review::admin_alert(
@@ -1235,7 +1218,7 @@ pub async fn resolve(
     }
     let refund = p.escrow_coin - to_provider;
     settle_escrow(&mut tx, &p, to_provider, admin).await?;
-    add_message(&mut tx, id, "admin", &note).await?;
+    add_message(&mut tx, id, None, "admin", &note).await?;
     set_status(
         &mut tx,
         &p,

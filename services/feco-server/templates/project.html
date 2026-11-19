@@ -144,13 +144,23 @@
 </details>
 {% endif %}
 
-<h2>{{ i18n.t("proj.messages") }}</h2>
-<table id="project-messages">{% for m in messages_list %}<tr><td><strong>{{ i18n.t(m.side) }}</strong> <span class="muted">{{ m.at }}</span><div style="white-space:pre-wrap">{{ m.body }}</div></td></tr>{% endfor %}</table>
-<form method="post" action="/projects/{{ p.id }}/message" id="message-form">
+<h2 id="chat">{{ i18n.t("proj.messages") }}</h2>
+{% match chat_id %}{% when Some with (cid) %}
+<div id="chat-thread" class="chat-thread" data-conversation="{{ cid }}" data-last="{{ chat_last }}" aria-live="polite">{{ thread_html|safe }}</div>
+{% if chat_can_send %}
+<form method="post" action="/messages/{{ cid }}" enctype="multipart/form-data" id="message-form">
   <input type="hidden" name="feco_csrf" value="{{ csrf }}">
-  <textarea name="body" maxlength="5000" required aria-label="{{ i18n.t("proj.messages") }}"></textarea>
+  <input type="hidden" name="back" value="project">
+  <textarea name="body" maxlength="5000" aria-label="{{ i18n.t("proj.messages") }}"></textarea>
+  <label for="chat-file">{{ i18n.t("chat.attach") }}</label>
+  <input type="file" name="file" id="chat-file">
+  <p class="muted">{{ i18n.t("chat.attach_note") }}</p>
   <button type="submit" class="secondary">{{ i18n.t("proj.send_message") }}</button>
 </form>
+{% endif %}
+<p><a href="/messages/{{ cid }}" id="open-chat">{{ i18n.t("chat.open") }}</a></p>
+<script src="/messages/chat.js" defer></script>
+{% when None %}{% endmatch %}
 
 <h2>{{ i18n.t("proj.history") }}</h2>
 <table id="project-events">{% for e in events %}<tr><td>{{ i18n.t(e.status) }}{% if !e.note.is_empty() %} · {{ e.note }}{% endif %}<br><span class="muted">{{ e.actor }} · {{ e.at }}</span></td></tr>{% endfor %}</table>

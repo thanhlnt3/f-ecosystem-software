@@ -182,7 +182,7 @@ fn e2e_ready() -> bool {
                 .unwrap();
                 let momo_endpoint = momo.endpoint();
                 let _ = MOMO.set(momo);
-                let vars: HashMap<String, String> = [
+                let mut vars: HashMap<String, String> = [
                     ("FECO_ENV", "dev".to_owned()),
                     ("FECO_LAUNCHER_CLIENT_ID", launcher.clone()),
                     ("FECO_MOBILE_CLIENT_ID", mobile.clone()),
@@ -211,6 +211,11 @@ fn e2e_ready() -> bool {
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v))
                 .collect();
+                // Cơ sở dữ liệu riêng cho máy chủ kiểm thử (mặc định như cấu hình dev), để nhiều
+                // nhánh có migration khác nhau không dùng chung một lược đồ.
+                if let Ok(url) = std::env::var("FECO_E2E_DATABASE_URL") {
+                    vars.insert("FECO_DATABASE_URL".into(), url);
+                }
                 let _ = SERVER_VARS.set(vars.clone());
                 let config = Config::from_vars(&vars).unwrap();
                 let state = std::sync::Arc::new(AppState::from_config(&config).unwrap());

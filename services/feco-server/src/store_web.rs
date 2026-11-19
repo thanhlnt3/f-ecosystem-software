@@ -146,6 +146,9 @@ struct AppPage {
     owned: bool,
     csrf: String,
     reasons: Vec<(String, String)>,
+    /// Nút "Nhắn nhà phát triển": app có chủ tài khoản nhà phát triển, người xem không phải chủ
+    /// (thay đổi chat-and-source-scan).
+    can_message: bool,
 }
 
 fn html(t: impl Template, lang: Lang, status: StatusCode) -> Response {
@@ -371,6 +374,10 @@ async fn app_page(
                 .unwrap_or(false);
         }
     }
+    page.can_message = match crate::chat::app_owner(&state.db, id).await {
+        Ok(Some(owner)) => viewer.as_ref().is_none_or(|v| v.0 != owner),
+        _ => false,
+    };
     let mut res = html(page, lang, status);
     if let Some(c) = set_cookie {
         res.headers_mut().append(header::SET_COOKIE, c);
@@ -422,6 +429,7 @@ fn page_from(
             .iter()
             .map(|r| ((*r).to_owned(), lang.t(&format!("reason.{r}")).to_owned()))
             .collect(),
+        can_message: false,
     }
 }
 

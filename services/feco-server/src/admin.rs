@@ -664,6 +664,14 @@ pub fn nav(lang: Lang, admin: &Admin, section: &str) -> Vec<NavItem> {
             current: section == "projects",
         });
     }
+    // Báo cáo hội thoại chat (thay đổi chat-and-source-scan).
+    if admin.has(Role::Support) {
+        nav.push(NavItem {
+            href: "/admin/chat-reports",
+            label: lang.t("admin.nav.chat_reports"),
+            current: section == "chat-reports",
+        });
+    }
     nav
 }
 

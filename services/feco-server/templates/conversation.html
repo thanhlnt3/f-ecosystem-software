@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<p><a href="/messages">← {{ i18n.t("chat.title") }}</a></p>
+<h1 id="chat-title">{{ title }}</h1>
+<p class="muted">{{ i18n.t("chat.with") }} <strong id="chat-peer">{{ peer }}</strong>{% if !project_link.is_empty() %} · <a href="{{ project_link }}" id="chat-project">{{ i18n.t("chat.open_project") }}</a>{% endif %}{% if !app_link.is_empty() %} · <a href="{{ app_link }}" id="chat-app" data-app="{{ app_link }}">{{ app_name }}</a>{% endif %}</p>
+{% for m in messages %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
+{% if blocked %}<div class="msg warn" id="chat-blocked">{{ i18n.t(blocked_key) }}</div>{% endif %}
+<div id="chat-thread" class="chat-thread" data-conversation="{{ id }}" data-kind="{{ kind }}" data-last="{{ last_id }}" aria-live="polite">{% if last_id == 0 %}<p class="muted" id="chat-empty">{{ i18n.t("chat.empty_thread") }}</p>{% endif %}{{ thread_html|safe }}</div>
+{% if can_send %}
+<form method="post" action="/messages/{{ id }}" enctype="multipart/form-data" id="chat-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <textarea name="body" maxlength="5000" aria-label="{{ i18n.t("chat.body") }}" placeholder="{{ i18n.t("chat.body") }}"></textarea>
+  <label for="chat-file">{{ i18n.t("chat.attach") }}</label>
+  <input type="file" name="file" id="chat-file">
+  <p class="muted">{{ i18n.t("chat.attach_note") }}</p>
+  <button type="submit">{{ i18n.t("chat.send") }}</button>
+</form>
+{% endif %}
+<div class="links">
+{% if can_block %}
+{% if blocked %}
+<form method="post" action="/messages/{{ id }}/unblock" id="unblock-form"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit" class="secondary">{{ i18n.t("chat.unblock") }}</button></form>
+{% else %}
+<form method="post" action="/messages/{{ id }}/block" id="block-form"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit" class="secondary">{{ i18n.t("chat.block") }}</button></form>
+{% endif %}
+{% endif %}
+</div>
+<details id="chat-report"><summary>{{ i18n.t("chat.report") }}</summary>
+<form method="post" action="/messages/{{ id }}/report" id="report-form">
+  <input type="hidden" name="feco_csrf" value="{{ csrf }}">
+  <label for="report-reason">{{ i18n.t("chat.report_reason") }}</label>
+  <input type="text" name="reason" id="report-reason" maxlength="1000" required>
+  <button type="submit" class="secondary">{{ i18n.t("chat.report") }}</button>
+</form>
+</details>
+<script src="/messages/chat.js" defer></script>
+{% endblock %}
