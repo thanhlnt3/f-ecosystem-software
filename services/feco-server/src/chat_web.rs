@@ -33,6 +33,7 @@ use crate::{
     connected::{current_subject, format_time},
     csrf,
     i18n::Lang,
+    listing::{self, Item, ListQuery as AdminListQuery, Toolbar},
     views::Msg,
     wallet_web::{form, get, render, see_other},
     AppState,
@@ -793,6 +794,8 @@ pub struct ReportView {
     pub id: i64,
     pub conversation: String,
     pub reason: String,
+    /// Người báo cáo (thay đổi admin-list-tools).
+    pub reporter: String,
     pub at: String,
     pub handled: bool,
     pub handled_note: String,
@@ -812,6 +815,8 @@ struct AdminChatPage {
     detail: Option<ReportView>,
     detail_title: String,
     thread_html: String,
+    /// Thanh lọc, sắp xếp, tìm kiếm (thay đổi admin-list-tools).
+    toolbar: Toolbar,
 }
 
 fn report_view(r: chat::Report) -> ReportView {
@@ -819,6 +824,7 @@ fn report_view(r: chat::Report) -> ReportView {
         id: r.id,
         conversation: r.conversation_id.to_string(),
         reason: r.reason,
+        reporter: r.reporter_name,
         at: format_time(r.at),
         handled: r.handled_at.is_some(),
         handled_note: match (r.handled_at, r.handled_by) {
@@ -844,6 +850,7 @@ async fn support_gate(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn render_admin(
     state: &AppState,
     lang: Lang,
@@ -852,8 +859,34 @@ async fn render_admin(
     detail: Option<i64>,
     messages: Vec<Msg>,
     status: StatusCode,
+    query: &AdminListQuery,
 ) -> Response {
-    let reports = chat::reports(&state.db).await.unwrap_or_default();
+    let all = chat::reports(&state.db).await.unwrap_or_default();
+    let total = all.len();
+    let reports = listing::apply(all, query, &[], |r| Item {
+        at: Some(r.at),
+        sender: r.reporter_name.clone(),
+        text: format!("#{} {}", r.id, r.reason),
+        status: if r.handled_at.is_some() {
+            "handled"
+        } else {
+            "open"
+        }
+        .to_owned(),
+    });
+    let toolbar = Toolbar::new(
+        lang,
+        "/admin/chat-reports",
+        query,
+        lang.t("list.ph.reports"),
+        lang.t("list.status.all"),
+        &[
+            ("open", lang.t("chat.report_open").to_owned()),
+            ("handled", lang.t("chat.report_handled").to_owned()),
+        ],
+        reports.len(),
+        total,
+    );
     let mut detail_title = String::new();
     let mut thread_html = String::new();
     let detail = match detail {
@@ -889,6 +922,7 @@ async fn render_admin(
             detail,
             detail_title,
             thread_html,
+            toolbar,
         },
         lang,
         status,
@@ -900,13 +934,24 @@ async fn render_admin(
 pub async fn admin_reports(
     State(state): State<Arc<AppState>>,
     lang: Lang,
+    Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> Response {
     let a = match support_gate(&state, lang, &headers).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
-    render_admin(&state, lang, &headers, &a, None, Vec::new(), StatusCode::OK).await
+    render_admin(
+        &state,
+        lang,
+        &headers,
+        &a,
+        None,
+        Vec::new(),
+        StatusCode::OK,
+        &AdminListQuery::parse(&params),
+    )
+    .await
 }
 
 /// GET /admin/chat-reports/{id}: báo cáo và hội thoại bị báo cáo (chỉ đọc).
@@ -928,6 +973,7 @@ pub async fn admin_report(
         Some(id),
         Vec::new(),
         StatusCode::OK,
+        &AdminListQuery::default(),
     )
     .await
 }
@@ -966,7 +1012,17 @@ pub async fn admin_handled(
             StatusCode::SERVICE_UNAVAILABLE,
         ),
     };
-    render_admin(&state, lang, &headers, &a, Some(id), messages, status).await
+    render_admin(
+        &state,
+        lang,
+        &headers,
+        &a,
+        Some(id),
+        messages,
+        status,
+        &AdminListQuery::default(),
+    )
+    .await
 }
 
 #[cfg(test)]

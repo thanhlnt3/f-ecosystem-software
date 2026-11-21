@@ -9,7 +9,7 @@
 //! - Mọi thao tác ghi nhật ký kiểm toán; xem hồ sơ người dùng phải nhập lý do.
 //! - Không có chức năng đăng nhập thay người dùng hay xem dữ liệu trong app con.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use askama::Template;
 use axum::{
@@ -28,6 +28,7 @@ use crate::{
     csrf,
     i18n::Lang,
     kratos::{FlowKind, InitOptions, Whoami},
+    listing::{self, Item, ListQuery, Toolbar},
     orders::{self, OrderError, Status},
     payments::{self, Requester},
     review,
@@ -280,6 +281,8 @@ pub struct NavItem {
 pub struct ReviewView {
     pub version_id: String,
     pub app: String,
+    /// Tên tài khoản nhà phát triển (người gửi, thay đổi admin-list-tools).
+    pub developer: String,
     pub version: String,
     pub waited: String,
     pub reason: String,
@@ -296,6 +299,10 @@ pub struct OrderRow {
     pub status: String,
     pub due: String,
     pub warning: bool,
+    /// Email khách hàng (người gửi), mã trạng thái và lúc tạo: cho bộ lọc (admin-list-tools).
+    pub customer: String,
+    pub status_code: String,
+    pub created: OffsetDateTime,
 }
 
 pub struct MilestoneRow {
@@ -327,6 +334,9 @@ pub struct OrderDetail {
 
 pub struct RefundRow {
     pub id: String,
+    /// Người tạo lệnh và lúc tạo (admin-list-tools).
+    pub by: String,
+    pub created: String,
     pub transaction: String,
     pub amount: String,
     pub status: String,
@@ -635,46 +645,50 @@ struct AdminPage {
     show_chart: bool,
     /// Dev bỏ passkey: mọi trang quản trị hiện cảnh báo.
     dev_no_passkey: bool,
+    /// Thanh lọc, sắp xếp, tìm kiếm của danh sách đang mở (admin-list-tools).
+    toolbar: Toolbar,
 }
 
 /// Mục điều hướng của bảng quản trị theo vai trò con. Ví F-Coin cho Tài chính và Quản trị hệ
 /// thống, Dự án cho Quản lý dự án (thay đổi fcoin-wallet-and-marketplace).
-pub fn nav(lang: Lang, admin: &Admin, section: &str) -> Vec<NavItem> {
-    let mut nav: Vec<NavItem> = Role::ALL
+/// Các mục quản trị mà một tập vai trò được vào: (khóa, đường dẫn, khóa nhãn). Nguồn chung cho
+/// thanh điều hướng và `GET /v1/account/role` (thay đổi admin-list-tools, design L4).
+pub fn sections(roles: &[Role]) -> Vec<(&'static str, &'static str, &'static str)> {
+    let has = |r: Role| roles.contains(&r);
+    let mut out: Vec<(&'static str, &'static str, &'static str)> = Role::ALL
         .into_iter()
-        .filter(|r| admin.has(*r))
+        .filter(|r| has(*r))
         .map(|r| {
-            let (href, key) = r.section();
-            NavItem {
-                href,
-                label: lang.t(key),
-                current: href.ends_with(section),
-            }
+            let (href, label) = r.section();
+            (href.trim_start_matches("/admin/"), href, label)
         })
         .collect();
-    if admin.has(Role::Finance) || admin.has(Role::Sysadmin) {
-        nav.push(NavItem {
-            href: "/admin/wallet",
-            label: lang.t("admin.nav.wallet"),
-            current: section == "wallet",
-        });
+    if has(Role::Finance) || has(Role::Sysadmin) {
+        out.push(("wallet", "/admin/wallet", "admin.nav.wallet"));
     }
-    if admin.has(Role::ProjectManager) {
-        nav.push(NavItem {
-            href: "/admin/projects",
-            label: lang.t("admin.nav.projects"),
-            current: section == "projects",
-        });
+    if has(Role::ProjectManager) {
+        out.push(("projects", "/admin/projects", "admin.nav.projects"));
     }
     // Báo cáo hội thoại chat (thay đổi chat-and-source-scan).
-    if admin.has(Role::Support) {
-        nav.push(NavItem {
-            href: "/admin/chat-reports",
-            label: lang.t("admin.nav.chat_reports"),
-            current: section == "chat-reports",
-        });
+    if has(Role::Support) {
+        out.push((
+            "chat-reports",
+            "/admin/chat-reports",
+            "admin.nav.chat_reports",
+        ));
     }
-    nav
+    out
+}
+
+pub fn nav(lang: Lang, admin: &Admin, section: &str) -> Vec<NavItem> {
+    sections(&admin.roles)
+        .into_iter()
+        .map(|(key, href, label)| NavItem {
+            href,
+            label: lang.t(label),
+            current: key == section,
+        })
+        .collect()
 }
 
 impl AdminPage {
@@ -723,6 +737,7 @@ impl AdminPage {
             chart_total: String::new(),
             show_chart: false,
             dev_no_passkey: false,
+            toolbar: Default::default(),
         }
     }
 }
@@ -847,9 +862,30 @@ async fn review_queue(
     state: &AppState,
     lang: Lang,
     now: OffsetDateTime,
-) -> sqlx::Result<Vec<ReviewView>> {
+    query: &ListQuery,
+) -> sqlx::Result<(Vec<ReviewView>, usize)> {
+    let queue = review::manual_queue(&state.db).await?;
+    let total = queue.len();
+    // Người gửi: tên tài khoản nhà phát triển của app.
+    let apps: Vec<String> = queue.iter().map(|q| q.app_id.clone()).collect();
+    let developers: std::collections::HashMap<String, String> = sqlx::query_as(
+        "SELECT da.app_id, a.display_name FROM developer_apps da
+         JOIN developer_accounts a ON a.id = da.account_id WHERE da.app_id = ANY($1)",
+    )
+    .bind(&apps)
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .collect();
+    let developer = |app: &str| developers.get(app).cloned().unwrap_or_default();
+    let queue = listing::apply(queue, query, &[], |q| Item {
+        at: q.submitted_at,
+        sender: developer(&q.app_id),
+        text: format!("{} {} {}", q.app_id, q.version, q.reason),
+        status: String::new(),
+    });
     let mut out = Vec::new();
-    for q in review::manual_queue(&state.db).await? {
+    for q in queue {
         let row: Option<(Value, Option<Value>, OffsetDateTime)> =
             sqlx::query_as("SELECT manifest, checks, created_at FROM app_versions WHERE id = $1")
                 .bind(q.version_id)
@@ -905,6 +941,7 @@ async fn review_queue(
         let waited = q.submitted_at.map(|s| now - s).unwrap_or_default();
         out.push(ReviewView {
             version_id: q.version_id.to_string(),
+            developer: developer(&q.app_id),
             app: q.app_id,
             version: q.version,
             waited: format!(
@@ -918,7 +955,7 @@ async fn review_queue(
             source: crate::source_scan::view(&state.db, lang, q.version_id).await?,
         });
     }
-    Ok(out)
+    Ok((out, total))
 }
 
 async fn render_reviews(
@@ -929,10 +966,43 @@ async fn render_reviews(
     messages: Vec<Msg>,
     status: StatusCode,
 ) -> Response {
+    render_reviews_q(
+        state,
+        lang,
+        headers,
+        admin,
+        messages,
+        status,
+        &ListQuery::default(),
+    )
+    .await
+}
+
+async fn render_reviews_q(
+    state: &AppState,
+    lang: Lang,
+    headers: &HeaderMap,
+    admin: &Admin,
+    messages: Vec<Msg>,
+    status: StatusCode,
+    query: &ListQuery,
+) -> Response {
     let mut page = AdminPage::new(lang, admin, "reviews");
     page.messages = messages;
-    match review_queue(state, lang, OffsetDateTime::now_utc()).await {
-        Ok(r) => page.reviews = r,
+    match review_queue(state, lang, OffsetDateTime::now_utc(), query).await {
+        Ok((r, total)) => {
+            page.toolbar = Toolbar::new(
+                lang,
+                "/admin/reviews",
+                query,
+                lang.t("list.ph.reviews"),
+                lang.t("list.status.all"),
+                &[],
+                r.len(),
+                total,
+            );
+            page.reviews = r
+        }
         Err(e) => {
             tracing::error!(error = %e, "không đọc được hàng chờ duyệt");
             page.messages.push(Msg::error(lang.t("error.unavailable")));
@@ -958,10 +1028,11 @@ async fn render_reviews(
     render(state, headers, page, status)
 }
 
-/// GET /admin/reviews (Người duyệt app)
+/// GET /admin/reviews (Người duyệt app); lọc, sắp xếp, tìm kiếm theo `listing`.
 pub async fn reviews(
     State(state): State<Arc<AppState>>,
     lang: Lang,
+    Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> Response {
     let admin = match gate(
@@ -976,7 +1047,16 @@ pub async fn reviews(
         Ok(a) => a,
         Err(r) => return *r,
     };
-    render_reviews(&state, lang, &headers, &admin, Vec::new(), StatusCode::OK).await
+    render_reviews_q(
+        &state,
+        lang,
+        &headers,
+        &admin,
+        Vec::new(),
+        StatusCode::OK,
+        &ListQuery::parse(&params),
+    )
+    .await
 }
 
 /// POST /admin/reviews/{version}/{approve|reject}: quyết định kèm lý do theo điều khoản.
@@ -1061,23 +1141,52 @@ pub async fn review_action(
 /// Đơn còn dưới 2 ngày tới hạn mốc mà chưa bàn giao được cảnh báo và đứng đầu danh sách.
 pub const DUE_WARNING_DAYS: i64 = 2;
 
+/// Trạng thái đơn bị ẩn khi chưa lọc trạng thái (danh sách "Đang mở").
+pub const ORDER_CLOSED: [&str; 2] = ["completed", "cancelled"];
+
+/// Đơn đang mở (chưa xong, chưa hủy), đơn sắp tới hạn trước.
 pub async fn order_rows(
     state: &AppState,
     lang: Lang,
     now: OffsetDateTime,
 ) -> sqlx::Result<Vec<OrderRow>> {
+    Ok(order_rows_all(state, lang, now)
+        .await?
+        .into_iter()
+        .filter(|o| !ORDER_CLOSED.contains(&o.status_code.as_str()))
+        .collect())
+}
+
+/// Mọi đơn trừ đơn nháp (500 đơn mới nhất), đơn sắp tới hạn trước (thay đổi admin-list-tools).
+pub async fn order_rows_all(
+    state: &AppState,
+    lang: Lang,
+    now: OffsetDateTime,
+) -> sqlx::Result<Vec<OrderRow>> {
     let vi = lang == Lang::Vi;
-    let rows: Vec<(Uuid, String, String, String, Option<OffsetDateTime>)> = sqlx::query_as(
+    type Row = (
+        Uuid,
+        String,
+        String,
+        String,
+        Option<OffsetDateTime>,
+        String,
+        OffsetDateTime,
+    );
+    let rows: Vec<Row> = sqlx::query_as(
         "SELECT o.id, o.code, o.title, o.status,
                 (SELECT min(m.due_at) FROM order_milestones m JOIN order_quotes q ON q.id = m.quote_id
-                  WHERE m.order_id = o.id AND q.status = 'accepted' AND m.status IN ('pending', 'awaiting_payment', 'in_progress'))
-         FROM orders o WHERE o.status NOT IN ('completed', 'cancelled', 'draft') ORDER BY o.created_at DESC LIMIT 500",
+                  WHERE m.order_id = o.id AND q.status = 'accepted' AND m.status IN ('pending', 'awaiting_payment', 'in_progress')),
+                o.customer_email, o.created_at
+         FROM orders o WHERE o.status <> 'draft' ORDER BY o.created_at DESC LIMIT 500",
     )
     .fetch_all(&state.db)
     .await?;
     let mut out: Vec<(bool, Option<OffsetDateTime>, OrderRow)> = rows
         .into_iter()
-        .map(|(id, code, title, status, due)| {
+        .map(|(id, code, title, status, due, customer, created)| {
+            let open = !ORDER_CLOSED.contains(&status.as_str());
+            let due = due.filter(|_| open);
             let warning = due.is_some_and(|d| d - now < Duration::days(DUE_WARNING_DAYS));
             (
                 warning,
@@ -1088,9 +1197,12 @@ pub async fn order_rows(
                     title,
                     status: Status::parse(&status)
                         .map(|s| s.label(vi).to_owned())
-                        .unwrap_or(status),
+                        .unwrap_or_else(|| status.clone()),
                     due: due.map(orders::date).unwrap_or_default(),
                     warning,
+                    customer,
+                    status_code: status,
+                    created,
                 },
             )
         })
@@ -1108,10 +1220,11 @@ pub async fn order_rows(
     Ok(out.into_iter().map(|x| x.2).collect())
 }
 
-/// GET /admin/orders (Quản lý dự án)
+/// GET /admin/orders (Quản lý dự án); lọc, sắp xếp, tìm kiếm theo `listing`.
 pub async fn orders_list(
     State(state): State<Arc<AppState>>,
     lang: Lang,
+    Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> Response {
     let admin = match gate(
@@ -1127,8 +1240,42 @@ pub async fn orders_list(
         Err(r) => return *r,
     };
     let mut page = AdminPage::new(lang, &admin, "orders");
-    match order_rows(&state, lang, OffsetDateTime::now_utc()).await {
-        Ok(o) => page.orders = o,
+    let query = ListQuery::parse(&params);
+    match order_rows_all(&state, lang, OffsetDateTime::now_utc()).await {
+        Ok(o) => {
+            let total = o.len();
+            let mut statuses: Vec<(&str, String)> = Vec::new();
+            for code in [
+                "submitted",
+                "quoted",
+                "in_progress",
+                "awaiting_payment",
+                "delivered",
+                "disputed",
+                "completed",
+                "cancelled",
+            ] {
+                if let Some(st) = Status::parse(code) {
+                    statuses.push((code, st.label(lang == Lang::Vi).to_owned()));
+                }
+            }
+            page.orders = listing::apply(o, &query, &ORDER_CLOSED, |o| Item {
+                at: Some(o.created),
+                sender: o.customer.clone(),
+                text: format!("{} {} {}", o.code, o.title, o.status),
+                status: o.status_code.clone(),
+            });
+            page.toolbar = Toolbar::new(
+                lang,
+                "/admin/orders",
+                &query,
+                lang.t("list.ph.orders"),
+                lang.t("list.status.open"),
+                &statuses,
+                page.orders.len(),
+                total,
+            );
+        }
         Err(e) => {
             tracing::error!(error = %e, "không đọc được danh sách đơn");
             page.messages.push(Msg::error(lang.t("error.unavailable")));
@@ -1352,15 +1499,71 @@ async fn render_refunds(
     messages: Vec<Msg>,
     status: StatusCode,
 ) -> Response {
+    render_refunds_q(
+        state,
+        lang,
+        headers,
+        admin,
+        messages,
+        status,
+        &ListQuery::default(),
+    )
+    .await
+}
+
+async fn render_refunds_q(
+    state: &AppState,
+    lang: Lang,
+    headers: &HeaderMap,
+    admin: &Admin,
+    messages: Vec<Msg>,
+    status: StatusCode,
+    query: &ListQuery,
+) -> Response {
     let vi = lang == Lang::Vi;
     let mut page = AdminPage::new(lang, admin, "refunds");
     page.messages = messages;
     match payments::open_refunds(state).await {
         Ok(r) => {
+            let total = r.len();
+            let statuses: Vec<(&str, String)> = r
+                .iter()
+                .map(|x| (x.status.clone(), x.label(vi).to_owned()))
+                .collect::<std::collections::BTreeMap<_, _>>()
+                .into_iter()
+                .map(|(code, label)| {
+                    (
+                        if code == "pending_approval" {
+                            "pending_approval"
+                        } else {
+                            "processing"
+                        },
+                        label,
+                    )
+                })
+                .collect();
+            let r = listing::apply(r, query, &[], |r| Item {
+                at: Some(r.created_at),
+                sender: r.requested_by.clone(),
+                text: format!("{} {} {}", r.reason, orders::vnd(r.amount_vnd), r.label(vi)),
+                status: r.status.clone(),
+            });
+            page.toolbar = Toolbar::new(
+                lang,
+                "/admin/refunds",
+                query,
+                lang.t("list.ph.refunds"),
+                lang.t("list.status.all"),
+                &statuses,
+                r.len(),
+                total,
+            );
             page.refunds = r
                 .into_iter()
                 .map(|r| RefundRow {
                     id: r.id.to_string(),
+                    by: r.requested_by.clone(),
+                    created: when(r.created_at),
                     transaction: r.transaction_id.to_string(),
                     amount: orders::vnd(r.amount_vnd),
                     status: r.label(vi).to_owned(),
@@ -1394,10 +1597,11 @@ async fn render_refunds(
     render(state, headers, page, status)
 }
 
-/// GET /admin/refunds (Tài chính)
+/// GET /admin/refunds (Tài chính); lọc, sắp xếp, tìm kiếm theo `listing`.
 pub async fn refunds(
     State(state): State<Arc<AppState>>,
     lang: Lang,
+    Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> Response {
     let admin = match gate(
@@ -1412,7 +1616,16 @@ pub async fn refunds(
         Ok(a) => a,
         Err(r) => return *r,
     };
-    render_refunds(&state, lang, &headers, &admin, Vec::new(), StatusCode::OK).await
+    render_refunds_q(
+        &state,
+        lang,
+        &headers,
+        &admin,
+        Vec::new(),
+        StatusCode::OK,
+        &ListQuery::parse(&params),
+    )
+    .await
 }
 
 /// POST /admin/refunds: tạo lệnh hoàn (transaction, amount, reason). Chỉ vai trò Tài chính.
@@ -1750,11 +1963,68 @@ async fn render_members(
     messages: Vec<Msg>,
     status: StatusCode,
 ) -> Response {
+    render_members_q(
+        state,
+        lang,
+        headers,
+        admin,
+        messages,
+        status,
+        &ListQuery::default(),
+    )
+    .await
+}
+
+async fn render_members_q(
+    state: &AppState,
+    lang: Lang,
+    headers: &HeaderMap,
+    admin: &Admin,
+    messages: Vec<Msg>,
+    status: StatusCode,
+    query: &ListQuery,
+) -> Response {
     let mut page = AdminPage::new(lang, admin, "members");
     page.messages = messages;
-    page.members = crate::roles::holders(&state.db)
+    // Lọc chung cho yêu cầu vai trò và người có quyền: trạng thái là vai trò nền tảng.
+    let holders = crate::roles::holders(&state.db).await.unwrap_or_default();
+    let pending = crate::roles::pending_requests(&state.db)
         .await
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let total = holders.len() + pending.len();
+    let holders = listing::apply(holders, query, &[], |h| Item {
+        at: None,
+        sender: h.email.clone(),
+        text: format!("{} {}", h.role.label(lang), h.admin_roles.join(" ")),
+        status: h.role.as_str().to_owned(),
+    });
+    let pending = listing::apply(pending, query, &[], |r| Item {
+        at: Some(r.created_at),
+        sender: r.email.clone(),
+        text: format!(
+            "{} {} {} {}",
+            r.platform_role().label(lang),
+            r.legal_name.as_deref().unwrap_or_default(),
+            r.tax_code.as_deref().unwrap_or_default(),
+            r.note
+        ),
+        status: r.platform_role().as_str().to_owned(),
+    });
+    let roles: Vec<(&str, String)> = crate::roles::PlatformRole::ALL
+        .into_iter()
+        .map(|r| (r.as_str(), r.label(lang).to_owned()))
+        .collect();
+    page.toolbar = Toolbar::new(
+        lang,
+        "/admin/members",
+        query,
+        lang.t("list.ph.members"),
+        lang.t("list.status.all"),
+        &roles,
+        holders.len() + pending.len(),
+        total,
+    );
+    page.members = holders
         .into_iter()
         .map(|h| MemberRow {
             subject: h.subject.to_string(),
@@ -1769,9 +2039,6 @@ async fn render_members(
                 .join(", "),
         })
         .collect();
-    let pending = crate::roles::pending_requests(&state.db)
-        .await
-        .unwrap_or_default();
     let mut rows = Vec::with_capacity(pending.len());
     for r in pending {
         // Trạng thái xác minh email của người xin (Kratos không trả lời thì bỏ trống).
@@ -1885,10 +2152,11 @@ pub async fn subject_by_email(state: &AppState, email: &str) -> Result<Uuid, Str
     }
 }
 
-/// GET /admin/members
+/// GET /admin/members; lọc, sắp xếp, tìm kiếm theo `listing`.
 pub async fn members(
     State(state): State<Arc<AppState>>,
     lang: Lang,
+    Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> Response {
     let admin = match gate(
@@ -1903,7 +2171,16 @@ pub async fn members(
         Ok(a) => a,
         Err(r) => return *r,
     };
-    render_members(&state, lang, &headers, &admin, Vec::new(), StatusCode::OK).await
+    render_members_q(
+        &state,
+        lang,
+        &headers,
+        &admin,
+        Vec::new(),
+        StatusCode::OK,
+        &ListQuery::parse(&params),
+    )
+    .await
 }
 
 /// Thêm hoặc đổi vai trò của một thành viên quản trị (dùng chung cho web và `feco-catalog`).

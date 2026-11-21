@@ -4,6 +4,7 @@ import 'package:feco_mobile/app_state.dart';
 import 'package:feco_mobile/config.dart';
 import 'package:feco_mobile/demo.dart';
 import 'package:feco_mobile/i18n.dart';
+import 'package:feco_mobile/models.dart';
 import 'package:feco_mobile/ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -156,6 +157,37 @@ void main() {
     expect(find.byKey(const Key('update-kibi')), findsNothing);
     expect(find.byKey(const Key('updates-banner')), findsNothing);
     expect(h.state.updateCount, 0);
+  });
+
+  // admin-list-tools: "Quản trị viên mở báo cáo tin nhắn", "Người dùng thường".
+  testWidgets('scenario_bang_quan_tri_tren_dien_thoai', (tester) async {
+    final h = Harness();
+    h.backend.role = 'admin';
+    h.backend.adminSections = const [
+      AdminSection('reviews', 'https://f-eco.example/admin/reviews'),
+      AdminSection('chat-reports', 'https://f-eco.example/admin/chat-reports'),
+    ];
+    await h.pump(tester);
+    await h.state.signIn();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-account')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('admin-console-card')), findsOneWidget);
+    expect(find.text('Hàng chờ duyệt app'), findsOneWidget);
+    await tapKey(tester, 'admin-chat-reports');
+    expect(h.opened, [Uri.parse('https://f-eco.example/admin/chat-reports')]);
+  });
+
+  testWidgets('scenario_nguoi_dung_thuong_khong_co_bang_quan_tri', (
+    tester,
+  ) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.state.signIn();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-account')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('admin-console-card')), findsNothing);
   });
 
   testWidgets('scenario_doi_ngon_ngu', (tester) async {

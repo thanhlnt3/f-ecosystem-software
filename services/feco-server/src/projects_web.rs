@@ -5,7 +5,7 @@
 //! - `GET /projects/{id}`, `POST /projects/{id}/{action}`: chi tiết và các bước của dự án;
 //! - `GET /admin/projects`, `GET /admin/projects/{id}`, `POST /admin/projects/{id}/resolve`.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use askama::Template;
 use axum::{
@@ -23,6 +23,7 @@ use crate::{
     connected::{current_subject, format_time},
     csrf,
     i18n::Lang,
+    listing::{self, Item, ListQuery, Toolbar},
     projects::{self, Project, Side},
     roles::{self, PlatformRole},
     views::Msg,
@@ -886,6 +887,8 @@ struct AdminProjectsPage {
     dev_no_passkey: bool,
     projects: Vec<ProjectRow>,
     detail: Option<ProjectPage>,
+    /// Thanh lọc, sắp xếp, tìm kiếm (thay đổi admin-list-tools).
+    toolbar: Toolbar,
 }
 
 async fn pm_gate(
@@ -897,6 +900,7 @@ async fn pm_gate(
     admin::gate(state, lang, headers, path, Some(Role::ProjectManager)).await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn render_admin(
     state: &AppState,
     lang: Lang,
@@ -905,10 +909,50 @@ async fn render_admin(
     detail: Option<Uuid>,
     messages: Vec<Msg>,
     status: StatusCode,
+    query: &ListQuery,
 ) -> Response {
-    let projects = projects::list_all(&state.db, None)
+    let all = projects::list_all(&state.db, None)
         .await
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let total = all.len();
+    let filtered = listing::apply(all, query, &[], |p| Item {
+        at: Some(p.updated_at),
+        sender: p.customer_email.clone(),
+        text: format!(
+            "{} {} {} {}",
+            p.code,
+            p.title,
+            p.provider_email,
+            lang.t(status_key(&p.status))
+        ),
+        status: p.status.clone(),
+    });
+    let statuses: Vec<(&str, String)> = [
+        "requested",
+        "negotiating",
+        "agreed",
+        "in_progress",
+        "delivered",
+        "disputed",
+        "completed",
+        "resolved",
+        "cancelled",
+        "refunded",
+    ]
+    .into_iter()
+    .map(|s| (s, lang.t(status_key(s)).to_owned()))
+    .collect();
+    let toolbar = Toolbar::new(
+        lang,
+        "/admin/projects",
+        query,
+        lang.t("list.ph.projects"),
+        lang.t("list.status.all"),
+        &statuses,
+        filtered.len(),
+        total,
+    );
+    let projects = filtered
         .into_iter()
         .map(|p| ProjectRow {
             id: p.id.to_string(),
@@ -946,6 +990,7 @@ async fn render_admin(
             dev_no_passkey: state.admin_passkey_optional,
             projects,
             detail,
+            toolbar,
         },
         lang,
         status,
@@ -953,17 +998,28 @@ async fn render_admin(
     )
 }
 
-/// GET /admin/projects
+/// GET /admin/projects; lọc, sắp xếp, tìm kiếm theo `listing` (thay đổi admin-list-tools).
 pub async fn admin_list(
     State(state): State<Arc<AppState>>,
     lang: Lang,
+    Query(params): Query<HashMap<String, String>>,
     headers: HeaderMap,
 ) -> Response {
     let a = match pm_gate(&state, lang, &headers, "/admin/projects").await {
         Ok(a) => a,
         Err(r) => return *r,
     };
-    render_admin(&state, lang, &headers, &a, None, Vec::new(), StatusCode::OK).await
+    render_admin(
+        &state,
+        lang,
+        &headers,
+        &a,
+        None,
+        Vec::new(),
+        StatusCode::OK,
+        &ListQuery::parse(&params),
+    )
+    .await
 }
 
 /// GET /admin/projects/{id}
@@ -985,6 +1041,7 @@ pub async fn admin_detail(
         Some(id),
         Vec::new(),
         StatusCode::OK,
+        &ListQuery::default(),
     )
     .await
 }
@@ -1019,7 +1076,17 @@ pub async fn admin_resolve(
             Ok(()) => (vec![Msg::success(lang.t("admin.saved"))], StatusCode::OK),
             Err(e) => explain(lang, e).swap(),
         };
-    render_admin(&state, lang, &headers, &a, Some(id), messages, status).await
+    render_admin(
+        &state,
+        lang,
+        &headers,
+        &a,
+        Some(id),
+        messages,
+        status,
+        &ListQuery::default(),
+    )
+    .await
 }
 
 /// POST /admin/projects/{id}/message: Quản lý dự án nhắn trong hội thoại dự án (`side = 'admin'`).
@@ -1042,5 +1109,15 @@ pub async fn admin_message(
         Ok(_) => (vec![Msg::success(lang.t("admin.saved"))], StatusCode::OK),
         Err(e) => (vec![Msg::error(e.text(lang))], e.status()),
     };
-    render_admin(&state, lang, &headers, &a, Some(id), messages, status).await
+    render_admin(
+        &state,
+        lang,
+        &headers,
+        &a,
+        Some(id),
+        messages,
+        status,
+        &ListQuery::default(),
+    )
+    .await
 }

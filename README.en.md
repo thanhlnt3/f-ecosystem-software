@@ -525,6 +525,16 @@ Without ZaloPay keys the payment page reports that the gateway is not configured
 
 2. The Admin Console needs a passkey or security key: go to Settings (http://127.0.0.1:8080/settings), click **Add passkey**, then sign out and sign in again (password, then passkey). Open http://127.0.0.1:8080/admin: the **Overview** page has stat cards by role (Developer role requests, users, versions awaiting review, orders due soon, refunds awaiting approval, 30-day revenue and a 14-day chart); the sidebar shows only the sections for the roles you have (review queue, build-to-order requests, refunds, user support which requires entering a reason, role assignment).
 
+   Every admin list (review queue, build-to-order requests, refunds, role assignment, projects, chat reports, F-Coin withdrawal and grant queues) has a toolbar:
+   - search that ignores case and Vietnamese diacritics;
+   - status and date-range filters;
+   - sorting by newest, oldest, sender A–Z or Z–A;
+   - "Clear filters" and a "Showing N of M" line.
+
+   The filters live in the page address, for example http://127.0.0.1:8080/admin/orders?q=an&status=all&sort=sender. The order list shows open orders by default; choose "All" to include completed or cancelled orders.
+
+   In F-Launcher, the **Admin console** button opens a menu of the sections you can enter. On the phone, the **Account** tab has an **Admin console** card. Both open the matching web page.
+
    Browsers usually do not allow creating a passkey on the `127.0.0.1` address. On a dev machine, set `FECO_ADMIN_PASSKEY_OPTIONAL=true` (together with `FECO_ENV=dev`) to enter the Admin Console with a password only; every admin page then shows a warning. This variable makes staging and production refuse to start.
 3. Notification center: http://127.0.0.1:8080/notifications (and the **Notifications** tab in F-Launcher). Turn app update notifications, app suggestions and the newsletter on or off; newsletter emails have an unsubscribe link that works without signing in.
 4. Add the VNPAY and MoMo gateways and MISA e-invoicing through environment variables (your own sandbox keys, never written into the repo): `FECO_VNPAY_TMN_CODE`, `FECO_VNPAY_HASH_SECRET`, `FECO_VNPAY_PAYMENT_URL`; `FECO_MOMO_PARTNER_CODE`, `FECO_MOMO_ACCESS_KEY`, `FECO_MOMO_SECRET_KEY`, `FECO_MOMO_ENDPOINT`; `FECO_MISA_CLIENT_ID`, `FECO_MISA_CLIENT_SECRET`, `FECO_MISA_TAX_CODE`, `FECO_MISA_USERNAME`, `FECO_MISA_PASSWORD`, `FECO_MISA_INV_SERIES`, `FECO_MISA_VAT_RATE`. The gateways call back to `FECO_PAYMENT_CALLBACK_BASE` (a public address, for example a tunnel).

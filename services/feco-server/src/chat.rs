@@ -1084,13 +1084,17 @@ pub struct Report {
     pub at: OffsetDateTime,
     pub handled_at: Option<OffsetDateTime>,
     pub handled_by: Option<String>,
+    /// Tên người báo cáo trong hội thoại (thay đổi admin-list-tools).
+    pub reporter_name: String,
 }
 
-/// Báo cáo chưa xử lý trước, rồi 100 báo cáo gần nhất.
+/// Báo cáo chưa xử lý trước, rồi mới nhất trước (tối đa 500).
 pub async fn reports(db: &Db) -> sqlx::Result<Vec<Report>> {
     sqlx::query_as(
-        "SELECT id, conversation_id, reporter, reason, at, handled_at, handled_by FROM chat_reports
-         ORDER BY (handled_at IS NULL) DESC, at DESC LIMIT 100",
+        "SELECT r.id, r.conversation_id, r.reporter, r.reason, r.at, r.handled_at, r.handled_by,
+                COALESCE(CASE WHEN r.reporter = c.customer THEN c.customer_name ELSE c.developer_name END, '') AS reporter_name
+         FROM chat_reports r LEFT JOIN conversations c ON c.id = r.conversation_id
+         ORDER BY (r.handled_at IS NULL) DESC, r.at DESC LIMIT 500",
     )
     .fetch_all(db)
     .await
@@ -1098,7 +1102,9 @@ pub async fn reports(db: &Db) -> sqlx::Result<Vec<Report>> {
 
 pub async fn report_by_id(db: &Db, id: i64) -> sqlx::Result<Option<Report>> {
     sqlx::query_as(
-        "SELECT id, conversation_id, reporter, reason, at, handled_at, handled_by FROM chat_reports WHERE id = $1",
+        "SELECT r.id, r.conversation_id, r.reporter, r.reason, r.at, r.handled_at, r.handled_by,
+                COALESCE(CASE WHEN r.reporter = c.customer THEN c.customer_name ELSE c.developer_name END, '') AS reporter_name
+         FROM chat_reports r LEFT JOIN conversations c ON c.id = r.conversation_id WHERE r.id = $1",
     )
     .bind(id)
     .fetch_optional(db)

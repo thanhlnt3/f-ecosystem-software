@@ -187,12 +187,40 @@ class NotificationItem {
 
 /// Tài khoản: tên (`/v1/me`) và vai trò nền tảng (`/v1/account/role`).
 class Account {
-  const Account({required this.name, required this.role});
+  const Account({
+    required this.name,
+    required this.role,
+    this.adminSections = const [],
+  });
 
   final String name;
 
   /// `user`, `customer`, `business_customer`, `developer`, `dev_company`, `admin`.
   final String role;
+
+  /// Các mục quản trị được vào (thay đổi admin-list-tools, design L6); rỗng với người dùng thường.
+  final List<AdminSection> adminSections;
+}
+
+/// Một mục của bảng quản trị trên web: khóa (`reviews`, `chat-reports`...) và địa chỉ.
+class AdminSection {
+  const AdminSection(this.key, this.url);
+  final String key;
+  final String url;
+
+  static final _key = RegExp(r'^[a-z-]{1,32}$');
+
+  /// `admin_sections` của `GET /v1/account/role`: bỏ mục có khóa lạ hoặc địa chỉ không phải
+  /// HTTPS (HTTP chỉ với máy dev).
+  static List<AdminSection> listFromJson(Object? j) => [
+    for (final e
+        in (j is List ? j : const []).whereType<Map<String, Object?>>())
+      if (e['key'] is String &&
+          _key.hasMatch(e['key'] as String) &&
+          e['url'] is String &&
+          validWebUrl(e['url'] as String))
+        AdminSection(e['key'] as String, e['url'] as String),
+  ];
 }
 
 /// Kết quả mua app (`POST /v1/wallet/purchases`).

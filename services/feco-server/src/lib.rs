@@ -32,6 +32,7 @@ pub mod i18n_fr;
 pub mod i18n_ja;
 pub mod kratos;
 pub mod launch;
+pub mod listing;
 pub mod loadtest;
 pub mod maildns;
 pub mod mailer;

@@ -524,6 +524,16 @@ Không có khóa ZaloPay thì trang thanh toán báo chưa cấu hình cổng; �
 
 2. Bảng quản trị cần passkey hoặc khóa bảo mật: vào Cài đặt (http://127.0.0.1:8080/settings), bấm **Thêm passkey**, rồi đăng xuất và đăng nhập lại (mật khẩu, sau đó passkey). Mở http://127.0.0.1:8080/admin: trang **Tổng quan** có thẻ số liệu theo vai trò (yêu cầu quyền Lập trình viên, người dùng, phiên bản chờ duyệt, đơn sắp trễ, hoàn tiền chờ duyệt, doanh thu 30 ngày và biểu đồ 14 ngày); thanh bên chỉ có mục của vai trò bạn có (hàng chờ duyệt, đơn xây app, hoàn tiền, hỗ trợ người dùng phải nhập lý do, phân quyền).
 
+   Mỗi danh sách quản trị (hàng chờ duyệt, đơn xây app, hoàn tiền, phân quyền, dự án, báo cáo tin nhắn, hàng chờ rút và cấp F-Coin) có thanh công cụ:
+   - tìm kiếm không phân biệt hoa thường và dấu tiếng Việt;
+   - lọc trạng thái và khoảng ngày;
+   - sắp xếp mới nhất, cũ nhất, người gửi A–Z hoặc Z–A;
+   - "Xóa lọc" và dòng "Đang hiện N/M".
+
+   Điều kiện nằm trên địa chỉ trang, ví dụ http://127.0.0.1:8080/admin/orders?q=an&status=all&sort=sender. Danh sách đơn mặc định chỉ hiện đơn đang mở; chọn "Tất cả" để xem cả đơn đã xong hoặc đã hủy.
+
+   Trên F-Launcher, nút **Bảng quản trị** mở menu các mục bạn được vào. Trên điện thoại, tab **Tài khoản** có thẻ **Bảng quản trị**. Cả hai mở trang web tương ứng.
+
    Trình duyệt thường không cho tạo passkey trên địa chỉ `127.0.0.1`. Ở máy dev, đặt `FECO_ADMIN_PASSKEY_OPTIONAL=true` (cùng `FECO_ENV=dev`) để vào bảng quản trị chỉ bằng mật khẩu; mọi trang quản trị sẽ hiện cảnh báo. Biến này làm staging và production từ chối khởi động.
 3. Trung tâm thông báo: http://127.0.0.1:8080/notifications (và tab **Thông báo** trong F-Launcher). Tắt hoặc bật thông báo cập nhật app, gợi ý app, bản tin; email bản tin có liên kết hủy đăng ký không cần đăng nhập.
 4. Thêm cổng VNPAY, MoMo và hóa đơn điện tử MISA bằng biến môi trường (khóa sandbox của chính bạn, không ghi vào repo): `FECO_VNPAY_TMN_CODE`, `FECO_VNPAY_HASH_SECRET`, `FECO_VNPAY_PAYMENT_URL`; `FECO_MOMO_PARTNER_CODE`, `FECO_MOMO_ACCESS_KEY`, `FECO_MOMO_SECRET_KEY`, `FECO_MOMO_ENDPOINT`; `FECO_MISA_CLIENT_ID`, `FECO_MISA_CLIENT_SECRET`, `FECO_MISA_TAX_CODE`, `FECO_MISA_USERNAME`, `FECO_MISA_PASSWORD`, `FECO_MISA_INV_SERIES`, `FECO_MISA_VAT_RATE`. Cổng gọi callback về `FECO_PAYMENT_CALLBACK_BASE` (địa chỉ công khai, ví dụ tunnel).

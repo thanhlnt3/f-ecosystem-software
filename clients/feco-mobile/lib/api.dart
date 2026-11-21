@@ -187,6 +187,7 @@ class HttpBackend implements Backend {
     return Account(
       name: me['name'] is String ? me['name'] as String : '',
       role: role['role'] is String ? role['role'] as String : 'user',
+      adminSections: AdminSection.listFromJson(role['admin_sections']),
     );
   }
 

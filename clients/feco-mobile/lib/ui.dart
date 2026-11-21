@@ -747,6 +747,36 @@ class AccountPage extends StatelessWidget {
               ),
           ],
         ),
+        // Bảng quản trị trên web: mở thẳng từng mục (thay đổi admin-list-tools, design L6).
+        if (a != null && a.adminSections.isNotEmpty) ...[
+          const Divider(height: 32),
+          Card(
+            key: const Key('admin-console-card'),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.admin_panel_settings),
+                    title: Text(
+                      s.t('admin_console'),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    subtitle: Text(s.t('admin_console_hint')),
+                  ),
+                  for (final sec in a.adminSections)
+                    ListTile(
+                      key: Key('admin-${sec.key}'),
+                      leading: const Icon(Icons.open_in_new),
+                      title: Text(s.adminSectionLabel(sec.key)),
+                      onTap: () => s.openWeb(sec.url),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const Divider(height: 32),
         Text(s.t('on_web'), style: Theme.of(context).textTheme.titleSmall),
         for (final (key, path) in [

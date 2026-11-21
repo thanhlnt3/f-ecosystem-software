@@ -1,0 +1,20 @@
+{# Thanh lọc, sắp xếp, tìm kiếm của danh sách quản trị (thay đổi admin-list-tools, design L1). #}
+{% if toolbar.show %}
+<form method="get" action="{{ toolbar.action }}" class="filters list-tools" id="list-tools" role="search">
+  <input type="search" name="q" id="list-q" value="{{ toolbar.q }}" placeholder="{{ toolbar.placeholder }}" aria-label="{{ i18n.t("list.search") }}" maxlength="200">
+  {% if !toolbar.statuses.is_empty() %}
+  <select name="status" id="list-status" aria-label="{{ i18n.t("list.status") }}">
+    {% for o in toolbar.statuses %}<option value="{{ o.code }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <select name="sort" id="list-sort" aria-label="{{ i18n.t("list.sort") }}">
+    {% for o in toolbar.sorts %}<option value="{{ o.code }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>{% endfor %}
+  </select>
+  <label class="list-date">{{ i18n.t("list.from") }} <input type="date" name="from" id="list-from" value="{{ toolbar.from }}"></label>
+  <label class="list-date">{{ i18n.t("list.to") }} <input type="date" name="to" id="list-to" value="{{ toolbar.to }}"></label>
+  <button type="submit" id="list-apply">{{ i18n.t("list.apply") }}</button>
+  {% if toolbar.active %}<a href="{{ toolbar.action }}" id="list-clear">{{ i18n.t("list.clear") }}</a>{% endif %}
+  <span class="muted" id="list-count">{{ toolbar.count(i18n) }}</span>
+</form>
+{% if toolbar.shown == 0 && toolbar.total > 0 %}<p class="muted" id="list-no-match">{{ i18n.t("list.no_match") }}</p>{% endif %}
+{% endif %}

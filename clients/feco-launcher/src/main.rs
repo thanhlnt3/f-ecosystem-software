@@ -419,6 +419,21 @@ fn update_suggestions(
     out
 }
 
+/// Nhãn của một mục quản trị theo khóa máy chủ gửi (khóa lạ thì hiện nguyên khóa).
+fn admin_section_label(key: &str) -> &str {
+    match key {
+        "reviews" => t("Hàng chờ duyệt app"),
+        "users" => t("Hỗ trợ người dùng"),
+        "orders" => t("Đơn xây app"),
+        "refunds" => t("Hoàn tiền"),
+        "members" => t("Phân quyền"),
+        "wallet" => t("Ví F-Coin"),
+        "projects" => t("Dự án phần mềm"),
+        "chat-reports" => t("Báo cáo tin nhắn"),
+        other => other,
+    }
+}
+
 /// Số F-Coin còn thiếu để mua (None: đủ).
 fn shortfall(balance: i64, price: i64) -> Option<i64> {
     (balance < price).then_some(price - balance)
@@ -1926,9 +1941,25 @@ impl LauncherApp {
         if let Some(role) = &self.view.role {
             if role.is_admin() {
                 if let Some(url) = &role.admin_console {
-                    if icons::button(ui, Icon::Shield, t("Bảng quản trị"), false, true).clicked()
-                    {
-                        actions.push(Action::OpenLink(url.clone()));
+                    let button = icons::button(ui, Icon::Shield, t("Bảng quản trị"), false, true);
+                    if role.admin_sections.is_empty() {
+                        if button.clicked() {
+                            actions.push(Action::OpenLink(url.clone()));
+                        }
+                    } else {
+                        // Mở thẳng từng mục quản trị trên web (thay đổi admin-list-tools, L5).
+                        egui::Popup::menu(&button).show(|ui| {
+                            if ui.button(t("Trang chủ quản trị")).clicked() {
+                                actions.push(Action::OpenLink(url.clone()));
+                                ui.close();
+                            }
+                            for (key, link) in &role.admin_sections {
+                                if ui.button(admin_section_label(key)).clicked() {
+                                    actions.push(Action::OpenLink(link.clone()));
+                                    ui.close();
+                                }
+                            }
+                        });
                     }
                 }
             }
@@ -4230,6 +4261,14 @@ mod tests {
     }
 
     /// Scenario "Phát hiện bản mới" và "Bỏ qua phiên bản": gợi ý app có bản mới, trừ bản đã bỏ qua.
+    /// admin-list-tools: nhãn mục quản trị có bản dịch, khóa lạ hiện nguyên khóa.
+    #[test]
+    fn admin_section_labels() {
+        assert_eq!(admin_section_label("reviews"), "Hàng chờ duyệt app");
+        assert_eq!(admin_section_label("chat-reports"), "Báo cáo tin nhắn");
+        assert_eq!(admin_section_label("moi-la"), "moi-la");
+    }
+
     #[test]
     fn suggests_updates_except_skipped_versions() {
         let apps = vec![

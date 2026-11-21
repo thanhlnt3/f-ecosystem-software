@@ -861,6 +861,10 @@ pub struct AccountRole {
     pub developer_portal: Option<String>,
     #[serde(default)]
     pub admin_console: Option<String>,
+    /// Các mục quản trị được vào: (khóa, địa chỉ), ví dụ `("reviews", "https://…/admin/reviews")`
+    /// (thay đổi admin-list-tools, design L5). Chỉ nhận liên kết https hoặc máy dev.
+    #[serde(default)]
+    pub admin_sections: Vec<(String, String)>,
 }
 
 impl AccountRole {
@@ -872,10 +876,24 @@ impl AccountRole {
             _ => "user".to_owned(),
         };
         let https_or_local = |v: &Value| v.as_str().filter(|u| web_link(u)).map(str::to_owned);
+        let admin_sections = body["admin_sections"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| {
+                let key = s["key"].as_str().filter(|k| {
+                    !k.is_empty()
+                        && k.len() <= 32
+                        && k.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+                })?;
+                Some((key.to_owned(), https_or_local(&s["url"])?))
+            })
+            .collect();
         AccountRole {
             role,
             developer_portal: https_or_local(&body["developer_portal"]),
             admin_console: https_or_local(&body["admin_console"]),
+            admin_sections,
         }
     }
 
@@ -1004,6 +1022,41 @@ mod notification_tests {
         assert_eq!(odd.role, "user");
         assert!(!odd.can_develop());
         assert!(AccountRole::from_json(&serde_json::json!({"role": "admin"})).is_admin());
+    }
+
+    /// admin-list-tools: mục quản trị chỉ nhận khóa hợp lệ và liên kết https (hoặc máy dev).
+    #[test]
+    fn admin_sections_are_parsed_safely() {
+        let admin = AccountRole::from_json(&serde_json::json!({
+            "role": "admin",
+            "admin_console": "https://f-eco.example/admin",
+            "admin_sections": [
+                {"key": "reviews", "url": "https://f-eco.example/admin/reviews"},
+                {"key": "chat-reports", "url": "http://127.0.0.1:8080/admin/chat-reports"},
+                {"key": "orders", "url": "javascript:alert(1)"},
+                {"key": "<b>", "url": "https://f-eco.example/admin/x"},
+                {"url": "https://f-eco.example/admin/y"},
+            ],
+        }));
+        assert_eq!(
+            admin.admin_sections,
+            [
+                (
+                    "reviews".to_owned(),
+                    "https://f-eco.example/admin/reviews".to_owned()
+                ),
+                (
+                    "chat-reports".to_owned(),
+                    "http://127.0.0.1:8080/admin/chat-reports".to_owned()
+                ),
+            ]
+        );
+        // Bản cũ của máy chủ không có trường này.
+        assert!(
+            AccountRole::from_json(&serde_json::json!({"role": "admin"}))
+                .admin_sections
+                .is_empty()
+        );
     }
 
     /// Liên kết được phân tích và so đúng host, không so tiền tố chuỗi.

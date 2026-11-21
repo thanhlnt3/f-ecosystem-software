@@ -30,6 +30,10 @@ class DemoBackend implements Backend {
   DemoBackend({this.balance = 10});
 
   int balance;
+
+  /// Vai trò và mục quản trị của tài khoản mẫu (widget test bảng quản trị).
+  String role = 'customer';
+  List<AdminSection> adminSections = const [];
   final Set<String> _owned = {};
   final Map<String, String> _library = {};
 
@@ -133,7 +137,7 @@ class DemoBackend implements Backend {
 
   @override
   Future<Account> account() async =>
-      const Account(name: 'Lan Nguyễn', role: 'customer');
+      Account(name: 'Lan Nguyễn', role: role, adminSections: adminSections);
 
   @override
   Uri? iconUrl(String appId) => null;

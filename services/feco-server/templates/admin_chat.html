@@ -32,9 +32,10 @@
   <div class="chat-thread" id="admin-chat-thread">{{ thread_html|safe }}</div>
 </section>
 {% when None %}{% endmatch %}
-{% if reports.is_empty() %}<p class="muted" id="no-reports">{{ i18n.t("chat.no_reports") }}</p>{% endif %}
+{% include "admin_toolbar.html" %}
+{% if reports.is_empty() && toolbar.total == 0 %}<p class="muted" id="no-reports">{{ i18n.t("chat.no_reports") }}</p>{% endif %}
 <table id="chat-report-list">
-{% for r in reports %}<tr class="chat-report" data-report="{{ r.id }}" data-handled="{{ r.handled }}"><td><a href="/admin/chat-reports/{{ r.id }}">#{{ r.id }} · {{ r.reason }}</a><br><span class="muted">{{ r.at }}{% if r.handled %} · {{ i18n.t("chat.report_handled") }}{% endif %}</span></td></tr>
+{% for r in reports %}<tr class="chat-report" data-report="{{ r.id }}" data-handled="{{ r.handled }}"><td><a href="/admin/chat-reports/{{ r.id }}">#{{ r.id }} · {{ r.reason }}</a><br><span class="muted">{% if !r.reporter.is_empty() %}<span class="report-reporter">{{ r.reporter }}</span> · {% endif %}{{ r.at }}{% if r.handled %} · {{ i18n.t("chat.report_handled") }}{% endif %}</span></td></tr>
 {% endfor %}
 </table>
   </main>

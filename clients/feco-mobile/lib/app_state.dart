@@ -138,6 +138,10 @@ class AppState extends ChangeNotifier {
 
   bool inLibrary(String appId) => library.any((i) => i.id == appId);
 
+  /// Nhãn của một mục quản trị theo khóa máy chủ gửi; khóa lạ thì hiện nguyên khóa.
+  String adminSectionLabel(String key) =>
+      strings.containsKey('admin.$key') ? t('admin.$key') : key;
+
   /// Số app máy tính có bản mới (dòng tóm tắt và huy hiệu của tab "Ứng dụng của tôi").
   int get updateCount => library.where((i) => i.desktopUpdate).length;
 

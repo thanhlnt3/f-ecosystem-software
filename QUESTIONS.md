@@ -484,3 +484,12 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 124. **Phiên bản theo nền tảng.** Thông báo cập nhật gửi theo phiên bản, không theo nền tảng: bản 1.2.0
      chỉ có gói Windows vẫn báo cho người cài trên macOS. Máy chủ chưa biết người dùng cài trên nền
      tảng nào. Có cần ghi nền tảng khi F-Launcher báo đã cài không?
+125. **Danh sách quản trị rất dài.** Bộ lọc chạy trên các dòng đã đọc: đơn 500 mới nhất, dự án 200,
+     báo cáo tin nhắn 500. Khi vượt mức này, cần phân trang và lọc ngay trong cơ sở dữ liệu. Khi nào
+     cần (ước lượng số đơn và dự án mỗi tháng)?
+126. **Tìm người dùng theo một phần email.** Trang "Hỗ trợ người dùng" chỉ tìm theo đúng email hoặc
+     mã đơn và che email, để nhân viên hỗ trợ không duyệt được danh sách người dùng. Có cần tìm theo
+     một phần email hay tên (kèm ghi nhật ký) không?
+127. **Bảng quản trị gốc trên máy tính và điện thoại.** Theo lựa chọn ngày 21/11/2026, F-Launcher và
+     app di động mở trang web quản trị. Nếu sau này cần màn hình gốc (xem danh sách không cần trình
+     duyệt), phải thêm API quản trị riêng có passkey. Có kế hoạch không?

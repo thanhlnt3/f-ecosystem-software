@@ -580,4 +580,17 @@ void main() {
     expect(await thread.send('Chào'), 'chat_blocked');
     expect((await backend.messages(DemoBackend.blockedChat)).length, 1);
   });
+
+  // admin-list-tools: mục quản trị chỉ nhận khóa hợp lệ và địa chỉ HTTPS (HTTP chỉ với máy dev).
+  test('admin_sections_from_the_server', () {
+    final list = AdminSection.listFromJson([
+      {'key': 'reviews', 'url': 'https://f-eco.example/admin/reviews'},
+      {'key': 'chat-reports', 'url': 'http://127.0.0.1:8080/admin/chat-reports'},
+      {'key': 'orders', 'url': 'javascript:alert(1)'},
+      {'key': '<b>', 'url': 'https://f-eco.example/admin/x'},
+      {'url': 'https://f-eco.example/admin/y'},
+    ]);
+    expect(list.map((s) => s.key), ['reviews', 'chat-reports']);
+    expect(AdminSection.listFromJson(null), isEmpty);
+  });
 }

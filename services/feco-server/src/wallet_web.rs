@@ -6,7 +6,10 @@
 //! - `GET /v1/wallet`, `POST /v1/wallet/purchases`: API cho F-Launcher;
 //! - `GET/POST /admin/wallet`: trang Ví F-Coin của bảng quản trị.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use askama::Template;
 use axum::{
@@ -27,6 +30,7 @@ use crate::{
     connected::{current_subject, format_time},
     csrf, gateways,
     i18n::Lang,
+    listing::{self, Item, ListQuery, Toolbar},
     orders::{vnd, OrderError},
     views::Msg,
     wallet::{self, coin, signed_coin, Kind, Payout},
@@ -749,6 +753,8 @@ pub struct DayBar {
 #[template(path = "admin_wallet.html")]
 struct AdminWalletPage {
     i18n: Lang,
+    /// Thanh lọc, sắp xếp, tìm kiếm (thay đổi admin-list-tools).
+    toolbar: Toolbar,
     messages: Vec<Msg>,
     csrf: String,
     me: String,
@@ -818,6 +824,7 @@ async fn render_admin(
     messages: Vec<Msg>,
     revealed: Option<(String, String)>,
     status: StatusCode,
+    list: &ListQuery,
 ) -> Response {
     let now = OffsetDateTime::now_utc();
     let (o, rates, open, lines, grants) = tokio::join!(
@@ -828,6 +835,40 @@ async fn render_admin(
         wallet::pending_grants(&state.db)
     );
     let o = o.unwrap_or_default();
+    // Hàng chờ rút và yêu cầu cấp F-Coin: lọc, sắp xếp, tìm kiếm (thay đổi admin-list-tools).
+    let open = open.unwrap_or_default();
+    let grants = grants.unwrap_or_default();
+    let total = open.len() + grants.len();
+    let open = listing::apply(open, list, &[], |w| Item {
+        at: Some(w.created_at),
+        sender: w.email.clone(),
+        text: format!(
+            "{} {} {}",
+            w.code,
+            w.note,
+            lang.t(withdrawal_status(&w.status))
+        ),
+        status: w.status.clone(),
+    });
+    let grants = listing::apply(grants, list, &[], |g| Item {
+        at: Some(g.created_at),
+        sender: g.recipient_email.clone(),
+        text: format!("{} {} {}", g.code, g.reason, g.requested_by),
+        status: g.status.clone(),
+    });
+    let toolbar = Toolbar::new(
+        lang,
+        "/admin/wallet",
+        list,
+        lang.t("list.ph.wallet"),
+        lang.t("list.status.all"),
+        &[
+            ("pending", lang.t(withdrawal_status("pending")).to_owned()),
+            ("approved", lang.t(withdrawal_status("approved")).to_owned()),
+        ],
+        open.len() + grants.len(),
+        total,
+    );
     let max = o
         .days
         .iter()
@@ -883,7 +924,6 @@ async fn render_admin(
                 })
                 .collect(),
             withdrawals: open
-                .unwrap_or_default()
                 .into_iter()
                 .map(|w| AdminWithdrawalView {
                     id: w.id.to_string(),
@@ -924,8 +964,8 @@ async fn render_admin(
                 .collect(),
             revealed,
             transfer_idem: Uuid::new_v4().simple().to_string(),
+            toolbar,
             grants: grants
-                .unwrap_or_default()
                 .into_iter()
                 .map(|g| GrantView {
                     id: g.id.to_string(),
@@ -945,13 +985,18 @@ async fn render_admin(
     )
 }
 
-/// GET /admin/wallet
+/// GET /admin/wallet; `q` tìm trong sổ cái, hàng chờ rút và yêu cầu cấp F-Coin; lọc, sắp xếp theo
+/// `listing` (thay đổi admin-list-tools).
 pub async fn admin_page(
     State(state): State<Arc<AppState>>,
     lang: Lang,
     headers: HeaderMap,
-    Query(q): Query<AdminWalletQuery>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
+    let list = ListQuery::parse(&params);
+    let q = AdminWalletQuery {
+        q: params.get("q").cloned(),
+    };
     let a = match admin_gate(&state, lang, &headers).await {
         Ok(a) => a,
         Err(r) => return *r,
@@ -965,6 +1010,7 @@ pub async fn admin_page(
         Vec::new(),
         None,
         StatusCode::OK,
+        &list,
     )
     .await
 }
@@ -1087,7 +1133,18 @@ async fn admin_do(
             (vec![m], s)
         }
     };
-    render_admin(&state, lang, &headers, &a, "", messages, revealed, status).await
+    render_admin(
+        &state,
+        lang,
+        &headers,
+        &a,
+        "",
+        messages,
+        revealed,
+        status,
+        &ListQuery::default(),
+    )
+    .await
 }
 
 /// Biểu mẫu "Chuyển F-Coin" (production-readiness, design K2): tìm người nhận theo email (phải đã
@@ -1184,7 +1241,18 @@ pub async fn admin_grant_action(
             (vec![m], s)
         }
     };
-    render_admin(&state, lang, &headers, &a, "", messages, None, status).await
+    render_admin(
+        &state,
+        lang,
+        &headers,
+        &a,
+        "",
+        messages,
+        None,
+        status,
+        &ListQuery::default(),
+    )
+    .await
 }
 
 #[cfg(test)]

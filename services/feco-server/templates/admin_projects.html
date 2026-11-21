@@ -47,7 +47,8 @@
   <table>{% for e in d.events %}<tr><td>{{ i18n.t(e.status) }}{% if !e.note.is_empty() %} · {{ e.note }}{% endif %}<br><span class="muted">{{ e.actor }} · {{ e.at }}</span></td></tr>{% endfor %}</table>
 </section>
 {% when None %}{% endmatch %}
-{% if projects.is_empty() %}<p class="muted">{{ i18n.t("proj.none") }}</p>{% endif %}
+{% include "admin_toolbar.html" %}
+{% if projects.is_empty() && toolbar.total == 0 %}<p class="muted">{{ i18n.t("proj.none") }}</p>{% endif %}
 <table id="admin-project-list">
 {% for p in projects %}<tr class="project" data-code="{{ p.code }}" data-status="{{ p.status }}"><td><a href="/admin/projects/{{ p.id }}"><strong>{{ p.code }}</strong> · {{ p.title }}</a><br><span class="muted">{{ p.other }} · {{ p.updated }}</span></td><td>{{ p.price }}</td><td>{{ i18n.t(p.status_label) }}</td></tr>{% endfor %}
 </table>

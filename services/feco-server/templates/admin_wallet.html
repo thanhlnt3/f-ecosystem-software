@@ -33,8 +33,9 @@
 </section>
 
 <h2 id="withdrawal-queue">{{ i18n.t("aw.queue") }}</h2>
+{% include "admin_toolbar.html" %}
 {% match revealed %}{% when Some with (r) %}<div class="msg info" id="revealed">{{ r.0 }}: <code>{{ r.1 }}</code></div>{% when None %}{% endmatch %}
-{% if withdrawals.is_empty() %}<p class="muted" id="queue-empty">{{ i18n.t("aw.queue_empty") }}</p>{% endif %}
+{% if withdrawals.is_empty() && !toolbar.active %}<p class="muted" id="queue-empty">{{ i18n.t("aw.queue_empty") }}</p>{% endif %}
 {% for w in withdrawals %}
 <div class="card admin-withdrawal" data-code="{{ w.code }}" data-status="{{ w.status }}" style="margin-top:12px">
   <p><strong>{{ w.code }}</strong> · {{ w.email }} · {{ w.coins }} · <strong>{{ w.amount }}</strong> · {{ i18n.t(w.status_label) }}</p>

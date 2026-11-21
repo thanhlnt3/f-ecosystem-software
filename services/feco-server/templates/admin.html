@@ -41,10 +41,11 @@
 <div class="card">
 {% if section == "reviews" %}
 <h2>{{ i18n.t("admin.nav.reviews") }}</h2>
-{% if reviews.is_empty() %}<p class="muted">{{ i18n.t("admin.queue_empty") }}</p>{% endif %}
+{% include "admin_toolbar.html" %}
+{% if reviews.is_empty() && toolbar.total == 0 %}<p class="muted">{{ i18n.t("admin.queue_empty") }}</p>{% endif %}
 {% for r in reviews %}
 <div class="review queue-item" data-app="{{ r.app }}" data-version="{{ r.version }}">
-  <strong>{{ r.app }} {{ r.version }}</strong> · <span class="muted">{{ i18n.t("admin.waited") }} {{ r.waited }} · {{ r.reason }}</span>
+  <strong>{{ r.app }} {{ r.version }}</strong>{% if !r.developer.is_empty() %} · <span class="queue-developer">{{ r.developer }}</span>{% endif %} · <span class="muted">{{ i18n.t("admin.waited") }} {{ r.waited }} · {{ r.reason }}</span>
   <h3>{{ i18n.t("admin.diff") }}</h3>
   <ul class="diff">{% for d in r.diff %}<li>{{ d }}</li>{% endfor %}</ul>
   {% if !r.checks.is_empty() %}<details><summary>{{ i18n.t("admin.checks") }}</summary><ul>{% for c in r.checks %}<li><code>{{ c }}</code></li>{% endfor %}</ul></details>{% endif %}
@@ -108,18 +109,20 @@
 </form>
 {% when None %}
 <h2>{{ i18n.t("admin.nav.orders") }}</h2>
+{% include "admin_toolbar.html" %}
 <table id="admin-orders">
-{% for o in orders %}<tr class="admin-order{% if o.warning %} warning{% endif %}" data-code="{{ o.code }}"{% if o.warning %} style="background:rgba(179,38,30,.12)"{% endif %}>
+{% for o in orders %}<tr class="admin-order{% if o.warning %} warning{% endif %}" data-code="{{ o.code }}" data-status="{{ o.status_code }}"{% if o.warning %} style="background:rgba(179,38,30,.12)"{% endif %}>
   <td><a href="/admin/orders/{{ o.id }}">{{ o.code }}</a>{% if o.warning %} <span class="badge" style="color:var(--err)">{{ i18n.t("admin.due_soon") }}</span>{% endif %}</td>
-  <td>{{ o.title }}</td><td>{{ o.status }}</td><td>{{ o.due }}</td></tr>{% endfor %}
+  <td>{{ o.title }}<br><span class="muted order-customer">{{ o.customer }}</span></td><td>{{ o.status }}</td><td>{{ o.due }}</td></tr>{% endfor %}
 </table>
 {% endmatch %}
 {% endif %}
 
 {% if section == "refunds" %}
 <h2>{{ i18n.t("admin.nav.refunds") }}</h2>
+{% include "admin_toolbar.html" %}
 <table id="open-refunds">
-{% for r in refunds %}<tr class="refund"><td>{{ r.amount }}</td><td>{{ r.status }}</td><td>{{ r.reason }}</td><td class="muted">{{ r.approvals }} / {{ r.needed }}</td>
+{% for r in refunds %}<tr class="refund"><td>{{ r.amount }}</td><td>{{ r.status }}</td><td>{{ r.reason }}<br><span class="muted">{{ r.by }} · {{ r.created }}</span></td><td class="muted">{{ r.approvals }} / {{ r.needed }}</td>
   <td class="row-actions"><form method="post" action="/admin/refunds/{{ r.id }}/approve"><input type="hidden" name="feco_csrf" value="{{ csrf }}"><button type="submit">{{ i18n.t("admin.approve") }}</button></form></td></tr>{% endfor %}
 </table>
 <h3>{{ i18n.t("admin.new_refund") }}</h3>
@@ -165,6 +168,7 @@
 
 {% if section == "members" %}
 <h2>{{ i18n.t("admin.nav.members") }}</h2>
+{% include "admin_toolbar.html" %}
 
 <h3>{{ i18n.t("role.requests") }}</h3>
 {% if role_requests.is_empty() %}<p class="muted" id="role-requests-empty">{{ i18n.t("role.requests_empty") }}</p>{% endif %}

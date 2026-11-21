@@ -1,5 +1,42 @@
 # Nhật ký thay đổi
 
+## 1.15.0 (21/11/2026)
+
+Thay đổi OpenSpec `admin-list-tools`: lọc, sắp xếp và tìm kiếm trong bảng quản trị, dùng chung trên web, F-Launcher máy tính và điện thoại.
+
+### Bảng quản trị trên web
+
+- **Thanh công cụ chung** cho mọi danh sách: hàng chờ duyệt app, đơn xây app, hoàn tiền, phân quyền (yêu cầu vai trò và người có quyền), dự án, báo cáo tin nhắn, hàng chờ rút và yêu cầu cấp F-Coin.
+  - Tìm kiếm không phân biệt hoa thường và dấu tiếng Việt ("au lac" tìm được "Âu Lạc"); nhiều từ thì phải khớp tất cả.
+  - Lọc trạng thái và khoảng ngày.
+  - Sắp xếp: thứ tự mặc định (ưu tiên như trước), mới nhất, cũ nhất, người gửi A–Z, Z–A.
+  - "Xóa lọc", "Đang hiện N/M"; điều kiện nằm trên địa chỉ trang.
+- **Người gửi** hiện trên từng dòng: nhà phát triển ở hàng chờ duyệt, email khách hàng ở đơn, người tạo lệnh hoàn tiền, người báo cáo tin nhắn.
+- Danh sách đơn lọc được cả đơn đã xong và đã hủy (mặc định vẫn chỉ đơn đang mở). Báo cáo tin nhắn hiện tới 500 báo cáo (trước là 100).
+- Trên điện thoại, bảng cuộn ngang và thanh công cụ xuống dòng.
+- Trang "Hỗ trợ người dùng" giữ cách tìm theo đúng email hoặc mã đơn, để không lộ danh sách người dùng.
+
+### F-Launcher máy tính và điện thoại
+
+- `GET /v1/account/role` trả thêm `admin_sections`: các mục quản trị tài khoản được vào.
+- **F-Launcher**: nút "Bảng quản trị" mở menu trang chủ quản trị và từng mục.
+- **Điện thoại**: tab Tài khoản có thẻ "Bảng quản trị" cho quản trị viên, bốn thứ tiếng.
+- Chỉ mở địa chỉ HTTPS (HTTP chỉ với máy dev). Thao tác quản trị vẫn trên web, với passkey như trước.
+
+### Kiểm thử
+
+- **E2E** `admin_list_tools`:
+  - tìm theo người gửi không dấu;
+  - đơn đã xong, sắp xếp theo người gửi, lọc theo ngày;
+  - lọc trạng thái báo cáo tin nhắn;
+  - xóa lọc;
+  - `admin_sections` theo vai trò.
+- **Unit test**:
+  - `listing::tests`;
+  - F-Launcher: `admin_sections_are_parsed_safely`, `admin_section_labels`;
+  - điện thoại: `admin_sections_from_the_server`.
+- **Widget test**: `scenario_bang_quan_tri_tren_dien_thoai`, `scenario_nguoi_dung_thuong_khong_co_bang_quan_tri`.
+
 ## 1.14.0 (21/11/2026)
 
 Thay đổi OpenSpec `app-update-notices`: rà soát việc phát hiện app con có bản mới và báo người dùng trên F-Launcher máy tính, web và điện thoại. Kèm bản sửa lỗ hổng Next.js của ThesisAI (QUESTIONS.md 109).

@@ -8712,6 +8712,265 @@ async fn app_logos_and_web_library() {
     );
 }
 
+// ============ admin-list-tools: lọc, sắp xếp, tìm kiếm danh sách quản trị ============
+
+/// Thay đổi admin-list-tools: scenario "Tìm theo người gửi", "Sắp xếp theo người gửi", "Lọc theo
+/// thời gian", "Lọc trạng thái", "Đơn đã xong", "Xóa lọc" và "Người duyệt app" (`admin_sections`).
+#[tokio::test]
+async fn admin_list_tools() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    use feco_server::admin::Role;
+    let state = local_state();
+    let db = &state.db;
+    let tag = uuid::Uuid::new_v4().simple().to_string()[..8].to_owned();
+    let (admin, _) = admin_with_passkey(
+        &state,
+        "loc-danh-sach",
+        &[Role::Reviewer, Role::ProjectManager, Role::Support],
+    )
+    .await;
+
+    // --- Hàng chờ duyệt: hai app của hai nhà phát triển.
+    for (dev, app) in [
+        (format!("Công ty Âu Lạc {tag}"), format!("aulac-{tag}")),
+        (format!("Beta Studio {tag}"), format!("beta-{tag}")),
+    ] {
+        let account = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO developer_accounts (id, kind, display_name, domain_token)
+             VALUES ($1, 'organization', $2, 'x')",
+        )
+        .bind(account)
+        .bind(&dev)
+        .execute(db)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO developer_apps (app_id, account_id, client_id, name, kind)
+             VALUES ($1, $2, $1, $1, 'desktop')",
+        )
+        .bind(&app)
+        .bind(account)
+        .execute(db)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO app_versions (id, app_id, version, manifest, manifest_toml, status, created_by,
+                 submitted_at, review_stage, manual_reason)
+             VALUES ($1, $2, '1.0.0', '{}', '', 'pending_review', $1, now(), 'manual', 'Lần đầu')",
+        )
+        .bind(uuid::Uuid::new_v4())
+        .bind(&app)
+        .execute(db)
+        .await
+        .unwrap();
+    }
+    // Scenario "Tìm theo người gửi": không phân biệt dấu và hoa thường.
+    let page = get(&admin, &format!("/admin/reviews?q=au+lac+{tag}")).await;
+    assert!(
+        page.contains(&format!(r#"data-app="aulac-{tag}""#)),
+        "{page}"
+    );
+    assert!(
+        !page.contains(&format!(r#"data-app="beta-{tag}""#)),
+        "{page}"
+    );
+    assert!(page.contains(&format!("Công ty Âu Lạc {tag}")), "{page}");
+    let count = text_of(&page, "#list-count");
+    assert!(count.starts_with("Đang hiện 1/"), "{count}");
+    assert!(page.contains(r#"id="list-clear""#), "có nút Xóa lọc");
+    // Scenario "Xóa lọc": trang không điều kiện có cả hai, không có nút Xóa lọc.
+    let page = get(&admin, "/admin/reviews").await;
+    assert!(page.contains(&format!(r#"data-app="aulac-{tag}""#)));
+    assert!(page.contains(&format!(r#"data-app="beta-{tag}""#)));
+    assert!(!page.contains(r#"id="list-clear""#));
+
+    // --- Đơn xây app: ba đơn của ba khách, một đơn đã hoàn thành, một đơn tạo hôm qua.
+    for (code, email, status, days_ago) in [
+        (
+            format!("DH-{tag}-1"),
+            format!("chi-{tag}@example.com"),
+            "submitted",
+            0,
+        ),
+        (
+            format!("DH-{tag}-2"),
+            format!("an-{tag}@example.com"),
+            "submitted",
+            1,
+        ),
+        (
+            format!("DH-{tag}-3"),
+            format!("binh-{tag}@example.com"),
+            "completed",
+            0,
+        ),
+    ] {
+        sqlx::query(
+            "INSERT INTO orders (id, code, customer, customer_email, title, description, status, created_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, $1, 'Đơn thử', $4, now() - make_interval(days => $5))",
+        )
+        .bind(&code)
+        .bind(uuid::Uuid::new_v4())
+        .bind(&email)
+        .bind(status)
+        .bind(days_ago)
+        .execute(db)
+        .await
+        .unwrap();
+    }
+    let codes = |page: &str| -> Vec<String> {
+        let doc = scraper::Html::parse_document(page);
+        let sel = scraper::Selector::parse("tr.admin-order").unwrap();
+        doc.select(&sel)
+            .filter_map(|e| e.value().attr("data-code").map(str::to_owned))
+            .collect()
+    };
+    // Scenario "Đơn đã xong": mặc định chỉ đơn đang mở.
+    let page = get(&admin, &format!("/admin/orders?q={tag}")).await;
+    assert_eq!(codes(&page), [format!("DH-{tag}-1"), format!("DH-{tag}-2")]);
+    let page = get(&admin, &format!("/admin/orders?q={tag}&status=all")).await;
+    assert_eq!(codes(&page).len(), 3, "{page}");
+    let page = get(&admin, &format!("/admin/orders?q={tag}&status=completed")).await;
+    assert_eq!(codes(&page), [format!("DH-{tag}-3")]);
+    // Scenario "Sắp xếp theo người gửi": theo email khách hàng (an < binh < chi).
+    let page = get(
+        &admin,
+        &format!("/admin/orders?q={tag}&status=all&sort=sender"),
+    )
+    .await;
+    assert_eq!(
+        codes(&page),
+        [
+            format!("DH-{tag}-2"),
+            format!("DH-{tag}-3"),
+            format!("DH-{tag}-1")
+        ]
+    );
+    let page = get(
+        &admin,
+        &format!("/admin/orders?q={tag}&status=all&sort=sender_desc"),
+    )
+    .await;
+    assert_eq!(codes(&page)[0], format!("DH-{tag}-1"));
+    // Scenario "Lọc theo thời gian": chỉ đơn tạo hôm qua.
+    let yesterday = (time::OffsetDateTime::now_utc() - time::Duration::days(1))
+        .date()
+        .to_string();
+    let page = get(
+        &admin,
+        &format!("/admin/orders?q={tag}&from={yesterday}&to={yesterday}"),
+    )
+    .await;
+    assert_eq!(codes(&page), [format!("DH-{tag}-2")]);
+    assert!(
+        page.contains(&format!(r#"value="{yesterday}""#)),
+        "giữ ngày trong ô lọc"
+    );
+
+    // --- Báo cáo tin nhắn: scenario "Lọc trạng thái".
+    let (customer, developer) = (uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
+    let conversation: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO conversations (kind, customer, developer, customer_name, developer_name)
+         VALUES ('direct', $1, $2, $3, 'Nhà phát triển') RETURNING id",
+    )
+    .bind(customer)
+    .bind(developer)
+    .bind(format!("Khách Hàng {tag}"))
+    .fetch_one(db)
+    .await
+    .unwrap();
+    let mut ids = Vec::new();
+    for (reason, handled) in [
+        (format!("spam {tag}"), false),
+        (format!("lừa đảo {tag}"), true),
+    ] {
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO chat_reports (conversation_id, reporter, reason, handled_at, handled_by)
+             VALUES ($1, $2, $3, CASE WHEN $4 THEN now() END, CASE WHEN $4 THEN 'e2e' END)
+             RETURNING id",
+        )
+        .bind(conversation)
+        .bind(customer)
+        .bind(&reason)
+        .bind(handled)
+        .fetch_one(db)
+        .await
+        .unwrap();
+        ids.push(id);
+    }
+    let reports = |page: &str| -> Vec<String> {
+        let doc = scraper::Html::parse_document(page);
+        let sel = scraper::Selector::parse("tr.chat-report").unwrap();
+        doc.select(&sel)
+            .filter_map(|e| e.value().attr("data-report").map(str::to_owned))
+            .collect()
+    };
+    let page = get(&admin, &format!("/admin/chat-reports?q={tag}")).await;
+    assert_eq!(reports(&page).len(), 2, "{page}");
+    assert!(
+        page.contains(&format!("Khách Hàng {tag}")),
+        "tên người báo cáo"
+    );
+    let page = get(
+        &admin,
+        &format!("/admin/chat-reports?q={tag}&status=handled"),
+    )
+    .await;
+    assert_eq!(reports(&page), [ids[1].to_string()]);
+    let page = get(&admin, &format!("/admin/chat-reports?q=lua+dao+{tag}")).await;
+    assert_eq!(reports(&page), [ids[1].to_string()]);
+    // Tìm theo người báo cáo, không dấu.
+    let page = get(
+        &admin,
+        &format!("/admin/chat-reports?q=khach+hang+{tag}&sort=old"),
+    )
+    .await;
+    assert_eq!(reports(&page), [ids[0].to_string(), ids[1].to_string()]);
+
+    // --- Dự án: thanh công cụ có mặt, không khớp thì báo không có dòng nào.
+    let page = get(&admin, "/admin/projects?q=khong-co-du-an-nao-nhu-vay").await;
+    assert!(page.contains(r#"id="list-tools""#), "{page}");
+    assert!(text_of(&page, "#list-count").starts_with("Đang hiện 0/"));
+
+    // --- Giao diện điện thoại: bảng cuộn ngang dưới 800px.
+    assert!(page.contains(".admin-main table { display:block; overflow-x:auto; }"));
+
+    // --- Scenario "Người duyệt app": `admin_sections` theo vai trò.
+    let (reviewer, _) = admin_with_passkey(&state, "chi-duyet", &[Role::Reviewer]).await;
+    let token = launcher_token_for(&reviewer).await;
+    let role: serde_json::Value = reqwest::Client::new()
+        .get(format!("{BASE}/v1/account/role"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        role["admin_sections"],
+        serde_json::json!([{"key": "reviews", "url": format!("{BASE}/admin/reviews")}])
+    );
+    let (plain_email, plain_password) = unique("khong-quan-tri");
+    let plain = app_browser();
+    register_in(&plain, &plain_email, &plain_password, "Người Dùng").await;
+    let token = launcher_token_for(&plain).await;
+    let role: serde_json::Value = reqwest::Client::new()
+        .get(format!("{BASE}/v1/account/role"))
+        .bearer_auth(&token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(role["admin_sections"], serde_json::json!([]));
+}
+
 // ============ app-update-notices: thông báo cập nhật đúng người, gỡ app ============
 
 /// Scenario "Kênh beta", "Người đã có bản mới", "Phát hành bằng công cụ vận hành", "Gỡ app"

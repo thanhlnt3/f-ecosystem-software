@@ -138,11 +138,23 @@ pub async fn account_role(State(state): State<Arc<AppState>>, headers: HeaderMap
     let admin_roles = crate::roles::admin_roles(&state.db, subject)
         .await
         .unwrap_or_default();
+    // Các mục quản trị được vào: F-Launcher và app di động mở thẳng từng mục (thay đổi
+    // admin-list-tools, design L4).
+    let roles: Vec<crate::admin::Role> = admin_roles
+        .iter()
+        .filter_map(|r| crate::admin::Role::parse(r))
+        .collect();
+    let base = state.public_url.as_str().trim_end_matches('/');
+    let sections: Vec<serde_json::Value> = crate::admin::sections(&roles)
+        .into_iter()
+        .map(|(key, href, _)| json!({ "key": key, "url": format!("{base}{href}") }))
+        .collect();
     Json(json!({
         "role": role.as_str(),
         "admin_roles": admin_roles,
         "developer_portal": format!("{}developer", state.public_url),
         "admin_console": format!("{}admin", state.public_url),
+        "admin_sections": sections,
     }))
     .into_response()
 }
