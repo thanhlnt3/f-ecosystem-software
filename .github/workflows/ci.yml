@@ -308,6 +308,28 @@ jobs:
           path: .dev/scans/*/scan-report.md
           retention-days: 30
 
+  thesisai-fe:
+    # Bản vá thesisai-fe (đăng nhập F-Eco, Next.js 16.4.6 đã vá GHSA-2464-fhr4-w9xw và
+    # GHSA-673q-mjm6-r5xr, QUESTIONS.md 109) còn áp được lên commit trong README và dựng được.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Áp bản vá và dựng thesisai-fe
+        run: |
+          set -eu
+          read -r repo commit <<< "$(sed -nE 's#.*https://github\.com/([A-Za-z0-9_.-]+/thesisai-fe) \| `([0-9a-f]{40})`.*#\1 \2#p' integrations/thesisai/README.md)"
+          git init -q "$RUNNER_TEMP/fe"
+          cd "$RUNNER_TEMP/fe"
+          git fetch -q --depth 1 "https://github.com/$repo.git" "$commit"
+          git checkout -q FETCH_HEAD
+          git apply "$GITHUB_WORKSPACE/integrations/thesisai/thesisai-fe.patch"
+          test "$(node -p 'require("./package.json").dependencies.next')" = 16.4.6
+          npm ci --no-audit --no-fund
+          npx next build
+
   mentor-desktop:
     # mentor-integration: bản vá Mentor còn áp được lên commit đã ghi, test của Mentor qua, dựng được
     # app desktop Windows (scenario "Bản vá còn áp được").

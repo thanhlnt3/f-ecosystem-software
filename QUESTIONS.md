@@ -439,8 +439,9 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 109. **Lỗ hổng nghiêm trọng của thư viện.** OSV xếp CRITICAL thì bộ quét vẫn chỉ ghi mức `high`
      (chuyển duyệt tay, không tự từ chối), vì app có thể không dùng tới đoạn mã lỗi. Quét ThesisAI
      (frontend, commit `8f3735e`) thấy Next.js 16.4.0 có hai lỗ hổng chạy mã từ xa không cần đăng nhập
-     (GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr). Có nên tự từ chối khi OSV ghi CRITICAL không? Và cần
-     báo tác giả ThesisAI nâng Next.js trước khi đưa ra ngoài môi trường dev.
+     (GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr). **Đã xử lý (21/11/2026)**: `thesisai-fe.patch` nâng
+     Next.js lên 16.4.6; quét lại không còn lỗ hổng Next.js (`integrations/thesisai/SCAN.md`). Còn mở:
+     có nên tự từ chối khi OSV ghi CRITICAL không? Và ai báo tác giả ThesisAI áp bản vá mới?
 110. **Repo mã nguồn không tải được.** Repo riêng tư hoặc commit không tồn tại (GitHub trả 404) hiện bị
      từ chối với `source_scan`. Có nên chuyển duyệt tay thay vì từ chối không?
 111. **Thư viện chỉ dùng khi phát triển.** Lỗ hổng trong thư viện dev (test, công cụ dựng) hiện cũng

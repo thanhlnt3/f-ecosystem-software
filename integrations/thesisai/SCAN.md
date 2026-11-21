@@ -41,12 +41,36 @@ Lỗ hổng thư viện thật, không ghi vào `scan-allow.toml`:
   thi mã từ xa không cần đăng nhập: Image Optimization với tệp SVG, và hàm `use cache` trả mảng có
   kiểu); GHSA-p3m5-59mp-jv5r (HIGH, từ chối dịch vụ qua Server Actions). Theo design S1, lỗ hổng
   CRITICAL thành phát hiện `high`, nên không làm CI thất bại; nhưng **nên nâng Next.js lên bản đã
-  vá trước khi đưa ThesisAI ra ngoài môi trường dev**.
+  vá trước khi đưa ThesisAI ra ngoài môi trường dev**. Bản vá đã nâng lên 16.4.6 (mục dưới).
 - `undici` 7.30.0: 4 lỗ hổng HIGH (bỏ qua kiểm tra chứng thư TLS, đầu độc bộ nhớ đệm, từ chối dịch vụ).
 - `body-parser` 2.3.0, `zod` 3.25.76, `systeminformation` 5.33.15: mỗi thư viện một lỗ hổng HIGH
   (từ chối dịch vụ, chèn lệnh Windows trong `services()`).
 
 Mức medium: `hono`, `@hono/node-server`, `fast-uri`, `minimatch`, `qs`, `undici`, `next` (MODERATE/LOW).
+
+## Sau khi áp bản vá (21/11/2026)
+
+`thesisai-fe.patch` nâng `next` và `eslint-config-next` từ 16.4.0 lên 16.4.6 (bản 16.4.x mới nhất, OSV
+không ghi lỗ hổng nào; bản sửa đầu tiên là 16.4.1). Bản vá cũng nâng trong `package-lock.json`, vẫn
+trong khoảng phiên bản mà `package.json` cho phép: `undici` 7.30.2, `body-parser` 2.4.0,
+`systeminformation` 5.33.23, `hono` 4.13.19, `@hono/node-server` 2.1.11, `fast-uri` 3.1.9, `qs` 6.17.1.
+
+Quét lại thư mục đã áp bản vá:
+
+```bash
+feco-codescan <thesisai-fe đã áp bản vá> --allow integrations/thesisai/scan-allow.toml
+```
+
+| Mức | Trước bản vá | Sau bản vá |
+|---|---|---|
+| critical | 0 | 0 |
+| high | 10 | 1 |
+| medium | 19 | 1 |
+
+Còn lại: `zod` 3.25.76 (GHSA-mrhx-c7xc-m3w5, HIGH). Bản sửa chỉ có từ zod 4.6.6, mà `@shadcn/registry`
+cần zod 3. Thư viện này thuộc công cụ dòng lệnh `shadcn`; app chỉ dùng `shadcn/tailwind.css`, không
+chạy mã của nó khi phục vụ người dùng. Job CI `thesisai-fe` áp bản vá lên commit trong `README.md`,
+kiểm `next` là 16.4.6, rồi chạy `npm ci` và `next build`.
 
 ## Ghi chú
 

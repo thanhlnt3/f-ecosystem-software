@@ -19,7 +19,7 @@ Thư mục này chỉ có bản vá, không có mã của ThesisAI. Tác giả T
 | Tệp | Nội dung |
 |---|---|
 | `thesisai-be.patch` | Route `/api/auth/feco/login` và `/api/auth/feco/callback` (Authlib), cột `users.feco_subject` và migration Alembic, cấu hình `FECO_*`, `SessionMiddleware`, thư viện `authlib` và `itsdangerous` (BSD-3-Clause) |
-| `thesisai-fe.patch` | Trang `/auth/feco` và nút "Đăng nhập bằng F-Eco" ở trang đăng nhập |
+| `thesisai-fe.patch` | Trang `/auth/feco` và nút "Đăng nhập bằng F-Eco" ở trang đăng nhập; nâng Next.js 16.4.0 lên 16.4.6 (vá hai lỗ hổng CRITICAL, xem `SCAN.md`) và các thư viện phụ có lỗ hổng trong `package-lock.json` |
 
 Áp bản vá:
 
