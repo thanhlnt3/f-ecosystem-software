@@ -472,3 +472,15 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 120. **Kratos trong CI dùng cơ sở dữ liệu bộ nhớ.** Hai lần CI gặp lỗi 500 "Could not update flow" của
      Kratos (`DSN=memory`) khi nhiều test chạy cùng lúc; chạy lại thì qua. Có nên chuyển Kratos của CI
      sang SQLite trên đĩa hoặc PostgreSQL không?
+121. **Thông báo của hệ điều hành và thông báo đẩy.** F-Launcher máy tính báo bản mới bằng hộp thoại,
+     huy hiệu và trung tâm thông báo, chưa có thông báo của Windows/macOS. Điện thoại chỉ biết khi
+     mở app hoặc quay lại từ nền, chưa có thông báo đẩy. Cả hai cần thư viện mới (ví dụ `notify-rust`;
+     Firebase Cloud Messaging/APNs với khóa dịch vụ). Có cần không, và dùng dịch vụ đẩy nào?
+122. **Một tài khoản, nhiều máy.** Máy chủ ghi "đã cài" theo tài khoản, không theo máy. Gỡ app ở một
+     máy thì app rời "Ứng dụng của tôi" dù máy kia vẫn cài; máy kia báo lại khi cập nhật lần tới. Có
+     cần ghi theo từng thiết bị không?
+123. **Kênh beta.** F-Launcher chưa có lựa chọn nhận bản beta, nên bản beta không có thông báo và không
+     hiện "Có bản mới". Có cần lựa chọn này (và thông báo cho người chọn beta) không?
+124. **Phiên bản theo nền tảng.** Thông báo cập nhật gửi theo phiên bản, không theo nền tảng: bản 1.2.0
+     chỉ có gói Windows vẫn báo cho người cài trên macOS. Máy chủ chưa biết người dùng cài trên nền
+     tảng nào. Có cần ghi nền tảng khi F-Launcher báo đã cài không?

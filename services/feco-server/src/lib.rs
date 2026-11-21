@@ -329,6 +329,10 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/entitlements", get(entitlements::api_list))
         .route("/v1/catalog", get(store_web::api_list))
         .route("/v1/catalog/installs", post(store_web::api_install))
+        .route(
+            "/v1/catalog/installs/{app}",
+            axum::routing::delete(store_web::api_uninstall),
+        )
         .route("/v1/catalog/{id}", get(store_web::api_detail))
         .route("/v1/catalog/{id}/update", get(dev_web::api_update))
         .route("/v1/apps/crashes", post(dev_web::api_crash))

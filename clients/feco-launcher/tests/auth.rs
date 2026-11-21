@@ -233,3 +233,61 @@ fn os_keyring_round_trip() {
     assert_eq!(a.load().unwrap(), None);
     a.clear().unwrap();
 }
+
+/// Scenario "Cập nhật rồi báo máy chủ" và "Gỡ rồi báo máy chủ" (thay đổi app-update-notices):
+/// F-Launcher gửi `POST /v1/catalog/installs` với phiên bản mới và
+/// `DELETE /v1/catalog/installs/{app}` khi gỡ, kèm access token.
+#[tokio::test]
+async fn reports_installed_version_and_uninstall() {
+    use axum::{extract::Path, http::HeaderMap, routing::delete};
+    let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+    let (a, b) = (seen.clone(), seen.clone());
+    let router = Router::new()
+        .route(
+            "/v1/catalog/installs",
+            post(
+                move |headers: HeaderMap, Json(body): Json<serde_json::Value>| {
+                    let seen = a.clone();
+                    async move {
+                        assert_eq!(headers["authorization"], "Bearer access-abc");
+                        seen.lock()
+                            .unwrap()
+                            .push(format!("POST {} {}", body["app_id"], body["version"]));
+                        axum::http::StatusCode::NO_CONTENT
+                    }
+                },
+            ),
+        )
+        .route(
+            "/v1/catalog/installs/{app}",
+            delete(move |headers: HeaderMap, Path(app): Path<String>| {
+                let seen = b.clone();
+                async move {
+                    if headers.get("authorization").is_none() {
+                        return axum::http::StatusCode::UNAUTHORIZED;
+                    }
+                    seen.lock().unwrap().push(format!("DELETE {app}"));
+                    axum::http::StatusCode::NO_CONTENT
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let server = url::Url::parse(&format!("http://{addr}/")).unwrap();
+    let a = Auth::new(
+        server.clone(),
+        server,
+        "launcher",
+        free_port(),
+        Arc::new(MemoryStore::default()),
+    );
+    a.record_install("access-abc", "soundlab", "1.3.0")
+        .await
+        .unwrap();
+    a.remove_install("access-abc", "soundlab").await.unwrap();
+    assert_eq!(
+        *seen.lock().unwrap(),
+        [r#"POST "soundlab" "1.3.0""#, "DELETE soundlab"]
+    );
+}

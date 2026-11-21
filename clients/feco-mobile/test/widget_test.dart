@@ -116,6 +116,48 @@ void main() {
     expect(find.byKey(const Key('library-thesisai')), findsOneWidget);
   });
 
+  // app-update-notices: "App máy tính có bản mới", "App web", "Quay lại app".
+  testWidgets('scenario_bao_ban_moi_tren_dien_thoai', (tester) async {
+    final h = Harness();
+    await h.backend.addToLibrary('kibi', '0.3.0');
+    await h.backend.addToLibrary('thesisai', '0.0.9');
+    await h.pump(tester);
+    await h.state.signIn();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('tab-library')));
+    await tester.pumpAndSettle();
+    // App máy tính có bản mới: nhãn, dòng tóm tắt, huy hiệu 1.
+    expect(find.byKey(const Key('update-kibi')), findsOneWidget);
+    expect(
+      find.text(
+        'Số app có bản mới: 1. Mở F-Launcher trên máy tính để cập nhật.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('tab-library')),
+        matching: find.text('1'),
+      ),
+      findsOneWidget,
+    );
+    // App web: không có nhãn.
+    expect(find.byKey(const Key('library-thesisai')), findsOneWidget);
+    expect(find.byKey(const Key('update-thesisai')), findsNothing);
+    // Cập nhật trên máy tính rồi quay lại app: tải lại, hết "Có bản mới".
+    await h.backend.addToLibrary('kibi', '0.3.3');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('update-kibi')), findsNothing);
+    expect(find.byKey(const Key('updates-banner')), findsNothing);
+    expect(h.state.updateCount, 0);
+  });
+
   testWidgets('scenario_doi_ngon_ngu', (tester) async {
     final h = Harness();
     await h.pump(tester);

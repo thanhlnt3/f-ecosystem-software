@@ -361,7 +361,7 @@ async fn interrupted_update_keeps_old_version_and_rollback_needs_no_download() {
 
     // Lần kiểm tra sau có mạng: cập nhật thành công, bản cũ được giữ để quay lại.
     std::fs::rename(&hidden, &stored).unwrap();
-    let results = l.update_all(Timestamp::now()).await;
+    let results = l.update_all(Timestamp::now(), &Default::default()).await;
     assert!(results.iter().all(|(_, r)| r.is_ok()), "{results:?}");
     assert_eq!(l.prepare_launch("soundlab").unwrap().version, "1.2.0");
     assert_eq!(l.my_apps()[0].previous_version.as_deref(), Some("1.1.0"));
@@ -378,6 +378,32 @@ async fn interrupted_update_keeps_old_version_and_rollback_needs_no_download() {
         "@echo soundlab 1.1.0"
     );
     assert_eq!(l.my_apps()[0].previous_version.as_deref(), Some("1.2.0"));
+}
+
+/// Scenario "Cập nhật tất cả bỏ qua bản đã bỏ qua" (thay đổi app-update-notices): bản người dùng
+/// đã bỏ qua không được cài bằng "Cập nhật tất cả" hay tự cập nhật; bản mới hơn nữa thì có.
+#[tokio::test]
+async fn update_all_leaves_skipped_versions() {
+    let f = Fixture::new().await;
+    f.publish_app("soundlab", "1.0.0").await;
+    let mut l = f.launcher().await;
+    l.sync(Timestamp::now()).await.unwrap();
+    l.install(&entry(&l, "soundlab", "1.0.0"), Timestamp::now())
+        .await
+        .unwrap();
+    f.publish_app("soundlab", "2.0.0").await;
+    l.sync(Timestamp::now()).await.unwrap();
+    let skipped: std::collections::BTreeMap<String, String> =
+        [("soundlab".to_owned(), "2.0.0".to_owned())].into();
+    assert!(l.update_all(Timestamp::now(), &skipped).await.is_empty());
+    assert_eq!(l.prepare_launch("soundlab").unwrap().version, "1.0.0");
+    // Bản 2.1.0 chưa bị bỏ qua: được cập nhật.
+    f.publish_app("soundlab", "2.1.0").await;
+    l.sync(Timestamp::now()).await.unwrap();
+    let results = l.update_all(Timestamp::now(), &skipped).await;
+    assert_eq!(results.len(), 1);
+    assert!(results[0].1.is_ok(), "{results:?}");
+    assert_eq!(l.prepare_launch("soundlab").unwrap().version, "2.1.0");
 }
 
 /// Scenario "Phát hành 10%" phía launcher: thiết bị ngoài nhóm vẫn ở bản cũ; vào nhóm thì
@@ -400,7 +426,10 @@ async fn staged_rollout_limits_offered_update() {
     // Máy chủ: thiết bị này vẫn ở 1.2.0 (ngoài 10%).
     l.set_rollout("soundlab", Some("1.2.0".into())).unwrap();
     assert!(l.my_apps()[0].update.is_none());
-    assert!(l.update_all(Timestamp::now()).await.is_empty());
+    assert!(l
+        .update_all(Timestamp::now(), &Default::default())
+        .await
+        .is_empty());
     // Máy chủ: thiết bị này được nhận 1.3.0.
     l.set_rollout("soundlab", Some("1.3.0".into())).unwrap();
     assert_eq!(l.my_apps()[0].update.as_ref().unwrap().version, "1.3.0");

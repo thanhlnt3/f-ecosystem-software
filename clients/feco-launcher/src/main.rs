@@ -309,6 +309,9 @@ struct Shared {
     identity: Arc<Identity>,
     broker: Broker,
     broker_url: String,
+    /// Phiên bản người dùng đã "Bỏ qua bản này" (bản sao của `prefs.skipped_updates` cho việc chạy
+    /// nền: cập nhật tất cả, tự cập nhật; thay đổi app-update-notices design U4).
+    skipped: std::sync::Mutex<std::collections::BTreeMap<String, String>>,
 }
 
 #[derive(Clone, Default)]
@@ -670,6 +673,7 @@ impl LauncherApp {
             identity,
             broker,
             broker_url: format!("http://{addr}/"),
+            skipped: std::sync::Mutex::new(prefs.skipped_updates.clone()),
         });
         let view = rt.block_on(snapshot(&shared));
         register_icons(&view.catalog);
@@ -869,10 +873,17 @@ impl LauncherApp {
                 l.install(&entry, Timestamp::now())
                     .await
                     .map_err(|e| e.to_string())?;
+                drop(l);
+                report_install(&s, &entry.app, &entry.version).await;
                 Ok(tf("Đã cập nhật {} lên {}", &[&entry.title, &entry.version]))
             }),
             Action::UpdateAll => self.run(t("Đang cập nhật tất cả..."), false, |s| async move {
-                let results = s.launcher.lock().await.update_all(Timestamp::now()).await;
+                let skipped = s.skipped.lock().expect("khóa").clone();
+                let mut l = s.launcher.lock().await;
+                let results = l.update_all(Timestamp::now(), &skipped).await;
+                let installed = l.installed();
+                drop(l);
+                report_updates(&s, &results, &installed).await;
                 summarize(&results)
             }),
             Action::Rollback(app) => self.run(
@@ -882,6 +893,8 @@ impl LauncherApp {
                     let mut l = s.launcher.lock().await;
                     l.rollback(&app).map_err(|e| e.to_string())?;
                     let plan = l.prepare_launch(&app).map_err(|e| e.to_string())?;
+                    drop(l);
+                    report_install(&s, &app, &plan.version).await;
                     Ok(tf("Đã quay lại {} {}", &[&plan.title, &plan.version]))
                 },
             ),
@@ -894,6 +907,7 @@ impl LauncherApp {
                         .await
                         .uninstall(&app, delete_data)
                         .map_err(|e| e.to_string())?;
+                    report_uninstall(&s, &app).await;
                     Ok(tf("Đã gỡ {}. Quyền dữ liệu bạn đã cấp cho app vẫn còn; thu hồi ở trang \"Ứng dụng đã kết nối\".", &[&app]))
                 })
             }
@@ -966,6 +980,7 @@ impl LauncherApp {
             Action::ShowUpdates => self.update_prompt = true,
             Action::SkipUpdate(app, version) => {
                 self.prefs.skipped_updates.insert(app, version);
+                *self.shared.skipped.lock().expect("khóa") = self.prefs.skipped_updates.clone();
                 if let Err(e) = self.prefs.save(&self.prefs_path) {
                     self.notice = Some((true, e.to_string()));
                 }
@@ -1837,12 +1852,8 @@ impl LauncherApp {
     /// Mục điều hướng: icon, trang, tên, số cần báo (bản cập nhật, thông báo chưa đọc).
     fn nav_entries(&self) -> [(Icon, Page, &'static str, usize); 4] {
         let unread = self.view.notifications.iter().filter(|n| !n.read).count();
-        let updates = self
-            .view
-            .my_apps
-            .iter()
-            .filter(|a| a.update.is_some())
-            .count();
+        // Không tính bản đã bỏ qua, như hộp thoại "Có bản cập nhật mới" (app-update-notices U4).
+        let updates = update_suggestions(&self.view.my_apps, &self.prefs.skipped_updates).len();
         [
             (Icon::Library, Page::Library, t("Thư viện"), updates),
             (Icon::Store, Page::Store, t("Cửa hàng"), 0),
@@ -2140,12 +2151,8 @@ impl LauncherApp {
                     }
                 }
                 if !store {
-                    let updates = self
-                        .view
-                        .my_apps
-                        .iter()
-                        .filter(|a| a.update.is_some())
-                        .count();
+                    let updates =
+                        update_suggestions(&self.view.my_apps, &self.prefs.skipped_updates).len();
                     if updates > 0
                         && primary_button(
                             ui,
@@ -4036,7 +4043,11 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
         }
     }
     if l.state().auto_update && l.due_for_update_check(now) {
-        let results = l.update_all(now).await;
+        let skipped = s.skipped.lock().expect("khóa").clone();
+        let results = l.update_all(now, &skipped).await;
+        let installed = l.installed();
+        drop(l);
+        report_updates(&s, &results, &installed).await;
         if !results.is_empty() {
             return summarize(&results);
         }
@@ -4044,7 +4055,35 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
     Ok(String::new())
 }
 
-/// Báo F-Store đã cài (để được đánh giá app). Không chặn việc cài nếu thất bại.
+/// Báo máy chủ phiên bản mới của các app vừa cập nhật thành công (thay đổi app-update-notices U3).
+async fn report_updates(
+    s: &Shared,
+    results: &[(String, Result<(), LauncherError>)],
+    installed: &[(String, String)],
+) {
+    for (app, result) in results {
+        if result.is_err() {
+            continue;
+        }
+        if let Some((_, version)) = installed.iter().find(|(a, _)| a == app) {
+            report_install(s, app, version).await;
+        }
+    }
+}
+
+/// Báo F-Store đã gỡ app (rời "Ứng dụng của tôi", không nhận thông báo cập nhật nữa). Không chặn
+/// việc gỡ nếu thất bại.
+async fn report_uninstall(s: &Shared, app: &str) {
+    if let Ok(token) = s.identity.access_token().await {
+        if let Err(e) = s.identity.auth.remove_install(&token, app).await {
+            eprintln!("không báo được lượt gỡ {app}: {e}");
+        }
+    }
+}
+
+/// Báo F-Store phiên bản đang cài sau khi cài, cập nhật hay quay lại bản trước (để được đánh giá
+/// app, và để "Ứng dụng của tôi" trên web và di động biết đã có bản mới). Không chặn việc cài nếu
+/// thất bại.
 async fn report_install(s: &Shared, app: &str, version: &str) {
     if let Ok(token) = s.identity.access_token().await {
         if let Err(e) = s.identity.auth.record_install(&token, app, version).await {

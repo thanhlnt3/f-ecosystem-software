@@ -562,6 +562,10 @@ F-Coin là đơn vị thanh toán chỉ dùng trong F-Eco. Tỷ giá ban đầu 
    ```
 
 6. **Ứng dụng của tôi**: http://127.0.0.1:8080/library hiện app đã cài qua F-Launcher và app đã mua, kèm nhãn "Có bản mới". F-Launcher tự gợi ý cập nhật sau mỗi lần đồng bộ.
+   - "Có bản mới" chỉ tính bản phát hành trên kênh ổn định cho mọi thiết bị. Bản đang phát hành dần, bản beta và bản tạm dừng không tính.
+   - F-Launcher báo máy chủ sau khi cập nhật, quay lại bản trước hoặc gỡ app. Nhờ vậy, web và điện thoại thôi hiện "Có bản mới" sau khi bạn cập nhật trên máy tính.
+   - Thông báo "có bản cập nhật" gửi một lần cho mỗi phiên bản, khi bản đó tới tay mọi người, và chỉ gửi cho người đang cài bản cũ hơn. Bản phát hành bằng `feco-catalog release` được báo trong vòng 10 phút.
+   - Trên điện thoại: tab "Ứng dụng của tôi" có huy hiệu số app có bản mới, kèm dòng "Mở F-Launcher trên máy tính để cập nhật". App tải lại danh sách khi bạn quay lại từ nền.
 
 7. **Tin nhắn**: http://127.0.0.1:8080/messages.
    - Khách hàng bấm **Nhắn nhà phát triển** ở trang app trong F-Store hoặc ở danh sách nhà phát triển trong Dự án.
@@ -601,7 +605,8 @@ Các API chính của `feco-server`:
 | `POST /v1/launch-codes` | Chỉ token của F-Launcher: `{"client_id"}` → mã khởi chạy dùng một lần, sống 60 giây |
 | `/store`, `/store/{id}` | F-Store: danh mục, tìm kiếm (`?q=&category=&os=windows\|macos&price=free\|paid&verified=1`), trang chi tiết; `POST /store/{id}/reviews`, `/store/{id}/reviews/{rid}/reply`, `/store/{id}/report` |
 | `GET /v1/catalog`, `GET /v1/catalog/{id}` | Danh mục dạng JSON (cùng tham số tìm kiếm); chi tiết kèm scope, mục đích, phiên bản, nhận xét |
-| `POST /v1/catalog/installs` | Chỉ token của F-Launcher: `{"app_id", "version"}` ghi nhận đã cài (điều kiện để đánh giá) |
+| `POST /v1/catalog/installs` | Chỉ token của F-Launcher: `{"app_id", "version"}` ghi nhận đã cài, cập nhật hoặc quay lại một bản (điều kiện để đánh giá) |
+| `DELETE /v1/catalog/installs/{app}` | Chỉ token của F-Launcher: đã gỡ app; app rời "Ứng dụng của tôi" (trừ app đã mua) và không còn nhận thông báo cập nhật |
 | `GET /v1/catalog/{id}/update?platform=&device=&channel=` | Phiên bản một launcher nên dùng, theo kênh và phần trăm phát hành dần |
 | `/developer`, `/developer/apps/{id}`, `/developer/docs` | Cổng nhà phát triển và tài liệu |
 | `POST /v1/dev/apps/{app}/versions`, `PUT /v1/dev/versions/{id}/packages/{platform}`, `POST /v1/dev/versions/{id}/submit` | API cho CLI `f-dev` (token `fdev_...`): nộp `f-app.toml`, tải gói (header `X-Feco-Sha256`, tối đa 2 GB), gửi duyệt |

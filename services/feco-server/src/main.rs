@@ -144,6 +144,20 @@ fn spawn_background_jobs(state: Arc<AppState>) {
             }
         }
     });
+    // Mỗi 10 phút: báo bản cập nhật chưa báo, gồm bản phát hành bằng `feco-catalog release`
+    // (thay đổi app-update-notices, design U1).
+    let s = state.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(600));
+        loop {
+            tick.tick().await;
+            match feco_server::notifications::announce_updates(&s, None).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!(sent = n, "đã báo bản cập nhật app"),
+                Err(e) => tracing::error!(error = %e, "không báo được bản cập nhật app"),
+            }
+        }
+    });
     // Thanh toán: mỗi phút truy vấn chủ động giao dịch quá 15 phút và lệnh hoàn đang xử lý; mỗi
     // giờ kiểm xem đã tới lúc đối soát ngày hôm trước chưa.
     let s = state.clone();

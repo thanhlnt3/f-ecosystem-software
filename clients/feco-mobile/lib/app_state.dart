@@ -138,6 +138,26 @@ class AppState extends ChangeNotifier {
 
   bool inLibrary(String appId) => library.any((i) => i.id == appId);
 
+  /// Số app máy tính có bản mới (dòng tóm tắt và huy hiệu của tab "Ứng dụng của tôi").
+  int get updateCount => library.where((i) => i.desktopUpdate).length;
+
+  /// Tải lại "Ứng dụng của tôi" và thông báo, không hiện vòng chờ: khi quay lại app từ nền
+  /// (thay đổi app-update-notices, design U5). Lỗi mạng thì giữ dữ liệu cũ.
+  Future<void> refreshLibrary() async {
+    if (!auth.signedIn) return;
+    try {
+      final results = await Future.wait([
+        backend.library(),
+        backend.notifications(),
+      ]);
+      library = results[0] as List<LibraryItem>;
+      notifications = results[1] as List<NotificationItem>;
+      notifyListeners();
+    } on Exception {
+      // Lần sau kéo làm mới sẽ báo lỗi.
+    }
+  }
+
   /// "Thêm" app web vào Ứng dụng của tôi (ghi lượt thêm lên máy chủ).
   Future<void> add(CatalogApp app) async {
     await backend.addToLibrary(app.id, app.latestVersion);

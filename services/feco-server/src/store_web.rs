@@ -820,7 +820,6 @@ pub struct InstallRequest {
     pub version: Option<String>,
 }
 
-/// POST /v1/catalog/installs (chỉ token của F-Launcher)
 /// GET /v1/catalog/private (access token của F-Launcher): app riêng tư của người dùng, ví dụ
 /// bản build bàn giao của đơn xây app (spec custom-build-orders, "Bàn giao mốc và nghiệm thu").
 pub async fn api_private(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
@@ -834,6 +833,7 @@ pub async fn api_private(State(state): State<Arc<AppState>>, headers: HeaderMap)
     }
 }
 
+/// POST /v1/catalog/installs (chỉ token của F-Launcher): đã cài, cập nhật hay quay lại một bản.
 pub async fn api_install(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -851,6 +851,23 @@ pub async fn api_install(
             "No app with this id is listed.",
             "Không có app này trong danh mục.",
         ),
+        Err(e) => api_unavailable(e),
+    }
+}
+
+/// DELETE /v1/catalog/installs/{app} (chỉ token của F-Launcher): người dùng đã gỡ app (thay đổi
+/// app-update-notices design U3). Không có bản ghi nào cũng trả 204.
+pub async fn api_uninstall(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(app): Path<String>,
+) -> Response {
+    let subject = match crate::launch::launcher_subject(&state, &headers).await {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    match catalog::remove_install(&state.db, subject, &app).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => api_unavailable(e),
     }
 }

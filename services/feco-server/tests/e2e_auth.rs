@@ -2841,6 +2841,12 @@ async fn developer_portal_end_to_end() {
     // Không đổi scope hay quyền: duyệt tự động.
     feco_server::review::process_due(&st).await.unwrap();
     let next_release = format!("/developer/versions/{next_id}/release");
+    // app-update-notices: chủ app cài 1.2.0 qua F-Launcher, theo dõi thông báo cập nhật và
+    // "Ứng dụng của tôi" qua các bước phát hành dần, tạm dừng, phát hành cho mọi người.
+    let owner_token = launcher_token_for(&owner).await;
+    record_install_as(&owner_token, &app_id, "1.2.0").await;
+    let owner_subject = subject_of(&email).await;
+    assert_eq!(app_update_notes(owner_subject, &app_id).await, 0);
     let (_, page) = post(
         &adm_c,
         &next_release,
@@ -2863,6 +2869,9 @@ async fn developer_portal_end_to_end() {
         "{} / 200 thiết bị nhận 1.3.0",
         updated.len()
     );
+    // Scenario "Phát hành dần chưa báo" và "Bản đang phát hành dần".
+    assert_eq!(app_update_notes(owner_subject, &app_id).await, 0);
+    assert_eq!(library_update(&owner_token, &app_id).await, Some(false));
     // Hỏi lại vẫn cùng kết quả; dừng phát hành dần thì không thiết bị nào nhận bản mới nữa.
     assert_eq!(rollout_version(&app_id, &updated[0]).await, "1.3.0");
     let (_, page) = post(
@@ -2876,6 +2885,8 @@ async fn developer_portal_end_to_end() {
     for device in updated.iter().take(5) {
         assert_eq!(rollout_version(&app_id, device).await, "1.2.0");
     }
+    assert_eq!(app_update_notes(owner_subject, &app_id).await, 0);
+    assert_eq!(library_update(&owner_token, &app_id).await, Some(false));
     post(&adm_c, &next_release, &csrf_adm, &full).await;
     for i in 0..20 {
         assert_eq!(
@@ -2883,6 +2894,37 @@ async fn developer_portal_end_to_end() {
             "1.3.0"
         );
     }
+    // Scenario "Phát hành cho mọi người": đúng một thông báo, web và di động hiện "Có bản mới".
+    assert_eq!(app_update_notes(owner_subject, &app_id).await, 1);
+    let title: String = sqlx::query_scalar(
+        "SELECT title FROM notifications WHERE subject = $1 AND category = 'app_updates' AND link = $2",
+    )
+    .bind(owner_subject)
+    .bind(format!("/store/{app_id}"))
+    .fetch_one(&st.db)
+    .await
+    .unwrap();
+    assert!(title.ends_with("có bản cập nhật 1.3.0"), "{title}");
+    assert_eq!(library_update(&owner_token, &app_id).await, Some(true));
+    // Scenario "Không báo hai lần".
+    post(&adm_c, &next_release, &csrf_adm, &full).await;
+    feco_server::notifications::announce_updates(&st, None)
+        .await
+        .unwrap();
+    assert_eq!(app_update_notes(owner_subject, &app_id).await, 1);
+    // Scenario "Đã cập nhật trên máy tính": F-Launcher báo 1.3.0 thì hết "Có bản mới".
+    record_install_as(&owner_token, &app_id, "1.3.0").await;
+    assert_eq!(library_update(&owner_token, &app_id).await, Some(false));
+    // Chủ app gỡ app (F-Launcher báo gỡ): app rời "Ứng dụng của tôi" và không còn được tính trong
+    // số liệu lượt cài bên dưới.
+    let res = reqwest::Client::new()
+        .delete(format!("{BASE}/v1/catalog/installs/{app_id}"))
+        .bearer_auth(&owner_token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 204);
+    assert_eq!(library_update(&owner_token, &app_id).await, None);
 
     // Nộp qua cổng web: manifest, tải gói (multipart), gửi duyệt.
     let web_manifest = app_manifest(&app_id, "1.4.0");
@@ -7358,6 +7400,49 @@ async fn launcher_token_for(user: &reqwest::Client) -> String {
         .to_owned()
 }
 
+/// F-Launcher báo đã cài (hoặc cập nhật lên) `version` của `app`.
+async fn record_install_as(token: &str, app: &str, version: &str) {
+    let res = reqwest::Client::new()
+        .post(format!("{BASE}/v1/catalog/installs"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({"app_id": app, "version": version}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 204);
+}
+
+/// Số thông báo cập nhật của `app` mà người dùng đã nhận.
+async fn app_update_notes(subject: uuid::Uuid, app: &str) -> i64 {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM notifications WHERE subject = $1 AND category = 'app_updates' AND link = $2",
+    )
+    .bind(subject)
+    .bind(format!("/store/{app}"))
+    .fetch_one(&local_state().db)
+    .await
+    .unwrap()
+}
+
+/// `update_available` của `app` trong `GET /v1/library` (`None`: app không có trong danh sách).
+async fn library_update(token: &str, app: &str) -> Option<bool> {
+    let lib: serde_json::Value = reqwest::Client::new()
+        .get(format!("{BASE}/v1/library"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    lib["apps"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["id"] == app)
+        .map(|a| a["update_available"].as_bool().unwrap())
+}
+
 /// App có giá trong danh mục, có một phiên bản đã phát hành, chủ là `owner`.
 async fn priced_app(
     state: &AppState,
@@ -8621,6 +8706,148 @@ async fn app_logos_and_web_library() {
         .await
         .unwrap();
     let lib = get(&user, "/library").await;
+    assert!(
+        lib.contains(&format!(r#"data-app="{paid}""#)) && lib.contains("Đã mua"),
+        "{lib}"
+    );
+}
+
+// ============ app-update-notices: thông báo cập nhật đúng người, gỡ app ============
+
+/// Scenario "Kênh beta", "Người đã có bản mới", "Phát hành bằng công cụ vận hành", "Gỡ app"
+/// (thay đổi app-update-notices). Phát hành dần, tạm dừng và không báo hai lần nằm trong
+/// `developer_portal_end_to_end` (luồng phát hành thật của cổng nhà phát triển).
+#[tokio::test]
+async fn app_update_notices() {
+    if !e2e_ready() {
+        return;
+    }
+    let _serial = SERIAL.lock().await;
+    let state = local_state();
+    let tag = &uuid::Uuid::new_v4().simple().to_string()[..8];
+    let app = format!("notice-{tag}");
+    feco_server::catalog::upsert_app(
+        &state.db,
+        &state.catalog,
+        &catalog_app(&app, &format!("client-{app}"), "Notice App"),
+    )
+    .await
+    .unwrap();
+    let release = |v: &'static str| {
+        let (state, app) = (&state, app.clone());
+        async move {
+            feco_server::catalog::release_version(
+                &state.db,
+                &state.catalog,
+                &app,
+                &version(v, "windows-x64"),
+            )
+            .await
+            .unwrap();
+        }
+    };
+    release("1.0.0").await;
+    feco_server::notifications::announce_updates(&state, None)
+        .await
+        .unwrap();
+
+    // Hai người: Cũ cài 1.0.0, Mới đã có 1.1.0 (ví dụ nhận qua phát hành dần).
+    let (old_email, password) = unique("ban-cu");
+    let old_user = app_browser();
+    register_in(&old_user, &old_email, &password, "Bản Cũ").await;
+    let old_token = launcher_token_for(&old_user).await;
+    record_install_as(&old_token, &app, "1.0.0").await;
+    let old_subject = subject_of(&old_email).await;
+    let (new_email, password) = unique("ban-moi");
+    let new_user = app_browser();
+    register_in(&new_user, &new_email, &password, "Bản Mới").await;
+    let new_token = launcher_token_for(&new_user).await;
+    record_install_as(&new_token, &app, "1.1.0").await;
+    let new_subject = subject_of(&new_email).await;
+
+    // Scenario "Kênh beta": không ai nhận thông báo, web không hiện "Có bản mới".
+    release("1.1.0").await;
+    sqlx::query(
+        "UPDATE catalog_versions SET channel = 'beta' WHERE app_id = $1 AND version = '1.1.0'",
+    )
+    .bind(&app)
+    .execute(&state.db)
+    .await
+    .unwrap();
+    feco_server::notifications::announce_updates(&state, Some(&app))
+        .await
+        .unwrap();
+    assert_eq!(app_update_notes(old_subject, &app).await, 0);
+    assert_eq!(library_update(&old_token, &app).await, Some(false));
+
+    // Scenario "Phát hành bằng công cụ vận hành" và "Người đã có bản mới": bản 1.1.0 lên kênh
+    // ổn định bằng feco-catalog (không có thông báo ngay); việc định kỳ báo cho người cài 1.0.0,
+    // không báo cho người đã có 1.1.0.
+    sqlx::query(
+        "UPDATE catalog_versions SET channel = 'stable' WHERE app_id = $1 AND version = '1.1.0'",
+    )
+    .bind(&app)
+    .execute(&state.db)
+    .await
+    .unwrap();
+    assert_eq!(app_update_notes(old_subject, &app).await, 0);
+    feco_server::notifications::announce_updates(&state, None)
+        .await
+        .unwrap();
+    assert_eq!(app_update_notes(old_subject, &app).await, 1);
+    assert_eq!(app_update_notes(new_subject, &app).await, 0);
+    assert_eq!(library_update(&old_token, &app).await, Some(true));
+    assert_eq!(library_update(&new_token, &app).await, Some(false));
+    let lib = get(&old_user, "/library").await;
+    assert!(
+        lib.contains(&format!(r#"data-app="{app}" data-update="true""#)),
+        "{lib}"
+    );
+
+    // Scenario "Gỡ app": F-Launcher báo gỡ; app rời "Ứng dụng của tôi", không nhận thông báo nữa.
+    let delete = |token: String, app: String| async move {
+        reqwest::Client::new()
+            .delete(format!("{BASE}/v1/catalog/installs/{app}"))
+            .bearer_auth(token)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16()
+    };
+    assert_eq!(delete(old_token.clone(), app.clone()).await, 204);
+    assert_eq!(
+        delete(old_token.clone(), app.clone()).await,
+        204,
+        "gỡ lần hai"
+    );
+    assert_eq!(library_update(&old_token, &app).await, None);
+    let lib = get(&old_user, "/library").await;
+    assert!(!lib.contains(&format!(r#"data-app="{app}""#)), "{lib}");
+    release("1.2.0").await;
+    feco_server::notifications::announce_updates(&state, None)
+        .await
+        .unwrap();
+    assert_eq!(app_update_notes(old_subject, &app).await, 1);
+    assert_eq!(app_update_notes(new_subject, &app).await, 1);
+    // Không có token F-Launcher thì không gỡ được.
+    let res = reqwest::Client::new()
+        .delete(format!("{BASE}/v1/catalog/installs/{app}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status().as_u16(), 401);
+
+    // App đã mua vẫn còn trong danh sách sau khi gỡ, với nhãn "Đã mua".
+    let paid = format!("notice-mua-{tag}");
+    priced_app(&state, &paid, "Notice Mua", 5, None).await;
+    topup_manual(&state, new_subject, &new_email, 10).await;
+    feco_server::wallet::purchase(&state, new_subject, &new_email, &paid, Some(5))
+        .await
+        .unwrap();
+    record_install_as(&new_token, &paid, "1.0.0").await;
+    assert_eq!(delete(new_token.clone(), paid.clone()).await, 204);
+    let lib = get(&new_user, "/library").await;
     assert!(
         lib.contains(&format!(r#"data-app="{paid}""#)) && lib.contains("Đã mua"),
         "{lib}"

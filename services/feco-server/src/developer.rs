@@ -1395,8 +1395,11 @@ pub async fn release(
     .execute(&state.db)
     .await?;
     state.catalog.clear();
-    // Báo người đã cài app (loại tùy chọn "cập nhật app", spec notifications).
-    crate::notifications::app_updated(state, &info.app_id, &manifest.name, &info.version).await;
+    // Báo người đang cài bản cũ khi bản này tới tay mọi người trên kênh ổn định (thay đổi
+    // app-update-notices, design U1): phát hành dần hay beta thì chưa báo.
+    if let Err(e) = crate::notifications::announce_updates(state, Some(&info.app_id)).await {
+        tracing::error!(error = %e, app = %info.app_id, "không gửi được thông báo cập nhật");
+    }
     Ok(())
 }
 

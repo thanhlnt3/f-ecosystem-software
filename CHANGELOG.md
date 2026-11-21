@@ -1,5 +1,48 @@
 # Nhật ký thay đổi
 
+## 1.14.0 (21/11/2026)
+
+Thay đổi OpenSpec `app-update-notices`: rà soát việc phát hiện app con có bản mới và báo người dùng trên F-Launcher máy tính, web và điện thoại. Kèm bản sửa lỗ hổng Next.js của ThesisAI (QUESTIONS.md 109).
+
+### Thông báo cập nhật app
+
+- **Đúng lúc**: thông báo gửi khi một phiên bản được phát hành trên kênh ổn định cho mọi thiết bị (100%). Phát hành 10%, kênh beta, tạm dừng và đổi phần trăm không còn gửi thông báo.
+- **Một lần**: mỗi phiên bản chỉ được báo một lần (bảng `app_update_notices`, migration `0022`). Phát hành lại cùng phiên bản không gửi lần nữa. App lên nhiều bản liền thì chỉ báo bản mới nhất.
+- **Đúng người**: chỉ người đang cài bản cũ hơn. Người đã nhận bản mới qua phát hành dần và người đã gỡ app không nhận.
+- **Phát hành bằng `feco-catalog release`**: việc định kỳ 10 phút gửi thông báo, trước đây không có.
+
+### "Ứng dụng của tôi" trên web và điện thoại
+
+- "Có bản mới" chỉ tính bản phát hành trên kênh ổn định cho mọi thiết bị. Trước đây bản beta, bản 10% và bản tạm dừng cũng làm hiện nhãn này.
+- `DELETE /v1/catalog/installs/{app}`: F-Launcher báo đã gỡ app. App rời danh sách (trừ app đã mua) và không còn nhận thông báo cập nhật.
+
+### F-Launcher máy tính
+
+- Báo máy chủ phiên bản đang cài sau khi cập nhật một app, cập nhật tất cả, tự cập nhật và quay lại bản trước. Trước đây chỉ báo khi cài hoặc mua, nên web và điện thoại vẫn hiện "Có bản mới" sau khi đã cập nhật.
+- Báo máy chủ khi gỡ app.
+- Huy hiệu Thư viện, nút "Cập nhật tất cả (N)" và tự cập nhật không tính bản đã "Bỏ qua bản này", khớp với hộp thoại và dải thông báo. Mục "Cập nhật lên" của từng app vẫn cài được bản đó.
+
+### Điện thoại
+
+- Quay lại app từ nền thì tải lại "Ứng dụng của tôi" và thông báo, trước đây chỉ tải lại tin nhắn.
+- Tab "Ứng dụng của tôi" có huy hiệu số app có bản mới, kèm dòng "Số app có bản mới: N. Mở F-Launcher trên máy tính để cập nhật." (bốn thứ tiếng).
+- App web không còn nhãn "Có bản mới", vì app web luôn mở bản mới nhất.
+
+### ThesisAI: Next.js 16.4.6
+
+- `integrations/thesisai/thesisai-fe.patch` nâng Next.js từ 16.4.0 lên 16.4.6. Bản này vá hai lỗ hổng CRITICAL chạy mã từ xa không cần đăng nhập (GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr) và GHSA-p3m5-59mp-jv5r.
+- Lockfile cũng nâng `undici`, `body-parser`, `systeminformation`, `hono`, `fast-uri`, `qs` trong khoảng phiên bản cho phép.
+- Quét lại: high từ 10 xuống 1, medium từ 19 xuống 1. Còn `zod` 3 của công cụ `shadcn`, xem `integrations/thesisai/SCAN.md`.
+- Job CI mới `thesisai-fe`: áp bản vá lên commit đã ghi, `npm ci`, `next build`.
+
+### Kiểm thử
+
+- **E2E**:
+  - `app_update_notices`: kênh beta, người đã có bản mới, phát hành bằng công cụ vận hành, gỡ app, app đã mua;
+  - `developer_portal_end_to_end`: phát hành 10%, tạm dừng, 100%, phát hành lại, qua cổng nhà phát triển thật.
+- **F-Launcher**: `update_all_leaves_skipped_versions`, `reports_installed_version_and_uninstall`.
+- **Điện thoại**: widget test `scenario_bao_ban_moi_tren_dien_thoai`.
+
 ## 1.13.0 (20/11/2026)
 
 Thay đổi OpenSpec `oidc-login-and-token-reuse`: xong phần lập trình của task 2.3 và 2.5 trong `add-f-ecosystem-platform`.

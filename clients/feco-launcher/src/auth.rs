@@ -568,6 +568,30 @@ impl Auth {
         }
     }
 
+    /// Báo F-Store đã gỡ app (`DELETE /v1/catalog/installs/{app}`, thay đổi app-update-notices).
+    pub async fn remove_install(&self, access: &str, app_id: &str) -> Result<(), AuthError> {
+        let mut url = self
+            .server
+            .join("v1/catalog/installs/")
+            .expect("URL máy chủ hợp lệ");
+        url.path_segments_mut()
+            .expect("URL máy chủ có đường dẫn")
+            .pop_if_empty()
+            .push(app_id);
+        let res = self
+            .http
+            .delete(url)
+            .bearer_auth(access)
+            .send()
+            .await
+            .map_err(|e| AuthError::Offline(e.to_string()))?;
+        match res.status() {
+            s if s.is_success() => Ok(()),
+            reqwest::StatusCode::UNAUTHORIZED => Err(AuthError::Expired),
+            s => Err(AuthError::Failed(format!("/v1/catalog/installs trả {s}"))),
+        }
+    }
+
     /// Xin mã khởi chạy cho app `client_id` (spec launcher, "Mở app con và truyền phiên đăng nhập").
     pub async fn launch_code(
         &self,

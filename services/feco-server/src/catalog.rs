@@ -531,7 +531,6 @@ pub async fn remove_app(db: &Db, cache: &Cache, app: &str, reason: &str) -> sqlx
     Ok(n > 0)
 }
 
-/// Ghi nhận người dùng đã cài app (launcher báo sau khi cài).
 /// App riêng tư của một người dùng (đã phát hành ít nhất một phiên bản).
 pub async fn private_for(db: &Db, subject: Uuid) -> sqlx::Result<Vec<Listing>> {
     let rows: Vec<AppRow> = sqlx::query_as(&format!(
@@ -562,6 +561,17 @@ pub async fn set_private(
     Ok(n > 0)
 }
 
+/// Người dùng đã gỡ app trong F-Launcher (thay đổi app-update-notices design U3).
+pub async fn remove_install(db: &Db, subject: Uuid, app: &str) -> sqlx::Result<()> {
+    sqlx::query("DELETE FROM catalog_installs WHERE subject = $1 AND app_id = $2")
+        .bind(subject)
+        .bind(app)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+/// Ghi nhận người dùng đã cài app (launcher báo sau khi cài, cập nhật hay quay lại bản trước).
 pub async fn record_install(
     db: &Db,
     subject: Uuid,
@@ -629,7 +639,8 @@ pub fn newer(a: &str, b: &str) -> bool {
     }
 }
 
-/// App đã cài hoặc đã mua của một người dùng, kèm phiên bản mới nhất đang phát hành.
+/// App đã cài hoặc đã mua của một người dùng, kèm phiên bản mới nhất đang phát hành cho mọi người
+/// (kênh `stable`, 100%; thay đổi app-update-notices design U2).
 pub async fn library(db: &Db, subject: Uuid) -> sqlx::Result<Vec<LibraryItem>> {
     type Row = (
         String,
@@ -644,6 +655,7 @@ pub async fn library(db: &Db, subject: Uuid) -> sqlx::Result<Vec<LibraryItem>> {
     let rows: Vec<Row> = sqlx::query_as(
         "SELECT a.id, a.name, a.icon IS NOT NULL, i.subject IS NOT NULL, i.version, p.buyer IS NOT NULL,
                 (SELECT v.version FROM catalog_versions v WHERE v.app_id = a.id AND v.status = 'released'
+                   AND v.channel = 'stable' AND v.rollout_percent = 100
                  ORDER BY v.released_at DESC LIMIT 1), a.web_url
          FROM catalog_apps a
          LEFT JOIN catalog_installs i ON i.app_id = a.id AND i.subject = $1

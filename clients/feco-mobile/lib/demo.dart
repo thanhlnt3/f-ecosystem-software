@@ -110,7 +110,8 @@ class DemoBackend implements Backend {
         purchased: _owned.contains(e.key),
         latest: apps.firstWhere((a) => a.id == e.key).latestVersion,
         webUrl: apps.firstWhere((a) => a.id == e.key).webUrl,
-        updateAvailable: false,
+        updateAvailable:
+            e.value != apps.firstWhere((a) => a.id == e.key).latestVersion,
       ),
   ];
 

@@ -485,13 +485,19 @@ impl Launcher {
         }
     }
 
-    /// Cập nhật mọi app có bản mới; trả kết quả từng app.
-    pub async fn update_all(&mut self, now: Timestamp) -> Vec<(String, Result<(), LauncherError>)> {
+    /// Cập nhật mọi app có bản mới, trừ phiên bản người dùng đã bỏ qua (`skipped`: app → phiên
+    /// bản); trả kết quả từng app.
+    pub async fn update_all(
+        &mut self,
+        now: Timestamp,
+        skipped: &std::collections::BTreeMap<String, String>,
+    ) -> Vec<(String, Result<(), LauncherError>)> {
         let updates: Vec<CatalogEntry> = self
             .state
             .apps
             .keys()
             .filter_map(|app| self.update_for(app).cloned())
+            .filter(|e| skipped.get(&e.app) != Some(&e.version))
             .collect();
         let mut out = Vec::new();
         for entry in updates {

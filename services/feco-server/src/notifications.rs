@@ -263,15 +263,49 @@ pub async fn notify(
     }
 }
 
-/// Báo bản cập nhật cho những người đã cài app (loại tùy chọn "cập nhật app").
-pub async fn app_updated(state: &AppState, app_id: &str, name: &str, version: &str) {
-    let subjects: Vec<Uuid> =
-        sqlx::query_scalar("SELECT subject FROM catalog_installs WHERE app_id = $1")
-            .bind(app_id)
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default();
-    for s in subjects {
+/// Báo bản cập nhật (loại tùy chọn "cập nhật app"), thay đổi app-update-notices design U1.
+///
+/// Với mỗi app (một app, hoặc mọi app khi `app` là `None`), lấy bản mới nhất đang phát hành cho
+/// mọi người (kênh `stable`, 100%). Bản đó chưa có trong `app_update_notices` thì ghi vào và báo
+/// cho người đang cài bản cũ hơn (hoặc chưa rõ bản). Trả số thông báo đã gửi.
+pub async fn announce_updates(state: &AppState, app: Option<&str>) -> sqlx::Result<usize> {
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT DISTINCT v.app_id, a.name, v.version FROM catalog_versions v
+         JOIN catalog_apps a ON a.id = v.app_id
+         WHERE v.status = 'released' AND v.channel = 'stable' AND v.rollout_percent = 100
+           AND a.status = 'listed' AND ($1::text IS NULL OR v.app_id = $1)",
+    )
+    .bind(app)
+    .fetch_all(&state.db)
+    .await?;
+    // Bản mới nhất của mỗi app: không báo bản trung gian.
+    let mut latest: std::collections::BTreeMap<String, (String, String)> = Default::default();
+    for (id, name, version) in rows {
+        match latest.get(&id) {
+            Some((_, v)) if !crate::catalog::newer(&version, v) => {}
+            _ => {
+                latest.insert(id, (name, version));
+            }
+        }
+    }
+    let mut sent = 0;
+    for (app_id, (name, version)) in latest {
+        let inserted = sqlx::query(
+            "INSERT INTO app_update_notices (app_id, version) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        )
+        .bind(&app_id)
+        .bind(&version)
+        .execute(&state.db)
+        .await?
+        .rows_affected();
+        if inserted == 0 {
+            continue;
+        }
+        let installs: Vec<(Uuid, Option<String>)> =
+            sqlx::query_as("SELECT subject, version FROM catalog_installs WHERE app_id = $1")
+                .bind(&app_id)
+                .fetch_all(&state.db)
+                .await?;
         let note = Note::vi(
             format!("{name} có bản cập nhật {version}"),
             format!("{name} {version} đã sẵn sàng trong F-Launcher."),
@@ -281,8 +315,15 @@ pub async fn app_updated(state: &AppState, app_id: &str, name: &str, version: &s
             format!("{name} {version} is available"),
             format!("{name} {version} is ready in F-Launcher."),
         );
-        notify(state, s, None, Category::AppUpdates, &note).await;
+        for (subject, installed) in installs {
+            if installed.is_some_and(|i| !crate::catalog::newer(&version, &i)) {
+                continue;
+            }
+            notify(state, subject, None, Category::AppUpdates, &note).await;
+            sent += 1;
+        }
     }
+    Ok(sent)
 }
 
 #[derive(Debug, Clone, Serialize)]

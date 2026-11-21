@@ -261,6 +261,12 @@ const Map<String, List<String>> strings = {
     'Mise à jour disponible',
     '新しいバージョンあり',
   ],
+  'updates_banner': [
+    'Số app có bản mới: {n}. Mở F-Launcher trên máy tính để cập nhật.',
+    'Apps with an update: {n}. Open F-Launcher on your computer to update.',
+    'Applis avec une mise à jour : {n}. Ouvrez F-Launcher sur votre ordinateur pour les mettre à jour.',
+    '新しいバージョンがあるアプリ: {n}。パソコンの F-Launcher で更新してください。',
+  ],
   'purchased': ['Đã mua', 'Purchased', 'Achetée', '購入済み'],
   'library_empty': [
     'Chưa có app nào. Thêm app web hoặc mua app trong Cửa hàng.',

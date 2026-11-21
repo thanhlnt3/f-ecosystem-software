@@ -2,6 +2,7 @@
 library;
 
 import 'config.dart';
+
 import 'package:material_ui/material_ui.dart';
 
 import 'app_state.dart';
@@ -51,14 +52,18 @@ class _HomePageState extends State<HomePage> {
   // Chưa đăng nhập thì mở ở Cửa hàng (xem được không cần đăng nhập).
   int _tab = 1;
 
-  // Quay lại app (từ nền): cập nhật số tin chưa đọc (C3: di động cập nhật khi mở app).
+  // Quay lại app (từ nền): cập nhật số tin chưa đọc (C3: di động cập nhật khi mở app), "Ứng dụng
+  // của tôi" và thông báo (app-update-notices U5: bản mới, hay đã cập nhật trên máy tính).
   late final AppLifecycleListener _lifecycle;
 
   @override
   void initState() {
     super.initState();
     _lifecycle = AppLifecycleListener(
-      onResume: () => widget.state.refreshChat(),
+      onResume: () {
+        widget.state.refreshChat();
+        widget.state.refreshLibrary();
+      },
     );
   }
 
@@ -81,6 +86,7 @@ class _HomePageState extends State<HomePage> {
     ];
     final unread = s.notifications.where((n) => !n.read).length;
     final chatUnread = s.chatUnread;
+    final updates = s.updateCount;
     final pages = [
       _NeedSignIn(
         state: s,
@@ -138,8 +144,17 @@ class _HomePageState extends State<HomePage> {
         destinations: [
           NavigationDestination(
             key: const Key('tab-library'),
-            icon: const Icon(Icons.apps_outlined),
-            selectedIcon: const Icon(Icons.apps),
+            icon: Badge(
+              key: const Key('library-update-badge'),
+              isLabelVisible: updates > 0,
+              label: Text(updates > 9 ? '9+' : '$updates'),
+              child: const Icon(Icons.apps_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: updates > 0,
+              label: Text(updates > 9 ? '9+' : '$updates'),
+              child: const Icon(Icons.apps),
+            ),
             label: titles[0],
           ),
           NavigationDestination(
@@ -522,6 +537,18 @@ class LibraryPage extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          if (s.updateCount > 0)
+            Card(
+              key: const Key('updates-banner'),
+              color: brandOrange.withValues(alpha: 0.12),
+              child: ListTile(
+                leading: const Icon(
+                  Icons.system_update_alt,
+                  color: brandOrange,
+                ),
+                title: Text(s.t('updates_banner', {'n': '${s.updateCount}'})),
+              ),
+            ),
           for (final i in s.library)
             Card(
               key: Key('library-${i.id}'),
@@ -538,8 +565,9 @@ class LibraryPage extends StatelessWidget {
                   children: [
                     if (i.webUrl != null) Text(s.t('web_app')),
                     if (i.purchased) Text(s.t('purchased')),
-                    if (i.updateAvailable)
+                    if (i.desktopUpdate)
                       Text(
+                        key: Key('update-${i.id}'),
                         s.t('update_available'),
                         style: const TextStyle(color: brandOrange),
                       ),

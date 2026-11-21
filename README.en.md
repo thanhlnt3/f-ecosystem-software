@@ -563,6 +563,10 @@ F-Coin is a payment unit used only inside F-Eco. The initial rate is 1 F-Coin = 
    ```
 
 6. **My apps**: http://127.0.0.1:8080/library lists apps installed through F-Launcher and apps you bought, with an "Update available" label. F-Launcher suggests updates after every sync.
+   - "Update available" only counts versions released on the stable channel to every device. Staged, beta and paused versions do not count.
+   - F-Launcher tells the server after updating, rolling back or uninstalling an app. The web and the phone then stop showing "Update available" once you have updated on the computer.
+   - The "update available" notification goes out once per version, when it reaches everyone, and only to people on an older version. Versions released with `feco-catalog release` are announced within 10 minutes.
+   - On the phone, the "My apps" tab shows a badge with the number of apps that have an update, plus a line "Open F-Launcher on your computer to update". The app reloads the list when you come back to it.
 
 7. **Messages**: http://127.0.0.1:8080/messages.
    - A customer clicks **Message the developer** on an F-Store app page or on the developer list in Projects.
@@ -602,7 +606,8 @@ The main `feco-server` APIs:
 | `POST /v1/launch-codes` | F-Launcher tokens only: `{"client_id"}` → a one-time launch code, valid for 60 seconds |
 | `/store`, `/store/{id}` | F-Store: catalog, search (`?q=&category=&os=windows\|macos&price=free\|paid&verified=1`), detail page; `POST /store/{id}/reviews`, `/store/{id}/reviews/{rid}/reply`, `/store/{id}/report` |
 | `GET /v1/catalog`, `GET /v1/catalog/{id}` | The catalog as JSON (same search parameters); the detail includes scopes, purposes, versions, reviews |
-| `POST /v1/catalog/installs` | F-Launcher tokens only: `{"app_id", "version"}` records an install (a prerequisite for reviewing) |
+| `POST /v1/catalog/installs` | F-Launcher tokens only: `{"app_id", "version"}` records an install, update or rollback (a prerequisite for reviewing) |
+| `DELETE /v1/catalog/installs/{app}` | F-Launcher tokens only: the app was uninstalled; it leaves "My apps" (unless bought) and no longer gets update notifications |
 | `GET /v1/catalog/{id}/update?platform=&device=&channel=` | The version a launcher should use, by channel and gradual rollout percentage |
 | `/developer`, `/developer/apps/{id}`, `/developer/docs` | The Developer Portal and its documentation |
 | `POST /v1/dev/apps/{app}/versions`, `PUT /v1/dev/versions/{id}/packages/{platform}`, `POST /v1/dev/versions/{id}/submit` | API for the `f-dev` CLI (token `fdev_...`): submit `f-app.toml`, upload a package (header `X-Feco-Sha256`, up to 2 GB), submit for review |

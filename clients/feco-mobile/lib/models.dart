@@ -122,6 +122,10 @@ class LibraryItem {
   final String? webUrl;
   final bool updateAvailable;
 
+  /// App máy tính có bản mới (cập nhật bằng F-Launcher trên máy tính). App web luôn mở bản mới
+  /// nhất nên không tính (thay đổi app-update-notices, design U5).
+  bool get desktopUpdate => updateAvailable && webUrl == null;
+
   factory LibraryItem.fromJson(Map<String, Object?> j) => LibraryItem(
     id: _s(j['id']),
     name: _s(j['name']),
