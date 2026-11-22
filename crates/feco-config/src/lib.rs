@@ -560,7 +560,10 @@ fn auth_config<'a>(
         public_url,
         kratos_public_url: url_var("FECO_KRATOS_PUBLIC_URL", "http://127.0.0.1:4433/")?,
         kratos_admin_url: url_var("FECO_KRATOS_ADMIN_URL", "http://127.0.0.1:4434/")?,
-        smtp_url: match (get("FECO_SMTP_URL"), get("FECO_SMTP_URL_FILE").map(str::trim)) {
+        smtp_url: match (
+            get("FECO_SMTP_URL"),
+            get("FECO_SMTP_URL_FILE").map(str::trim),
+        ) {
             // Tệp bí mật (mật khẩu SMTP không nằm trong biến môi trường hay repo; thay đổi
             // distribution-upkeep-and-real-email). FECO_SMTP_URL được ưu tiên nếu đặt cả hai.
             (None, Some(path)) if !path.is_empty() => {
@@ -1273,8 +1276,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("feco-smtp-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("smtp-url");
-        std::fs::write(&file, "smtps://lan%40gmail.com:app-pass@smtp.gmail.com:465
-").unwrap();
+        // Có xuống dòng cuối tệp như khi soạn bằng trình soạn thảo.
+        std::fs::write(
+            &file,
+            concat!(
+                "smtps://tester%40example.com:test-only@smtp.gmail.com:465",
+                "\n"
+            ),
+        )
+        .unwrap();
         let path = file.to_string_lossy().into_owned();
         let v = vars(&[("FECO_SMTP_URL_FILE", path.as_str())]);
         let get = |n: &str| v.get(n).map(String::as_str);
