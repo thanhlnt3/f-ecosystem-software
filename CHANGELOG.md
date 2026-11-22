@@ -28,6 +28,10 @@ Thay đổi OpenSpec `distribution-upkeep-and-real-email`.
 - feco-server nhận `FECO_SMTP_URL_FILE` (tệp bí mật); lỗi cấu hình không lộ nội dung tệp.
 - README có mục "Gửi email tới hòm thư thật" (Gmail với mật khẩu ứng dụng; tên miền riêng khi triển khai).
 
+### Thư viện
+
+- `url` 2.5.8 lên 2.5.9 (kèm `form_urlencoded` 1.2.3) ở F-Eco và F-Builder, vá RUSTSEC-2026-0592 (tràn stack trong `Url::origin()` với URL `blob:` lồng nhau, công bố 20/11/2026).
+
 ### Kiểm thử
 
 - `feco-tuf`: `maintain_renews_metadata_before_it_expires`.
