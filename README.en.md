@@ -149,7 +149,7 @@ Open http://127.0.0.1:8080 in a browser. The UI follows the browser language; ch
    - Choose a **Role**: General user (default), Individual customer, Business customer, Individual developer or Software company.
    - Business customers and Software companies must enter a legal name and a tax code (10 digits, for example `0312345678`).
    - Roles other than General user wait for a System administrator to approve or reject them at http://127.0.0.1:8080/admin/members. The request shows "Chosen at sign-up" and whether the email is verified. The result arrives by email; until then, the account is a General user.
-2. **Verify your email**: open Mailpit at http://127.0.0.1:8025. All emails from the dev system are kept here and never sent out. Open the email "Xác minh email tài khoản F-Eco" (Verify your F-Eco account email) and click the link.
+2. **Verify your email**: open Mailpit at http://127.0.0.1:8025. By default all emails from the dev system are kept here and never sent out. Open the email "Xác minh email tài khoản F-Eco" (Verify your F-Eco account email) and click the link. To deliver emails to a real inbox (for example Gmail), see [Sending email to real inboxes](#sending-email-to-real-inboxes).
 3. **Sign in** at http://127.0.0.1:8080/login. The home page is the **profile page**: name, email and verification status, role, join date; stat cards (connected apps, devices, orders, unread notifications); shortcuts to security (including two-factor status), privacy, shopping, and role-based tools.
 4. **Settings** at http://127.0.0.1:8080/settings:
    - edit your profile (name, photo, phone number, invoicing details), change your password;
@@ -651,6 +651,7 @@ The main `feco-server` APIs:
 | `FECO_HYDRA_PUBLIC_URL` / `FECO_HYDRA_ADMIN_URL` | `http://127.0.0.1:4444/` / `:4445/` | Required in production |
 | `FECO_PAIRWISE_SECRET` | fixed dev key | Required in production, at least 32 characters; changing the key changes every app's `sub` |
 | `FECO_SMTP_URL` | `smtp://127.0.0.1:1025` | Required in production |
+| `FECO_SMTP_URL_FILE` | not set | A secret file holding the SMTP URL (with its password), instead of `FECO_SMTP_URL`. `FECO_SMTP_URL` wins if both are set |
 | `FECO_EMAIL_FROM` | `F-Eco <no-reply@f-eco.example>` | |
 | `FECO_CHALLENGE_PROVIDER` | `test` | `test` (dev/staging only) or `turnstile` (Cloudflare Turnstile). Production forbids `test` |
 | `FECO_TURNSTILE_SITE_KEY` / `FECO_TURNSTILE_SECRET_KEY` | | Required when `FECO_CHALLENGE_PROVIDER=turnstile` |
@@ -662,7 +663,7 @@ The main `feco-server` APIs:
 | `FECO_PACKAGE_DIR` | `infra/.data/packages` | Directory that stores packages uploaded by developers. Required in production |
 | `FECO_CLAMD_ADDR` | not set | ClamAV (`clamd`, for example `127.0.0.1:3310`), the second scanning engine in moderation. Required in production |
 | `FECO_ADMIN_EMAILS` | not set | Emails that receive moderation alerts (malware, late detections), comma-separated. Required in production |
-| `FECO_TUF_REPO` / `FECO_TUF_SIGN_KEYS` | not set | The TUF repository and the targets, snapshot and timestamp key files used to sign packages on release. If not set, the signing step is skipped |
+| `FECO_TUF_REPO` / `FECO_TUF_SIGN_KEYS` | not set | The TUF repository and the targets, snapshot and timestamp key files used to sign packages on release. When set, the server also re-signs metadata before it expires (at startup and every 5 minutes). If not set, the signing step is skipped |
 | `FECO_ADMIN_PASSKEY_OPTIONAL` | `false` | `true`: the Admin Console does not require a passkey. Can be set only when `FECO_ENV=dev`; other environments refuse to start |
 | `FECO_LAUNCHER_CLIENT_ID` | not set | The F-Launcher client ID in Hydra. If set, it enables sub-app launch codes (`/v1/launch-codes`) and the launcher does not have to go through the consent screen |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | not set | Dev/staging may only point to the payment gateway's sandbox |
@@ -744,6 +745,36 @@ Status page: http://127.0.0.1:8080/status. How to operate backups and monitoring
 
 CI (GitHub Actions) runs all of the steps above (except the load test, the startup measurement and the backup drill, which are run by hand every quarter), including the end-to-end tests with Docker infrastructure and the TUF drill, on every push.
 
+## Sending email to real inboxes
+
+By default, Kratos (verification and password-recovery emails) and feco-server (notifications, alerts) send email to Mailpit. To deliver to real inboxes, both use the same SMTP server:
+
+1. **Gmail (for a dev machine)**:
+   - turn on 2-Step Verification for the Google account;
+   - go to https://myaccount.google.com/apppasswords and create an "app password" (16 characters).
+2. Write the SMTP URL yourself into the secret file `.dev/smtp-url` (the `.dev` folder is never committed). Do not share this password with anyone, including in a chat:
+
+   ```text
+   smtps://<account-name>%40gmail.com:<app-password-without-spaces>@smtp.gmail.com:465
+   ```
+
+   Write the sender address (the same Gmail account) into `.dev/smtp-from`:
+
+   ```text
+   <account-name>@gmail.com
+   ```
+
+3. Restart Kratos (`scripts/dev-local.sh kratos`) and feco-server.
+   - Kratos reads `FECO_SMTP_URL` or `.dev/smtp-url`, and `FECO_EMAIL_FROM` or `.dev/smtp-from`.
+   - feco-server reads `FECO_SMTP_URL_FILE=.dev/smtp-url` and `FECO_EMAIL_FROM`.
+   - With `.dev/smtp-url` present, Kratos prints "Kratos gửi email qua SMTP đã cấu hình" at startup.
+4. Sign up with a real email address: the verification email reaches that inbox, not Mailpit.
+
+Limits:
+- Gmail allows about 500 emails a day.
+- Verification links point to Kratos's public address (`http://127.0.0.1:4433` on a dev machine), so they only open on that same machine.
+- For a real deployment, use your own sending domain with SPF, DKIM and DMARC (check with `feco-catalog mail-dns`). Set `COURIER_SMTP_CONNECTION_URI` and `COURIER_SMTP_FROM_ADDRESS` for Kratos and `FECO_SMTP_URL_FILE` for feco-server.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -752,7 +783,8 @@ CI (GitHub Actions) runs all of the steps above (except the load test, the start
 | `feco-server` exits immediately with "Cấu hình không hợp lệ" (Invalid configuration) | Read the message: it points to exactly the missing or wrong variable. In dev you only need `FECO_ENV=dev` |
 | "Không cập nhật được lược đồ cơ sở dữ liệu" (Could not update the database schema) | PostgreSQL is not running or `FECO_DATABASE_URL` is wrong |
 | The page says "Dịch vụ tài khoản đang tạm gián đoạn" (The account service is temporarily unavailable) | Kratos is not running; check `curl http://127.0.0.1:4433/health/ready` |
-| Not receiving email | All dev email goes to Mailpit at http://127.0.0.1:8025 and is never sent to the Internet |
+| No email arrives | By default every dev email goes to Mailpit at http://127.0.0.1:8025. To deliver to real inboxes, see [Sending email to real inboxes](#sending-email-to-real-inboxes) |
+| F-Launcher says "The server's distribution data has expired" | The TUF `timestamp` metadata is only valid for 1 hour. Run the server with `FECO_TUF_REPO` and `FECO_TUF_SIGN_KEYS` so it re-signs metadata itself (at startup and every 5 minutes). Without the server, run `cargo run -p feco-tuf -- refresh --repo .dev/tuf/repo --sign .dev/tuf/keys/snapshot.pk8,.dev/tuf/keys/timestamp.pk8`. If your computer's clock is wrong, correct it |
 | The sample app reports "cổng 9999 đang bận" (port 9999 is busy) | Another run of the sample app is still waiting; stop it with `Ctrl+C` |
 | The end-to-end tests report "cổng 8080 phải trống" (port 8080 must be free) | Stop the running `feco-server` before running the tests |
 | Kratos reports `database table is locked` | Dev Kratos uses in-memory SQLite, which cannot handle many concurrent writes; the tests already run sequentially. Staging and production must use PostgreSQL for Kratos |

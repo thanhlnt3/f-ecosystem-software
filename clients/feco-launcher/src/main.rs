@@ -317,6 +317,8 @@ struct Shared {
 #[derive(Clone, Default)]
 struct View {
     online: bool,
+    /// Metadata phân phối bị từ chối dù kết nối được máy chủ (distribution-upkeep-and-real-email).
+    distribution_error: Option<&'static str>,
     my_apps: Vec<MyApp>,
     catalog: Vec<CatalogEntry>,
     auto_update: bool,
@@ -334,6 +336,7 @@ async fn snapshot(shared: &Shared) -> View {
     let l = shared.launcher.lock().await;
     View {
         online: l.is_online(),
+        distribution_error: l.distribution_error(),
         my_apps: l.my_apps(),
         catalog: l.catalog_latest().into_iter().cloned().collect(),
         auto_update: l.state().auto_update,
@@ -2649,7 +2652,9 @@ impl LauncherApp {
     }
 
     fn store_page(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
-        if !self.view.online {
+        if let Some(text) = self.view.distribution_error {
+            ui.colored_label(warn_color(ui), t(text));
+        } else if !self.view.online {
             ui.colored_label(
                 warn_color(ui),
                 t("Đang ngoại tuyến. Danh mục sẽ cập nhật khi có mạng; các app đã cài vẫn mở được."),
@@ -4015,6 +4020,12 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
         Ok(()) => {}
         // Ngoại tuyến: thanh trên cùng đã báo, không cần thông báo lỗi.
         Err(LauncherError::Offline(_)) => return Ok(String::new()),
+        // Metadata bị từ chối: trang Cửa hàng đã hiện thông báo dễ hiểu (không lặp lại mỗi lần
+        // đồng bộ); chi tiết nằm trong nhật ký sự kiện.
+        Err(e @ (LauncherError::ExpiredMetadata(_) | LauncherError::InvalidMetadata(_))) => {
+            eprintln!("đồng bộ danh mục bị từ chối: {}", e.detail());
+            return Ok(String::new());
+        }
         Err(e) => return Err(e.to_string()),
     }
     // Giá F-Coin công khai (hiện giá cả khi chưa đăng nhập); lỗi thì giữ lần trước.

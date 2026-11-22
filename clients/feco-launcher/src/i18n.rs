@@ -229,6 +229,8 @@ const TABLE: &[(&str, &str, &str)] = &[
     ("Lập trình viên", "Developer", "Développeur"),
     ("Người sử dụng ứng dụng", "App user", "Utilisateur"),
     ("Cổng nhà phát triển", "Developer portal", "Portail développeur"),
+    ("Dữ liệu phân phối của máy chủ đã hết hạn nên danh mục chưa cập nhật được. Các app đã cài vẫn mở được; F-Launcher sẽ tự thử lại. Nếu giờ trên máy tính đang sai, hãy chỉnh lại giờ.", "The server's distribution data has expired, so the catalog could not be updated. Installed apps still open; F-Launcher will try again. If your computer's clock is wrong, please correct it.", "Les données de distribution du serveur ont expiré : le catalogue n'a pas pu être mis à jour. Les applis installées s'ouvrent toujours ; F-Launcher réessaiera. Si l'horloge de l'ordinateur est fausse, corrigez-la."),
+    ("Dữ liệu phân phối từ máy chủ không hợp lệ nên đã bị từ chối. Danh mục chưa cập nhật được; các app đã cài vẫn mở được.", "The distribution data from the server is invalid and was rejected. The catalog could not be updated; installed apps still open.", "Les données de distribution du serveur ne sont pas valides et ont été refusées. Le catalogue n'a pas pu être mis à jour ; les applis installées s'ouvrent toujours."),
     ("Bảng quản trị", "Admin console", "Console d'administration"),
     ("Trang chủ quản trị", "Admin home", "Accueil de l'administration"),
     ("Hàng chờ duyệt app", "App review queue", "File de vérification des applis"),

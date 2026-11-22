@@ -1,5 +1,41 @@
 # Nhật ký thay đổi
 
+## 1.16.0 (22/11/2026)
+
+Thay đổi OpenSpec `distribution-upkeep-and-real-email`.
+
+### Hết thông báo "Đang ngoại tuyến" và "Metadata … ExpiredMetadata"
+
+- **Nguyên nhân**:
+  - metadata `timestamp` của kho phân phối TUF chỉ có hạn 1 giờ (chống tấn công "đóng băng"), nhưng không có gì ký lại định kỳ;
+  - F-Launcher coi mọi lần đồng bộ lỗi là ngoại tuyến, nên hiện cả "Đang ngoại tuyến" lẫn chuỗi lỗi kỹ thuật.
+- **Máy chủ**:
+  - `Repo::maintain` trong `feco-tuf` ký lại `timestamp`, `snapshot` khi còn dưới một nửa thời hạn, và `targets` khi còn dưới một phần ba;
+  - feco-server chạy việc này lúc khởi động và mỗi 5 phút khi có `FECO_TUF_REPO`;
+  - máy chủ tắt nhiều ngày thì tự sửa khi bật lại.
+- **F-Launcher**:
+  - metadata hết hạn hoặc không hợp lệ không còn bị coi là ngoại tuyến;
+  - trang Cửa hàng hiện một thông báo dễ hiểu, bốn thứ tiếng, không có chi tiết kỹ thuật; thông báo tự mất khi lần đồng bộ sau thành công;
+  - chi tiết vẫn ghi trong nhật ký sự kiện (`expired_metadata`).
+- **Điện thoại**:
+  - máy chủ trả lỗi thì báo "Máy chủ F-Eco đang gặp lỗi", không còn báo nhầm là mất kết nối;
+  - quay lại app sau lỗi thì tự tải lại.
+- Web không dùng kho phân phối nên không bị ảnh hưởng.
+
+### Gửi email tới hòm thư thật
+
+- `scripts/dev-local.sh kratos` lấy SMTP từ `FECO_SMTP_URL` hoặc `.dev/smtp-url`, địa chỉ gửi từ `FECO_EMAIL_FROM` hoặc `.dev/smtp-from`. Trước đây máy chủ SMTP của Kratos bị gán cứng là Mailpit.
+- feco-server nhận `FECO_SMTP_URL_FILE` (tệp bí mật); lỗi cấu hình không lộ nội dung tệp.
+- README có mục "Gửi email tới hòm thư thật" (Gmail với mật khẩu ứng dụng; tên miền riêng khi triển khai).
+
+### Kiểm thử
+
+- `feco-tuf`: `maintain_renews_metadata_before_it_expires`.
+- **E2E** `developer_portal_end_to_end`: máy chủ tắt 3 ngày, việc định kỳ ký lại, launcher đồng bộ được.
+- **F-Launcher**: `expired_metadata_is_not_offline_and_clears_after_renewal`; `fake_manifest_is_rejected` cập nhật.
+- **Điện thoại**: widget test `scenario_loi_may_chu_va_quay_lai`.
+- **feco-config**: `smtp_url_from_secret_file`.
+
 ## 1.15.0 (21/11/2026)
 
 Thay đổi OpenSpec `admin-list-tools`: lọc, sắp xếp và tìm kiếm trong bảng quản trị, dùng chung trên web, F-Launcher máy tính và điện thoại.

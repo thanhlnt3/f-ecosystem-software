@@ -292,6 +292,52 @@ async fn package_with_path_traversal_is_rejected() {
     assert!(!f.paths().apps().join("outside.txt").exists());
 }
 
+/// Thay đổi distribution-upkeep-and-real-email: scenario "Metadata hết hạn" và "Máy chủ đã gia
+/// hạn". Metadata hết hạn không làm F-Launcher báo ngoại tuyến; ký lại thì hết thông báo.
+#[tokio::test]
+async fn expired_metadata_is_not_offline_and_clears_after_renewal() {
+    let f = Fixture::new().await;
+    f.publish_app("soundlab", "1.2.0").await;
+    let mut l = f.launcher().await;
+    l.sync(Timestamp::now()).await.unwrap();
+    let signers: Vec<_> = f.keys.iter().map(feco_tuf::keys::source).collect();
+    // Máy chủ không ký lại timestamp suốt 2 giờ.
+    f.repo
+        .refresh(
+            &signers,
+            feco_tuf::Expiry::default(),
+            Timestamp::now() - jiff::SignedDuration::from_hours(2),
+        )
+        .await
+        .unwrap();
+    let err = l.sync(Timestamp::now()).await.unwrap_err();
+    assert!(matches!(err, LauncherError::ExpiredMetadata(_)), "{err:?}");
+    assert!(l.is_online(), "không phải ngoại tuyến");
+    let notice = l.distribution_error().expect("có thông báo").to_owned();
+    assert!(
+        notice.starts_with("Dữ liệu phân phối của máy chủ đã hết hạn"),
+        "{notice}"
+    );
+    assert!(
+        !notice.contains("ExpiredMetadata") && !notice.contains("Tuf"),
+        "{notice}"
+    );
+    assert_eq!(err.to_string(), notice);
+    assert!(
+        err.detail().contains("ExpiredMetadata"),
+        "chi tiết vẫn có trong nhật ký"
+    );
+    assert!(kinds(l.events()).contains(&"expired_metadata".to_owned()));
+    assert!(!l.state().catalog.is_empty(), "danh mục cũ vẫn giữ");
+    // Máy chủ ký lại (việc định kỳ): đồng bộ được, thông báo biến mất.
+    f.repo
+        .maintain(&signers, feco_tuf::Expiry::default(), Timestamp::now())
+        .await
+        .unwrap();
+    l.sync(Timestamp::now()).await.unwrap();
+    assert_eq!(l.distribution_error(), None);
+}
+
 /// Scenario "Manifest giả": metadata không có chữ ký hợp lệ của nền tảng bị từ chối.
 #[tokio::test]
 async fn fake_manifest_is_rejected() {
@@ -320,7 +366,13 @@ async fn fake_manifest_is_rejected() {
     }
     let err = l.sync(Timestamp::now()).await.unwrap_err();
     assert!(matches!(err, LauncherError::InvalidMetadata(_)), "{err:?}");
-    assert!(!l.is_online());
+    // Vẫn kết nối được máy chủ: không phải ngoại tuyến, thông báo không có chi tiết kỹ thuật.
+    assert!(l.is_online());
+    let notice = l.distribution_error().expect("có thông báo");
+    assert!(
+        notice.contains("không hợp lệ") && !notice.contains("Tuf"),
+        "{notice}"
+    );
     assert_eq!(
         l.state().catalog,
         before,

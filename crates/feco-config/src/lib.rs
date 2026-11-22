@@ -560,7 +560,22 @@ fn auth_config<'a>(
         public_url,
         kratos_public_url: url_var("FECO_KRATOS_PUBLIC_URL", "http://127.0.0.1:4433/")?,
         kratos_admin_url: url_var("FECO_KRATOS_ADMIN_URL", "http://127.0.0.1:4434/")?,
-        smtp_url: url_var("FECO_SMTP_URL", "smtp://127.0.0.1:1025")?,
+        smtp_url: match (get("FECO_SMTP_URL"), get("FECO_SMTP_URL_FILE").map(str::trim)) {
+            // Tệp bí mật (mật khẩu SMTP không nằm trong biến môi trường hay repo; thay đổi
+            // distribution-upkeep-and-real-email). FECO_SMTP_URL được ưu tiên nếu đặt cả hai.
+            (None, Some(path)) if !path.is_empty() => {
+                let raw = std::fs::read_to_string(path).map_err(|e| ConfigError::Invalid {
+                    var: "FECO_SMTP_URL_FILE",
+                    reason: format!("không đọc được tệp: {e}"),
+                })?;
+                // Không đưa nội dung tệp (có mật khẩu) vào thông báo lỗi.
+                Url::parse(raw.trim()).map_err(|_| ConfigError::Invalid {
+                    var: "FECO_SMTP_URL_FILE",
+                    reason: "nội dung không phải URL SMTP hợp lệ".into(),
+                })?
+            }
+            _ => url_var("FECO_SMTP_URL", "smtp://127.0.0.1:1025")?,
+        },
         hydra_public_url: url_var("FECO_HYDRA_PUBLIC_URL", "http://127.0.0.1:4444/")?,
         hydra_admin_url: url_var("FECO_HYDRA_ADMIN_URL", "http://127.0.0.1:4445/")?,
         pairwise_secret: match get("FECO_PAIRWISE_SECRET") {
@@ -1250,6 +1265,39 @@ mod tests {
             Config::from_vars(&v).unwrap_err(),
             ConfigError::TestChallengeInProduction
         );
+    }
+
+    /// distribution-upkeep-and-real-email: URL SMTP đọc từ tệp bí mật; lỗi không lộ nội dung tệp.
+    #[test]
+    fn smtp_url_from_secret_file() {
+        let dir = std::env::temp_dir().join(format!("feco-smtp-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("smtp-url");
+        std::fs::write(&file, "smtps://lan%40gmail.com:app-pass@smtp.gmail.com:465
+").unwrap();
+        let path = file.to_string_lossy().into_owned();
+        let v = vars(&[("FECO_SMTP_URL_FILE", path.as_str())]);
+        let get = |n: &str| v.get(n).map(String::as_str);
+        let a = auth_config(Environment::Dev, &get).unwrap();
+        assert_eq!(a.smtp_url.host_str(), Some("smtp.gmail.com"));
+        assert_eq!(a.smtp_url.scheme(), "smtps");
+        // FECO_SMTP_URL được ưu tiên.
+        let v = vars(&[
+            ("FECO_SMTP_URL_FILE", path.as_str()),
+            ("FECO_SMTP_URL", "smtp://127.0.0.1:2525"),
+        ]);
+        let get = |n: &str| v.get(n).map(String::as_str);
+        assert_eq!(
+            auth_config(Environment::Dev, &get).unwrap().smtp_url.port(),
+            Some(2525)
+        );
+        // Nội dung sai: thông báo lỗi không chứa nội dung tệp.
+        std::fs::write(&file, "mat-khau-bi-mat").unwrap();
+        let v = vars(&[("FECO_SMTP_URL_FILE", path.as_str())]);
+        let get = |n: &str| v.get(n).map(String::as_str);
+        let err = auth_config(Environment::Dev, &get).unwrap_err().to_string();
+        assert!(!err.contains("mat-khau-bi-mat"), "{err}");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

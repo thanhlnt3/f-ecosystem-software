@@ -62,7 +62,12 @@ class _HomePageState extends State<HomePage> {
     _lifecycle = AppLifecycleListener(
       onResume: () {
         widget.state.refreshChat();
-        widget.state.refreshLibrary();
+        // Lần tải trước lỗi thì tải lại toàn bộ (thông báo lỗi biến mất khi máy chủ đã ổn).
+        if (widget.state.error != null) {
+          widget.state.reload();
+        } else {
+          widget.state.refreshLibrary();
+        }
       },
     );
   }

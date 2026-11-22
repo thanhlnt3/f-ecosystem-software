@@ -2808,6 +2808,40 @@ async fn developer_portal_end_to_end() {
             .unwrap();
     let synced = tuf.sync().await.unwrap();
     let target = &synced.targets[&format!("{app_id}-1.2.0-windows-x64.zip")];
+    // distribution-upkeep-and-real-email: metadata vừa ký thì máy chủ không ký lại; metadata đã
+    // hết hạn (máy chủ tắt 3 ngày) thì việc định kỳ ký lại và launcher đồng bộ được.
+    assert_eq!(
+        feco_server::developer::maintain_tuf(&st).await.unwrap(),
+        Some(feco_tuf::Maintenance::Nothing)
+    );
+    let keys: Vec<_> = st
+        .tuf
+        .as_ref()
+        .unwrap()
+        .sign_keys
+        .iter()
+        .map(feco_tuf::keys::source)
+        .collect();
+    repo.refresh(
+        &keys,
+        feco_tuf::Expiry::default(),
+        jiff::Timestamp::now() - jiff::SignedDuration::from_hours(72),
+    )
+    .await
+    .unwrap();
+    let stale = feco_tuf::Client::for_local_repo(
+        &repo,
+        &repo.root_path(1),
+        work.path().join("tuf-client-stale"),
+    )
+    .await
+    .unwrap();
+    assert!(format!("{:?}", stale.sync().await.unwrap_err()).contains("ExpiredMetadata"));
+    assert_eq!(
+        feco_server::developer::maintain_tuf(&st).await.unwrap(),
+        Some(feco_tuf::Maintenance::Refreshed)
+    );
+    stale.sync().await.expect("đồng bộ được sau khi ký lại");
     let meta = target.meta.as_ref().expect("metadata của target");
     assert_eq!(meta.entry.as_deref(), Some("SoundLab.exe"));
     assert_eq!(meta.client_id.as_deref(), Some(client_id.as_str()));

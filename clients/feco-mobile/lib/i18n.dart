@@ -361,6 +361,12 @@ const Map<String, List<String>> strings = {
     'Commandes d’applis',
     'アプリ開発の注文',
   ],
+  'error_server': [
+    'Máy chủ F-Eco đang gặp lỗi. Hãy thử lại sau ít phút.',
+    'The F-Eco server has a problem. Please try again in a few minutes.',
+    'Le serveur F-Eco rencontre un problème. Réessayez dans quelques minutes.',
+    'F-Eco サーバーで問題が発生しています。数分後にもう一度お試しください。',
+  ],
   'error_network': [
     'Không kết nối được máy chủ F-Eco.',
     'Can’t reach the F-Eco server.',

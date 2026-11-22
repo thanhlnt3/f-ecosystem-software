@@ -954,3 +954,88 @@ fn icon_with_huge_dimensions_is_rejected() {
     assert!(icon_from_png(b"\x89PNG\r\n\x1a\n").is_err(), "thiếu IHDR");
     assert!(icon_from_png(&png(1024, 64)).is_ok());
 }
+
+/// Thay đổi distribution-upkeep-and-real-email: scenario "Timestamp sắp hết hạn" và "Máy chủ tắt
+/// nhiều ngày". `maintain` chỉ ký lại khi cần, và sửa được metadata đã hết hạn.
+#[tokio::test]
+async fn maintain_renews_metadata_before_it_expires() {
+    use feco_tuf::Maintenance;
+    let fixture = Fixture::new().await;
+    fixture
+        .publish(SOUNDLAB, "soundlab", "1.2.0", b"SoundLab 1.2.0")
+        .await;
+    let now = Timestamp::now();
+    // Vừa phát hành: còn đủ hạn, không làm gì.
+    assert_eq!(
+        fixture
+            .repo
+            .maintain(&fixture.release_keys(), Expiry::default(), now)
+            .await
+            .unwrap(),
+        Maintenance::Nothing
+    );
+    // 40 phút sau, timestamp (hạn 1 giờ) còn 20 phút: ký lại snapshot và timestamp.
+    let later = now + SignedDuration::from_mins(40);
+    assert_eq!(
+        fixture
+            .repo
+            .maintain(&fixture.online_keys(), Expiry::default(), later)
+            .await
+            .unwrap(),
+        Maintenance::Refreshed
+    );
+    assert_eq!(
+        fixture
+            .repo
+            .maintain(&fixture.online_keys(), Expiry::default(), later)
+            .await
+            .unwrap(),
+        Maintenance::Nothing,
+        "vừa ký lại thì không ký nữa"
+    );
+
+    // Máy chủ tắt 3 ngày: timestamp đã hết hạn, client từ chối.
+    fixture
+        .repo
+        .refresh(
+            &fixture.online_keys(),
+            Expiry::default(),
+            now - SignedDuration::from_hours(72),
+        )
+        .await
+        .unwrap();
+    let err = fixture
+        .client("after-downtime")
+        .await
+        .sync()
+        .await
+        .expect_err("metadata hết hạn");
+    assert!(tuf_error(&err).contains("ExpiredMetadata"), "{err:?}");
+    // Khởi động lại: maintain ký lại, client đồng bộ được.
+    assert_eq!(
+        fixture
+            .repo
+            .maintain(&fixture.online_keys(), Expiry::default(), Timestamp::now())
+            .await
+            .unwrap(),
+        Maintenance::Refreshed
+    );
+    let state = fixture.client("after-downtime").await.sync().await.unwrap();
+    assert!(state.targets.contains_key(SOUNDLAB));
+
+    // Targets còn dưới 1/3 thời hạn (90 ngày): ký lại cả targets (cần khóa targets).
+    let near_end = Timestamp::now() + SignedDuration::from_hours(70 * 24);
+    fixture
+        .repo
+        .maintain(&fixture.online_keys(), Expiry::default(), near_end)
+        .await
+        .expect_err("thiếu khóa targets");
+    assert_eq!(
+        fixture
+            .repo
+            .maintain(&fixture.release_keys(), Expiry::default(), near_end)
+            .await
+            .unwrap(),
+        Maintenance::Resigned
+    );
+}

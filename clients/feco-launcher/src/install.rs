@@ -22,14 +22,24 @@ pub const UPDATE_CHECK_INTERVAL: SignedDuration = SignedDuration::from_hours(6);
 /// Thời gian tối đa từ lần đồng bộ thành công gần nhất mà app đã cài vẫn mở được khi ngoại tuyến.
 pub const MAX_OFFLINE: SignedDuration = SignedDuration::from_hours(7 * 24);
 
+/// Thông báo khi metadata phân phối hết hạn (tiếng Việt; giao diện dịch bằng `i18n::t`).
+pub const EXPIRED_METADATA_NOTICE: &str = "Dữ liệu phân phối của máy chủ đã hết hạn nên danh mục chưa cập nhật được. Các app đã cài vẫn mở được; F-Launcher sẽ tự thử lại. Nếu giờ trên máy tính đang sai, hãy chỉnh lại giờ.";
+/// Thông báo khi metadata phân phối không hợp lệ.
+pub const INVALID_METADATA_NOTICE: &str = "Dữ liệu phân phối từ máy chủ không hợp lệ nên đã bị từ chối. Danh mục chưa cập nhật được; các app đã cài vẫn mở được.";
+
 #[derive(Debug, thiserror::Error)]
 pub enum LauncherError {
     #[error("Đang ngoại tuyến ({0})")]
     Offline(String),
     #[error("Gói cài đặt không hợp lệ")]
     InvalidPackage(String),
-    #[error("Metadata phân phối không hợp lệ, đã từ chối ({0})")]
+    /// Metadata bị từ chối (chữ ký sai, phiên bản cũ...). Chi tiết chỉ dùng cho nhật ký.
+    #[error("{}", INVALID_METADATA_NOTICE)]
     InvalidMetadata(String),
+    /// Metadata quá hạn (máy chủ chưa ký lại, hoặc giờ của máy tính sai). Chi tiết chỉ dùng cho
+    /// nhật ký (thay đổi distribution-upkeep-and-real-email, design D3).
+    #[error("{}", EXPIRED_METADATA_NOTICE)]
+    ExpiredMetadata(String),
     #[error("{title} {version} đã bị thu hồi: {reason}")]
     Revoked {
         title: String,
@@ -56,7 +66,9 @@ impl LauncherError {
     /// Chi tiết kỹ thuật (để ghi nhật ký), ngoài thông báo cho người dùng.
     pub fn detail(&self) -> String {
         match self {
-            LauncherError::InvalidPackage(d) | LauncherError::InvalidMetadata(d) => d.clone(),
+            LauncherError::InvalidPackage(d)
+            | LauncherError::InvalidMetadata(d)
+            | LauncherError::ExpiredMetadata(d) => d.clone(),
             other => other.to_string(),
         }
     }
@@ -90,7 +102,9 @@ fn classify(e: feco_tuf::Error, package: bool) -> LauncherError {
         "ParseMetadata",
         "Canonical",
     ];
-    if INTEGRITY.iter().any(|m| detail.contains(m)) {
+    if detail.contains("ExpiredMetadata") {
+        LauncherError::ExpiredMetadata(detail)
+    } else if INTEGRITY.iter().any(|m| detail.contains(m)) {
         if package && !detail.contains("Metadata") {
             LauncherError::InvalidPackage(detail)
         } else {
@@ -148,6 +162,9 @@ pub struct Launcher {
     state: LocalState,
     events: EventLog,
     online: bool,
+    /// Lý do lần đồng bộ gần nhất bị từ chối dù kết nối được máy chủ (metadata hết hạn hoặc
+    /// không hợp lệ); `None` sau lần đồng bộ thành công.
+    distribution_error: Option<&'static str>,
 }
 
 impl Launcher {
@@ -166,6 +183,7 @@ impl Launcher {
             state,
             events,
             online: false,
+            distribution_error: None,
         })
     }
 
@@ -186,14 +204,19 @@ impl Launcher {
         self.online
     }
 
+    /// Thông báo cho người dùng khi metadata phân phối bị từ chối (không phải mất mạng).
+    pub fn distribution_error(&self) -> Option<&'static str> {
+        self.distribution_error
+    }
+
     fn save(&self) -> Result<(), LauncherError> {
         let path = self.paths.state_file();
         self.state.save(&path).map_err(io(&path))
     }
 
     /// Đồng bộ metadata TUF. Lỗi thì giữ nguyên danh mục và danh sách thu hồi cũ: "App của tôi"
-    /// vẫn dùng được, phần danh mục báo ngoại tuyến. Metadata giả hoặc cũ bị từ chối và ghi sự
-    /// kiện bảo mật.
+    /// vẫn dùng được. Chỉ lỗi mạng mới là ngoại tuyến; metadata giả, cũ hoặc hết hạn bị từ chối,
+    /// ghi sự kiện bảo mật và giữ thông báo trong [`Launcher::distribution_error`].
     pub async fn sync(&mut self, now: Timestamp) -> Result<(), LauncherError> {
         match self.tuf.sync().await {
             Ok(synced) => {
@@ -201,14 +224,25 @@ impl Launcher {
                 self.state.revocations = synced.revocations;
                 self.state.last_sync = Some(now);
                 self.online = true;
+                self.distribution_error = None;
                 self.save()
             }
             Err(e) => {
-                self.online = false;
                 let err = classify(e, false);
-                if let LauncherError::InvalidMetadata(detail) = &err {
-                    self.events
-                        .record("invalid_metadata", json!({ "detail": detail }));
+                match &err {
+                    LauncherError::InvalidMetadata(detail)
+                    | LauncherError::ExpiredMetadata(detail) => {
+                        // Kết nối được máy chủ nhưng metadata bị từ chối: không phải ngoại tuyến.
+                        self.online = true;
+                        let (kind, notice) = if matches!(err, LauncherError::ExpiredMetadata(_)) {
+                            ("expired_metadata", EXPIRED_METADATA_NOTICE)
+                        } else {
+                            ("invalid_metadata", INVALID_METADATA_NOTICE)
+                        };
+                        self.distribution_error = Some(notice);
+                        self.events.record(kind, json!({ "detail": detail }));
+                    }
+                    _ => self.online = false,
                 }
                 Err(err)
             }

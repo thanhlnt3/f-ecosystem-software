@@ -1,5 +1,6 @@
 // Widget test các scenario của spec mobile-launcher, với dữ liệu mẫu (không gọi mạng).
 
+import 'package:feco_mobile/api.dart';
 import 'package:feco_mobile/app_state.dart';
 import 'package:feco_mobile/config.dart';
 import 'package:feco_mobile/demo.dart';
@@ -188,6 +189,33 @@ void main() {
     await tester.tap(find.byKey(const Key('tab-account')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('admin-console-card')), findsNothing);
+  });
+
+  // distribution-upkeep-and-real-email: "Máy chủ trả lỗi", "Quay lại sau lỗi".
+  testWidgets('scenario_loi_may_chu_va_quay_lai', (tester) async {
+    final h = Harness();
+    h.backend.failure = const ApiException(503, 'unavailable', 'Down', 'Lỗi');
+    await h.pump(tester);
+    expect(
+      h.state.error,
+      'Máy chủ F-Eco đang gặp lỗi. Hãy thử lại sau ít phút.',
+    );
+    expect(find.text('Không kết nối được máy chủ F-Eco.'), findsNothing);
+    // Mất mạng thật thì vẫn báo mất kết nối.
+    h.backend.failure = Exception('socket');
+    await h.state.reload();
+    expect(h.state.error, 'Không kết nối được máy chủ F-Eco.');
+    // Máy chủ ổn lại, người dùng quay lại app: tự tải lại, hết lỗi.
+    h.backend.failure = null;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(h.state.error, isNull);
+    expect(h.state.catalog, isNotEmpty);
   });
 
   testWidgets('scenario_doi_ngon_ngu', (tester) async {

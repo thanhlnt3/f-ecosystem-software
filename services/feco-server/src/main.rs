@@ -144,6 +144,20 @@ fn spawn_background_jobs(state: Arc<AppState>) {
             }
         }
     });
+    // Lúc khởi động và mỗi 5 phút: ký lại metadata TUF trước khi hết hạn (timestamp chỉ có hạn
+    // 1 giờ), để F-Launcher không gặp metadata hết hạn (thay đổi distribution-upkeep-and-real-email).
+    let s = state.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(300));
+        loop {
+            tick.tick().await;
+            match feco_server::developer::maintain_tuf(&s).await {
+                Ok(None | Some(feco_tuf::Maintenance::Nothing)) => {}
+                Ok(Some(done)) => tracing::info!(?done, "đã ký lại metadata phân phối"),
+                Err(e) => tracing::error!(error = %e, "không ký lại được metadata phân phối"),
+            }
+        }
+    });
     // Mỗi 10 phút: báo bản cập nhật chưa báo, gồm bản phát hành bằng `feco-catalog release`
     // (thay đổi app-update-notices, design U1).
     let s = state.clone();

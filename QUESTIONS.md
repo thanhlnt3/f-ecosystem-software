@@ -493,3 +493,9 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 127. **Bảng quản trị gốc trên máy tính và điện thoại.** Theo lựa chọn ngày 21/11/2026, F-Launcher và
      app di động mở trang web quản trị. Nếu sau này cần màn hình gốc (xem danh sách không cần trình
      duyệt), phải thêm API quản trị riêng có passkey. Có kế hoạch không?
+128. **Tên miền gửi email khi ra mắt.** Máy dev dùng được Gmail với mật khẩu ứng dụng (khoảng 500
+     email mỗi ngày). Khi ra mắt cần tên miền gửi riêng có SPF, DKIM, DMARC, và một dịch vụ gửi
+     (ví dụ Amazon SES, Mailgun, Postmark) (task 14.3). Chọn dịch vụ nào, tên miền nào?
+129. **Liên kết xác minh trên điện thoại.** Liên kết trong email xác minh trỏ về địa chỉ công khai
+     của Kratos (`127.0.0.1` trên máy dev), nên mở trên điện thoại không được. Có nên đổi xác minh
+     sang mã 6 số (như khôi phục mật khẩu) để nhập được từ bất kỳ thiết bị nào không?

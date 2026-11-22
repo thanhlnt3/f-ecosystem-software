@@ -29,7 +29,31 @@ case "${1:-}" in
       export DSN="sqlite://$native_root/infra/.data/kratos.sqlite?_fk=true"
       "${KRATOS_BIN:-kratos}" migrate sql -e --yes >/dev/null
     fi
-    export COURIER_SMTP_CONNECTION_URI="smtp://127.0.0.1:1025/?disable_starttls=true"
+    # Email xác minh và khôi phục (thay đổi distribution-upkeep-and-real-email, design D5): SMTP
+    # thật lấy từ FECO_SMTP_URL hoặc tệp bí mật .dev/smtp-url (không commit), ví dụ Gmail với mật
+    # khẩu ứng dụng: smtps://<tài khoản>%40gmail.com:<mật khẩu ứng dụng>@smtp.gmail.com:465
+    # Địa chỉ gửi từ FECO_EMAIL_FROM hoặc .dev/smtp-from. Không có thì dùng Mailpit như trước.
+    # Không in URL ra màn hình: URL có mật khẩu.
+    smtp_url="${FECO_SMTP_URL:-}"
+    if [ -z "$smtp_url" ] && [ -s "$root/.dev/smtp-url" ]; then
+      smtp_url="$(tr -d '
+' < "$root/.dev/smtp-url")"
+    fi
+    smtp_from="${FECO_EMAIL_FROM:-}"
+    if [ -z "$smtp_from" ] && [ -s "$root/.dev/smtp-from" ]; then
+      smtp_from="$(tr -d '
+' < "$root/.dev/smtp-from")"
+    fi
+    if [ -n "$smtp_url" ]; then
+      export COURIER_SMTP_CONNECTION_URI="$smtp_url"
+      echo "Kratos gửi email qua SMTP đã cấu hình (FECO_SMTP_URL hoặc .dev/smtp-url)" >&2
+    else
+      export COURIER_SMTP_CONNECTION_URI="smtp://127.0.0.1:1025/?disable_starttls=true"
+    fi
+    if [ -n "$smtp_from" ]; then
+      export COURIER_SMTP_FROM_ADDRESS="$smtp_from"
+      export COURIER_SMTP_FROM_NAME="F-Eco"
+    fi
     extra=()
     # FECO_KRATOS_E2E_OIDC=1: thêm nhà cung cấp OIDC giả cho E2E (infra/kratos/kratos.e2e-oidc.yml).
     if [ "${FECO_KRATOS_E2E_OIDC:-}" = 1 ]; then

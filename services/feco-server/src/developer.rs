@@ -1552,6 +1552,27 @@ pub async fn pause(state: &AppState, m: &Membership, version_id: Uuid) -> DevRes
     Ok(())
 }
 
+/// Ký lại metadata TUF trước khi hết hạn (thay đổi distribution-upkeep-and-real-email, design D2).
+/// `Ok(None)`: máy chủ không có kho phân phối (`FECO_TUF_REPO`).
+pub async fn maintain_tuf(
+    state: &AppState,
+) -> Result<Option<feco_tuf::Maintenance>, feco_tuf::Error> {
+    let Some(tuf) = &state.tuf else {
+        return Ok(None);
+    };
+    let signers: Vec<_> = tuf.sign_keys.iter().map(feco_tuf::keys::source).collect();
+    let repo = feco_tuf::Repo::open(&tuf.repo);
+    // Dùng chung khóa với phát hành: metadata được đọc, sửa rồi ghi lại.
+    let _guard = state.tuf_lock.lock().await;
+    repo.maintain(
+        &signers,
+        feco_tuf::Expiry::default(),
+        jiff::Timestamp::now(),
+    )
+    .await
+    .map(Some)
+}
+
 /// Nhóm (0–99) của một thiết bị cho một phiên bản: ổn định giữa các lần hỏi, độc lập giữa các
 /// phiên bản.
 pub fn rollout_bucket(app_id: &str, version: &str, device: &str) -> u32 {

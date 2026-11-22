@@ -149,7 +149,7 @@ Mở http://127.0.0.1:8080 trong trình duyệt. Giao diện theo ngôn ngữ c�
    - Chọn **Vai trò**: Người dùng phổ thông (mặc định), Khách hàng cá nhân, Khách hàng doanh nghiệp, Lập trình viên cá nhân hoặc Công ty phát triển phần mềm.
    - Khách hàng doanh nghiệp và Công ty phát triển phần mềm phải nhập tên pháp lý và mã số thuế (10 số, ví dụ `0312345678`).
    - Vai trò khác Người dùng phổ thông chờ Quản trị hệ thống duyệt hoặc từ chối ở http://127.0.0.1:8080/admin/members. Yêu cầu ghi "Chọn khi đăng ký" kèm trạng thái xác minh email. Kết quả gửi về email; trong lúc chờ, tài khoản là Người dùng phổ thông.
-2. **Xác minh email**: mở Mailpit tại http://127.0.0.1:8025. Mọi email của hệ thống dev đều được giữ ở đây, không gửi ra ngoài. Mở email "Xác minh email tài khoản F-Eco" rồi bấm liên kết.
+2. **Xác minh email**: mở Mailpit tại http://127.0.0.1:8025. Mặc định mọi email của hệ thống dev đều được giữ ở đây, không gửi ra ngoài. Mở email "Xác minh email tài khoản F-Eco" rồi bấm liên kết. Muốn email tới hòm thư thật (ví dụ Gmail), xem [Gửi email tới hòm thư thật](#gửi-email-tới-hòm-thư-thật).
 3. **Đăng nhập** tại http://127.0.0.1:8080/login. Trang chủ là **trang hồ sơ**: tên, email và trạng thái xác minh, vai trò, ngày tham gia; thẻ số liệu (ứng dụng đã kết nối, thiết bị, đơn hàng, thông báo chưa đọc); lối tắt bảo mật (kèm trạng thái xác thực hai lớp), quyền riêng tư, mua sắm và công cụ theo vai trò.
 4. **Cài đặt** tại http://127.0.0.1:8080/settings:
    - sửa hồ sơ (tên, ảnh, số điện thoại, thông tin xuất hóa đơn), đổi mật khẩu;
@@ -650,6 +650,7 @@ Các API chính của `feco-server`:
 | `FECO_HYDRA_PUBLIC_URL` / `FECO_HYDRA_ADMIN_URL` | `http://127.0.0.1:4444/` / `:4445/` | Bắt buộc ở production |
 | `FECO_PAIRWISE_SECRET` | khóa dev cố định | Bắt buộc ở production, tối thiểu 32 ký tự; đổi khóa thì `sub` của mọi app thay đổi |
 | `FECO_SMTP_URL` | `smtp://127.0.0.1:1025` | Bắt buộc ở production |
+| `FECO_SMTP_URL_FILE` | không đặt | Tệp bí mật chứa URL SMTP (có mật khẩu), thay cho `FECO_SMTP_URL`. `FECO_SMTP_URL` được ưu tiên nếu đặt cả hai |
 | `FECO_EMAIL_FROM` | `F-Eco <no-reply@f-eco.example>` | |
 | `FECO_CHALLENGE_PROVIDER` | `test` | `test` (chỉ dev/staging) hoặc `turnstile` (Cloudflare Turnstile). Production cấm `test` |
 | `FECO_TURNSTILE_SITE_KEY` / `FECO_TURNSTILE_SECRET_KEY` | | Bắt buộc khi `FECO_CHALLENGE_PROVIDER=turnstile` |
@@ -661,7 +662,7 @@ Các API chính của `feco-server`:
 | `FECO_PACKAGE_DIR` | `infra/.data/packages` | Thư mục lưu gói nhà phát triển tải lên. Bắt buộc ở production |
 | `FECO_CLAMD_ADDR` | không đặt | ClamAV (`clamd`, ví dụ `127.0.0.1:3310`), engine quét thứ hai của khâu kiểm duyệt. Bắt buộc ở production |
 | `FECO_ADMIN_EMAILS` | không đặt | Email nhận cảnh báo kiểm duyệt (mã độc, phát hiện muộn), ngăn bởi dấu phẩy. Bắt buộc ở production |
-| `FECO_TUF_REPO` / `FECO_TUF_SIGN_KEYS` | không đặt | Kho TUF và các file khóa targets, snapshot, timestamp để ký gói khi phát hành. Không đặt thì bỏ qua bước ký |
+| `FECO_TUF_REPO` / `FECO_TUF_SIGN_KEYS` | không đặt | Kho TUF và các file khóa targets, snapshot, timestamp để ký gói khi phát hành. Có đặt thì máy chủ cũng tự ký lại metadata trước khi hết hạn (lúc khởi động và mỗi 5 phút). Không đặt thì bỏ qua bước ký |
 | `FECO_ADMIN_PASSKEY_OPTIONAL` | `false` | `true`: bảng quản trị không bắt buộc passkey. Chỉ được đặt khi `FECO_ENV=dev`; môi trường khác từ chối khởi động |
 | `FECO_LAUNCHER_CLIENT_ID` | không đặt | Client ID của F-Launcher trong Hydra. Có thì bật mã khởi chạy app con (`/v1/launch-codes`) và launcher không phải qua màn hình đồng ý |
 | `FECO_VNPAY_*`, `FECO_MOMO_*` | không đặt | Dev/staging chỉ được trỏ tới sandbox của cổng thanh toán |
@@ -743,6 +744,36 @@ Trang trạng thái: http://127.0.0.1:8080/status. Cách vận hành sao lưu v�
 
 CI (GitHub Actions) chạy tất cả những bước trên (trừ kiểm thử tải, đo khởi động và diễn tập sao lưu, chạy tay mỗi quý), kể cả kiểm thử đầu-cuối với hạ tầng Docker và diễn tập TUF, ở mỗi lần push.
 
+## Gửi email tới hòm thư thật
+
+Mặc định, Kratos (email xác minh, khôi phục mật khẩu) và feco-server (thông báo, cảnh báo) gửi email tới Mailpit. Để gửi tới hòm thư thật, cả hai dùng chung một máy chủ SMTP:
+
+1. **Gmail (cho máy dev)**:
+   - bật xác minh 2 bước cho tài khoản Google;
+   - vào https://myaccount.google.com/apppasswords, tạo một "mật khẩu ứng dụng" (16 ký tự).
+2. Tự ghi URL SMTP vào tệp bí mật `.dev/smtp-url` (thư mục `.dev` không được commit). Không gửi mật khẩu này cho ai, kể cả vào khung chat:
+
+   ```text
+   smtps://<tên-tài-khoản>%40gmail.com:<mật-khẩu-ứng-dụng-viết-liền>@smtp.gmail.com:465
+   ```
+
+   Ghi địa chỉ gửi (trùng tài khoản Gmail) vào `.dev/smtp-from`:
+
+   ```text
+   <tên-tài-khoản>@gmail.com
+   ```
+
+3. Khởi động lại Kratos (`scripts/dev-local.sh kratos`) và feco-server.
+   - Kratos đọc `FECO_SMTP_URL` hoặc `.dev/smtp-url`, và `FECO_EMAIL_FROM` hoặc `.dev/smtp-from`.
+   - feco-server đọc `FECO_SMTP_URL_FILE=.dev/smtp-url` và `FECO_EMAIL_FROM`.
+   - Có tệp `.dev/smtp-url` thì Kratos in "Kratos gửi email qua SMTP đã cấu hình" lúc khởi động.
+4. Đăng ký một tài khoản bằng email thật: email xác minh tới hòm thư đó, không vào Mailpit.
+
+Giới hạn:
+- Gmail cho gửi khoảng 500 email mỗi ngày.
+- Liên kết xác minh trỏ về địa chỉ công khai của Kratos (`http://127.0.0.1:4433` trên máy dev), nên chỉ mở được trên chính máy đó.
+- Khi triển khai thật, dùng tên miền gửi riêng có SPF, DKIM, DMARC (kiểm bằng `feco-catalog mail-dns`). Đặt `COURIER_SMTP_CONNECTION_URI`, `COURIER_SMTP_FROM_ADDRESS` cho Kratos và `FECO_SMTP_URL_FILE` cho feco-server.
+
 ## Xử lý sự cố
 
 | Triệu chứng | Cách xử lý |
@@ -751,7 +782,8 @@ CI (GitHub Actions) chạy tất cả những bước trên (trừ kiểm thử 
 | `feco-server` thoát ngay với "Cấu hình không hợp lệ" | Đọc thông báo: nó chỉ đúng biến bị thiếu hoặc sai. Ở dev chỉ cần `FECO_ENV=dev` |
 | "Không cập nhật được lược đồ cơ sở dữ liệu" | PostgreSQL chưa chạy hoặc sai `FECO_DATABASE_URL` |
 | Trang báo "Dịch vụ tài khoản đang tạm gián đoạn" | Kratos chưa chạy; kiểm tra `curl http://127.0.0.1:4433/health/ready` |
-| Không nhận được email | Mọi email dev nằm ở Mailpit http://127.0.0.1:8025, không gửi ra Internet |
+| Không nhận được email | Mặc định mọi email dev nằm ở Mailpit http://127.0.0.1:8025. Muốn gửi tới hòm thư thật, xem [Gửi email tới hòm thư thật](#gửi-email-tới-hòm-thư-thật) |
+| F-Launcher báo "Dữ liệu phân phối của máy chủ đã hết hạn" | Metadata `timestamp` của kho TUF chỉ có hạn 1 giờ. Chạy máy chủ với `FECO_TUF_REPO` và `FECO_TUF_SIGN_KEYS` để máy chủ tự ký lại (lúc khởi động và mỗi 5 phút). Không có máy chủ thì chạy tay `cargo run -p feco-tuf -- refresh --repo .dev/tuf/repo --sign .dev/tuf/keys/snapshot.pk8,.dev/tuf/keys/timestamp.pk8`. Nếu giờ trên máy tính sai, chỉnh lại giờ |
 | App mẫu báo "cổng 9999 đang bận" | Một lần chạy app mẫu khác vẫn đang chờ; dừng nó bằng `Ctrl+C` |
 | Kiểm thử đầu-cuối báo "cổng 8080 phải trống" | Dừng `feco-server` đang chạy trước khi chạy kiểm thử |
 | Kratos báo `database table is locked` | Kratos dev dùng SQLite trong bộ nhớ, không chịu được ghi đồng thời nhiều; các kiểm thử đã chạy lần lượt. Staging và production phải dùng PostgreSQL cho Kratos |

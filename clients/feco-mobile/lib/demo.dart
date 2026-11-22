@@ -31,6 +31,9 @@ class DemoBackend implements Backend {
 
   int balance;
 
+  /// Lỗi giả lập khi tải danh mục (widget test thông báo lỗi); `null`: bình thường.
+  Exception? failure;
+
   /// Vai trò và mục quản trị của tài khoản mẫu (widget test bảng quản trị).
   String role = 'customer';
   List<AdminSection> adminSections = const [];
@@ -77,7 +80,10 @@ class DemoBackend implements Backend {
   ];
 
   @override
-  Future<List<CatalogApp>> catalog() async => apps;
+  Future<List<CatalogApp>> catalog() async {
+    if (failure case final e?) throw e;
+    return apps;
+  }
 
   @override
   Future<Wallet> wallet() async => Wallet(

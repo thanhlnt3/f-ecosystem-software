@@ -80,6 +80,10 @@ class AppState extends ChangeNotifier {
         notifications = const [];
         account = null;
       }
+    } on ApiException {
+      // Máy chủ có trả lời nhưng báo lỗi: không phải mất kết nối (thay đổi
+      // distribution-upkeep-and-real-email, design D4).
+      error = t('error_server');
     } on Exception {
       error = t('error_network');
     } finally {

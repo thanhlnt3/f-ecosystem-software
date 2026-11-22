@@ -47,6 +47,17 @@ impl Default for Expiry {
     }
 }
 
+/// Việc [`Repo::maintain`] đã làm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Maintenance {
+    /// Metadata còn đủ hạn.
+    Nothing,
+    /// Đã ký lại snapshot và timestamp.
+    Refreshed,
+    /// Đã ký lại targets, snapshot và timestamp.
+    Resigned,
+}
+
 /// Thông tin của một phiên bản app, ghi vào trường `custom` của target và được ký cùng hash.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TargetMeta {
@@ -594,6 +605,34 @@ impl Repo {
         snapshot.write(&dir, true).await?;
         timestamp.write(&dir, true).await?;
         Ok(())
+    }
+
+    /// Ký lại trước khi metadata hết hạn (thay đổi distribution-upkeep-and-real-email, design D1).
+    /// Máy chủ gọi định kỳ (mỗi 5 phút):
+    /// - `targets` còn dưới 1/3 thời hạn: [`Repo::resign`] (cần khóa targets);
+    /// - `snapshot` hoặc `timestamp` còn dưới 1/2 thời hạn: [`Repo::refresh`];
+    /// - còn lại: không làm gì.
+    ///
+    /// Metadata đã hết hạn (máy chủ tắt lâu) có thời gian còn lại âm nên cũng được ký lại.
+    pub async fn maintain(
+        &self,
+        signers: &[Box<dyn KeySource>],
+        expiry: Expiry,
+        now: Timestamp,
+    ) -> Result<Maintenance> {
+        let repo = self.load().await?;
+        let left = |expires: Timestamp| expires.duration_since(now);
+        if left(repo.targets().signed.expires) < expiry.targets / 3 {
+            self.resign(signers, expiry, now).await?;
+            return Ok(Maintenance::Resigned);
+        }
+        if left(repo.snapshot().signed.expires) < expiry.snapshot / 2
+            || left(repo.timestamp().signed.expires) < expiry.timestamp / 2
+        {
+            self.refresh(signers, expiry, now).await?;
+            return Ok(Maintenance::Refreshed);
+        }
+        Ok(Maintenance::Nothing)
     }
 
     /// Ký lại targets, snapshot và timestamp mà không đổi nội dung, để gia hạn targets (cần khóa
