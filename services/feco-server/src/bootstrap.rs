@@ -59,19 +59,35 @@ fn check_password(password: &str) -> Result<(), String> {
 
 /// 32 ký tự ngẫu nhiên (hai UUID v4 lấy từ bộ sinh số ngẫu nhiên của hệ điều hành).
 fn generate_password() -> String {
-    let raw = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-    // Trộn chữ hoa để mật khẩu có nhiều loại ký tự.
-    raw.chars()
-        .take(32)
-        .enumerate()
-        .map(|(i, c)| {
-            if i % 3 == 0 {
-                c.to_ascii_uppercase()
-            } else {
-                c
+    // 32 ký tự từ nguồn ngẫu nhiên của hệ điều hành. Ba ký tự đầu lần lượt là chữ hoa, chữ
+    // thường, chữ số để mật khẩu luôn có đủ ba loại; phần còn lại lấy từ cả 62 ký tự. Chỉ lấy byte
+    // nằm trong bội lớn nhất của độ dài bảng (ví dụ 248 = 62 × 4) để chia đều.
+    const UPPER: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const LOWER: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
+    const DIGIT: &[u8] = b"0123456789";
+    const ALL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let mut out = String::with_capacity(32);
+    let mut buf = [0u8; 64];
+    while out.len() < 32 {
+        getrandom::fill(&mut buf).expect("nguồn ngẫu nhiên");
+        for b in buf {
+            if out.len() == 32 {
+                break;
             }
-        })
-        .collect()
+            let set = match out.len() {
+                0 => UPPER,
+                1 => LOWER,
+                2 => DIGIT,
+                _ => ALL,
+            };
+            // Bội lớn nhất của độ dài bảng không vượt 256: bỏ byte ngoài khoảng để chia đều.
+            let limit = 256 - 256 % set.len();
+            if (b as usize) < limit {
+                out.push(set[b as usize % set.len()] as char);
+            }
+        }
+    }
+    out
 }
 
 fn write_secret(path: &Path, value: &str) -> Result<(), String> {
@@ -241,6 +257,15 @@ mod tests {
         let first = load_password(&dev).unwrap();
         assert_eq!(first.len(), 32);
         assert!(first.chars().any(|c| c.is_ascii_uppercase()));
+        // Lần nào cũng đủ chữ hoa, chữ thường, chữ số (trước đây đôi khi thiếu chữ hoa).
+        for _ in 0..2000 {
+            let p = generate_password();
+            assert_eq!(p.len(), 32);
+            assert!(p.chars().all(|c| c.is_ascii_alphanumeric()), "{p}");
+            assert!(p.chars().any(|c| c.is_ascii_uppercase()), "{p}");
+            assert!(p.chars().any(|c| c.is_ascii_lowercase()), "{p}");
+            assert!(p.chars().any(|c| c.is_ascii_digit()), "{p}");
+        }
         assert_eq!(
             load_password(&dev).unwrap(),
             first,

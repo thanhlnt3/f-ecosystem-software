@@ -31,6 +31,7 @@ Thay đổi OpenSpec `distribution-upkeep-and-real-email`.
 ### Thư viện
 
 - `url` 2.5.8 lên 2.5.9 (kèm `form_urlencoded` 1.2.3) ở F-Eco và F-Builder, vá RUSTSEC-2026-0592 (tràn stack trong `Url::origin()` với URL `blob:` lồng nhau, công bố 20/11/2026).
+- Mật khẩu quản trị viên mặc định tự sinh (dev) luôn có đủ chữ hoa, chữ thường và chữ số, lấy trực tiếp từ nguồn ngẫu nhiên của hệ điều hành. Trước đây khoảng 0,6% lần sinh không có chữ hoa, làm test `password_file_rules` thỉnh thoảng hỏng.
 
 ### Kiểm thử
 
