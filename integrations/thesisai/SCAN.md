@@ -72,6 +72,22 @@ cần zod 3. Thư viện này thuộc công cụ dòng lệnh `shadcn`; app ch�
 chạy mã của nó khi phục vụ người dùng. Job CI `thesisai-fe` áp bản vá lên commit trong `README.md`,
 kiểm `next` là 16.4.6, rồi chạy `npm ci` và `next build`.
 
+## Cập nhật lên commit mới (23/11/2026)
+
+| Repo | Commit cũ | Commit mới | Thay đổi |
+|---|---|---|---|
+| thesisai-fe | `8f3735e` | `671822188b949e2290f1c73c12bd32a47b178a0d` | 2 commit, 6 tệp (danh sách số buổi luyện tập) |
+| thesisai-be | `d890595` | `db66b57ea87394da334fda0b1cb12a6be248275f` | 1 commit, 5 tệp (kho đoạn văn bản) |
+
+- Hai bản vá của F-Eco áp được không cần sửa và đã được sinh lại theo commit mới.
+- **Quét commit gốc**:
+  - thesisai-fe: high 10, medium 24. Upstream vẫn dùng Next.js 16.4.0, chưa áp bản vá của F-Eco.
+  - thesisai-be: không có phát hiện.
+- **Quét bản đã áp bản vá**:
+  - thesisai-fe: critical 0, high 1, medium 1, như trước (`zod` 3 của công cụ `shadcn`).
+  - thesisai-be: không có phát hiện.
+- Workflow `integration-scan.yml` quét lại hai commit này mỗi thứ Hai.
+
 ## Ghi chú
 
 - **thesisai-be không ghim phiên bản**: `requirements.txt` chỉ có ràng buộc `>=` (ví dụ

@@ -34,6 +34,10 @@ const COMMIT: &str = "0a3b8b708cf435f730a77453b8203fbff280d198";
 static SERVER_VARS: OnceLock<HashMap<String, String>> = OnceLock::new();
 /// Repo `e2e-flaky/*` trả 503 cho tới khi cờ này bật (giả lập mạng lỗi rồi phục hồi).
 static FLAKY_UP: AtomicBool = AtomicBool::new(false);
+/// Thư viện có trong lockfile mà OSV giả chỉ báo lỗ hổng sau khi cờ [`NEW_VULN`] bật (giả lập
+/// lỗ hổng công bố sau khi phát hành, thay đổi dependency-rescan).
+const LATE_PKG: (&str, &str) = ("late-vuln-e2e", "2.0.0");
+static NEW_VULN: AtomicBool = AtomicBool::new(false);
 
 /// `package-lock.json` có thư viện bị OSV giả báo lỗ hổng mức HIGH (ở dòng 6).
 fn vulnerable_lock() -> String {
@@ -45,6 +49,10 @@ fn vulnerable_lock() -> String {
         r#"  "packages": {"#.to_owned(),
         r#"    "": { "name": "app", "version": "1.0.0" },"#.to_owned(),
         format!(r#"    "node_modules/{name}": {{ "version": "{version}" }},"#),
+        format!(
+            r#"    "node_modules/{}": {{ "version": "{}" }},"#,
+            LATE_PKG.0, LATE_PKG.1
+        ),
         r#"    "node_modules/react": { "version": "19.0.0" }"#.to_owned(),
         "  }".to_owned(),
         "}".to_owned(),
@@ -81,6 +89,11 @@ async fn fake_osv() -> String {
                     .map(|q| {
                         if q["package"]["name"] == VULN_PKG.0 && q["version"] == VULN_PKG.1 {
                             json!({"vulns": [{"id": "GHSA-e2e0-high-0001"}]})
+                        } else if q["package"]["name"] == LATE_PKG.0
+                            && q["version"] == LATE_PKG.1
+                            && NEW_VULN.load(Ordering::SeqCst)
+                        {
+                            json!({"vulns": [{"id": "GHSA-e2e0-late-0002"}]})
                         } else {
                             json!({})
                         }
@@ -650,6 +663,27 @@ fn findings_on(page: &str, scope: &str) -> Vec<(String, String, String, String)>
 
 /// Scenario "Bí mật lộ bị từ chối", "Lỗ hổng cần người duyệt", "Không kèm mã nguồn", "Thứ tự kiểm
 /// tra"; nộp mã nguồn qua web, API và `f-dev publish --source`; tải repo lỗi mạng thì xếp hàng lại.
+/// Quét lại định kỳ ngay (dependency-rescan): bỏ mốc quét gần nhất, xếp lịch rồi chạy hàng đợi.
+async fn rescan_now(st: &AppState, version: uuid::Uuid) {
+    sqlx::query("UPDATE app_versions SET last_scanned_at = NULL WHERE id = $1")
+        .bind(version)
+        .execute(&st.db)
+        .await
+        .unwrap();
+    review::enqueue_rescans(&st.db).await.unwrap();
+    review::process_due(st).await.unwrap();
+}
+
+/// Số cảnh báo `new_vulnerability` của `app` trong 30 ngày.
+async fn new_vuln_alerts(st: &AppState, app: &str) -> usize {
+    review::recent_alerts(&st.db, 30)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|a| a.kind == "new_vulnerability" && a.details["app"] == app)
+        .count()
+}
+
 #[tokio::test]
 async fn source_scan_end_to_end() {
     if !e2e_ready() {
@@ -774,6 +808,94 @@ async fn source_scan_end_to_end() {
     review::approve(&st, v102, "e2e", "Thư viện lỗi không dùng tới")
         .await
         .unwrap();
+
+    // --- Thay đổi dependency-rescan: quét lại định kỳ cả mã nguồn của bản đang phát hành.
+    sqlx::query(
+        "UPDATE app_versions SET status = 'released', last_scanned_at = NULL WHERE id = $1",
+    )
+    .bind(v102)
+    .execute(&st.db)
+    .await
+    .unwrap();
+    let vuln_mails = || {
+        let email = email.clone();
+        let app = app.clone();
+        async move {
+            let list: Value = reqwest::Client::new()
+                .get(format!("{MAILPIT}/api/v1/messages?limit=500"))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            list["messages"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|m| {
+                    m["To"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .any(|t| t["Address"] == email)
+                        && m["Subject"].as_str().is_some_and(|s| {
+                            s.contains(&format!("Lỗ hổng mới trong thư viện của {app} 1.0.2"))
+                        })
+                })
+                .count()
+        }
+    };
+    // Chưa có lỗ hổng mới (chỉ lỗ hổng đã biết lúc duyệt): không báo.
+    rescan_now(&st, v102).await;
+    assert_eq!(new_vuln_alerts(&st, &app).await, 0);
+    assert_eq!(vuln_mails().await, 0);
+    // Scenario "Lỗ hổng mới công bố": OSV công bố lỗ hổng HIGH cho late-vuln-e2e 2.0.0.
+    NEW_VULN.store(true, Ordering::SeqCst);
+    rescan_now(&st, v102).await;
+    let mail = wait_mail(
+        &email,
+        &format!("Lỗ hổng mới trong thư viện của {app} 1.0.2"),
+    )
+    .await;
+    assert!(mail.contains("GHSA-e2e0-late-0002"), "{mail}");
+    assert!(
+        !mail.contains("GHSA-e2e0-high-0001"),
+        "lỗ hổng cũ không báo lại: {mail}"
+    );
+    assert!(mail.contains("osv.dev"), "{mail}");
+    assert_eq!(new_vuln_alerts(&st, &app).await, 1);
+    let (status, _, _, _, _, checks) = version_state(&st, v102).await;
+    assert_eq!(status, "released", "không tự thu hồi");
+    assert_eq!(checks.unwrap()["source"]["counts"]["high"], 2);
+    // Scenario "Báo cáo trên trang phiên bản".
+    let page = get(&c, &format!("/developer/apps/{app}")).await;
+    let rows = findings_on(&page, "div.version[data-version=\"1.0.2\"]");
+    assert_eq!(rows.len(), 2, "{page}");
+    // Scenario "Không báo lại".
+    rescan_now(&st, v102).await;
+    assert_eq!(new_vuln_alerts(&st, &app).await, 1);
+    assert_eq!(vuln_mails().await, 1);
+    // Scenario "Xem cảnh báo lỗ hổng mới" (dependency-rescan, admin-console).
+    let admin_page = get(&reviewer, "/admin/reviews").await;
+    assert!(
+        admin_page.contains(&format!(
+            r#"class="admin-alert" data-kind="new_vulnerability" data-app="{app}" data-version="1.0.2""#
+        )),
+        "{admin_page}"
+    );
+    assert!(admin_page.contains("GHSA-e2e0-late-0002"));
+    let filtered = get(
+        &reviewer,
+        &format!("/admin/reviews?status=new_vulnerability&q={app}"),
+    )
+    .await;
+    assert!(filtered.contains(r#"class="admin-alert""#), "{filtered}");
+    assert!(
+        !filtered.contains(r#"class="review queue-item""#),
+        "{filtered}"
+    );
+    NEW_VULN.store(false, Ordering::SeqCst);
 
     // --- Scenario "Bí mật lộ bị từ chối": `f-dev publish --source` với token GitHub thật trong mã.
     let token_value = ["ghp_", "Zq3Lm9Xc2Vb7Nn1Kk5Hh8Gg4Ff6Dd0Ss2Aa9"].concat();

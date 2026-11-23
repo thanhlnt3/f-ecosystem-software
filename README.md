@@ -26,7 +26,7 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 > - F-Store (`/store`): danh mục app đã duyệt, tìm không phân biệt dấu tiếng Việt, lọc theo danh mục, hệ điều hành, giá, nhà phát triển đã xác minh; trang chi tiết có scope dữ liệu kèm mục đích, license, chính sách quyền riêng tư, lịch sử thay đổi; đánh giá chỉ cho người đã cài, nhà phát triển trả lời, báo cáo vi phạm.
 >
 > - Cổng nhà phát triển (`/developer`): đăng ký cá nhân hoặc tổ chức (cần email đã xác minh và TOTP), Thỏa thuận nhà phát triển, xác minh tên miền bằng DNS TXT, nhóm và vai trò, client ID cùng địa chỉ chuyển hướng, manifest `f-app.toml`, nộp gói qua web hoặc CLI `f-dev`, kiểm tra chữ ký mã, kênh stable/beta và phát hành dần theo phần trăm, số liệu tổng hợp.
-> - Kiểm duyệt: hàng đợi kiểm tra tự động (quét mã độc bằng engine chữ ký của F-Eco và ClamAV, chữ ký mã, kiến trúc, packer), quy tắc duyệt thủ công hay tự động, chính sách nội dung (`/policy/content`), từ chối kèm điều khoản và cách sửa, kháng nghị, gỡ khẩn cấp, quét lại 7 ngày.
+> - Kiểm duyệt: hàng đợi kiểm tra tự động (quét mã độc bằng engine chữ ký của F-Eco và ClamAV, chữ ký mã, kiến trúc, packer), quy tắc duyệt thủ công hay tự động, chính sách nội dung (`/policy/content`), từ chối kèm điều khoản và cách sửa, kháng nghị, gỡ khẩn cấp, quét lại 7 ngày (cả gói lẫn lỗ hổng thư viện trong mã nguồn đã nộp; lỗ hổng mới được báo cho nhà phát triển và hiện ở mục "Cảnh báo kiểm duyệt" của trang Hàng chờ duyệt).
 > - F-SDK cho Rust, C (ABI ổn định), Python và TypeScript/Node.js: đăng nhập bằng mã khởi chạy của launcher hoặc qua trình duyệt (PKCE), tự làm mới token, `/v1/me`, kiểm tra quyền sử dụng (`/v1/entitlements`), báo lỗi khi chạy, kiểm chữ ký webhook. App dùng thư viện OIDC chuẩn không cần F-SDK. Mã lỗi thống nhất, liệt kê ở `/developer/docs`.
 >
 > - Đơn xây app theo yêu cầu (`/orders`): gửi yêu cầu kèm tệp (tối đa 200 MB) và chấp nhận Điều khoản dịch vụ xây app (bản nháp), báo giá theo mốc (đặt cọc ≤ 30%, hạn 7 ngày, đề nghị điều chỉnh), bàn giao từng mốc dưới dạng app riêng tư trong F-Launcher, nghiệm thu, lượt sửa miễn phí, tự nghiệm thu sau 14 ngày, tin nhắn kèm tệp, hủy đơn, tranh chấp, tải bàn giao cuối khi đã trả đủ.
@@ -241,6 +241,13 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
    scripts/dev-launcher.sh publish   # ký phiên bản Ghi chú mới → launcher hiện "Cập nhật lên ..."
    scripts/dev-launcher.sh revoke    # thu hồi bản Ghi chú mới nhất → sau lần đồng bộ kế tiếp không mở được, hiện lý do
    scripts/dev-launcher.sh refresh   # timestamp TUF hết hạn sau 1 giờ: chạy lại khi launcher báo metadata hết hạn
+   ```
+
+   Thử F-Launcher tự cập nhật: dựng bản release mang số phiên bản mới hơn bản đang chạy, rồi ký nó vào kho dev. F-Launcher bản cũ tải bản mới sau lần đồng bộ tới, hiện nút **Khởi động lại để cập nhật**, và cài bản mới khi khởi động lại.
+
+   ```bash
+   cargo build --release -p feco-launcher
+   scripts/dev-launcher.sh publish-self   # gói feco-launcher-<phiên bản>-<nền tảng>.zip, mã app feco-launcher
    ```
 
    Bấm **Đồng bộ** để launcher đồng bộ ngay (bình thường mỗi giờ). **Quay lại** khôi phục bản trước
@@ -698,7 +705,14 @@ npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
 FECO_E2E=1 cargo test -p feco-server --test e2e_auth
 ```
 
-Chat và quét mã nguồn có E2E riêng, mỗi bộ dùng cơ sở dữ liệu riêng (`feco_chat_e2e`, `feco_scan_e2e`, tự tạo). `FECO_E2E_DATABASE_URL` cho `e2e_auth` chạy trên một cơ sở dữ liệu khác `feco`:
+Mỗi bộ E2E dùng cơ sở dữ liệu riêng, tự tạo: `e2e_auth` dùng `feco_e2e` (đặt `FECO_E2E_DATABASE_URL` để đổi), chat dùng `feco_chat_e2e`, quét mã nguồn dùng `feco_scan_e2e`. Không bộ nào ghi vào cơ sở dữ liệu dev `feco`.
+
+Các E2E đọc email trong Mailpit. Nếu Kratos đang gửi email thật (đã có `.dev/smtp-url`), hãy khởi động lại Kratos với Mailpit trước khi chạy E2E, để test không gửi thư ra ngoài:
+
+```bash
+FECO_SMTP_URL="smtp://127.0.0.1:1025/?disable_starttls=true" scripts/dev-local.sh kratos
+```
+
 
 ```bash
 FECO_E2E=1 cargo test -p feco-server --test e2e_chat --test e2e_source_scan

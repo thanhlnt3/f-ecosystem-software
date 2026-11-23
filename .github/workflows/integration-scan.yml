@@ -1,0 +1,29 @@
+name: integration-scan
+
+# Thay đổi dependency-rescan (design R5): quét lại Mentor và ThesisAI ở commit đã ghi mỗi thứ Hai
+# (9 giờ sáng giờ Việt Nam), kể cả khi repo F-Eco không có thay đổi, để thấy lỗ hổng thư viện mới
+# công bố. Có phát hiện critical chưa được cho phép thì workflow đỏ và GitHub báo chủ repo. Chạy tay
+# được bằng "Run workflow".
+on:
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Quét Mentor và ThesisAI
+        run: scripts/scan-integrations-all.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-scan-weekly
+          path: .dev/scans/*/scan-report.md
+          retention-days: 90

@@ -281,12 +281,27 @@ pub fn decide(origin: &str, report: &Report) -> Outcome {
     }
 }
 
-/// Quét mã nguồn của phiên bản (nếu có) và lưu báo cáo.
-pub async fn review(
+/// Kết quả lấy và quét mã nguồn của một phiên bản (thay đổi dependency-rescan, design R1).
+pub enum Scanned {
+    /// Phiên bản không kèm mã nguồn.
+    NoSource,
+    /// Lỗi mạng khi tải repo: thử lại sau.
+    Retry(String),
+    /// Lỗi của nhà phát triển (repo riêng tư, commit không có, zip hỏng).
+    Failed(String),
+    Done {
+        origin: String,
+        report: Report,
+    },
+}
+
+/// Lấy mã nguồn của phiên bản (tệp đã lưu, hoặc tải repo tại commit) và quét, có tra OSV.dev.
+/// Không ghi gì vào cơ sở dữ liệu.
+pub async fn scan_submission(
     state: &AppState,
     version_id: Uuid,
     manifest: &Manifest,
-) -> Result<Outcome, String> {
+) -> Result<Scanned, String> {
     let db_err = |e: sqlx::Error| e.to_string();
     let row: Option<SubmissionRow> = sqlx::query_as(
         "SELECT origin, repository, commit, storage_path FROM source_submissions WHERE version_id = $1",
@@ -296,9 +311,7 @@ pub async fn review(
     .await
     .map_err(db_err)?;
     let Some((origin, repository, commit, storage_path)) = row else {
-        return Ok(Outcome::NoSource(
-            json!({ "status": "none", "note": NO_SOURCE }),
-        ));
+        return Ok(Scanned::NoSource);
     };
     // Mã nguồn git được tải vào file tạm, xóa sau khi quét.
     let mut fetched: Option<PathBuf> = None;
@@ -306,12 +319,9 @@ pub async fn review(
         "git" => {
             let (repository, commit) = (repository.unwrap_or_default(), commit.unwrap_or_default());
             let Some((owner, repo)) = feco_manifest::github_repo(&repository) else {
-                return fail(
-                    state,
-                    version_id,
-                    &format!("Repo mã nguồn không hợp lệ: {repository}"),
-                )
-                .await;
+                return Ok(Scanned::Failed(format!(
+                    "Repo mã nguồn không hợp lệ: {repository}"
+                )));
             };
             let dir = state.package_dir.join(".incoming");
             tokio::fs::create_dir_all(&dir)
@@ -337,29 +347,21 @@ pub async fn review(
                 Ok(_) => {}
                 Err(FetchError::Network(e)) => {
                     let _ = tokio::fs::remove_file(&dest).await;
-                    return Ok(Outcome::Retry(format!(
+                    return Ok(Scanned::Retry(format!(
                         "không tải được mã nguồn {repository}@{commit}: {e}"
                     )));
                 }
                 Err(FetchError::Status(code)) => {
                     let _ = tokio::fs::remove_file(&dest).await;
-                    return fail(
-                        state,
-                        version_id,
-                        &format!(
-                            "Không tải được mã nguồn từ {repository} tại commit {commit} (HTTP {code}): repo phải công khai trên GitHub và commit phải tồn tại."
-                        ),
-                    )
-                    .await;
+                    return Ok(Scanned::Failed(format!(
+                        "Không tải được mã nguồn từ {repository} tại commit {commit} (HTTP {code}): repo phải công khai trên GitHub và commit phải tồn tại."
+                    )));
                 }
                 Err(FetchError::TooLarge(_)) => {
                     let _ = tokio::fs::remove_file(&dest).await;
-                    return fail(
-                        state,
-                        version_id,
-                        &format!("Mã nguồn {repository}@{commit} lớn hơn 200 MB."),
-                    )
-                    .await;
+                    return Ok(Scanned::Failed(format!(
+                        "Mã nguồn {repository}@{commit} lớn hơn 200 MB."
+                    )));
                 }
                 Err(FetchError::Io(e)) => {
                     let _ = tokio::fs::remove_file(&dest).await;
@@ -380,27 +382,109 @@ pub async fn review(
     if let Some(f) = fetched {
         let _ = tokio::fs::remove_file(f).await;
     }
-    let report = match scanned {
-        Ok(r) => r,
-        Err(e) => {
-            return fail(
-                state,
-                version_id,
-                &format!("Tệp mã nguồn không quét được: {e}"),
-            )
-            .await;
-        }
-    };
+    Ok(match scanned {
+        Ok(report) => Scanned::Done { origin, report },
+        Err(e) => Scanned::Failed(format!("Tệp mã nguồn không quét được: {e}")),
+    })
+}
+
+async fn save_report(db: &Db, version_id: Uuid, report: &Report) -> Result<(), String> {
     sqlx::query(
         "UPDATE source_submissions SET status = 'scanned', report = $2, scanned_at = now()
          WHERE version_id = $1",
     )
     .bind(version_id)
-    .bind(serde_json::to_value(&report).unwrap_or(Value::Null))
-    .execute(&state.db)
+    .bind(serde_json::to_value(report).unwrap_or(Value::Null))
+    .execute(db)
     .await
-    .map_err(db_err)?;
-    Ok(decide(&origin, &report))
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Quét mã nguồn của phiên bản (nếu có) và lưu báo cáo.
+pub async fn review(
+    state: &AppState,
+    version_id: Uuid,
+    manifest: &Manifest,
+) -> Result<Outcome, String> {
+    match scan_submission(state, version_id, manifest).await? {
+        Scanned::NoSource => Ok(Outcome::NoSource(
+            json!({ "status": "none", "note": NO_SOURCE }),
+        )),
+        Scanned::Retry(e) => Ok(Outcome::Retry(e)),
+        Scanned::Failed(why) => fail(state, version_id, &why).await,
+        Scanned::Done { origin, report } => {
+            save_report(&state.db, version_id, &report).await?;
+            Ok(decide(&origin, &report))
+        }
+    }
+}
+
+/// Khóa của một phát hiện để so giữa hai lần quét (mã lỗ hổng nằm trong `message`).
+fn finding_key(rule: &str, path: &str, message: &str) -> String {
+    format!("{rule}|{path}|{message}")
+}
+
+/// Kết quả quét lại mã nguồn của một phiên bản đang phát hành.
+pub struct Rescan {
+    /// Phát hiện mức `high` hoặc `critical` chưa có ở lần quét trước.
+    pub new_findings: Vec<feco_codescan::Finding>,
+    /// Tóm tắt mới (ghi vào `app_versions.checks.source`).
+    pub summary: Value,
+}
+
+/// Quét lại mã nguồn đã nộp (thay đổi dependency-rescan, design R2): tra lại OSV.dev, lưu báo cáo
+/// mới, trả các phát hiện nghiêm trọng mới. `Ok(None)`: không có mã nguồn, hoặc tải/quét chưa
+/// được (lần quét lại sau sẽ thử tiếp); `Err`: lỗi mạng hay cơ sở dữ liệu.
+pub async fn rescan(
+    state: &AppState,
+    version_id: Uuid,
+    manifest: &Manifest,
+) -> Result<Option<Rescan>, String> {
+    let previous: Option<Option<Value>> =
+        sqlx::query_scalar("SELECT report FROM source_submissions WHERE version_id = $1")
+            .bind(version_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| e.to_string())?;
+    let Some(previous) = previous else {
+        return Ok(None);
+    };
+    let known: std::collections::HashSet<String> = previous
+        .as_ref()
+        .and_then(|r| r["findings"].as_array())
+        .into_iter()
+        .flatten()
+        .map(|f| {
+            finding_key(
+                f["rule"].as_str().unwrap_or_default(),
+                f["path"].as_str().unwrap_or_default(),
+                f["message"].as_str().unwrap_or_default(),
+            )
+        })
+        .collect();
+    match scan_submission(state, version_id, manifest).await? {
+        Scanned::NoSource => Ok(None),
+        Scanned::Retry(e) => Err(e),
+        Scanned::Failed(why) => {
+            tracing::warn!(%version_id, %why, "quét lại mã nguồn không được");
+            Ok(None)
+        }
+        Scanned::Done { origin, report } => {
+            save_report(&state.db, version_id, &report).await?;
+            let new_findings = report
+                .findings
+                .iter()
+                .filter(|f| matches!(f.severity, Severity::High | Severity::Critical))
+                .filter(|f| !known.contains(&finding_key(&f.rule, &f.path, &f.message)))
+                .cloned()
+                .collect();
+            Ok(Some(Rescan {
+                new_findings,
+                summary: summary(&origin, &report),
+            }))
+        }
+    }
 }
 
 /// Mã nguồn không quét được do lỗi của nhà phát triển (repo riêng tư, commit không có, zip hỏng):

@@ -327,7 +327,7 @@ ENVEOF
 mentor() {
   need_repo
   build
-  local id=mentor name="Mentor" version="${MENTOR_VERSION:-0.2.0}"
+  local id=mentor name="Mentor" version="${MENTOR_VERSION:-0.2.2}"
   local front="${MENTOR_WEB:-http://localhost:5173}" back="${MENTOR_API:-http://localhost:8100}"
   local secret_file="$DEV/mentor-client-secret" id_file="$DEV/mentor-client-id" client
   # Client phía máy chủ: secret do script tạo, chỉ lưu trong .dev/ (không commit).

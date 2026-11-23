@@ -162,7 +162,7 @@ index 3e45679..51cc5eb 100644
      def documents_dir(self) -> Path:
          p = Path(self.STORAGE_DIR) / "uploads" / "documents"
 diff --git a/app/main.py b/app/main.py
-index 55c6141..c6094c4 100644
+index 2e99359..1698f57 100644
 --- a/app/main.py
 +++ b/app/main.py
 @@ -1,5 +1,6 @@
@@ -283,7 +283,7 @@ index 6e926b2..534d790 100644
  
  auth_service = AuthService()
 diff --git a/requirements.txt b/requirements.txt
-index 81a72eb..36d60c5 100644
+index 9fa2033..2b8c3f7 100644
 --- a/requirements.txt
 +++ b/requirements.txt
 @@ -13,6 +13,8 @@ python-dotenv>=1.0.1

@@ -7,6 +7,8 @@
 #   scripts/dev-launcher.sh revoke    # thu hồi phiên bản Ghi chú mới nhất
 #   scripts/dev-launcher.sh remove-demo  # gỡ Demo App khỏi kho TUF và danh mục (môi trường dev cũ)
 #   scripts/dev-launcher.sh refresh   # ký lại timestamp (hết hạn sau 1 giờ)
+#   scripts/dev-launcher.sh publish-self [PHIÊN-BẢN]  # ký F-Launcher vừa dựng bản release vào kho
+#                                     # (thử tự cập nhật; mặc định phiên bản trong Cargo.toml)
 #   scripts/dev-launcher.sh env       # in biến môi trường cho feco-server, launcher và app mẫu F-SDK
 #
 # Demo App không còn nằm trong kho ứng dụng (thay đổi platform-roles); thêm app vào kho bằng
@@ -134,6 +136,35 @@ remove_demo() {
   catalog remove feco-demo-app "Gỡ app thử nghiệm khỏi kho ứng dụng"
 }
 
+# Ký bản F-Launcher vừa dựng (cargo build --release -p feco-launcher) vào kho dev, mã app dành
+# riêng feco-launcher (thay đổi launcher-self-update). F-Launcher đang chạy bản cũ hơn sẽ tải bản
+# này sau lần đồng bộ tới và hỏi khởi động lại để cập nhật.
+publish_self() {
+  build
+  local version="${1:-$(sed -nE 's/^version = "([^"]+)"/\1/p' "$ROOT/Cargo.toml" | head -1)}"
+  local bin plat zipname zipfile pkg
+  bin="$(exe "$TARGET_DIR/release/feco-launcher")"
+  [[ -f "$bin" ]] || { echo "chưa có $bin: chạy cargo build --release -p feco-launcher" >&2; exit 1; }
+  plat="$(platform)"
+  zipname="feco-launcher-$version-$plat.zip"
+  zipfile="$DEV/uploads/$zipname"
+  pkg="$(mktemp -d)"
+  cp "$bin" "$pkg/"
+  mkdir -p "$DEV/uploads"
+  rm -f "$zipfile"
+  "$PY" -c 'import sys, zipfile, pathlib
+src, out = pathlib.Path(sys.argv[1]), sys.argv[2]
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    for f in sorted(src.rglob("*")):
+        if f.is_file():
+            z.write(f, f.relative_to(src).as_posix())' "$pkg" "$zipfile"
+  rm -rf "$pkg"
+  "$TUF" publish --repo "$REPO" --file "$zipfile" --name "$zipname" --app feco-launcher \
+    --version "$version" --platform "$plat" --title "F-Launcher" --entry "$(basename "$bin")" \
+    --sign "$(RELEASE_KEYS)"
+  echo "đã ký F-Launcher $version ($plat) vào kho dev" >&2
+}
+
 refresh() {
   build
   "$TUF" refresh --repo "$REPO" --sign "$(k snapshot),$(k timestamp)"
@@ -176,6 +207,7 @@ case "${1:-}" in
   remove-demo) remove_demo ;;
   revoke) revoke "${2:-}" ;;
   refresh) refresh ;;
+  publish-self) publish_self "${2:-}" ;;
   env) env_vars ;;
-  *) sed -n '2,13p' "$0"; exit 2 ;;
+  *) sed -n '2,15p' "$0"; exit 2 ;;
 esac

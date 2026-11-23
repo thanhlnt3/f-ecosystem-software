@@ -499,3 +499,13 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 129. **Liên kết xác minh trên điện thoại.** Liên kết trong email xác minh trỏ về địa chỉ công khai
      của Kratos (`127.0.0.1` trên máy dev), nên mở trên điện thoại không được. Có nên đổi xác minh
      sang mã 6 số (như khôi phục mật khẩu) để nhập được từ bất kỳ thiết bị nào không?
+130. **Đề nghị tác giả app con nâng thư viện.** Mentor còn `soupsieve` 2.10 cho Python dưới 3.11.5
+     (nên nâng `requires-python`); ThesisAI upstream vẫn dùng Next.js 16.4.0 (bản vá của F-Eco nâng
+     lên 16.4.6) và `zod` 3 qua `shadcn`. Ai liên hệ tác giả, và có cần F-Eco gửi pull request?
+131. **Gửi email thật khi chạy test.** E2E đọc email trong Mailpit. Khi Kratos dev gửi qua Gmail
+     (`.dev/smtp-url`), chạy E2E sẽ gửi thư thật tới địa chỉ thử `@example.com` (đã xảy ra một lần
+     ngày 23/11/2026). README nhắc khởi động lại Kratos với Mailpit trước khi test. Có cần chặn hẳn
+     (E2E kiểm Kratos đang gửi tới Mailpit, không thì dừng) không?
+132. **Phát hành F-Launcher qua kho phân phối.** `release.yml` dựng gói F-Launcher nhưng chưa ký vào kho
+     TUF production (chưa có kho production, task 1.4 và 5.1). Khi có, bước ký gói `feco-launcher`
+     nên chạy tự động trong `release.yml` hay do người giữ khóa targets làm tay?

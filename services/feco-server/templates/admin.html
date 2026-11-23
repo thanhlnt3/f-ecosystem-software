@@ -42,7 +42,7 @@
 {% if section == "reviews" %}
 <h2>{{ i18n.t("admin.nav.reviews") }}</h2>
 {% include "admin_toolbar.html" %}
-{% if reviews.is_empty() && toolbar.total == 0 %}<p class="muted">{{ i18n.t("admin.queue_empty") }}</p>{% endif %}
+{% if reviews.is_empty() && !toolbar.active %}<p class="muted">{{ i18n.t("admin.queue_empty") }}</p>{% endif %}
 {% for r in reviews %}
 <div class="review queue-item" data-app="{{ r.app }}" data-version="{{ r.version }}">
   <strong>{{ r.app }} {{ r.version }}</strong>{% if !r.developer.is_empty() %} · <span class="queue-developer">{{ r.developer }}</span>{% endif %} · <span class="muted">{{ i18n.t("admin.waited") }} {{ r.waited }} · {{ r.reason }}</span>
@@ -64,6 +64,11 @@
   </form>
 </div>
 {% endfor %}
+<h3 id="admin-alerts-title">{{ i18n.t("admin.alerts") }}</h3>
+{% if alerts.is_empty() %}<p class="muted" id="admin-alerts-empty">{{ i18n.t("admin.alerts_none") }}</p>{% endif %}
+<table id="admin-alerts">
+{% for a in alerts %}<tr class="admin-alert" data-kind="{{ a.kind }}" data-app="{{ a.app }}" data-version="{{ a.version }}"><td><span class="badge warn"{% if a.kind == "late_detection" %} style="color:var(--err)"{% endif %}>{{ a.kind_label }}</span> {{ a.message }}<br><span class="muted">{{ a.at }}</span>{% if !a.lines.is_empty() %}<ul class="alert-lines">{% for l in a.lines %}<li><code>{{ l }}</code></li>{% endfor %}</ul>{% endif %}</td></tr>{% endfor %}
+</table>
 {% endif %}
 
 {% if section == "orders" %}

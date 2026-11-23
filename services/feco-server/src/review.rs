@@ -687,6 +687,20 @@ async fn run_rescan(state: &AppState, version_id: Uuid) -> Result<JobResult, Str
         .iter()
         .flat_map(|r| r.engine_errors.clone())
         .collect();
+    // Quét lại cả mã nguồn đã nộp: lỗ hổng thư viện công bố sau khi phát hành (thay đổi
+    // dependency-rescan, design R3). Lỗi mạng thì lần quét lại sau thử tiếp.
+    let source = match source_scan::rescan(state, version_id, &v.manifest).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(%version_id, error = %e, "chưa quét lại được mã nguồn");
+            return Err(format!("quét lại mã nguồn chưa chạy được: {e}"));
+        }
+    };
+    if let Some(r) = &source {
+        set_source_check(state, version_id, &r.summary)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
     if errors.is_empty() {
         sqlx::query("UPDATE app_versions SET last_scanned_at = now() WHERE id = $1")
             .bind(version_id)
@@ -720,6 +734,52 @@ async fn run_rescan(state: &AppState, version_id: Uuid) -> Result<JobResult, Str
         .await;
         return Ok(JobResult {
             outcome: "late_detection".into(),
+            reports,
+        });
+    }
+    // Lỗ hổng mới (high/critical chưa có ở lần quét trước): báo nhà phát triển và quản trị, không
+    // tự thu hồi (người duyệt quyết định).
+    if let Some(r) = source.filter(|r| !r.new_findings.is_empty()) {
+        let lines: Vec<String> = r
+            .new_findings
+            .iter()
+            .take(20)
+            .map(|f| format!("- [{}] {}: {}", f.severity.as_str(), f.path, f.message))
+            .collect();
+        let installs: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM catalog_installs WHERE app_id = $1 AND version = $2",
+        )
+        .bind(&v.app_id)
+        .bind(&v.version)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+        let subject = format!(
+            "Lỗ hổng mới trong thư viện của {} {} / New vulnerability in {} {}",
+            v.app_id, v.version, v.app_id, v.version
+        );
+        let body = format!(
+            "Lần quét lại định kỳ của F-Eco phát hiện lỗ hổng mới công bố trong thư viện mà {app} {version} đang dùng:\n\n{list}\n\nCách sửa: nâng các thư viện trên lên bản đã vá (xem mã lỗ hổng trên https://osv.dev), dựng lại và nộp phiên bản mới. Phiên bản hiện tại vẫn đang phát hành; người duyệt của F-Eco có thể liên hệ nếu lỗ hổng ảnh hưởng tới người dùng.\n\n---\n\nF-Eco's periodic rescan found newly published vulnerabilities in libraries used by {app} {version} (listed above). Fix: upgrade those libraries to a patched release, rebuild and submit a new version. The current version stays published.\n",
+            app = v.app_id,
+            version = v.version,
+            list = lines.join("\n"),
+        );
+        notify_developer(state, &v.app_id, &subject, &body).await;
+        admin_alert(
+            state,
+            "new_vulnerability",
+            &format!(
+                "Lỗ hổng mới trong thư viện của {} {} đang phát hành; {installs} người dùng đang cài",
+                v.app_id, v.version
+            ),
+            json!({
+                "app": v.app_id, "version": v.version, "installs": installs,
+                "findings": lines,
+            }),
+        )
+        .await;
+        return Ok(JobResult {
+            outcome: "vulnerable".into(),
             reports,
         });
     }
@@ -1222,6 +1282,28 @@ pub struct Alert {
     pub details: Value,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
+}
+
+/// Cảnh báo kiểm duyệt trong `days` ngày gần nhất, mới nhất trước (bảng quản trị, thay đổi
+/// dependency-rescan design R4).
+pub async fn recent_alerts(db: &Db, days: i32) -> sqlx::Result<Vec<Alert>> {
+    let rows: Vec<(i64, String, String, Value, OffsetDateTime)> = sqlx::query_as(
+        "SELECT id, kind, message, details, created_at FROM admin_alerts
+         WHERE created_at > now() - make_interval(days => $1) ORDER BY created_at DESC LIMIT 500",
+    )
+    .bind(days)
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| Alert {
+            id: r.0,
+            kind: r.1,
+            message: r.2,
+            details: r.3,
+            created_at: r.4,
+        })
+        .collect())
 }
 
 pub async fn open_alerts(db: &Db) -> sqlx::Result<Vec<Alert>> {

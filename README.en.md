@@ -26,7 +26,7 @@ An open platform for third-party developers to publish **sub-apps** through a sh
 > - F-Store (`/store`): catalog of approved apps, search that ignores Vietnamese diacritics, filter by category, operating system, price, verified developer; the detail page shows data scopes with their purpose, license, privacy policy, change history; reviews only from people who installed the app, developer replies, abuse reports.
 >
 > - Developer Portal (`/developer`): individual or organization registration (requires a verified email and TOTP), Developer Agreement, domain verification via DNS TXT, teams and roles, client ID and redirect URIs, the `f-app.toml` manifest, package submission via the web or the `f-dev` CLI, code-signature checks, stable/beta channels and percentage-based gradual rollout, aggregate metrics.
-> - Moderation: automated check queue (malware scanning with the F-Eco signature engine and ClamAV, code signature, architecture, packer), manual or automatic review rules, content policy (`/policy/content`), rejections that cite the clause and how to fix it, appeals, emergency takedown, 7-day rescan.
+> - Moderation: automated check queue (malware scanning with the F-Eco signature engine and ClamAV, code signature, architecture, packer), manual or automatic review rules, content policy (`/policy/content`), rejections that cite the clause and how to fix it, appeals, emergency takedown, 7-day rescan (both packages and library vulnerabilities in the submitted source; new vulnerabilities are reported to the developer and listed under "Review alerts" on the review queue page).
 > - F-SDK for Rust, C (stable ABI), Python and TypeScript/Node.js: sign-in with the launcher's launch code or through the browser (PKCE), automatic token refresh, `/v1/me`, entitlement checks (`/v1/entitlements`), runtime error reporting, webhook signature verification. Apps that use a standard OIDC library do not need F-SDK. Unified error codes, listed at `/developer/docs`.
 >
 > - Build-to-order app requests (`/orders`): submit a request with files (up to 200 MB) and accept the app-building Terms of Service (draft), milestone-based quotes (deposit ≤ 30%, 7-day validity, counter-offers), each milestone delivered as a private app in F-Launcher, acceptance, free revisions, automatic acceptance after 14 days, messages with attachments, order cancellation, disputes, final delivery download once paid in full.
@@ -241,6 +241,13 @@ app repository; it is used only to try single sign-on in step 5.
    scripts/dev-launcher.sh publish   # signs a new Notes version → the launcher shows "Update to ..."
    scripts/dev-launcher.sh revoke    # revokes the latest Notes version → after the next sync it cannot be opened, and the reason is shown
    scripts/dev-launcher.sh refresh   # the TUF timestamp expires after 1 hour: run again when the launcher reports expired metadata
+   ```
+
+   Try F-Launcher self-update: build a release with a version newer than the running one, then sign it into the dev repository. The older F-Launcher downloads it after the next sync, shows a **Restart to update** button, and installs the new version on restart.
+
+   ```bash
+   cargo build --release -p feco-launcher
+   scripts/dev-launcher.sh publish-self   # package feco-launcher-<version>-<platform>.zip, app id feco-launcher
    ```
 
    Click **Sync** to make the launcher sync right away (normally it syncs every hour). **Roll back** (Quay lại) restores the previous version
@@ -699,7 +706,14 @@ npx -y @fission-ai/openspec@1.16.1 validate add-f-ecosystem-platform --strict
 FECO_E2E=1 cargo test -p feco-server --test e2e_auth
 ```
 
-Chat and source scanning have their own E2E suites, each on its own database (`feco_chat_e2e`, `feco_scan_e2e`, created automatically). `FECO_E2E_DATABASE_URL` runs `e2e_auth` on a database other than `feco`:
+Each E2E suite uses its own database, created automatically: `e2e_auth` uses `feco_e2e` (set `FECO_E2E_DATABASE_URL` to change it), chat uses `feco_chat_e2e`, source scanning uses `feco_scan_e2e`. No suite writes to the dev database `feco`.
+
+The E2E suites read email from Mailpit. If Kratos is sending real email (`.dev/smtp-url` exists), restart Kratos with Mailpit before running E2E so the tests do not send mail out:
+
+```bash
+FECO_SMTP_URL="smtp://127.0.0.1:1025/?disable_starttls=true" scripts/dev-local.sh kratos
+```
+
 
 ```bash
 FECO_E2E=1 cargo test -p feco-server --test e2e_chat --test e2e_source_scan

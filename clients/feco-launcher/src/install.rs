@@ -22,6 +22,10 @@ pub const UPDATE_CHECK_INTERVAL: SignedDuration = SignedDuration::from_hours(6);
 /// Thời gian tối đa từ lần đồng bộ thành công gần nhất mà app đã cài vẫn mở được khi ngoại tuyến.
 pub const MAX_OFFLINE: SignedDuration = SignedDuration::from_hours(7 * 24);
 
+/// Mã app dành riêng cho gói của chính F-Launcher trong kho phân phối (thay đổi
+/// launcher-self-update). Gói này không hiện trong Cửa hàng hay Thư viện.
+pub const SELF_APP: &str = "feco-launcher";
+
 /// Thông báo khi metadata phân phối hết hạn (tiếng Việt; giao diện dịch bằng `i18n::t`).
 pub const EXPIRED_METADATA_NOTICE: &str = "Dữ liệu phân phối của máy chủ đã hết hạn nên danh mục chưa cập nhật được. Các app đã cài vẫn mở được; F-Launcher sẽ tự thử lại. Nếu giờ trên máy tính đang sai, hãy chỉnh lại giờ.";
 /// Thông báo khi metadata phân phối không hợp lệ.
@@ -254,8 +258,91 @@ impl Launcher {
     pub fn catalog_latest(&self) -> Vec<&CatalogEntry> {
         catalog::latest(&self.state.catalog)
             .into_iter()
+            .filter(|e| e.app != SELF_APP)
             .filter(|e| !e.private || self.state.private_apps.contains(&e.app))
             .collect()
+    }
+
+    /// Bản F-Launcher mới hơn `current` cho nền tảng của máy, trong kho phân phối đã ký (thay đổi
+    /// launcher-self-update, design S1). Bản đã thu hồi không tính.
+    pub fn self_update(&self, current: &str) -> Option<&CatalogEntry> {
+        self.state
+            .catalog
+            .iter()
+            .filter(|e| e.app == SELF_APP && e.platform == self.platform)
+            .filter(|e| compare(&e.version, current) == Ordering::Greater)
+            .filter(|e| self.revocation(&e.target).is_none())
+            .max_by(|a, b| compare(&a.version, &b.version))
+    }
+
+    /// Phiên bản F-Launcher đã tải xong, chờ cài khi khởi động lại.
+    pub fn pending_self_update(&self) -> Option<String> {
+        crate::selfupdate::read_pending(&self.paths.self_update()).map(|p| p.version)
+    }
+
+    /// Tải bản F-Launcher mới qua kho phân phối (chữ ký, hash, độ dài), giải nén vào
+    /// `self-update/<phiên bản>/` và ghi `pending.json` (design S2). Trả tệp chạy của bản mới.
+    pub async fn stage_self_update(
+        &mut self,
+        entry: &CatalogEntry,
+    ) -> Result<PathBuf, LauncherError> {
+        if entry.app != SELF_APP || !safe_component(&entry.version) || !safe_relative(&entry.entry)
+        {
+            let err = LauncherError::InvalidPackage(format!(
+                "không phải gói F-Launcher hợp lệ: {entry:?}"
+            ));
+            self.events.record(
+                "invalid_package",
+                json!({ "target": entry.target, "detail": err.detail() }),
+            );
+            return Err(err);
+        }
+        if let Some(err) = self.revoked_error(&entry.title, &entry.version, &entry.target) {
+            return Err(err);
+        }
+        let dir = self.paths.self_update();
+        std::fs::create_dir_all(&dir).map_err(io(&dir))?;
+        let downloads = self.paths.downloads();
+        std::fs::create_dir_all(&downloads).map_err(io(&downloads))?;
+        let partial = downloads.join(format!("{}.partial", entry.target));
+        let staging = dir.join(format!(
+            ".staging-{}-{}",
+            entry.version,
+            crate::random_hex(4)
+        ));
+        let result = self.download_and_extract(entry, &partial, &staging).await;
+        let _ = std::fs::remove_file(&partial);
+        if let Err(err) = result {
+            let _ = std::fs::remove_dir_all(&staging);
+            if let LauncherError::InvalidPackage(detail) = &err {
+                self.events.record(
+                    "invalid_package",
+                    json!({ "target": entry.target, "detail": detail }),
+                );
+            }
+            return Err(err);
+        }
+        let final_dir = dir.join(&entry.version);
+        if final_dir.exists() {
+            std::fs::remove_dir_all(&final_dir).map_err(io(&final_dir))?;
+        }
+        if let Err(e) = std::fs::rename(&staging, &final_dir) {
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(io(&final_dir)(e));
+        }
+        crate::selfupdate::write_pending(
+            &dir,
+            &crate::selfupdate::Pending {
+                version: entry.version.clone(),
+                entry: entry.entry.clone(),
+            },
+        )
+        .map_err(io(&dir))?;
+        self.events.record(
+            "self_update_staged",
+            json!({ "target": entry.target, "version": entry.version }),
+        );
+        Ok(final_dir.join(&entry.entry))
     }
 
     /// App riêng tư người dùng đang đăng nhập được thấy; rỗng khi chưa đăng nhập.

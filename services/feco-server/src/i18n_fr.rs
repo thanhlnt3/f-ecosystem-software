@@ -967,4 +967,8 @@ pub const FR: &[(&str, &str)] = &[
     ("chat.report_open", "Non traité"),
     ("list.reporter", "Auteur du signalement"),
     ("list.customer", "Client"),
+    ("admin.alerts", "Alertes de vérification (30 jours)"),
+    ("admin.alerts_none", "Aucune alerte ces 30 derniers jours."),
+    ("alert.new_vulnerability", "Nouvelle vulnérabilité de bibliothèque"),
+    ("alert.late_detection", "Logiciel malveillant détecté tardivement"),
 ];

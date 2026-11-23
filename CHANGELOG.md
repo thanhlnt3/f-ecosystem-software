@@ -1,5 +1,53 @@
 # Nhật ký thay đổi
 
+## 1.17.0 (23/11/2026)
+
+Ba thay đổi OpenSpec: `dependency-rescan`, `launcher-self-update`, cùng việc cập nhật Mentor và ThesisAI, sau khi quét lại toàn bộ app con trong kho.
+
+### Quét lại toàn bộ app con (23/11/2026)
+
+- **7 app thật** (kibi, bottom, eframe-template, Ghi chú, Bấm giờ, Mentor, ThesisAI): không có phát hiện `critical`.
+- **Lỗ hổng mức high**: Mentor có 5 (`pypdf`, `soupsieve`); ThesisAI frontend có 1 (`zod` 3, đã biết).
+- **Bản mới ở kho gốc**: Mentor 0.2.2 (3 commit), ThesisAI frontend (2 commit), backend (1 commit). kibi, bottom, eframe-template đang ở bản mới nhất.
+- **CSDL dev**: dọn 268 app thử sót lại từ E2E chạy nhầm vào cơ sở dữ liệu `feco`. Có sao lưu `C:\t\backup\feco-dev-2026-11-23.dump`.
+
+### Quét lại định kỳ cả lỗ hổng thư viện (`dependency-rescan`)
+
+- Lần quét lại 7 ngày của các phiên bản đang phát hành giờ quét lại cả mã nguồn đã nộp và tra lại OSV.dev. Trước đây chỉ quét gói.
+- **Lỗ hổng `high`/`critical` mới**:
+  - nhà phát triển nhận email nêu thư viện, mã lỗ hổng và cách sửa;
+  - quản trị viên có cảnh báo `new_vulnerability`, kèm số người đang cài;
+  - mỗi lỗ hổng báo một lần; không tự thu hồi phiên bản.
+- Trang Hàng chờ duyệt có mục **Cảnh báo kiểm duyệt (30 ngày)**: lỗ hổng mới, mã độc phát hiện muộn. Lọc được theo loại, tìm, sắp xếp. Trước đây cảnh báo chỉ có trong email và `feco-catalog`.
+- Workflow mới `integration-scan.yml` quét lại Mentor và ThesisAI mỗi thứ Hai. Script dùng chung: `scripts/scan-integrations-all.sh`.
+- `e2e_auth` mặc định dùng cơ sở dữ liệu `feco_e2e`, không còn ghi vào CSDL dev.
+
+### F-Launcher tự cập nhật (`launcher-self-update`)
+
+- Gói F-Launcher nằm trong kho phân phối với mã app dành riêng `feco-launcher`, không hiện trong Cửa hàng.
+- Sau mỗi lần đồng bộ, F-Launcher tải bản mới hơn về nền. Gói được kiểm bằng chữ ký, hash và độ dài của kho; gói bị sửa bị từ chối và ghi sự kiện bảo mật.
+- Khi tải xong, F-Launcher hiện nút **Khởi động lại để cập nhật**. Bản mới được cài lúc khởi động; cài lỗi thì giữ bản cũ.
+- `scripts/dev-launcher.sh publish-self` ký bản vừa dựng vào kho dev.
+- Còn chờ chứng thư: kiểm Authenticode và Developer ID của bản mới, notarize (task 6.6).
+
+### Mentor 0.2.2 và ThesisAI
+
+- **Mentor** `5ad3c9f` (0.2.2):
+  - bản vá của F-Eco nâng `pypdf` 6.21.4, `soupsieve` 4.1.3, `opentelemetry-api` 1.45.2, `url` 2.5.9;
+  - phát hiện high giảm từ 5 xuống 2. Còn `soupsieve` 2.10, chỉ dùng cho Python dưới 3.11.5 (`integrations/mentor/SCAN.md`).
+- **ThesisAI**: frontend `6718221`, backend `db66b57`. Bản vá áp được không cần sửa, quét như trước.
+
+### Kiểm thử
+
+- **E2E** `source_scan_end_to_end`:
+  - quét lại không có lỗ hổng mới thì không báo;
+  - OSV giả công bố lỗ hổng mới thì có email nêu `GHSA-e2e0-late-0002`, có cảnh báo quản trị, phiên bản vẫn phát hành, trang phiên bản có 2 dòng;
+  - quét lại lần nữa không báo thêm;
+  - Hàng chờ duyệt hiện cảnh báo, lọc theo loại được.
+- **F-Launcher**:
+  - `self_update_downloads_verifies_and_installs_on_restart`: kho TUF thật, gói bị sửa, chờ cài, thay tệp, bản bị thu hồi;
+  - `selfupdate::tests`: thay tệp, bỏ bản chờ cũ hoặc không an toàn, đặt lại bản cũ khi chép lỗi.
+
 ## 1.16.0 (22/11/2026)
 
 Thay đổi OpenSpec `distribution-upkeep-and-real-email`.

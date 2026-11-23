@@ -159,6 +159,24 @@ fn main() -> eframe::Result {
             std::process::exit(2);
         }
     };
+    // Cài bản F-Launcher đã tải xong (thay đổi launcher-self-update, design S3) rồi chạy bản mới.
+    if let Ok(exe) = std::env::current_exe() {
+        let dir = Paths::new(&config.data_dir).self_update();
+        match feco_launcher::selfupdate::apply_pending(&dir, &exe, env!("CARGO_PKG_VERSION")) {
+            Ok(Some(version)) => {
+                eprintln!("đã cài F-Launcher {version}, đang chạy bản mới");
+                match std::process::Command::new(&exe)
+                    .args(std::env::args_os().skip(1))
+                    .spawn()
+                {
+                    Ok(_) => std::process::exit(0),
+                    Err(e) => eprintln!("không chạy được bản mới: {e}"),
+                }
+            }
+            Ok(None) => {}
+            Err(e) => eprintln!("không cài được bản F-Launcher mới (vẫn dùng bản cũ): {e}"),
+        }
+    }
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("F-Launcher")
         .with_inner_size([1100.0, 720.0])
@@ -319,6 +337,8 @@ struct View {
     online: bool,
     /// Metadata phân phối bị từ chối dù kết nối được máy chủ (distribution-upkeep-and-real-email).
     distribution_error: Option<&'static str>,
+    /// Bản F-Launcher đã tải, chờ khởi động lại để cài (launcher-self-update).
+    self_update_ready: Option<String>,
     my_apps: Vec<MyApp>,
     catalog: Vec<CatalogEntry>,
     auto_update: bool,
@@ -337,6 +357,7 @@ async fn snapshot(shared: &Shared) -> View {
     View {
         online: l.is_online(),
         distribution_error: l.distribution_error(),
+        self_update_ready: l.pending_self_update(),
         my_apps: l.my_apps(),
         catalog: l.catalog_latest().into_iter().cloned().collect(),
         auto_update: l.state().auto_update,
@@ -535,6 +556,8 @@ impl ChatState {
 enum Action {
     Login,
     Logout,
+    /// Khởi động lại để cài bản F-Launcher đã tải (launcher-self-update).
+    RestartForUpdate,
     Sync,
     AskInstall(Box<CatalogEntry>),
     Install(Box<CatalogEntry>),
@@ -806,6 +829,19 @@ impl LauncherApp {
                     Ok(tf("Xin chào {}", &[&name.unwrap_or_default()]))
                 },
             ),
+            Action::RestartForUpdate => {
+                // Tiến trình mới cài bản chờ lúc khởi động (selfupdate::apply_pending).
+                match std::env::current_exe().and_then(|exe| {
+                    std::process::Command::new(exe)
+                        .args(std::env::args_os().skip(1))
+                        .spawn()
+                }) {
+                    Ok(_) => std::process::exit(0),
+                    Err(e) => {
+                        self.notice = Some((true, tf("Không khởi động lại được: {}", &[&e])));
+                    }
+                }
+            }
             Action::Logout => self.run(t("Đang đăng xuất..."), false, |s| async move {
                 s.identity.auth.logout().await.map_err(|e| e.to_string())?;
                 *s.identity.session.lock().await = None;
@@ -1916,6 +1952,16 @@ impl LauncherApp {
         };
         if icons::button(ui, Icon::Sync, &sync_tip, false, idle).clicked() {
             actions.push(Action::Sync);
+        }
+        // Bản F-Launcher mới đã tải và kiểm tra xong (launcher-self-update).
+        if let Some(version) = &self.view.self_update_ready {
+            let tip = tf(
+                "F-Launcher {} đã tải xong. Khởi động lại để cập nhật.",
+                &[version],
+            );
+            if icons::button(ui, Icon::ArrowUp, &tip, true, true).clicked() {
+                actions.push(Action::RestartForUpdate);
+            }
         }
         // Tính năng tài khoản trên web (đồng bộ tính năng launcher và web).
         let server = self.shared.config.server.clone();
@@ -4081,6 +4127,16 @@ async fn sync(s: Arc<Shared>) -> Result<String, String> {
                 }
                 // Không hỏi được thì giữ câu trả lời lần trước.
                 Err(e) => eprintln!("không hỏi được bản phát hành của {app}: {e}"),
+            }
+        }
+    }
+    // Bản F-Launcher mới trong kho phân phối: tải và kiểm tra nền, cài khi khởi động lại
+    // (launcher-self-update, design S4). Lỗi chỉ ghi nhật ký.
+    if let Some(entry) = l.self_update(env!("CARGO_PKG_VERSION")).cloned() {
+        if l.pending_self_update().as_deref() != Some(entry.version.as_str()) {
+            if let Err(e) = l.stage_self_update(&entry).await {
+                let (version, detail) = (&entry.version, e.detail());
+                eprintln!("không tải được F-Launcher {version}: {detail}");
             }
         }
     }

@@ -967,4 +967,8 @@ pub const JA: &[(&str, &str)] = &[
     ("chat.report_open", "未対応"),
     ("list.reporter", "報告者"),
     ("list.customer", "顧客"),
+    ("admin.alerts", "審査アラート（30 日間）"),
+    ("admin.alerts_none", "過去 30 日間のアラートはありません。"),
+    ("alert.new_vulnerability", "ライブラリの新しい脆弱性"),
+    ("alert.late_detection", "マルウェアの遅延検出"),
 ];

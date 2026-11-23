@@ -41,6 +41,11 @@ impl Paths {
         self.root.join("appdata").join(app)
     }
 
+    /// Bản F-Launcher mới đã tải, chờ cài khi khởi động lại (thay đổi launcher-self-update).
+    pub fn self_update(&self) -> PathBuf {
+        self.root.join("self-update")
+    }
+
     pub fn downloads(&self) -> PathBuf {
         self.root.join("downloads")
     }

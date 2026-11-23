@@ -91,7 +91,7 @@
 - [x] 6.5 Chặn mở phiên bản bị thu hồi, hiện công bố mức cô lập khi cài; xác minh bằng các scenario trong spec
   - Đã xác minh bằng test `revoked_version_is_blocked_after_next_sync`: sau lần đồng bộ kế tiếp (mỗi giờ khi có mạng, mỗi 5 phút khi đang ngoại tuyến) launcher không cho mở bản bị thu hồi và hiện lý do đã ký; trạng thái thu hồi được lưu nên khởi động lại khi ngoại tuyến vẫn chặn; đề xuất quay lại bản trước, cập nhật hoặc gỡ. Hộp thoại cài và thẻ danh mục có dòng "App này chạy với quyền như mọi ứng dụng khác trên máy bạn" (`ISOLATION_NOTICE`).
 - [ ] 6.6 Launcher tự cập nhật, bộ cài ký Authenticode, Developer ID và notarize; xác minh trên máy ảo sạch
-  - Trạng thái: chưa làm. Cần chứng thư ký mã Authenticode và tài khoản Apple Developer (QUESTIONS.md, câu 17).
+  - Trạng thái: phần tự cập nhật đã làm trong 1.17.0 (thay đổi `launcher-self-update`): gói `feco-launcher` trong kho phân phối, tải và kiểm tra qua TUF, cài khi khởi động lại, giữ bản cũ khi cài lỗi (test `self_update_downloads_verifies_and_installs_on_restart`, `selfupdate::tests`). Còn chờ: ký Authenticode, Developer ID và notarize, kiểm chữ ký mã của bản mới trước khi cài, xác minh trên máy ảo sạch. Cần chứng thư ký mã Authenticode và tài khoản Apple Developer (QUESTIONS.md, câu 17).
 
 ## 7. Danh mục (`app-catalog`)
 

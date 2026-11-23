@@ -248,12 +248,20 @@ fn e2e_ready() -> bool {
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v))
                 .collect();
-                // CSDL riêng cho máy chủ kiểm thử (mặc định như cấu hình dev), để nhiều nhánh có
-                // migration khác nhau không dùng chung một lược đồ; tạo CSDL nếu chưa có.
-                if let Ok(url) = std::env::var("FECO_E2E_DATABASE_URL") {
-                    ensure_database(&url).await;
-                    vars.insert("FECO_DATABASE_URL".into(), url);
-                }
+                // CSDL riêng cho máy chủ kiểm thử, để nhiều nhánh có migration khác nhau không dùng
+                // chung một lược đồ; tạo CSDL nếu chưa có. Không đặt FECO_E2E_DATABASE_URL thì dùng
+                // CSDL `feco_e2e` cạnh CSDL dev: test không bao giờ ghi vào dữ liệu dev (trước
+                // đây ghi vào `feco` và để lại hàng trăm app thử trên F-Store dev).
+                let url = std::env::var("FECO_E2E_DATABASE_URL").unwrap_or_else(|_| {
+                    let base = std::env::var("FECO_DATABASE_URL").unwrap_or_else(|_| {
+                        "postgres://feco:feco-dev-only@127.0.0.1:5432/feco".to_owned()
+                    });
+                    let mut u = url::Url::parse(&base).expect("FECO_DATABASE_URL hợp lệ");
+                    u.set_path("/feco_e2e");
+                    u.to_string()
+                });
+                ensure_database(&url).await;
+                vars.insert("FECO_DATABASE_URL".into(), url);
                 let _ = SERVER_VARS.set(vars.clone());
                 let config = Config::from_vars(&vars).unwrap();
                 let state = std::sync::Arc::new(AppState::from_config(&config).unwrap());

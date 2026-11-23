@@ -292,6 +292,18 @@ pub struct ReviewView {
     pub source: Option<crate::source_scan::SourceView>,
 }
 
+/// Một cảnh báo kiểm duyệt trên trang Hàng chờ duyệt (thay đổi dependency-rescan, design R4).
+pub struct AlertRow {
+    pub kind: String,
+    pub kind_label: String,
+    pub message: String,
+    pub app: String,
+    pub version: String,
+    pub at: String,
+    /// Dòng chi tiết (ví dụ các lỗ hổng mới).
+    pub lines: Vec<String>,
+}
+
 pub struct OrderRow {
     pub id: String,
     pub code: String,
@@ -647,6 +659,8 @@ struct AdminPage {
     dev_no_passkey: bool,
     /// Thanh lọc, sắp xếp, tìm kiếm của danh sách đang mở (admin-list-tools).
     toolbar: Toolbar,
+    /// Cảnh báo kiểm duyệt 30 ngày gần nhất (trang Hàng chờ duyệt).
+    alerts: Vec<AlertRow>,
 }
 
 /// Mục điều hướng của bảng quản trị theo vai trò con. Ví F-Coin cho Tài chính và Quản trị hệ
@@ -738,6 +752,7 @@ impl AdminPage {
             show_chart: false,
             dev_no_passkey: false,
             toolbar: Default::default(),
+            alerts: Vec::new(),
         }
     }
 }
@@ -882,7 +897,7 @@ async fn review_queue(
         at: q.submitted_at,
         sender: developer(&q.app_id),
         text: format!("{} {} {}", q.app_id, q.version, q.reason),
-        status: String::new(),
+        status: "queue".into(),
     });
     let mut out = Vec::new();
     for q in queue {
@@ -989,6 +1004,49 @@ async fn render_reviews_q(
 ) -> Response {
     let mut page = AdminPage::new(lang, admin, "reviews");
     page.messages = messages;
+    // Cảnh báo kiểm duyệt 30 ngày gần nhất, cùng thanh lọc với hàng chờ (dependency-rescan R4).
+    let alerts = review::recent_alerts(&state.db, 30)
+        .await
+        .unwrap_or_default();
+    let alert_total = alerts.len();
+    let alerts = listing::apply(alerts, query, &[], |a| Item {
+        at: Some(a.created_at),
+        sender: a.details["app"].as_str().unwrap_or_default().to_owned(),
+        text: format!(
+            "{} {} {}",
+            a.message,
+            a.details["version"].as_str().unwrap_or_default(),
+            a.details["findings"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|f| f.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        status: a.kind.clone(),
+    });
+    page.alerts = alerts
+        .into_iter()
+        .map(|a| AlertRow {
+            kind_label: match a.kind.as_str() {
+                "new_vulnerability" => lang.t("alert.new_vulnerability").to_owned(),
+                "late_detection" => lang.t("alert.late_detection").to_owned(),
+                other => other.to_owned(),
+            },
+            message: a.message,
+            app: a.details["app"].as_str().unwrap_or_default().to_owned(),
+            version: a.details["version"].as_str().unwrap_or_default().to_owned(),
+            at: when(a.created_at),
+            lines: a.details["findings"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|f| f.as_str().map(str::to_owned))
+                .collect(),
+            kind: a.kind,
+        })
+        .collect();
     match review_queue(state, lang, OffsetDateTime::now_utc(), query).await {
         Ok((r, total)) => {
             page.toolbar = Toolbar::new(
@@ -997,9 +1055,16 @@ async fn render_reviews_q(
                 query,
                 lang.t("list.ph.reviews"),
                 lang.t("list.status.all"),
-                &[],
-                r.len(),
-                total,
+                &[
+                    ("queue", lang.t("admin.nav.reviews").to_owned()),
+                    (
+                        "new_vulnerability",
+                        lang.t("alert.new_vulnerability").to_owned(),
+                    ),
+                    ("late_detection", lang.t("alert.late_detection").to_owned()),
+                ],
+                r.len() + page.alerts.len(),
+                total + alert_total,
             );
             page.reviews = r
         }

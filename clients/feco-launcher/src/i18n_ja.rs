@@ -117,6 +117,8 @@ pub(crate) const JA: &[(&str, &str)] = &[
     ("Cổng nhà phát triển", "開発者ポータル"),
     ("Dữ liệu phân phối của máy chủ đã hết hạn nên danh mục chưa cập nhật được. Các app đã cài vẫn mở được; F-Launcher sẽ tự thử lại. Nếu giờ trên máy tính đang sai, hãy chỉnh lại giờ.", "サーバーの配布データの有効期限が切れたため、カタログを更新できませんでした。インストール済みのアプリは引き続き開けます。F-Launcher は自動で再試行します。パソコンの時刻がずれている場合は修正してください。"),
     ("Dữ liệu phân phối từ máy chủ không hợp lệ nên đã bị từ chối. Danh mục chưa cập nhật được; các app đã cài vẫn mở được.", "サーバーの配布データが無効なため拒否しました。カタログを更新できませんでした。インストール済みのアプリは引き続き開けます。"),
+    ("F-Launcher {} đã tải xong. Khởi động lại để cập nhật.", "F-Launcher {} の準備ができました。再起動して更新してください。"),
+    ("Không khởi động lại được: {}", "再起動できませんでした: {}"),
     ("Bảng quản trị", "管理コンソール"),
     ("Trang chủ quản trị", "管理ホーム"),
     ("Hàng chờ duyệt app", "アプリ審査キュー"),

@@ -27,6 +27,7 @@ pub mod launch;
 pub mod library;
 pub mod paths;
 pub mod prefs;
+pub mod selfupdate;
 pub mod state;
 pub mod style;
 

@@ -873,3 +873,64 @@ async fn web_apps_show_everywhere_and_open_their_url() {
         .unwrap();
     assert!(l.prepare_launch("soundlab").unwrap().web_url.is_none());
 }
+
+/// Thay đổi launcher-self-update: scenario "Có bản launcher mới", "Gói bị sửa", "Không hiện trong
+/// Cửa hàng". Gói F-Launcher được tải qua kho phân phối, kiểm tra, chờ cài, rồi thay tệp đang chạy
+/// lúc khởi động lại.
+#[tokio::test]
+async fn self_update_downloads_verifies_and_installs_on_restart() {
+    use feco_launcher::install::SELF_APP;
+    let f = Fixture::new().await;
+    f.publish_app("soundlab", "1.2.0").await;
+    let name = f.publish_app(SELF_APP, "99.0.0").await;
+    let mut l = f.launcher().await;
+    l.sync(Timestamp::now()).await.unwrap();
+
+    // Không hiện trong Cửa hàng.
+    assert!(l.catalog_latest().iter().all(|e| e.app != SELF_APP));
+    assert!(l.catalog_latest().iter().any(|e| e.app == "soundlab"));
+    assert!(l.self_update("99.0.0").is_none(), "đang chạy bản mới nhất");
+    let update = l
+        .self_update("1.17.0")
+        .cloned()
+        .expect("có bản F-Launcher mới");
+    assert_eq!(update.version, "99.0.0");
+
+    // Gói bị sửa sau khi ký: từ chối, không có gì chờ cài, ghi sự kiện bảo mật.
+    let stored = f.stored_target(&name, &update.sha256);
+    let original = std::fs::read(&stored).unwrap();
+    std::fs::write(&stored, b"goi bi sua").unwrap();
+    let err = l.stage_self_update(&update).await.unwrap_err();
+    assert!(matches!(err, LauncherError::InvalidPackage(_)), "{err:?}");
+    assert_eq!(l.pending_self_update(), None);
+    assert!(kinds(l.events()).contains(&"invalid_package".to_owned()));
+
+    // Gói đúng: tải, kiểm tra, chờ cài.
+    std::fs::write(&stored, original).unwrap();
+    let exe = l.stage_self_update(&update).await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&exe).unwrap(),
+        "@echo feco-launcher 99.0.0"
+    );
+    assert_eq!(l.pending_self_update().as_deref(), Some("99.0.0"));
+    assert!(kinds(l.events()).contains(&"self_update_staged".to_owned()));
+
+    // Khởi động lại: bản chờ thay tệp đang chạy.
+    let current = f.tmp.path().join("cai-dat").join("feco-launcher.cmd");
+    std::fs::create_dir_all(current.parent().unwrap()).unwrap();
+    std::fs::write(&current, "@echo feco-launcher 1.17.0").unwrap();
+    let installed =
+        feco_launcher::selfupdate::apply_pending(&f.paths().self_update(), &current, "1.17.0")
+            .unwrap();
+    assert_eq!(installed.as_deref(), Some("99.0.0"));
+    assert_eq!(
+        std::fs::read_to_string(&current).unwrap(),
+        "@echo feco-launcher 99.0.0"
+    );
+    assert_eq!(l.pending_self_update(), None);
+
+    // Bản bị thu hồi không được đề nghị.
+    f.revoke(&name, "Lỗi nghiêm trọng").await;
+    l.sync(Timestamp::now()).await.unwrap();
+    assert!(l.self_update("1.17.0").is_none());
+}

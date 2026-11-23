@@ -5,7 +5,7 @@ job CI `integration-scan` và `build-desktop.sh` quét lại mỗi lần chạy 
 
 - **Ngày quét**: 19/11/2026
 - **Repo**: https://github.com/katD2707/agent-mentor-maximum-experience
-- **Commit**: `0a3b8b708cf435f730a77453b8203fbff280d198` (bằng `MENTOR_COMMIT`)
+- **Commit**: `0a3b8b708cf435f730a77453b8203fbff280d198` (lần quét đầu; `MENTOR_COMMIT` hiện là bản 0.2.2, xem mục dưới)
 - **Lệnh**:
 
   ```bash
@@ -15,6 +15,23 @@ job CI `integration-scan` và `build-desktop.sh` quét lại mỗi lần chạy 
 
 - **Phạm vi**: 1.282 tệp (khoảng 27 MB), bỏ 1 tệp lớn hơn 2 MB; 848 thư viện đọc từ lockfile
   (`uv.lock`: 168 PyPI; `Cargo.lock` của app Tauri: 510 crates.io; `pnpm-lock.yaml`: 170 npm); OSV.dev đã tra.
+
+## Cập nhật lên Mentor 0.2.2 (23/11/2026)
+
+- **Commit mới**: `5ad3c9fd7f1bb6344c874ec6707787d661db6ee6` (App 0.2.2; 3 commit, 11 tệp so với `0a3b8b7`). Hai bản vá của F-Eco áp được không cần sửa.
+- **Quét commit gốc** (`scripts/scan-integration.sh`): critical 0, high 5, medium 10. Vẫn là các lỗ hổng thư viện của bản cũ.
+- **Bản vá của F-Eco nâng thư viện có lỗ hổng**:
+
+  | Thư viện | Trước | Sau | Lỗ hổng vá |
+  |---|---|---|---|
+  | `pypdf` (`uv.lock`) | 6.21.3 | 6.21.4 | GHSA-5849-834g-hvw5, GHSA-cggf-277g-3q54, GHSA-mfr5-77xh-9j7h (HIGH: vòng lặp vô hạn, tốn bộ nhớ khi đọc PDF) |
+  | `soupsieve` (`uv.lock`, Python ≥ 3.11.5) | 4.0.1 | 4.1.3 | GHSA-mmhr-3c5m-f64f |
+  | `opentelemetry-api` (`uv.lock`) | 1.45.1 | 1.45.2 | GHSA-mf5v-w3w3-f6cg (MODERATE) |
+  | `url` (`apps/app/src-tauri/Cargo.lock`) | 2.5.8 | 2.5.9 | RUSTSEC-2026-0592 |
+
+- **Quét bản đã áp bản vá**: critical 0, high 2, medium 9.
+- **Còn lại**: `soupsieve` 2.10, chỉ dùng khi chạy bằng Python dưới 3.11.5 (soupsieve 3 trở lên đòi Python mới hơn). F-Eco dựng và chạy Mentor bằng Python 3.14, nên dùng 4.1.3 đã vá. Cách hết hẳn: Mentor nâng `requires-python` lên `>=3.11.5`. Đề nghị tác giả Mentor làm việc này.
+- Workflow `integration-scan.yml` quét lại commit này mỗi thứ Hai.
 
 ## Số phát hiện
 

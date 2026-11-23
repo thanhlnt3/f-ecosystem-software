@@ -4,8 +4,8 @@ ThesisAI là ứng dụng web giúp sinh viên luyện bảo vệ đồ án tố
 
 | Phần | Repo | Commit đã dùng để tạo bản vá |
 |---|---|---|
-| Frontend (Next.js 16, cổng 3000) | https://github.com/justAchillGuy8386/thesisai-fe | `8f3735e5e630c4aedb12bc888894ed26e8a07fa3` |
-| Backend (FastAPI, cổng 8000) | https://github.com/justAchillGuy8386/thesisai-be | `d890595fbb0777e6a269203bcfecbb8af5eaf3a3` |
+| Frontend (Next.js 16, cổng 3000) | https://github.com/justAchillGuy8386/thesisai-fe | `671822188b949e2290f1c73c12bd32a47b178a0d` |
+| Backend (FastAPI, cổng 8000) | https://github.com/justAchillGuy8386/thesisai-be | `db66b57ea87394da334fda0b1cb12a6be248275f` |
 
 Trong F-Eco, ThesisAI là **app web**:
 - F-Store có trang ThesisAI với nút "Mở ứng dụng web".
