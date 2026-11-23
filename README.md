@@ -2,9 +2,9 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Phiên bản 1.5.0** (English: [README.en.md](README.en.md)) ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+> **Phiên bản 1.20.0** (English: [README.en.md](README.en.md)) ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
 >
-> Đã chạy được (nhóm task 1–14; các mục còn mở ghi ở cuối nhật ký thay đổi):
+> Đã chạy được (các mục còn mở ghi ở cuối nhật ký thay đổi và trong `QUESTIONS.md`):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
 > - Đăng nhập một lần cho app con qua OAuth 2.0/OIDC, màn hình đồng ý theo scope, API `/v1/me`, trang ứng dụng đã kết nối, thu hồi quyền, webhook, xuất dữ liệu cá nhân.
 > - Giao diện web tiếng Việt, tiếng Anh, tiếng Pháp và tiếng Nhật; trang Giao diện (`/preferences`) chọn ngôn ngữ, chủ đề, màu nhấn, 10 phong cách như F-Launcher, mật độ, cỡ chữ. Trang hồ sơ cho người đã đăng nhập (vai trò, thẻ số liệu, bảo mật, quyền riêng tư). Tài liệu có bản tiếng Anh trong `docs/en/`.
@@ -35,6 +35,15 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 >
 > - Thanh toán còn qua VNPAY (QR, thẻ ATM, thẻ quốc tế) và MoMo (ví); hóa đơn điện tử qua MISA meInvoice khi cấu hình (chưa có tài khoản thử).
 > - Bảng quản trị (`/admin`) với 5 vai trò, bắt buộc passkey hoặc khóa bảo mật; thông báo qua email và trung tâm thông báo trên web và trong F-Launcher, tắt được loại tùy chọn, hủy đăng ký không cần đăng nhập.
+>
+> - Ví F-Coin (nạp, rút, mua app, thống kê), vai trò người dùng có duyệt, dự án phần mềm (hồ sơ nhận việc, hợp đồng, ký quỹ), tin nhắn giữa khách hàng và nhà phát triển (web, F-Launcher, điện thoại).
+> - Bảng quản trị: tài khoản quản trị viên mặc định luôn có sẵn; mọi danh sách quản trị có tìm kiếm, lọc trạng thái và khoảng ngày, sắp xếp theo thời gian hoặc người gửi, dùng chung trên web, F-Launcher và điện thoại.
+> - Thông báo có bản cập nhật app trên web, F-Launcher và điện thoại; F-Launcher tự cập nhật chính nó qua TUF.
+> - Quét mã nguồn app con khi nộp và quét lại mỗi 7 ngày (bí mật lộ, mã đáng ngờ, lỗ hổng thư viện qua OSV.dev); app bên ngoài được quét tường minh trước khi tích hợp và quét lại mỗi tuần.
+> - App tích hợp sẵn trong kho dev: ThesisAI và BinhAI Office (app web), Mentor (web và desktop), VPdf (desktop Windows), cùng app mẫu Ghi chú, Bấm giờ và ba app mã nguồn mở.
+> - F-Launcher di động (Flutter, Android và iOS) đồng hành với bản desktop.
+> - Gửi email xác minh và thông báo tới hòm thư thật qua SMTP (ví dụ Gmail) ở máy dev.
+> - Giao diện mới (1.20.0): trang chào cho người chưa đăng nhập trên web; F-Launcher mặc định phong cách Trang nhã, chủ đề sáng, ô lưới lớn, có phần "Không gian của bạn" với số app đã cài và số bản cập nhật; bảng màu xanh lục lam chung cho web, desktop và điện thoại.
 >
 > Chưa có: máy ảo chạy thử app, môi trường sandbox, tên miền email (SPF, DKIM, DMARC), tài khoản thử của VNPAY, MoMo, MISA. Chưa dùng được cho người dùng cuối.
 
@@ -136,14 +145,14 @@ Lần đầu biên dịch mất vài phút. Khi thấy dòng `feco-server đang 
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.5.0"}
+# {"status":"ok","environment":"dev","version":"1.20.0"}
 ```
 
 Ở môi trường `dev`, mọi địa chỉ đã có giá trị mặc định trỏ tới hạ tầng ở bước 2, và lược đồ cơ sở dữ liệu được tạo tự động khi khởi động. Xem thêm phần [Cấu hình](#cấu-hình).
 
 ### 4. Dùng thử tài khoản
 
-Mở http://127.0.0.1:8080 trong trình duyệt. Giao diện theo ngôn ngữ của trình duyệt; đổi bằng nút **VI · EN · FR · 日本語** ở góc phải trên. Nút **Giao diện** bên cạnh mở trang tùy chỉnh: phong cách (Chân phương, Trang nhã, Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài), chủ đề sáng/tối, màu nhấn, mật độ, cỡ chữ. Tùy chỉnh lưu trên trình duyệt (cookie `feco_ui`).
+Mở http://127.0.0.1:8080 trong trình duyệt. Khi chưa đăng nhập, trang chủ là trang chào giới thiệu F-Store, cổng nhà phát triển và quyền riêng tư, kèm nút **Đăng ký** và **Đăng nhập**. Giao diện theo ngôn ngữ của trình duyệt; đổi bằng nút **VI · EN · FR · 日本語** ở góc phải trên. Nút **Giao diện** bên cạnh mở trang tùy chỉnh: phong cách (Chân phương, Trang nhã, Giấy da, Bích họa, Trời sao, Hồ sen, Lập thể, Hoa huệ, Phố cổ, Sơn mài), chủ đề sáng/tối, màu nhấn, mật độ, cỡ chữ. Tùy chỉnh lưu trên trình duyệt (cookie `feco_ui`).
 
 1. **Đăng ký** tại http://127.0.0.1:8080/registration. Mật khẩu phải dài từ 10 ký tự và không nằm trong các vụ rò rỉ dữ liệu, nên ví dụ `Password123!` sẽ bị từ chối.
    - Chọn **Vai trò**: Người dùng phổ thông (mặc định), Khách hàng cá nhân, Khách hàng doanh nghiệp, Lập trình viên cá nhân hoặc Công ty phát triển phần mềm.
@@ -274,6 +283,8 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
       đây, cài gần đây, nhóm, dung lượng);
     - **Cài đặt** (icon bánh răng ở thanh bên) mở trong cửa sổ riêng: chủ đề sáng, tối hoặc theo hệ thống; màu nhấn; cỡ chữ 80–150%; bố cục
       mặc định; cỡ ô lưới; trang mở đầu; mô tả ngắn; chế độ gọn; khôi phục mặc định.
+    - mặc định (từ 1.20.0): phong cách Trang nhã, chủ đề sáng, ô lưới lớn, cửa sổ 1280 × 800.
+      Đầu trang Thư viện là phần "Không gian của bạn" với lời chào, số app đã cài và số bản cập nhật.
 
     Mọi lựa chọn lưu trong `%LOCALAPPDATA%\F-Eco\Launcher\settings.json` và có hiệu lực ngay.
 11. Bấm vào một app để mở trang chi tiết trong cửa sổ riêng (mỗi app một cửa sổ, tối đa 6; bấm lại thì cửa sổ đó hiện lên trước): giới thiệu, tính năng, có gì mới, bảng thông tin, nút
@@ -289,7 +300,7 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
     `feco-catalog role-set <email> developer "<lý do>"`.
 14. **Thanh bên thu gọn**: bấm nút cạnh logo (hoặc Ctrl+B) để thanh bên chỉ còn icon. Rê chuột lên
     icon để xem tên; số thông báo chưa đọc và số bản cập nhật hiện thành huy hiệu. Launcher nhớ lựa
-    chọn này; cửa sổ hẹp hơn 720 px thì thanh bên tự thu gọn.
+    chọn này; cửa sổ hẹp hơn 840 px thì thanh bên tự thu gọn.
 15. **App web ThesisAI**: app web chạy trong trình duyệt và đăng nhập bằng tài khoản F-Eco.
 
     ```bash
@@ -856,8 +867,8 @@ Câu hỏi còn chờ quyết định nằm ở [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/f-dev` | CLI cho nhà phát triển: `f-dev validate`, `f-dev pack`, `f-dev publish` |
 | `tools/feco-license-check` | Kiểm tra license dịch vụ và ảnh container |
 | `infra/` | Hạ tầng dev: `docker-compose.yml`, cấu hình Kratos (schema, mẫu email) và Hydra |
-| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher; `dev-apps.sh`: đưa app mẫu, app mã nguồn mở từ GitHub, app web ThesisAI và Mentor vào kho dev; `scan-integration.sh`: quét repo bên ngoài trước khi tích hợp |
-| `integrations/` | Tích hợp app bên ngoài: `thesisai/` (bản vá "Đăng nhập bằng F-Eco" cho ThesisAI, hướng dẫn, nguồn gốc); `mentor/` (bản vá "Đăng nhập bằng F-Eco" cho Mentor, script dựng app desktop, hướng dẫn, nguồn gốc) |
+| `scripts/` | `dev-local.sh`: chạy hạ tầng không cần Docker; `tuf-drill.sh`: diễn tập chuỗi tin cậy TUF; `dev-launcher.sh`: kho TUF và client OAuth để dùng thử launcher; `dev-apps.sh`: đưa app mẫu, app mã nguồn mở từ GitHub, app web ThesisAI, Mentor, BinhAI Office và VPdf vào kho dev; `scan-integration.sh`: quét repo bên ngoài trước khi tích hợp; `scan-integrations-all.sh`: quét lại mọi app đã tích hợp |
+| `integrations/` | Tích hợp app bên ngoài: `thesisai/` (bản vá "Đăng nhập bằng F-Eco" cho ThesisAI, hướng dẫn, nguồn gốc); `mentor/` (bản vá "Đăng nhập bằng F-Eco" cho Mentor, script dựng app desktop, hướng dẫn, nguồn gốc); `binhai-office/` và `vpdf/` (script dựng từ mã nguồn, kết quả quét, giấy phép) |
 | `docs/security/` | Quy trình xử lý sự cố, quản lý khóa TUF, biên bản diễn tập |
 | `third_party/` | Khai báo license và ngoại lệ đã duyệt |
 | `openspec/` | Yêu cầu, thiết kế, kế hoạch |

@@ -1,5 +1,22 @@
 # Nhật ký thay đổi
 
+## 1.20.0 (23/11/2026)
+
+Gộp PR [#1](https://github.com/thanhlnt3/f-ecosystem-software/pull/1) "Polish UI across F-Eco apps" (`87abdb6`, đóng góp của collaborator), và cập nhật README.
+
+- **Web**:
+  - người chưa đăng nhập thấy trang chào mới, giới thiệu F-Store, cổng nhà phát triển, quyền riêng tư, kèm nút Đăng ký và Đăng nhập;
+  - thanh trên cùng, chữ và khoảng cách được làm lại (`base.html`);
+  - chuỗi mới có đủ tiếng Việt, Anh, Pháp, Nhật.
+- **F-Launcher**:
+  - mặc định mới: phong cách Trang nhã, chủ đề sáng, ô lưới lớn, cửa sổ 1280 × 800. Cài đặt đã lưu không đổi;
+  - đầu trang Thư viện có phần "Không gian của bạn": lời chào, số app đã cài, số bản cập nhật;
+  - thanh bên rộng hơn, chấm trạng thái kết nối; cửa sổ hẹp hơn 840 px (trước là 720 px) thì thanh bên tự thu gọn;
+  - Chân phương dùng bảng màu theo màu nhấn, chữ trên nút tự chọn trắng hoặc đen cho đủ tương phản.
+- **Bảng màu chung** (`feco-core`): Chân phương và Trang nhã chuyển sang tông xanh lục lam; F-Launcher di động dùng cùng màu thương hiệu.
+- **README** (Việt, Anh): cập nhật lên 1.20.0, bổ sung tóm tắt các tính năng từ 1.6.0 tới nay (ví F-Coin, tin nhắn, bộ lọc quản trị, thông báo cập nhật, F-Launcher tự cập nhật, quét mã nguồn, app tích hợp, F-Launcher di động, email thật) và giao diện mới. Từ bản này, mỗi lần nâng phiên bản đều cập nhật README.
+- Kiểm tra trước khi gộp: không xung đột với `main`; clippy sạch; unit test của `feco-launcher`, `feco-core`, `feco-server` qua. Job `secrets` của lượt chạy `pull_request` lỗi vì gitleaks-action thiếu quyền đọc PR (`Resource not accessible by integration`); lượt chạy `push` cùng commit đã quét sạch.
+
 ## 1.19.0 (23/11/2026)
 
 Thay đổi OpenSpec `vpdf-integration`: đưa app desktop VPdf (https://github.com/thanhlnt3/vpdf, tag `v0.2.0`) vào kho.

@@ -2,9 +2,9 @@
 
 An open platform for third-party developers to publish **sub-apps** through a shared launcher, with shared user accounts, a self-service app-building tool (**F-Builder**), and a paid **build-to-order app** service. The idea is inspired by the launcher + app suite model of ArtCraft, but open to third parties.
 
-> **Version 1.5.0** (Tiếng Việt: [README.md](README.md)) ([changelog](CHANGELOG.md)). Integrating a sub-app into F-Eco: [developer guide](docs/en/integration-guide.md); bringing an open-source app from GitHub into F-Eco: [docs/en/github-apps.md](docs/en/github-apps.md); configuring the payment gateways, e-invoicing and email: [docs/en/payments-setup.md](docs/en/payments-setup.md). The release package (binaries, F-SDK, documentation, `THIRD_PARTY_NOTICES`, SBOM) is built with `scripts/package-release.sh`, or automatically when a `v*` tag is pushed (`.github/workflows/release.yml`, which creates a draft release).
+> **Version 1.20.0** (Tiếng Việt: [README.md](README.md)) ([changelog](CHANGELOG.md)). Integrating a sub-app into F-Eco: [developer guide](docs/en/integration-guide.md); bringing an open-source app from GitHub into F-Eco: [docs/en/github-apps.md](docs/en/github-apps.md); configuring the payment gateways, e-invoicing and email: [docs/en/payments-setup.md](docs/en/payments-setup.md). The release package (binaries, F-SDK, documentation, `THIRD_PARTY_NOTICES`, SBOM) is built with `scripts/package-release.sh`, or automatically when a `v*` tag is pushed (`.github/workflows/release.yml`, which creates a draft release).
 >
-> Working today (task groups 1–14; open items are listed at the end of the changelog):
+> Working today (open items are listed at the end of the changelog and in `QUESTIONS.md`):
 > - Accounts: sign-up, email verification, sign-in, password-guessing protection, two-factor authentication (TOTP, recovery codes), signed-in devices, password recovery, account deletion after a 30-day waiting period.
 > - Single sign-on for sub-apps via OAuth 2.0/OIDC, a scope-based consent screen, the `/v1/me` API, a connected-apps page, permission revocation, webhooks, personal data export.
 > - Web UI in Vietnamese, English, French and Japanese; the Appearance (Giao diện) page (`/preferences`) lets you choose language, theme, accent color, the same 10 styles as F-Launcher, density and font size. A profile page for signed-in users (role, stat cards, security, privacy). Documentation has English versions in `docs/en/`.
@@ -35,6 +35,15 @@ An open platform for third-party developers to publish **sub-apps** through a sh
 >
 > - Payments also through VNPAY (QR, ATM card, international card) and MoMo (wallet); e-invoicing through MISA meInvoice when configured (no test account yet).
 > - Admin Console (`/admin`) with 5 roles, requiring a passkey or security key; notifications by email and through the notification center on the web and in F-Launcher, optional categories can be turned off, unsubscribing without signing in.
+>
+> - F-Coin wallet (top-up, withdrawal, buying apps, statistics), user roles with approval, software projects (work profiles, contracts, escrow), messaging between customers and developers (web, F-Launcher, phone).
+> - Admin Console: a default administrator account is always present; every admin list has search, status and date-range filters, and sorting by time or sender, shared by the web, F-Launcher and the phone app.
+> - App update notifications on the web, in F-Launcher and on the phone; F-Launcher updates itself through TUF.
+> - Source scanning of sub-apps on submission and every 7 days (leaked secrets, suspicious code, library vulnerabilities via OSV.dev); outside apps are scanned explicitly before integration and rescanned weekly.
+> - Apps integrated into the dev repository: ThesisAI and BinhAI Office (web apps), Mentor (web and desktop), VPdf (Windows desktop), plus the Notes and Timer sample apps and three open-source apps.
+> - F-Launcher for mobile (Flutter, Android and iOS) as a companion to the desktop version.
+> - Verification and notification emails can go to real inboxes over SMTP (for example Gmail) on a dev machine.
+> - New look (1.20.0): a landing page on the web for visitors who are not signed in; F-Launcher defaults to the Elegant style, light theme and large grid tiles, with a "Your workspace" header showing installed apps and available updates; a shared teal palette across web, desktop and phone.
 >
 > Not yet available: a virtual machine for trial runs of apps, a sandbox environment, an email domain (SPF, DKIM, DMARC), test accounts for VNPAY, MoMo and MISA. Not yet usable by end users.
 
@@ -136,14 +145,14 @@ The first build takes a few minutes. When you see the line `feco-server đang ch
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.5.0"}
+# {"status":"ok","environment":"dev","version":"1.20.0"}
 ```
 
 In the `dev` environment, every address has a default value pointing to the infrastructure from step 2, and the database schema is created automatically at startup. See also the [Configuration](#configuration) section.
 
 ### 4. Try the account features
 
-Open http://127.0.0.1:8080 in a browser. The UI follows the browser language; change it with the **VI · EN · FR · 日本語** button in the top-right corner. The **Appearance** (Giao diện) button next to it opens the customization page: style (Plain, Elegant, Parchment, Fresco, Starry night, Lotus pond, Cubist, Lily, Old quarter, Lacquer), light/dark theme, accent color, density, font size. Customizations are stored in the browser (cookie `feco_ui`).
+Open http://127.0.0.1:8080 in a browser. When you are not signed in, the home page is a landing page introducing F-Store, the Developer Portal and privacy, with **Sign up** and **Sign in** buttons. The UI follows the browser language; change it with the **VI · EN · FR · 日本語** button in the top-right corner. The **Appearance** (Giao diện) button next to it opens the customization page: style (Plain, Elegant, Parchment, Fresco, Starry night, Lotus pond, Cubist, Lily, Old quarter, Lacquer), light/dark theme, accent color, density, font size. Customizations are stored in the browser (cookie `feco_ui`).
 
 1. **Sign up** at http://127.0.0.1:8080/registration. The password must be at least 10 characters long and must not appear in known data breaches, so for example `Password123!` will be rejected.
    - Choose a **Role**: General user (default), Individual customer, Business customer, Individual developer or Software company.
@@ -274,6 +283,8 @@ app repository; it is used only to try single sign-on in step 5.
       opened, recently installed, category, size);
     - **Settings** (the gear icon in the sidebar) opens in its own window: light, dark or system theme; accent color; font size 80–150%; default
       layout; grid tile size; start page; short descriptions; compact mode; restore defaults.
+    - defaults (since 1.20.0): Elegant style, light theme, large grid tiles, a 1280 × 800 window.
+      The Library page opens with a "Your workspace" header showing a greeting, installed apps and available updates.
 
     All choices are saved in `%LOCALAPPDATA%\F-Eco\Launcher\settings.json` and take effect immediately.
 11. Click an app to open its detail page in its own window (one window per app, up to 6; clicking again brings that window to the front): introduction, features, what's new, an info table, the buttons
@@ -289,7 +300,7 @@ app repository; it is used only to try single sign-on in step 5.
     `feco-catalog role-set <email> developer "<reason>"`.
 14. **Collapsed sidebar**: click the button next to the logo (or press Ctrl+B) to show only icons
     in the sidebar. Hover an icon to see its name; unread notifications and available updates show
-    as badges. The launcher remembers your choice; windows narrower than 720 px collapse the
+    as badges. The launcher remembers your choice; windows narrower than 840 px collapse the
     sidebar automatically.
 15. **ThesisAI web app**: a web app that runs in the browser and signs in with your F-Eco account.
 
@@ -857,8 +868,8 @@ Questions awaiting a decision are in [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/f-dev` | CLI for developers: `f-dev validate`, `f-dev pack`, `f-dev publish` |
 | `tools/feco-license-check` | Checks service and container image licenses |
 | `infra/` | Dev infrastructure: `docker-compose.yml`, the Kratos configuration (schema, email templates) and Hydra |
-| `scripts/` | `dev-local.sh`: runs the infrastructure without Docker; `tuf-drill.sh`: drills the TUF chain of trust; `dev-launcher.sh`: the TUF repository and OAuth clients for trying the launcher; `dev-apps.sh`: puts sample apps, open-source apps from GitHub, the ThesisAI web app and Mentor into the dev repository; `scan-integration.sh`: scans an outside repository before integrating it |
-| `integrations/` | Integrations with outside apps: `thesisai/` (the "Sign in with F-Eco" patch for ThesisAI, guide, provenance); `mentor/` (the "Sign in with F-Eco" patch for Mentor, desktop build script, guide, provenance) |
+| `scripts/` | `dev-local.sh`: runs the infrastructure without Docker; `tuf-drill.sh`: drills the TUF chain of trust; `dev-launcher.sh`: the TUF repository and OAuth clients for trying the launcher; `dev-apps.sh`: puts sample apps, open-source apps from GitHub, the ThesisAI web app, Mentor, BinhAI Office and VPdf into the dev repository; `scan-integration.sh`: scans an outside repository before integrating it; `scan-integrations-all.sh`: rescans every integrated app |
+| `integrations/` | Integrations with outside apps: `thesisai/` (the "Sign in with F-Eco" patch for ThesisAI, guide, provenance); `mentor/` (the "Sign in with F-Eco" patch for Mentor, desktop build script, guide, provenance); `binhai-office/` and `vpdf/` (build-from-source scripts, scan results, licenses) |
 | `docs/security/` | Incident response procedure, TUF key management, drill reports |
 | `third_party/` | License declarations and approved exceptions |
 | `openspec/` | Requirements, design, plan |
