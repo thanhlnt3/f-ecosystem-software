@@ -334,7 +334,15 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
     ```
 
     Bấm **Đồng bộ**, rồi trong Cửa hàng chọn BinhAI Office → **Thêm** → **Mở**. Kết quả quét bảo mật nằm trong [integrations/binhai-office/SCAN.md](integrations/binhai-office/SCAN.md).
-19. **Tin nhắn**: thanh bên có mục "Tin nhắn" kèm số tin chưa đọc (cập nhật mỗi 60 giây). Trang Tin nhắn có danh sách hội thoại và luồng tin; gõ rồi bấm **Gửi** hoặc Ctrl+Enter. Khi đang mở một hội thoại, launcher hỏi tin mới mỗi 5 giây. Tệp đính kèm chỉ gửi trên web; tệp đã quét sạch mở bằng trình duyệt. F-Launcher di động có tab "Tin nhắn" (sáu tab).
+19. **App desktop VPdf** (Windows x64): đọc PDF offline, tìm tiếng Việt không dấu. F-Eco dựng gói từ mã nguồn đã quét, kèm PDFium và qpdf (kiểm SHA-256):
+
+    ```bash
+    integrations/vpdf/build.sh ~/.feco-dev-ext/vpdf/pkg
+    scripts/dev-apps.sh vpdf
+    ```
+
+    Bấm **Đồng bộ**, rồi trong Cửa hàng chọn VPdf → **Cài** → **Mở**. Quét bảo mật và giấy phép: [integrations/vpdf/SCAN.md](integrations/vpdf/SCAN.md), [integrations/vpdf/NOTICE.md](integrations/vpdf/NOTICE.md).
+20. **Tin nhắn**: thanh bên có mục "Tin nhắn" kèm số tin chưa đọc (cập nhật mỗi 60 giây). Trang Tin nhắn có danh sách hội thoại và luồng tin; gõ rồi bấm **Gửi** hoặc Ctrl+Enter. Khi đang mở một hội thoại, launcher hỏi tin mới mỗi 5 giây. Tệp đính kèm chỉ gửi trên web; tệp đã quét sạch mở bằng trình duyệt. F-Launcher di động có tab "Tin nhắn" (sáu tab).
 
 Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/` chỉ ở bản debug; bản release bắt buộc đặt, trừ khi `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, cùng quy tắc), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`

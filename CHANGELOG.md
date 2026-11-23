@@ -1,5 +1,23 @@
 # Nhật ký thay đổi
 
+## 1.19.0 (23/11/2026)
+
+Thay đổi OpenSpec `vpdf-integration`: đưa app desktop VPdf (https://github.com/thanhlnt3/vpdf, tag `v0.2.0`) vào kho.
+
+- **Quét trước khi tích hợp** (`2b5971b`):
+  - 0 critical, 0 high; 5 medium là thư viện ngừng bảo trì và `url` 2.5.8;
+  - rà tay việc tải và nạp PDFium/qpdf (SHA-256 ghim), mạng (offline), bí mật;
+  - chi tiết trong `integrations/vpdf/SCAN.md`.
+- **Giấy phép**:
+  - VPdf dùng MIT hoặc Apache-2.0;
+  - tám ngoại lệ của thư viện native (FreeType, IJG, libpng-2.0, AGG, MIT-Modern-Variant, LLVM-exception, VC++ runtime) được chủ dự án duyệt ngày 23/11/2026 (`integrations/vpdf/NOTICE.md`);
+  - gói kèm thư mục `licenses/`.
+- **Dựng từ mã nguồn**: `integrations/vpdf/build.sh` tải PDFium `chromium/8138` và qpdf 12.4.2 bằng script của VPdf, chạy `cargo build --release --locked`, rồi sắp gói gồm `vpdf-app.exe`, các DLL và giấy phép.
+- **CI**:
+  - job mới `vpdf` (Windows) dựng gói và kiểm gói đủ tệp;
+  - `integration-scan` quét lại VPdf ở mỗi lần CI và mỗi thứ Hai.
+- **Danh mục dev**: `scripts/dev-apps.sh vpdf` ký gói desktop và ghi F-Store.
+
 ## 1.18.0 (23/11/2026)
 
 Thay đổi OpenSpec `binhai-office-integration`: đưa app web BinhAI Office (https://github.com/binhtran89/Demo_CraftAnything) vào kho, sau khi quét bảo mật.

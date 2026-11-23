@@ -306,6 +306,31 @@ jobs:
       - name: Dựng BinhAI Office và so với bản dựng sẵn
         run: integrations/binhai-office/build.sh "$RUNNER_TEMP/binhai-site" --verify-dist
 
+  vpdf:
+    # vpdf-integration: dựng VPdf (Windows x64) từ mã nguồn ở tag và commit trong README, với PDFium
+    # và qpdf tải theo SHA-256 ghim trong scripts/fetch-native.sh của VPdf; kiểm gói đủ tệp chạy,
+    # DLL và giấy phép. Gói được đính kèm làm artifact.
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Dựng gói VPdf
+        run: |
+          integrations/vpdf/build.sh "$RUNNER_TEMP/vpdf-pkg"
+          for f in vpdf-app.exe pdfium.dll qpdf30.dll licenses/LICENSE-MIT licenses/LICENSE-APACHE \
+                   licenses/pdfium/LICENSE licenses/license-exceptions.toml licenses/F-ECO-NOTICE.md; do
+            test -f "$RUNNER_TEMP/vpdf-pkg/$f" || { echo "gói thiếu $f" >&2; exit 1; }
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vpdf-windows-x64-ci
+          path: ${{ runner.temp }}/vpdf-pkg
+          retention-days: 7
+
   thesisai-fe:
     # Bản vá thesisai-fe (đăng nhập F-Eco, Next.js 16.4.6 đã vá GHSA-2464-fhr4-w9xw và
     # GHSA-673q-mjm6-r5xr, QUESTIONS.md 109) còn áp được lên commit trong README và dựng được.

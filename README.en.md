@@ -335,7 +335,15 @@ app repository; it is used only to try single sign-on in step 5.
     ```
 
     Click **Sync**, then in the Store choose BinhAI Office → **Add** → **Open**. The security scan results are in [integrations/binhai-office/SCAN.md](integrations/binhai-office/SCAN.md).
-19. **Messages**: the sidebar has a "Messages" item with the unread count (refreshed every 60 seconds). The Messages page lists conversations and shows the thread; type and click **Send** or press Ctrl+Enter. While a conversation is open, the launcher checks for new messages every 5 seconds. Attachments are sent on the web only; scanned, clean files open in the browser. The mobile F-Launcher has a "Messages" tab (six tabs).
+19. **VPdf desktop app** (Windows x64): an offline PDF reader with Vietnamese search that ignores diacritics. F-Eco builds the package from the scanned source, with PDFium and qpdf (SHA-256 checked):
+
+    ```bash
+    integrations/vpdf/build.sh ~/.feco-dev-ext/vpdf/pkg
+    scripts/dev-apps.sh vpdf
+    ```
+
+    Click **Sync**, then in the Store choose VPdf → **Install** → **Open**. Security scan and licenses: [integrations/vpdf/SCAN.md](integrations/vpdf/SCAN.md), [integrations/vpdf/NOTICE.md](integrations/vpdf/NOTICE.md).
+20. **Messages**: the sidebar has a "Messages" item with the unread count (refreshed every 60 seconds). The Messages page lists conversations and shows the thread; type and click **Send** or press Ctrl+Enter. While a conversation is open, the launcher checks for new messages every 5 seconds. Attachments are sent on the web only; scanned, clean files open in the browser. The mobile F-Launcher has a "Messages" tab (six tabs).
 
 Launcher variables: `FECO_LAUNCHER_SERVER` (default `http://127.0.0.1:8080/` in debug builds only; required in release builds unless `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, same rule), `FECO_LAUNCHER_DATA_DIR` (data directory), `FECO_LAUNCHER_TRUSTED_ROOT`

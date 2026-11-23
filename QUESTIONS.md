@@ -515,3 +515,14 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 134. **Nơi chạy BinhAI Office khi ra mắt.** App là trang tĩnh; máy dev phục vụ ở
      `http://localhost:5180/`. Khi ra mắt, F-Eco có tự phục vụ bản dựng (CDN của F-Eco) không, hay
      tác giả tự đặt ở đâu đó? Cần đổi `web_url` sang HTTPS.
+135. **Việc còn lại ở repo VPdf.**
+     - Điền `reviewer` và `date` cho tám ngoại lệ trong `third_party/license-exceptions.toml`, theo
+       lần duyệt ngày 23/11/2026, để `vpdf-license-check` qua.
+     - Nâng `url` lên 2.5.9 (RUSTSEC-2026-0592).
+     - Có làm bản macOS (đang tạm hoãn) để F-Launcher trên macOS cài được không?
+136. **VPdf thoát ngay khi mở tệp (chưa tái hiện).** Lúc thử gói VPdf trên máy dev (23/11/2026),
+     vài lần đầu `vpdf-app.exe` có tệp PDF đi kèm thì thoát với mã 0, không có thông báo, kể cả
+     chế độ `--self-test`. Sau đó không tái hiện được với cùng tệp và cùng gói: bản release, bản
+     debug, và khi chuyển tệp sang cửa sổ đang mở đều chạy bình thường. Nghi do cơ chế một phiên
+     bản (`instance.json`) khi có cửa sổ VPdf khác đang mở. Nếu người dùng gặp lại, cần nhật ký từ
+     VPdf (bản release không có console) để tìm nguyên nhân.

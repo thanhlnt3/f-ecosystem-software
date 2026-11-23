@@ -19,6 +19,7 @@
 #                                   # (integrations/thesisai/README.md)
 #   scripts/dev-apps.sh binhai      # app web BinhAI Office (tĩnh, không đăng nhập): gói app web,
 #                                   # danh mục (integrations/binhai-office/README.md)
+#   scripts/dev-apps.sh vpdf        # app desktop VPdf (gói dựng bằng integrations/vpdf/build.sh)
 #   scripts/dev-apps.sh mentor      # Mentor: client OAuth phía máy chủ, target web; có
 #                                   # MENTOR_DESKTOP_ZIP thì thêm target desktop; logo, danh mục; in biến
 #                                   # môi trường cho gateway Mentor (integrations/mentor/README.md)
@@ -356,6 +357,24 @@ binhai() {
 ENVEOF
 }
 
+# App desktop VPdf (thay đổi vpdf-integration): đọc PDF offline, không cần đăng nhập. Gói dựng từ mã
+# nguồn bằng integrations/vpdf/build.sh (đặt VPDF_PKG nếu gói nằm chỗ khác).
+vpdf() {
+  need_repo
+  build
+  local id=vpdf name="VPdf" version="${VPDF_VERSION:-0.2.0}"
+  local pkg="${VPDF_PKG:-$EXT/vpdf/pkg}"
+  [[ -f "$pkg/vpdf-app.exe" ]] || { echo "chưa có gói: chạy integrations/vpdf/build.sh $pkg" >&2; exit 1; }
+  ICON=""
+  WEBSITE="https://github.com/thanhlnt3/vpdf"
+  DESCRIPTION="VPdf là ứng dụng đọc PDF trên Windows, chạy offline: mở file kể cả có mật khẩu hoặc hỏng, cuộn và phóng 10%–6400%, ảnh thu nhỏ, mục lục, nhiều tab, sao chép chữ, và tìm chữ khi đang gõ (gõ không dấu vẫn ra chữ có dấu). Dựng hình bằng PDFium."
+  FEATURES="Tìm khi đang gõ, gõ không dấu ra chữ có dấu|Mở file có mật khẩu, tự sửa file hỏng nhẹ|Phóng 10%–6400%, ảnh thu nhỏ, mục lục tiếng Việt|Nhiều tab, nhớ vị trí đọc|Chạy offline, không cần tài khoản"
+  NOTES="Bản 0.2.0 của VPdf: tìm chữ khi đang gõ, tìm tiếng Việt không dấu, tùy chọn phân biệt dấu, hoa thường, khớp nguyên từ. Gói do F-Eco dựng từ mã nguồn tại tag v0.2.0 (integrations/vpdf)."
+  publish_app "$id" "$name" "$version" "$pkg" "vpdf-app.exe" "" \
+    "Đọc PDF offline, tìm tiếng Việt không dấu." productivity "thanhlnt3" \
+    "MIT OR Apache-2.0" "https://github.com/thanhlnt3/vpdf" "false" "desktop-vpdf"
+}
+
 # Mentor (thay đổi mentor-integration): một app, hai target. Target `web` mở thẳng đăng nhập F-Eco
 # của gateway Mentor; target desktop (Windows) lấy từ gói `mentor-<phiên bản>-windows-x64.zip` do CI
 # của F-Eco dựng (đặt MENTOR_DESKTOP_ZIP). Mã Mentor không nằm trong gói web.
@@ -426,10 +445,11 @@ case "${1:-}" in
   samples) samples ;;
   thesisai) thesisai ;;
   binhai) binhai ;;
+  vpdf) vpdf ;;
   mentor) mentor ;;
   icons) icons ;;
   github) shift; github "$@" ;;
   opensource) opensource ;;
   all) samples; opensource ;;
-  *) sed -n '2,21p' "$0"; exit 2 ;;
+  *) sed -n '2,22p' "$0"; exit 2 ;;
 esac
