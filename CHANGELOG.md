@@ -15,6 +15,7 @@ Gộp PR [#1](https://github.com/thanhlnt3/f-ecosystem-software/pull/1) "Polish 
   - Chân phương dùng bảng màu theo màu nhấn, chữ trên nút tự chọn trắng hoặc đen cho đủ tương phản.
 - **Bảng màu chung** (`feco-core`): Chân phương và Trang nhã chuyển sang tông xanh lục lam; F-Launcher di động dùng cùng màu thương hiệu.
 - **README** (Việt, Anh): cập nhật lên 1.20.0, bổ sung tóm tắt các tính năng từ 1.6.0 tới nay (ví F-Coin, tin nhắn, bộ lọc quản trị, thông báo cập nhật, F-Launcher tự cập nhật, quét mã nguồn, app tích hợp, F-Launcher di động, email thật) và giao diện mới. Từ bản này, mỗi lần nâng phiên bản đều cập nhật README.
+- **Bảo mật thư viện**: nâng `cookie` 0.18.2 → 0.18.3 (RUSTSEC-2026-0594, nonce của cookie mã hóa có thể lặp khi tiến trình `fork()`; F-Eco không fork nên không bị ảnh hưởng, nhưng `cargo deny` chặn bản cũ). Chủ dự án cho phép nâng ngày 24/11/2026.
 - Kiểm tra trước khi gộp: không xung đột với `main`; clippy sạch; unit test của `feco-launcher`, `feco-core`, `feco-server` qua. Job `secrets` của lượt chạy `pull_request` lỗi vì gitleaks-action thiếu quyền đọc PR (`Resource not accessible by integration`); lượt chạy `push` cùng commit đã quét sạch.
 
 ## 1.19.0 (23/11/2026)
