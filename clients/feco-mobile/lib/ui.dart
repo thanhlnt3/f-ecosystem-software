@@ -10,8 +10,8 @@ import 'chat_ui.dart';
 import 'i18n.dart';
 import 'models.dart';
 
-/// Màu của logo F-Launcher.
-const brandBlue = Color(0xFF1E88E5);
+/// Màu thương hiệu F-Eco.
+const brandTeal = Color(0xFF0F6B5C);
 const brandOrange = Color(0xFFF37021);
 
 class FecoApp extends StatelessWidget {
@@ -25,15 +25,27 @@ class FecoApp extends StatelessWidget {
       title: 'F-Launcher',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: brandBlue),
+        colorScheme: ColorScheme.fromSeed(seedColor: brandTeal),
         useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFFF4F7F7),
+        appBarTheme: const AppBarTheme(
+          centerTitle: false,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: brandBlue,
+          seedColor: brandTeal,
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF101817),
+        appBarTheme: const AppBarTheme(
+          centerTitle: false,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
       ),
       home: HomePage(state: state),
     ),

@@ -179,7 +179,7 @@ fn main() -> eframe::Result {
     }
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("F-Launcher")
-        .with_inner_size([1100.0, 720.0])
+        .with_inner_size([1280.0, 800.0])
         .with_min_inner_size([720.0, 480.0]);
     if let Some(icon) = window_icon() {
         viewport = viewport.with_icon(icon);
@@ -590,9 +590,9 @@ enum Action {
 }
 
 /// Độ rộng thanh bên đầy đủ và thu gọn; cửa sổ hẹp hơn [`NARROW_WINDOW`] thì thanh bên thu gọn.
-const SIDEBAR_FULL: f32 = 210.0;
-const SIDEBAR_COMPACT: f32 = 56.0;
-const NARROW_WINDOW: f32 = 720.0;
+const SIDEBAR_FULL: f32 = 236.0;
+const SIDEBAR_COMPACT: f32 = 64.0;
+const NARROW_WINDOW: f32 = 840.0;
 
 /// Thanh bên đang thu gọn: người dùng đã chọn, hoặc cửa sổ hẹp (không đổi lựa chọn đã lưu).
 fn sidebar_collapsed(saved: bool, window_width: f32) -> bool {
@@ -1334,13 +1334,16 @@ impl eframe::App for LauncherApp {
         let mut nav = egui::Panel::left("nav")
             .exact_size(sidebar_width(collapsed))
             .resizable(false);
-        if let Some(p) = self.prefs.style.palette() {
-            nav = nav.frame(
-                egui::Frame::side_top_panel(ui.style())
-                    .fill(rgb(p.panel))
-                    .stroke(egui::Stroke::new(1.0, rgb(p.stroke))),
-            );
-        }
+        let palette = self
+            .prefs
+            .style
+            .palette()
+            .unwrap_or_else(|| brand_palette(ui.visuals().dark_mode, self.prefs.accent.rgb()));
+        nav = nav.frame(
+            egui::Frame::side_top_panel(ui.style())
+                .fill(rgb(palette.panel))
+                .stroke(egui::Stroke::new(1.0, rgb(palette.stroke))),
+        );
         nav.show(ui, |ui| {
             if collapsed {
                 self.sidebar_compact(ui, &mut actions)
@@ -1349,12 +1352,18 @@ impl eframe::App for LauncherApp {
             }
         });
         self.status_panel(ui, "status");
-        egui::CentralPanel::default().show(ui, |ui| match self.page {
-            Page::Library => self.library_page(ui, &mut actions),
-            Page::Store => self.store_page(ui, &mut actions),
-            Page::Messages => self.messages_page(ui, &mut actions),
-            Page::Notifications => self.notifications(ui, &mut actions),
-        });
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::new()
+                    .fill(ui.visuals().window_fill)
+                    .inner_margin(24.0),
+            )
+            .show(ui, |ui| match self.page {
+                Page::Library => self.library_page(ui, &mut actions),
+                Page::Store => self.store_page(ui, &mut actions),
+                Page::Messages => self.messages_page(ui, &mut actions),
+                Page::Notifications => self.notifications(ui, &mut actions),
+            });
         let ctx = ui.ctx().clone();
         self.route_dialogs(egui::ViewportId::ROOT, &actions);
         if self.dialog_viewport == egui::ViewportId::ROOT {
@@ -1584,10 +1593,20 @@ fn accent(prefs: &Prefs) -> egui::Color32 {
 
 /// Chữ trên nút dùng màu nhấn.
 fn on_accent(prefs: &Prefs) -> egui::Color32 {
-    prefs
-        .style
-        .palette()
-        .map_or(egui::Color32::WHITE, |p| rgb(p.on_accent))
+    prefs.style.palette().map_or_else(
+        || rgb(contrast_text(prefs.accent.rgb())),
+        |p| rgb(p.on_accent),
+    )
+}
+
+fn contrast_text(background: ui_style::Rgb) -> ui_style::Rgb {
+    if ui_style::contrast([255, 255, 255], background)
+        >= ui_style::contrast([17, 17, 17], background)
+    {
+        [255, 255, 255]
+    } else {
+        [17, 17, 17]
+    }
 }
 
 /// Áp ngôn ngữ, phong cách, chủ đề, màu nhấn, cỡ chữ và chế độ gọn (có hiệu lực ngay).
@@ -1612,17 +1631,9 @@ fn apply_prefs(ctx: &egui::Context, prefs: &Prefs) {
             (None, egui::Theme::Dark) => egui::Visuals::dark(),
             (None, egui::Theme::Light) => egui::Visuals::light(),
         };
-        if let Some(p) = palette {
-            painter_visuals(&mut visuals, &p, shape.stroke);
-        } else {
-            let base = if theme == egui::Theme::Dark {
-                ui_style::BASE_DARK
-            } else {
-                ui_style::BASE_LIGHT
-            };
-            visuals.warn_fg_color = rgb(base.warn);
-            visuals.error_fg_color = rgb(base.danger);
-        }
+        let base = palette
+            .unwrap_or_else(|| brand_palette(theme == egui::Theme::Dark, prefs.accent.rgb()));
+        painter_visuals(&mut visuals, &base, shape.stroke);
         visuals.selection.bg_fill = color;
         visuals.selection.stroke.color = on_accent(prefs);
         visuals.hyperlink_color = color;
@@ -1649,10 +1660,56 @@ fn apply_prefs(ctx: &egui::Context, prefs: &Prefs) {
             style.spacing.item_spacing = egui::vec2(6.0, 3.0);
             style.spacing.button_padding = egui::vec2(6.0, 2.0);
         } else {
-            style.spacing.item_spacing = egui::vec2(k(8.0), k(6.0));
-            style.spacing.button_padding = egui::vec2(k(10.0), k(4.0));
+            style.spacing.item_spacing = egui::vec2(k(10.0), k(8.0));
+            style.spacing.button_padding = egui::vec2(k(12.0), k(7.0));
         }
+        style.spacing.interact_size = egui::vec2(40.0, 36.0);
+        style
+            .text_styles
+            .insert(egui::TextStyle::Heading, egui::FontId::proportional(26.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Body, egui::FontId::proportional(15.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Small, egui::FontId::proportional(12.0));
         ctx.set_style_of(theme, style);
+    }
+}
+
+fn brand_palette(dark: bool, accent: ui_style::Rgb) -> ui_style::Palette {
+    let on_accent = contrast_text(accent);
+    if dark {
+        ui_style::Palette {
+            dark: true,
+            window: [13, 20, 34],
+            panel: [17, 26, 43],
+            card: [23, 34, 54],
+            text: [235, 241, 249],
+            weak: [166, 179, 198],
+            stroke: [44, 59, 80],
+            accent,
+            on_accent,
+            warn: [246, 191, 97],
+            danger: [255, 139, 133],
+        }
+    } else {
+        ui_style::Palette {
+            dark: false,
+            window: [246, 248, 252],
+            panel: [255, 255, 255],
+            card: [255, 255, 255],
+            text: [24, 34, 52],
+            weak: [91, 103, 122],
+            stroke: [224, 230, 239],
+            accent,
+            on_accent,
+            warn: [135, 78, 0],
+            danger: [178, 42, 42],
+        }
     }
 }
 
@@ -1663,7 +1720,7 @@ fn painter_visuals(v: &mut egui::Visuals, p: &ui_style::Palette, stroke: f32) {
         egui::Color32::from_rgb(m(a[0], b[0]), m(a[1], b[1]), m(a[2], b[2]))
     };
     v.window_fill = rgb(p.window);
-    v.panel_fill = rgb(p.window);
+    v.panel_fill = rgb(p.panel);
     v.faint_bg_color = rgb(p.card);
     v.extreme_bg_color = rgb(p.card);
     v.text_edit_bg_color = Some(rgb(p.card));
@@ -1828,9 +1885,138 @@ fn app_icon(ui: &mut egui::Ui, app_id: &str, title: &str, size: f32) -> egui::Re
     response
 }
 
+fn app_tile_identity(
+    ui: &mut egui::Ui,
+    app_id: &str,
+    title: &str,
+    info: &feco_launcher::AppInfo,
+    icon_size: f32,
+) {
+    ui.horizontal(|ui| {
+        app_icon(ui, app_id, title, icon_size);
+        ui.vertical(|ui| {
+            ui.add(egui::Label::new(egui::RichText::new(title).strong()).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(byline(info)).small().weak()).truncate());
+        });
+    });
+}
+
 /// Nút hành động chính: icon và chữ trên nền màu nhấn.
 fn primary_button(ui: &mut egui::Ui, prefs: &Prefs, enabled: bool, icon: Icon, text: &str) -> bool {
     icons::filled(ui, icon, text, accent(prefs), on_accent(prefs), enabled).clicked()
+}
+
+const HERO_STACK_BREAKPOINT: f32 = 760.0;
+const HERO_METRICS_WIDTH: f32 = 300.0;
+const HERO_COLUMN_GAP: f32 = 24.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct HeroLayout {
+    stacked: bool,
+    intro_width: f32,
+    metrics_width: f32,
+}
+
+fn hero_layout(available_width: f32) -> HeroLayout {
+    if available_width < HERO_STACK_BREAKPOINT {
+        HeroLayout {
+            stacked: true,
+            intro_width: available_width,
+            metrics_width: available_width,
+        }
+    } else {
+        HeroLayout {
+            stacked: false,
+            intro_width: (available_width - HERO_METRICS_WIDTH - HERO_COLUMN_GAP).max(0.0),
+            metrics_width: HERO_METRICS_WIDTH,
+        }
+    }
+}
+
+fn hero_metric(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: usize,
+    foreground: egui::Color32,
+    muted: egui::Color32,
+) {
+    egui::Frame::new()
+        .fill(egui::Color32::from_rgba_unmultiplied(255, 255, 255, 12))
+        .stroke(egui::Stroke::new(
+            1.0,
+            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 24),
+        ))
+        .corner_radius(12.0)
+        .inner_margin(12.0)
+        .show(ui, |ui| {
+            ui.add(egui::Label::new(egui::RichText::new(label).small().color(muted)).wrap());
+            ui.add_space(6.0);
+            ui.label(
+                egui::RichText::new(value.to_string())
+                    .size(27.0)
+                    .strong()
+                    .color(foreground),
+            );
+        });
+}
+
+fn hero_metrics(
+    ui: &mut egui::Ui,
+    updates: usize,
+    installed: usize,
+    foreground: egui::Color32,
+    muted: egui::Color32,
+) {
+    let gap = ui.spacing().item_spacing.x;
+    let metric_width = ((ui.available_width() - gap) / 2.0).max(0.0);
+    ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(
+            egui::vec2(metric_width, 0.0),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| hero_metric(ui, t("Bản cập nhật"), updates, foreground, muted),
+        );
+        ui.allocate_ui_with_layout(
+            egui::vec2(metric_width, 0.0),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| hero_metric(ui, t("Đã cài đặt"), installed, foreground, muted),
+        );
+    });
+}
+
+fn hero_intro(
+    ui: &mut egui::Ui,
+    greeting: &str,
+    foreground: egui::Color32,
+    muted: egui::Color32,
+    highlight: egui::Color32,
+) {
+    ui.set_width(ui.available_width());
+    ui.label(
+        egui::RichText::new(t("Không gian của bạn"))
+            .small()
+            .strong()
+            .color(highlight),
+    );
+    ui.add_space(5.0);
+    ui.add(
+        egui::Label::new(
+            egui::RichText::new(greeting)
+                .size(26.0)
+                .strong()
+                .color(foreground),
+        )
+        .wrap(),
+    );
+    ui.add_space(4.0);
+    ui.add(
+        egui::Label::new(
+            egui::RichText::new(t(
+                "Tập trung các ứng dụng đã cài đặt và bản cập nhật mới nhất.",
+            ))
+            .color(muted),
+        )
+        .wrap(),
+    );
 }
 
 fn size_mb(bytes: u64) -> String {
@@ -1871,7 +2057,7 @@ fn install_label(entry: &CatalogEntry) -> &'static str {
 }
 
 /// Lề trong của ô lưới.
-const TILE_MARGIN: f32 = 10.0;
+const TILE_MARGIN: f32 = 14.0;
 
 /// Số cột và chiều rộng mỗi ô: càng nhiều cột càng tốt mà ô không hẹp hơn `min_width`; các ô
 /// trải đều để hàng lấp đầy chiều rộng.
@@ -1887,7 +2073,7 @@ fn card_frame(ui: &egui::Ui) -> egui::Frame {
         .fill(visuals.faint_bg_color)
         .stroke(visuals.widgets.noninteractive.bg_stroke)
         .corner_radius(f32::from(ui_style::current().shape().card_radius))
-        .inner_margin(10.0)
+        .inner_margin(14.0)
 }
 
 impl LauncherApp {
@@ -2038,8 +2224,8 @@ impl LauncherApp {
     fn sidebar(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            app_icon(ui, "f-launcher", "F Launcher", 28.0);
-            ui.heading("F-Launcher");
+            app_icon(ui, "f-launcher", "F Launcher", 34.0);
+            ui.label(egui::RichText::new("F-Launcher").size(19.0).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if icons::button(
                     ui,
@@ -2060,11 +2246,20 @@ impl LauncherApp {
             motif_band(ui, self.prefs.style, w, 8.0);
         }
         ui.add_space(4.0);
-        if self.view.online {
-            ui.weak(t("Đã kết nối"));
-        } else {
-            ui.colored_label(warn_color(ui), t("Đang ngoại tuyến"));
-        }
+        ui.horizontal(|ui| {
+            let (color, label) = if self.view.online {
+                (egui::Color32::from_rgb(35, 155, 91), t("Đã kết nối"))
+            } else {
+                (warn_color(ui), t("Đang ngoại tuyến"))
+            };
+            let (dot, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
+            ui.painter().circle_filled(dot.center(), 4.0, color);
+            ui.label(
+                egui::RichText::new(label)
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
+        });
         ui.add_space(12.0);
         let width = ui.available_width();
         for (icon, page, name, count) in self.nav_entries() {
@@ -2214,15 +2409,35 @@ impl LauncherApp {
         } else {
             (t("Thư viện"), self.view.my_apps.len())
         };
+        let subtitle = if store {
+            t("Khám phá những ứng dụng đáng tin cậy cho công việc và cuộc sống.")
+        } else {
+            t("Quản lý ứng dụng đã cài đặt, bản cập nhật và quyền truy cập.")
+        };
         let categories = if store {
             library::categories(&self.view.catalog)
         } else {
             library::categories(&self.view.my_apps)
         };
         let mut prefs = self.prefs.clone();
-        ui.horizontal(|ui| {
-            ui.heading(title);
-            ui.weak(tf("{} app", &[&count]));
+        ui.horizontal_wrapped(|ui| {
+            ui.vertical(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(title).size(28.0).strong());
+                    egui::Frame::new()
+                        .fill(ui.visuals().widgets.inactive.weak_bg_fill)
+                        .corner_radius(10.0)
+                        .inner_margin(egui::vec2(9.0, 4.0))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(tf("{} app", &[&count]))
+                                    .small()
+                                    .strong(),
+                            );
+                        });
+                });
+                ui.label(egui::RichText::new(subtitle).color(ui.visuals().weak_text_color()));
+            });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 for (layout, icon) in [(Layout::List, Icon::List), (Layout::Grid, Icon::Grid)] {
                     let selected = prefs.layout == layout;
@@ -2247,53 +2462,56 @@ impl LauncherApp {
                 }
             });
         });
-        ui.add_space(4.0);
+        ui.add_space(16.0);
         let filter = if store {
             &mut self.store_filter
         } else {
             &mut self.library_filter
         };
-        ui.horizontal(|ui| {
-            ui.add(
-                egui::TextEdit::singleline(&mut filter.text)
-                    .hint_text(t("Tìm theo tên, mô tả, nhà phát triển..."))
-                    .desired_width(260.0),
-            );
-            let selected = filter
-                .category
-                .as_ref()
-                .and_then(|c| categories.iter().find(|(code, _)| code == c))
-                .map_or(t("Mọi nhóm").to_owned(), |(_, label)| {
-                    tf("Nhóm: {}", &[&label])
-                });
-            egui::ComboBox::from_id_salt(("category", store))
-                .selected_text(selected)
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut filter.category, None, t("Mọi nhóm"));
-                    for (code, label) in &categories {
-                        ui.selectable_value(&mut filter.category, Some(code.clone()), label);
-                    }
-                });
-            let (sort, choices): (&mut SortKey, &[SortKey]) = if store {
-                (&mut prefs.store_sort, &SortKey::for_store())
-            } else {
-                (&mut prefs.library_sort, &SortKey::for_library())
-            };
-            egui::ComboBox::from_id_salt(("sort", store))
-                .selected_text(tf("Sắp xếp: {}", &[&sort.label()]))
-                .show_ui(ui, |ui| {
-                    for key in choices {
-                        ui.selectable_value(sort, *key, key.label());
-                    }
-                });
-            if (!filter.text.is_empty() || filter.category.is_some())
-                && icons::button(ui, Icon::Close, t("Xóa bộ lọc"), false, true).clicked()
-            {
-                *filter = Filter::default();
-            }
+        card_frame(ui).inner_margin(12.0).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_wrapped(|ui| {
+                ui.add(
+                    egui::TextEdit::singleline(&mut filter.text)
+                        .hint_text(t("Tìm theo tên, mô tả, nhà phát triển..."))
+                        .desired_width((ui.available_width() * 0.38).clamp(240.0, 420.0)),
+                );
+                let selected = filter
+                    .category
+                    .as_ref()
+                    .and_then(|c| categories.iter().find(|(code, _)| code == c))
+                    .map_or(t("Mọi nhóm").to_owned(), |(_, label)| {
+                        tf("Nhóm: {}", &[&label])
+                    });
+                egui::ComboBox::from_id_salt(("category", store))
+                    .selected_text(selected)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut filter.category, None, t("Mọi nhóm"));
+                        for (code, label) in &categories {
+                            ui.selectable_value(&mut filter.category, Some(code.clone()), label);
+                        }
+                    });
+                let (sort, choices): (&mut SortKey, &[SortKey]) = if store {
+                    (&mut prefs.store_sort, &SortKey::for_store())
+                } else {
+                    (&mut prefs.library_sort, &SortKey::for_library())
+                };
+                egui::ComboBox::from_id_salt(("sort", store))
+                    .selected_text(tf("Sắp xếp: {}", &[&sort.label()]))
+                    .show_ui(ui, |ui| {
+                        for key in choices {
+                            ui.selectable_value(sort, *key, key.label());
+                        }
+                    });
+                if (!filter.text.is_empty() || filter.category.is_some())
+                    && icons::button(ui, Icon::Close, t("Xóa bộ lọc"), false, true).clicked()
+                {
+                    *filter = Filter::default();
+                }
+            });
         });
         self.set_prefs(prefs);
-        ui.add_space(6.0);
+        ui.add_space(14.0);
     }
 
     fn query(&self, store: bool) -> library::Query {
@@ -2329,9 +2547,10 @@ impl LauncherApp {
         let body = ui.text_style_height(&egui::TextStyle::Body);
         let small = ui.text_style_height(&egui::TextStyle::Small);
         let gap = ui.spacing().item_spacing.y;
-        let icon = (self.prefs.tile_size.width() * 0.42).clamp(48.0, 88.0);
+        let icon = (self.prefs.tile_size.width() * 0.30).clamp(48.0, 64.0);
         let button = ui.spacing().interact_size.y.max(28.0);
-        let mut h = TILE_MARGIN * 2.0 + icon + 4.0 + body * 3.0 + button + gap * 5.0;
+        let identity = icon.max(body + small + gap);
+        let mut h = TILE_MARGIN * 2.0 + identity + body + button + gap * 4.0;
         if self.prefs.show_summary {
             h += small + gap;
         }
@@ -2372,13 +2591,13 @@ impl LauncherApp {
                         } else {
                             visuals.widgets.noninteractive.bg_stroke
                         };
-                        ui.painter().rect(
-                            rect,
-                            radius,
-                            visuals.faint_bg_color,
-                            stroke,
-                            egui::StrokeKind::Inside,
-                        );
+                        let fill = if response.hovered() {
+                            visuals.widgets.hovered.weak_bg_fill
+                        } else {
+                            visuals.faint_bg_color
+                        };
+                        ui.painter()
+                            .rect(rect, radius, fill, stroke, egui::StrokeKind::Inside);
                         let mut child = ui.new_child(
                             egui::UiBuilder::new()
                                 .max_rect(rect.shrink(TILE_MARGIN))
@@ -2500,6 +2719,73 @@ impl LauncherApp {
         }
     }
 
+    fn library_hero(&self, ui: &mut egui::Ui) {
+        let installed = self.view.my_apps.len();
+        let updates = update_suggestions(&self.view.my_apps, &self.prefs.skipped_updates).len();
+        let greeting = self
+            .view
+            .user
+            .as_deref()
+            .filter(|name| !name.trim().is_empty())
+            .map(|name| tf("Chào mừng trở lại, {}", &[&name]))
+            .unwrap_or_else(|| t("Chào mừng đến với F-Eco").to_owned());
+        let background = egui::Color32::from_rgb(18, 35, 59);
+        let foreground = egui::Color32::from_rgb(241, 246, 253);
+        let muted = egui::Color32::from_rgb(190, 204, 223);
+        let highlight = egui::Color32::from_rgb(141, 195, 255);
+        egui::Frame::new()
+            .fill(background)
+            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(36, 57, 86)))
+            .corner_radius(20.0)
+            .inner_margin(24.0)
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let layout = hero_layout(ui.available_width());
+                let area = ui.available_rect_before_wrap();
+                let painter = ui.painter().with_clip_rect(area);
+                let accent = accent(&self.prefs);
+                painter.circle_filled(
+                    egui::pos2(area.right() - 88.0, area.center().y),
+                    72.0,
+                    egui::Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 24),
+                );
+                painter.circle_stroke(
+                    egui::pos2(area.right() - 88.0, area.center().y),
+                    88.0,
+                    egui::Stroke::new(
+                        1.0,
+                        egui::Color32::from_rgba_unmultiplied(
+                            accent.r(),
+                            accent.g(),
+                            accent.b(),
+                            68,
+                        ),
+                    ),
+                );
+                if layout.stacked {
+                    ui.vertical(|ui| {
+                        hero_intro(ui, &greeting, foreground, muted, highlight);
+                        ui.add_space(18.0);
+                        hero_metrics(ui, updates, installed, foreground, muted);
+                    });
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(layout.intro_width, 0.0),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| hero_intro(ui, &greeting, foreground, muted, highlight),
+                        );
+                        ui.add_space(HERO_COLUMN_GAP);
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(layout.metrics_width, 0.0),
+                            egui::Layout::top_down(egui::Align::Center),
+                            |ui| hero_metrics(ui, updates, installed, foreground, muted),
+                        );
+                    });
+                }
+            });
+    }
+
     fn library_page(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let pending = update_suggestions(&self.view.my_apps, &self.prefs.skipped_updates);
         if !pending.is_empty() {
@@ -2521,6 +2807,8 @@ impl LauncherApp {
                 });
             ui.add_space(6.0);
         }
+        self.library_hero(ui);
+        ui.add_space(18.0);
         self.toolbar(ui, actions);
         if self.view.my_apps.is_empty() {
             ui.add_space(24.0);
@@ -2543,11 +2831,9 @@ impl LauncherApp {
         let show_summary = self.prefs.show_summary;
         let clicked = match self.prefs.layout {
             Layout::Grid => self.grid(ui, &shown, |me, ui, app| {
-                let icon = (me.prefs.tile_size.width() * 0.42).clamp(48.0, 88.0);
-                ui.vertical_centered(|ui| app_icon(ui, &app.app, &app.title, icon));
-                ui.add_space(4.0);
-                ui.add(egui::Label::new(egui::RichText::new(&app.title).strong()).truncate());
-                ui.add(egui::Label::new(egui::RichText::new(byline(&app.info)).weak()).truncate());
+                let icon = (me.prefs.tile_size.width() * 0.30).clamp(48.0, 64.0);
+                app_tile_identity(ui, &app.app, &app.title, &app.info, icon);
+                ui.add_space(8.0);
                 if show_summary {
                     if let Some(s) = &app.info.summary {
                         ui.add(egui::Label::new(egui::RichText::new(s).small()).truncate());
@@ -2722,13 +3008,9 @@ impl LauncherApp {
         let show_summary = self.prefs.show_summary;
         let clicked = match self.prefs.layout {
             Layout::Grid => self.grid(ui, &shown, |me, ui, entry| {
-                let icon = (me.prefs.tile_size.width() * 0.42).clamp(48.0, 88.0);
-                ui.vertical_centered(|ui| app_icon(ui, &entry.app, &entry.title, icon));
-                ui.add_space(4.0);
-                ui.add(egui::Label::new(egui::RichText::new(&entry.title).strong()).truncate());
-                ui.add(
-                    egui::Label::new(egui::RichText::new(byline(&entry.info)).weak()).truncate(),
-                );
+                let icon = (me.prefs.tile_size.width() * 0.30).clamp(48.0, 64.0);
+                app_tile_identity(ui, &entry.app, &entry.title, &entry.info, icon);
+                ui.add_space(8.0);
                 if show_summary {
                     if let Some(s) = &entry.info.summary {
                         ui.add(egui::Label::new(egui::RichText::new(s).small()).truncate());
@@ -4259,6 +4541,28 @@ async fn open_app(s: &Shared, app: &str) -> Result<String, String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn brand_palette_preserves_readable_contrast() {
+        for dark in [false, true] {
+            for accent in Accent::ALL {
+                let palette = brand_palette(dark, accent.rgb());
+                for background in [palette.window, palette.panel, palette.card] {
+                    assert!(
+                        ui_style::contrast(palette.text, background) >= 4.5,
+                        "text contrast failed for dark={dark}, accent={accent:?}"
+                    );
+                    assert!(
+                        ui_style::contrast(palette.weak, background) >= 3.0,
+                        "secondary text contrast failed for dark={dark}, accent={accent:?}"
+                    );
+                    assert!(ui_style::contrast(palette.warn, background) >= 4.5);
+                    assert!(ui_style::contrast(palette.danger, background) >= 4.5);
+                }
+                assert!(ui_style::contrast(palette.on_accent, palette.accent) >= 4.5);
+            }
+        }
+    }
+
     fn wallet_view(balance: i64, owned: &[&str], signed_in: bool) -> View {
         let body = serde_json::json!({
             "balance": balance, "rate_vnd": 1000, "frozen": false,
@@ -4364,9 +4668,10 @@ mod tests {
     /// launcher-sidebar-and-web-apps, scenario "Thu gọn thanh bên", "Cửa sổ hẹp".
     #[test]
     fn sidebar_collapses_when_chosen_or_narrow() {
-        assert_eq!(sidebar_width(sidebar_collapsed(false, 1000.0)), 210.0);
-        assert_eq!(sidebar_width(sidebar_collapsed(true, 1000.0)), 56.0);
-        // Cửa sổ 700 px: thu gọn mà không đổi lựa chọn đã lưu; rộng lại thì đầy đủ.
+        assert_eq!(sidebar_width(sidebar_collapsed(false, 1000.0)), 236.0);
+        assert_eq!(sidebar_width(sidebar_collapsed(true, 1000.0)), 64.0);
+        // Cửa sổ hẹp tự thu gọn thanh bên mà không đổi lựa chọn đã lưu.
+        assert!(sidebar_collapsed(false, 800.0));
         assert!(sidebar_collapsed(false, 700.0));
         assert!(!sidebar_collapsed(false, 1000.0));
         assert!(sidebar_collapsed(true, 700.0));
@@ -4457,6 +4762,19 @@ mod tests {
         i18n::set_language(Language::Vi);
         assert_eq!(coins(1250), "1.250 F-Coin");
         assert_eq!(tf("Còn thiếu {}", &[&coins(39)]), "Còn thiếu 39 F-Coin");
+    }
+
+    #[test]
+    fn library_hero_reserves_space_for_metrics() {
+        let wide = hero_layout(960.0);
+        assert!(!wide.stacked);
+        assert_eq!(wide.metrics_width, HERO_METRICS_WIDTH);
+        assert!(wide.intro_width >= 400.0);
+
+        let narrow = hero_layout(640.0);
+        assert!(narrow.stacked);
+        assert_eq!(narrow.intro_width, 640.0);
+        assert_eq!(narrow.metrics_width, 640.0);
     }
 
     /// Scenario "Ô lưới đều nhau": các ô cùng chiều rộng, lấp đầy hàng, không hẹp hơn cỡ đã chọn.

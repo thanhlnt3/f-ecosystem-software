@@ -70,16 +70,68 @@
   </div>
 </main>
 {% else %}
-<main>
-  <div class="card">
+<main class="landing">
 {% for m in notices %}<div class="msg {{ m.kind }}" role="status">{{ m.text }}</div>{% endfor %}
-  <h1>{{ i18n.t("home.welcome") }}</h1>
-  <p class="muted">{{ i18n.t("home.tagline") }}</p>
-  <div class="links">
-    <a href="/login">{{ i18n.t("home.login") }}</a>
-    <a href="/registration">{{ i18n.t("home.register") }}</a>
-  </div>
-  </div>
+  <section class="landing-hero" aria-labelledby="landing-title">
+    <div class="hero-copy">
+      <p class="hero-eyebrow">{{ i18n.t("home.welcome") }}</p>
+      <h1 id="landing-title">{{ i18n.t("home.hero_title") }}</h1>
+      <p class="hero-lead">{{ i18n.t("home.tagline") }}</p>
+      <div class="hero-actions">
+        <a class="btn" href="/registration">{{ i18n.t("home.register") }}</a>
+        <a class="btn secondary" href="/login">{{ i18n.t("home.login") }}</a>
+      </div>
+    </div>
+    <div class="hero-visual" aria-hidden="true">
+      <div class="ecosystem-window">
+        <div class="ecosystem-heading">
+          <span class="ecosystem-mark">F</span>
+          <span><strong>F-Eco</strong><small>{{ i18n.t("home.tagline") }}</small></span>
+        </div>
+        <div class="ecosystem-list">
+          <div class="ecosystem-item"><span>L</span><span><strong>F-Launcher</strong><small>{{ i18n.t("home.product_launcher") }}</small></span><i class="ecosystem-status"></i></div>
+          <div class="ecosystem-item"><span>B</span><span><strong>F-Builder</strong><small>{{ i18n.t("home.product_builder") }}</small></span><i class="ecosystem-status"></i></div>
+          <div class="ecosystem-item"><span>F</span><span><strong>F-Eco</strong><small>{{ i18n.t("home.product_account") }}</small></span><i class="ecosystem-status"></i></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="landing-section" aria-labelledby="platform-title">
+    <div class="section-heading">
+      <p class="section-kicker">{{ i18n.t("home.platform_kicker") }}</p>
+      <h2 id="platform-title">{{ i18n.t("home.platform_title") }}</h2>
+    </div>
+    <div class="feature-grid">
+      <a class="feature-card" href="/store">
+        <span class="feature-number">01 / 03</span>
+        <strong>{{ i18n.t("nav.store") }}</strong>
+        <p>{{ i18n.t("home.feature_store") }}</p>
+        <span class="feature-arrow" aria-hidden="true">→</span>
+      </a>
+      <a class="feature-card" href="/developer">
+        <span class="feature-number">02 / 03</span>
+        <strong>{{ i18n.t("nav.developer") }}</strong>
+        <p>{{ i18n.t("home.feature_developer") }}</p>
+        <span class="feature-arrow" aria-hidden="true">→</span>
+      </a>
+      <a class="feature-card" href="/apps">
+        <span class="feature-number">03 / 03</span>
+        <strong>{{ i18n.t("profile.privacy") }}</strong>
+        <p>{{ i18n.t("home.feature_account") }}</p>
+        <span class="feature-arrow" aria-hidden="true">→</span>
+      </a>
+    </div>
+    <div class="trust-panel">
+      <span class="trust-icon" aria-hidden="true">✓</span>
+      <div><strong>{{ i18n.t("home.trust_title") }}</strong><p>{{ i18n.t("home.trust_desc") }}</p></div>
+    </div>
+  </section>
+
+  <section class="landing-cta" aria-labelledby="landing-cta-title">
+    <div><h2 id="landing-cta-title">{{ i18n.t("home.cta_title") }}</h2><p>{{ i18n.t("home.cta_desc") }}</p></div>
+    <a class="btn" href="/registration">{{ i18n.t("home.register") }}</a>
+  </section>
 </main>
 {% endif %}
 {% endblock %}

@@ -28,6 +28,23 @@ pub(crate) const JA: &[(&str, &str)] = &[
     ("Sắp xếp: {}", "並べ替え: {}"),
     ("Xóa bộ lọc", "フィルターをクリア"),
     ("Cập nhật tất cả ({})", "すべて更新 ({})"),
+    ("Chào mừng trở lại, {}", "おかえりなさい、{} さん"),
+    ("Chào mừng đến với F-Eco", "F-Eco へようこそ"),
+    ("Không gian của bạn", "あなたのワークスペース"),
+    (
+        "Tập trung các ứng dụng đã cài đặt và bản cập nhật mới nhất.",
+        "インストール済みアプリと最新の更新をひとつの場所に。",
+    ),
+    ("Đã cài đặt", "インストール済み"),
+    ("Bản cập nhật", "更新"),
+    (
+        "Khám phá những ứng dụng đáng tin cậy cho công việc và cuộc sống.",
+        "仕事や日常に役立つ、信頼できるアプリを見つけましょう。",
+    ),
+    (
+        "Quản lý ứng dụng đã cài đặt, bản cập nhật và quyền truy cập.",
+        "インストール済みアプリ、更新、アクセス権を管理します。",
+    ),
     ("Không có app nào khớp", "一致するアプリはありません"),
     ("Chưa cài app nào.", "まだアプリがインストールされていません。"),
     ("Mở Cửa hàng", "ストアを開く"),

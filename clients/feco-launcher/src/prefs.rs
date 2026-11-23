@@ -118,9 +118,9 @@ impl TileSize {
     /// Chiều rộng của một ô lưới (điểm ảnh logic, trước khi nhân cỡ chữ).
     pub const fn width(self) -> f32 {
         match self {
-            TileSize::Small => 132.0,
-            TileSize::Medium => 172.0,
-            TileSize::Large => 220.0,
+            TileSize::Small => 152.0,
+            TileSize::Medium => 192.0,
+            TileSize::Large => 232.0,
         }
     }
 }
@@ -173,18 +173,18 @@ pub struct Prefs {
 impl Default for Prefs {
     fn default() -> Self {
         Self {
-            theme: Theme::System,
+            theme: Theme::Light,
             accent: Accent::Blue,
             font_scale: 1.0,
             layout: Layout::Grid,
-            tile_size: TileSize::Medium,
+            tile_size: TileSize::Large,
             start_page: StartPage::Library,
             show_summary: true,
             compact: false,
             library_sort: SortKey::Name,
             store_sort: SortKey::Name,
             language: Language::Vi,
-            style: UiStyle::Plain,
+            style: UiStyle::Elegant,
             skipped_updates: Default::default(),
             sidebar_collapsed: false,
         }
@@ -362,21 +362,20 @@ mod tests {
         assert!(!prefs.compact && prefs.show_summary);
     }
 
-    /// launcher-personalization: settings.json của 1.1 (không có language, style) giữ giao diện
-    /// cũ; giá trị lạ về mặc định; lưu rồi đọc lại giữ nguyên.
+    /// Cài đặt cũ thiếu language và style dùng phong cách mặc định mới; giá trị lạ về mặc định.
     #[test]
     fn language_and_style_are_saved() {
         let old = serde_json::json!({"theme": "dark", "layout": "list"});
         let prefs = Prefs::from_value(&old);
         assert_eq!(prefs.language, Language::Vi);
-        assert_eq!(prefs.style, UiStyle::Plain);
+        assert_eq!(prefs.style, UiStyle::Elegant);
         assert_eq!(prefs.layout, Layout::List);
 
         let odd = serde_json::json!({"language": "de", "style": "rembrandt"});
         let prefs = Prefs::from_value(&odd);
         assert_eq!(
             (prefs.language, prefs.style),
-            (Language::Vi, UiStyle::Plain)
+            (Language::Vi, UiStyle::Elegant)
         );
 
         let dir = tempfile::tempdir().unwrap();
@@ -396,7 +395,10 @@ mod tests {
         // Scenario "Khôi phục mặc định".
         Prefs::default().save(&path).unwrap();
         let back = Prefs::load(&path).0;
-        assert_eq!((back.language, back.style), (Language::Vi, UiStyle::Plain));
+        assert_eq!(
+            (back.language, back.style),
+            (Language::Vi, UiStyle::Elegant)
+        );
     }
 
     /// launcher-sidebar-and-web-apps, scenario "Thu gọn thanh bên", "Mở lại launcher",
