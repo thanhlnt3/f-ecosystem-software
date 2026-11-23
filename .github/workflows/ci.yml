@@ -212,6 +212,15 @@ jobs:
         working-directory: clients/feco-mobile
     steps:
       - uses: actions/checkout@v4
+      # Máy CI có lúc hết đĩa khi cài ảnh hệ thống của trình giả lập ("No space left on device",
+      # 23/11/2026): bỏ các bộ công cụ job này không dùng (.NET, GHC, CodeQL, Swift, Boost).
+      - name: Dọn dung lượng đĩa
+        working-directory: .
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift /usr/local/share/boost
+          df -h /
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

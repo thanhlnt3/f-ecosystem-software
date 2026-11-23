@@ -17,6 +17,7 @@ Thay đổi OpenSpec `vpdf-integration`: đưa app desktop VPdf (https://github.
   - job mới `vpdf` (Windows) dựng gói và kiểm gói đủ tệp;
   - `integration-scan` quét lại VPdf ở mỗi lần CI và mỗi thứ Hai.
 - **Danh mục dev**: `scripts/dev-apps.sh vpdf` ký gói desktop và ghi F-Store.
+- **CI Android**: job `mobile-android` dọn dung lượng đĩa trước khi cài trình giả lập. Máy CI đã hết đĩa khi cài ảnh hệ thống.
 
 ## 1.18.0 (23/11/2026)
 
