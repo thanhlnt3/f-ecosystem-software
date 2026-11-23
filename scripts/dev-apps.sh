@@ -17,6 +17,8 @@
 #   scripts/dev-apps.sh thesisai    # app web ThesisAI: client OAuth phía máy chủ (có secret), gói app
 #                                   # web, logo, danh mục; in biến môi trường cho backend ThesisAI
 #                                   # (integrations/thesisai/README.md)
+#   scripts/dev-apps.sh binhai      # app web BinhAI Office (tĩnh, không đăng nhập): gói app web,
+#                                   # danh mục (integrations/binhai-office/README.md)
 #   scripts/dev-apps.sh mentor      # Mentor: client OAuth phía máy chủ, target web; có
 #                                   # MENTOR_DESKTOP_ZIP thì thêm target desktop; logo, danh mục; in biến
 #                                   # môi trường cho gateway Mentor (integrations/mentor/README.md)
@@ -321,6 +323,39 @@ thesisai() {
 ENVEOF
 }
 
+# App web BinhAI Office (thay đổi binhai-office-integration): app tĩnh, không cần đăng nhập. Gói
+# chỉ có thông tin app; bản dựng từ mã nguồn (integrations/binhai-office/build.sh) được phục vụ ở
+# http://localhost:5180 (đặt BINHAI_URL để đổi).
+binhai() {
+  need_repo
+  build
+  local id=binhai-office name="BinhAI Office" version="${BINHAI_VERSION:-0.1.0}"
+  local front="${BINHAI_URL:-http://localhost:5180/}"
+  local pkg="$EXT/pkg/$id"
+  rm -rf "$pkg"
+  mkdir -p "$pkg"
+  "$PY" -I -c 'import json,sys; json.dump({"name": sys.argv[1], "url": sys.argv[2]}, open(sys.argv[3], "w", encoding="utf-8"), ensure_ascii=False)' \
+    "$name" "$front" "$pkg/webapp.json"
+  printf 'BinhAI Office: https://github.com/binhtran89/Demo_CraftAnything\nGói này chỉ chứa thông tin app web; ứng dụng chạy trong trình duyệt.\n' > "$pkg/NOTICE.txt"
+  WEB_URL="$front"
+  ICON=""
+  WEBSITE=""
+  DESCRIPTION="BinhAI Office là bản thử giao diện của một phòng AI làm việc trên máy tính: người dùng ra lệnh bằng tiếng Việt, 18 agent chia việc theo 8 quy trình, tự kiểm tra rồi gửi kết quả chờ duyệt, và văn phòng 3D phản ánh trạng thái công việc. Bản này chạy hoàn toàn trong trình duyệt với dữ liệu mô phỏng, không gọi dịch vụ AI và không cần tài khoản."
+  FEATURES="Ra lệnh bằng tiếng Việt, tự phân loại quy trình|18 agent, 8 quy trình, bước kiểm tra chất lượng và phê duyệt|Văn phòng 3D theo dõi công việc|Xuất kết quả ra Markdown, Word, Excel|Dữ liệu lưu trên trình duyệt, không gửi ra ngoài"
+  NOTES="Bản tích hợp đầu tiên: dựng từ mã nguồn tại commit 86a1fa3, đã quét bảo mật (integrations/binhai-office/SCAN.md)."
+  publish_app "$id" "$name" "$version" "$pkg" "webapp.json" "" \
+    "Bản thử phòng AI với 18 agent và văn phòng 3D, chạy trong trình duyệt." productivity "binhtran89" \
+    "Chưa công bố giấy phép (tác giả cho phép F-Eco tích hợp)" "https://github.com/binhtran89/Demo_CraftAnything" \
+    "false" "web-binhai-office"
+  WEB_URL=""
+  cat >&2 <<ENVEOF
+
+Đã đưa BinhAI Office vào kho TUF và danh mục dev. Dựng và phục vụ app (integrations/binhai-office):
+  integrations/binhai-office/build.sh "$EXT/binhai-office/site" --verify-dist
+  python -m http.server 5180 --bind 127.0.0.1 --directory "$EXT/binhai-office/site"
+ENVEOF
+}
+
 # Mentor (thay đổi mentor-integration): một app, hai target. Target `web` mở thẳng đăng nhập F-Eco
 # của gateway Mentor; target desktop (Windows) lấy từ gói `mentor-<phiên bản>-windows-x64.zip` do CI
 # của F-Eco dựng (đặt MENTOR_DESKTOP_ZIP). Mã Mentor không nằm trong gói web.
@@ -390,10 +425,11 @@ ENVEOF
 case "${1:-}" in
   samples) samples ;;
   thesisai) thesisai ;;
+  binhai) binhai ;;
   mentor) mentor ;;
   icons) icons ;;
   github) shift; github "$@" ;;
   opensource) opensource ;;
   all) samples; opensource ;;
-  *) sed -n '2,19p' "$0"; exit 2 ;;
+  *) sed -n '2,21p' "$0"; exit 2 ;;
 esac

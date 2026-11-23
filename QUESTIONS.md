@@ -509,3 +509,9 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 132. **Phát hành F-Launcher qua kho phân phối.** `release.yml` dựng gói F-Launcher nhưng chưa ký vào kho
      TUF production (chưa có kho production, task 1.4 và 5.1). Khi có, bước ký gói `feco-launcher`
      nên chạy tự động trong `release.yml` hay do người giữ khóa targets làm tay?
+133. **Giấy phép BinhAI Office.** Repo https://github.com/binhtran89/Demo_CraftAnything chưa có tệp
+     giấy phép; F-Eco tích hợp theo xác nhận rằng tác giả cho phép (23/11/2026). Có văn bản cho phép
+     của tác giả không, và nên đề nghị tác giả thêm giấy phép nào (ví dụ MIT)?
+134. **Nơi chạy BinhAI Office khi ra mắt.** App là trang tĩnh; máy dev phục vụ ở
+     `http://localhost:5180/`. Khi ra mắt, F-Eco có tự phục vụ bản dựng (CDN của F-Eco) không, hay
+     tác giả tự đặt ở đâu đó? Cần đổi `web_url` sang HTTPS.

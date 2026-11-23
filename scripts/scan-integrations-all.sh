@@ -2,7 +2,8 @@
 # Quét lại mọi app bên ngoài đã tích hợp ở đúng commit đã ghi (thay đổi chat-and-source-scan, design
 # S3; dependency-rescan, design R5):
 # - Mentor: commit trong integrations/mentor/MENTOR_COMMIT;
-# - ThesisAI: repo và commit trong bảng của integrations/thesisai/README.md.
+# - ThesisAI: repo và commit trong bảng của integrations/thesisai/README.md;
+# - BinhAI Office: repo và commit trong bảng của integrations/binhai-office/README.md.
 # Thoát mã khác 0 nếu một lần quét có phát hiện critical chưa được cho phép trong
 # integrations/<app>/scan-allow.toml, hoặc quét lỗi. Báo cáo ở .dev/scans/*/scan-report.md.
 # Dùng trong job integration-scan của ci.yml và workflow integration-scan.yml (hằng tuần).
@@ -20,4 +21,10 @@ fi
 while read -r repo commit; do
   scripts/scan-integration.sh "$repo" "$commit" integrations/thesisai/scan-allow.toml || status=1
 done <<< "$targets"
+read -r repo commit <<< "$(sed -nE 's#.*https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+) \| `([0-9a-f]{40})`.*#\1 \2#p' integrations/binhai-office/README.md | head -1)"
+if [ -z "${commit:-}" ]; then
+  echo "không đọc được repo và commit BinhAI Office từ README" >&2
+  exit 1
+fi
+scripts/scan-integration.sh "$repo" "$commit" integrations/binhai-office/scan-allow.toml || status=1
 exit "$status"

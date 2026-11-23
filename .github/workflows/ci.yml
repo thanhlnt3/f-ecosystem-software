@@ -294,6 +294,18 @@ jobs:
           path: .dev/scans/*/scan-report.md
           retention-days: 30
 
+  binhai-office:
+    # binhai-office-integration: dựng BinhAI Office từ mã nguồn ở commit trong README (npm ci
+    # --ignore-scripts, npm run build) và kiểm bản tự dựng trùng từng tệp với app/dist của tác giả.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Dựng BinhAI Office và so với bản dựng sẵn
+        run: integrations/binhai-office/build.sh "$RUNNER_TEMP/binhai-site" --verify-dist
+
   thesisai-fe:
     # Bản vá thesisai-fe (đăng nhập F-Eco, Next.js 16.4.6 đã vá GHSA-2464-fhr4-w9xw và
     # GHSA-673q-mjm6-r5xr, QUESTIONS.md 109) còn áp được lên commit trong README và dựng được.

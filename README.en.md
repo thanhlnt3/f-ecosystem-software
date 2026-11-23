@@ -326,7 +326,16 @@ app repository; it is used only to try single sign-on in step 5.
       ```bash
       scripts/scan-integration.sh katD2707/agent-mentor-maximum-experience "$(cat integrations/mentor/MENTOR_COMMIT)" integrations/mentor/scan-allow.toml
       ```
-18. **Messages**: the sidebar has a "Messages" item with the unread count (refreshed every 60 seconds). The Messages page lists conversations and shows the thread; type and click **Send** or press Ctrl+Enter. While a conversation is open, the launcher checks for new messages every 5 seconds. Attachments are sent on the web only; scanned, clean files open in the browser. The mobile F-Launcher has a "Messages" tab (six tabs).
+18. **BinhAI Office web app**: a prototype "AI office" with 18 agents and a 3D office, running entirely in the browser with no sign-in. F-Eco builds the app from the scanned source, then compares it with the author's prebuilt copy:
+
+    ```bash
+    integrations/binhai-office/build.sh ~/.feco-dev-ext/binhai-office/site --verify-dist
+    python -m http.server 5180 --bind 127.0.0.1 --directory ~/.feco-dev-ext/binhai-office/site
+    scripts/dev-apps.sh binhai
+    ```
+
+    Click **Sync**, then in the Store choose BinhAI Office → **Add** → **Open**. The security scan results are in [integrations/binhai-office/SCAN.md](integrations/binhai-office/SCAN.md).
+19. **Messages**: the sidebar has a "Messages" item with the unread count (refreshed every 60 seconds). The Messages page lists conversations and shows the thread; type and click **Send** or press Ctrl+Enter. While a conversation is open, the launcher checks for new messages every 5 seconds. Attachments are sent on the web only; scanned, clean files open in the browser. The mobile F-Launcher has a "Messages" tab (six tabs).
 
 Launcher variables: `FECO_LAUNCHER_SERVER` (default `http://127.0.0.1:8080/` in debug builds only; required in release builds unless `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, same rule), `FECO_LAUNCHER_DATA_DIR` (data directory), `FECO_LAUNCHER_TRUSTED_ROOT`

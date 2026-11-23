@@ -1,5 +1,22 @@
 # Nhật ký thay đổi
 
+## 1.18.0 (23/11/2026)
+
+Thay đổi OpenSpec `binhai-office-integration`: đưa app web BinhAI Office (https://github.com/binhtran89/Demo_CraftAnything) vào kho, sau khi quét bảo mật.
+
+- **Quét trước khi tích hợp** (commit `86a1fa3`):
+  - `feco-codescan`: 0 phát hiện, 236 thư viện npm sạch trên OSV.dev;
+  - rà tay: không có bí mật, không gọi mạng ra ngoài, Markdown được thoát HTML trước khi hiển thị, tệp dự án của công cụ dựng app không có dữ liệu cá nhân;
+  - chi tiết trong `integrations/binhai-office/SCAN.md`.
+- **Dựng từ mã nguồn**:
+  - `integrations/binhai-office/build.sh` cài thư viện với `npm ci --ignore-scripts` rồi `npm run build`;
+  - `--verify-dist` kiểm bản tự dựng trùng từng tệp (SHA-256) với `app/dist` của tác giả. Hiện trùng khớp.
+- **CI**:
+  - job mới `binhai-office` dựng và so `dist`;
+  - `integration-scan` (mỗi lần CI và mỗi thứ Hai) quét lại BinhAI Office cùng Mentor và ThesisAI.
+- **Danh mục dev**: `scripts/dev-apps.sh binhai` ký gói app web (`http://localhost:5180/`) và ghi F-Store.
+- **Giấy phép**: repo chưa có giấy phép; chủ dự án xác nhận tác giả cho phép F-Eco tích hợp (`NOTICE.md`).
+
 ## 1.17.0 (23/11/2026)
 
 Ba thay đổi OpenSpec: `dependency-rescan`, `launcher-self-update`, cùng việc cập nhật Mentor và ThesisAI, sau khi quét lại toàn bộ app con trong kho.

@@ -325,7 +325,16 @@ mẫu Ghi chú, Bấm giờ dùng F-SDK và các app mã nguồn mở từ GitHu
       ```bash
       scripts/scan-integration.sh katD2707/agent-mentor-maximum-experience "$(cat integrations/mentor/MENTOR_COMMIT)" integrations/mentor/scan-allow.toml
       ```
-18. **Tin nhắn**: thanh bên có mục "Tin nhắn" kèm số tin chưa đọc (cập nhật mỗi 60 giây). Trang Tin nhắn có danh sách hội thoại và luồng tin; gõ rồi bấm **Gửi** hoặc Ctrl+Enter. Khi đang mở một hội thoại, launcher hỏi tin mới mỗi 5 giây. Tệp đính kèm chỉ gửi trên web; tệp đã quét sạch mở bằng trình duyệt. F-Launcher di động có tab "Tin nhắn" (sáu tab).
+18. **App web BinhAI Office**: bản thử "phòng AI" với 18 agent và văn phòng 3D, chạy hoàn toàn trong trình duyệt, không cần đăng nhập. F-Eco dựng app từ mã nguồn đã quét, rồi so với bản dựng sẵn của tác giả:
+
+    ```bash
+    integrations/binhai-office/build.sh ~/.feco-dev-ext/binhai-office/site --verify-dist
+    python -m http.server 5180 --bind 127.0.0.1 --directory ~/.feco-dev-ext/binhai-office/site
+    scripts/dev-apps.sh binhai
+    ```
+
+    Bấm **Đồng bộ**, rồi trong Cửa hàng chọn BinhAI Office → **Thêm** → **Mở**. Kết quả quét bảo mật nằm trong [integrations/binhai-office/SCAN.md](integrations/binhai-office/SCAN.md).
+19. **Tin nhắn**: thanh bên có mục "Tin nhắn" kèm số tin chưa đọc (cập nhật mỗi 60 giây). Trang Tin nhắn có danh sách hội thoại và luồng tin; gõ rồi bấm **Gửi** hoặc Ctrl+Enter. Khi đang mở một hội thoại, launcher hỏi tin mới mỗi 5 giây. Tệp đính kèm chỉ gửi trên web; tệp đã quét sạch mở bằng trình duyệt. F-Launcher di động có tab "Tin nhắn" (sáu tab).
 
 Biến của launcher: `FECO_LAUNCHER_SERVER` (mặc định `http://127.0.0.1:8080/` chỉ ở bản debug; bản release bắt buộc đặt, trừ khi `FECO_LAUNCHER_DEV=1`), `FECO_LAUNCHER_HYDRA`
 (`http://127.0.0.1:4444/`, cùng quy tắc), `FECO_LAUNCHER_DATA_DIR` (thư mục dữ liệu), `FECO_LAUNCHER_TRUSTED_ROOT`
