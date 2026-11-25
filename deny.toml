@@ -42,6 +42,13 @@ ignore = [
     # không có file này). Đây là cảnh báo "ngừng bảo trì", không phải lỗ hổng. Gỡ khi
     # askama bỏ phụ thuộc này. Người duyệt: chủ dự án, 2026-11-09.
     { id = "RUSTSEC-2026-0374", reason = "basic-toml chỉ dùng lúc biên dịch trong askama_derive" },
+    # launcher-linux-keyring: zvariant, zbus_names, zvariant_derive "ngừng bảo trì" vì đã gộp
+    # vào zbus 6, không phải lỗ hổng. Đến qua zbus-secret-service-keyring-store 1.0.1 (bản mới
+    # nhất, còn dùng zbus 5), chỉ biên dịch trên Linux. Gỡ khi thư viện này chuyển sang zbus 6.
+    # Người duyệt: chủ dự án, 2026-11-25.
+    { id = "RUSTSEC-2026-0370", reason = "zvariant gộp vào zbus 6; chỉ dùng cho Secret Service trên Linux" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names gộp vào zbus 6; chỉ dùng cho Secret Service trên Linux" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive gộp vào zbus 6; chỉ dùng cho Secret Service trên Linux" },
 ]
 
 [bans]

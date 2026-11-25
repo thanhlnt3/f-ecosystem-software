@@ -4,7 +4,8 @@
 //!   client công khai, địa chỉ chuyển hướng loopback `http://127.0.0.1:47201/callback`).
 //!   Launcher không có ô nhập mật khẩu.
 //! - Refresh token nằm trong kho bảo mật của hệ điều hành (Windows Credential Manager, macOS
-//!   Keychain) qua `keyring-core` và kho gốc của từng hệ điều hành; access token chỉ nằm trong bộ nhớ. Khởi động lại máy rồi
+//!   Keychain, Secret Service trên Linux) qua `keyring-core` và kho gốc của từng hệ điều hành;
+//!   không có kho thì không lưu ra tệp. Access token chỉ nằm trong bộ nhớ. Khởi động lại máy rồi
 //!   mở launcher thì dùng refresh token để vào lại, không phải đăng nhập lại.
 
 use crate::broker::LaunchCode;
@@ -64,48 +65,92 @@ impl SecretStore for KeyringStore {
         match self.entry()?.get_password() {
             Ok(v) => Ok(Some(v)),
             Err(keyring_core::Error::NoEntry) => Ok(None),
-            Err(e) => Err(e.to_string()),
+            Err(e) => Err(store_error(&e)),
         }
     }
 
     fn save(&self, value: &str) -> Result<(), String> {
-        self.entry()?.set_password(value).map_err(|e| e.to_string())
+        self.entry()?
+            .set_password(value)
+            .map_err(|e| store_error(&e))
     }
 
     fn clear(&self) -> Result<(), String> {
         match self.entry()?.delete_credential() {
             Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
-            Err(e) => Err(e.to_string()),
+            Err(e) => Err(store_error(&e)),
         }
     }
 }
 
-/// Chọn kho bảo mật của hệ điều hành làm kho mặc định (một lần).
+/// Lời nhắc khi Linux không có Secret Service dùng được (launcher-linux-keyring).
+const LINUX_STORE_HINT: &str = "cần GNOME Keyring, KWallet hoặc KeePassXC (Secret Service) đang chạy và đã mở khóa; launcher không lưu phiên đăng nhập ra tệp";
+
+/// Diễn giải lỗi của kho bảo mật. Kho bị khóa hoặc người dùng từ chối thì nói rõ cần mở khóa.
+fn store_error(e: &keyring_core::Error) -> String {
+    match e {
+        keyring_core::Error::NoStorageAccess(_) if cfg!(target_os = "linux") => {
+            format!("kho bảo mật đang khóa hoặc bị từ chối truy cập; {LINUX_STORE_HINT} ({e})")
+        }
+        _ => e.to_string(),
+    }
+}
+
+/// Chọn kho bảo mật của hệ điều hành làm kho mặc định. Chỉ ghi nhớ khi thành công: trên Linux,
+/// người dùng có thể mở GNOME Keyring hay KeePassXC sau khi launcher đã chạy.
 fn os_store() -> Result<(), String> {
-    static INIT: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
-    INIT.get_or_init(|| {
-        #[cfg(windows)]
-        {
-            let store = windows_native_keyring_store::Store::new().map_err(|e| e.to_string())?;
-            keyring_core::set_default_store(store);
-            Ok(())
-        }
-        #[cfg(target_os = "macos")]
-        {
-            let store =
-                apple_native_keyring_store::keychain::Store::new().map_err(|e| e.to_string())?;
-            keyring_core::set_default_store(store);
-            Ok(())
-        }
-        #[cfg(not(any(windows, target_os = "macos")))]
-        {
-            Err(
-                "F-Launcher chỉ hỗ trợ Windows và macOS: chưa có kho bảo mật cho hệ điều hành này"
-                    .into(),
-            )
-        }
-    })
-    .clone()
+    static READY: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    static INIT: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    init_once(&READY, &INIT, install_os_store)
+}
+
+/// Chạy `install` cho tới khi thành công một lần; lỗi thì lần gọi sau thử lại.
+fn init_once(
+    ready: &std::sync::OnceLock<()>,
+    lock: &std::sync::Mutex<()>,
+    install: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    if ready.get().is_some() {
+        return Ok(());
+    }
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+    if ready.get().is_some() {
+        return Ok(());
+    }
+    install()?;
+    let _ = ready.set(());
+    Ok(())
+}
+
+#[cfg(windows)]
+fn install_os_store() -> Result<(), String> {
+    let store = windows_native_keyring_store::Store::new().map_err(|e| e.to_string())?;
+    keyring_core::set_default_store(store);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn install_os_store() -> Result<(), String> {
+    let store = apple_native_keyring_store::keychain::Store::new().map_err(|e| e.to_string())?;
+    keyring_core::set_default_store(store);
+    Ok(())
+}
+
+/// Linux: Secret Service qua D-Bus phiên (GNOME Keyring, KWallet, KeePassXC).
+#[cfg(target_os = "linux")]
+fn install_os_store() -> Result<(), String> {
+    let store = zbus_secret_service_keyring_store::Store::new()
+        .map_err(|e| format!("không kết nối được Secret Service: {LINUX_STORE_HINT} ({e})"))?;
+    keyring_core::set_default_store(store);
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn install_os_store() -> Result<(), String> {
+    Err(
+        "F-Launcher chỉ hỗ trợ Windows, macOS và Linux: chưa có kho bảo mật cho hệ điều hành này"
+            .into(),
+    )
 }
 
 /// Kho trong bộ nhớ (kiểm thử).
@@ -1106,5 +1151,90 @@ mod notification_tests {
         assert_eq!(n.len(), 2);
         assert_eq!(n[0].link, "https://f-eco.vn/orders/1#quote");
         assert!(n[1].link.is_empty(), "chỉ mở liên kết web");
+    }
+}
+
+#[cfg(test)]
+mod store_tests {
+    use super::*;
+
+    /// launcher-linux-keyring, scenario "Linux không có Secret Service": lỗi khởi tạo kho không
+    /// bị ghi nhớ; khi người dùng mở GNOME Keyring hay KeePassXC, lần sau launcher thử lại được.
+    #[test]
+    fn failed_store_init_is_retried() {
+        let ready = std::sync::OnceLock::new();
+        let lock = std::sync::Mutex::new(());
+        let err = init_once(&ready, &lock, || {
+            Err("không kết nối được Secret Service".into())
+        });
+        assert!(err.is_err());
+        let mut calls = 0;
+        assert!(init_once(&ready, &lock, || {
+            calls += 1;
+            Ok(())
+        })
+        .is_ok());
+        assert_eq!(calls, 1);
+        // Đã thành công thì không khởi tạo lại.
+        assert!(init_once(&ready, &lock, || panic!("không được gọi lại")).is_ok());
+    }
+
+    /// Kho bị khóa: trên Linux nói rõ cần mở khóa và launcher không lưu ra tệp.
+    #[test]
+    fn locked_store_error_explains_what_to_do() {
+        let e = keyring_core::Error::NoStorageAccess("Locked".into());
+        let msg = store_error(&e);
+        if cfg!(target_os = "linux") {
+            assert!(
+                msg.contains("GNOME Keyring") && msg.contains("không lưu phiên đăng nhập ra tệp"),
+                "{msg}"
+            );
+        } else {
+            assert_eq!(msg, e.to_string());
+        }
+        assert_eq!(
+            store_error(&keyring_core::Error::NoEntry),
+            keyring_core::Error::NoEntry.to_string()
+        );
+    }
+}
+
+/// Chạy với Secret Service thật trên Linux (job CI `rust (ubuntu-latest)`):
+/// `FECO_TEST_SECRET_SERVICE=present` khi GNOME Keyring đang chạy, `absent` khi không có D-Bus.
+#[cfg(all(test, target_os = "linux"))]
+mod secret_service_tests {
+    use super::*;
+
+    /// Scenario "Đăng nhập trên Linux" (phần lưu token) và "Linux không có Secret Service".
+    #[test]
+    fn secret_service_round_trip() {
+        let mode = std::env::var("FECO_TEST_SECRET_SERVICE").unwrap_or_default();
+        let store = KeyringStore::for_client("feco-ci-secret-service-test");
+        match mode.as_str() {
+            "present" => {
+                store.clear().unwrap();
+                assert_eq!(store.load().unwrap(), None);
+                store.save("refresh-token-ci").unwrap();
+                assert_eq!(store.load().unwrap().as_deref(), Some("refresh-token-ci"));
+                // Mục của client khác là mục riêng.
+                let other = KeyringStore::for_client("feco-ci-other-client");
+                assert_eq!(other.load().unwrap(), None);
+                store.clear().unwrap();
+                assert_eq!(store.load().unwrap(), None);
+                println!("Secret Service: lưu, đọc, xóa refresh token thành công");
+            }
+            "absent" => {
+                let err = store.load().unwrap_err();
+                assert!(
+                    err.contains("GNOME Keyring")
+                        && err.contains("không lưu phiên đăng nhập ra tệp"),
+                    "{err}"
+                );
+                println!("Không có Secret Service: {err}");
+            }
+            _ => eprintln!(
+                "bỏ qua: đặt FECO_TEST_SECRET_SERVICE=present|absent để chạy với D-Bus thật"
+            ),
+        }
     }
 }

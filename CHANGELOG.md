@@ -1,5 +1,16 @@
 # Nhật ký thay đổi
 
+## 1.21.0 (25/11/2026)
+
+Thay đổi OpenSpec `launcher-linux-keyring`: F-Launcher đăng nhập được trên Linux.
+
+- **Kho bảo mật trên Linux**: F-Launcher lưu refresh token qua Secret Service (D-Bus), giao diện chung của GNOME Keyring, KWallet và KeePassXC.
+  - Thư viện `zbus-secret-service-keyring-store` 1.0.1 (MIT OR Apache-2.0), thuần Rust, mã hóa phiên bằng RustCrypto; không cần `libdbus` hay OpenSSL. Chỉ biên dịch cho Linux. Chủ dự án cho phép thêm ngày 25/11/2026.
+  - Không có Secret Service hoặc kho đang khóa: launcher báo cần GNOME Keyring, KWallet hoặc KeePassXC đang chạy và đã mở khóa, và không lưu token ra tệp. Lỗi khởi tạo kho không bị ghi nhớ: cài hoặc mở khóa xong thì bấm Đăng nhập lại, không cần mở lại launcher.
+  - `deny.toml`: ngoại lệ có hạn cho RUSTSEC-2026-0370, 0371, 0372. Đây là cảnh báo `zvariant`, `zbus_names`, `zvariant_derive` ngừng bảo trì vì đã gộp vào zbus 6, không phải lỗ hổng. Gỡ khi thư viện Secret Service chuyển sang zbus 6. Chủ dự án duyệt ngày 25/11/2026.
+- **CI**: job `rust (ubuntu-latest)` chạy GNOME Keyring không giao diện, kiểm lưu, đọc, xóa token qua Secret Service, và kiểm thông báo khi không có D-Bus.
+- **README** hai thứ tiếng: mục "Cài đặt từ bản phát hành" cho Windows, macOS, Linux và điện thoại; Linux ghi cách dùng Secret Service.
+
 ## 1.20.0 (23/11/2026)
 
 Gộp PR [#1](https://github.com/thanhlnt3/f-ecosystem-software/pull/1) "Polish UI across F-Eco apps" (`87abdb6`, đóng góp của collaborator), và cập nhật README.

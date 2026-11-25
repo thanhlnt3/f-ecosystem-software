@@ -24,6 +24,15 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - name: F-Launcher lưu đăng nhập qua Secret Service trên Linux (launcher-linux-keyring)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends gnome-keyring dbus
+          # Có Secret Service (GNOME Keyring chạy không giao diện, đã mở khóa): lưu, đọc, xóa token.
+          dbus-run-session -- bash -c 'echo -n feco-ci | gnome-keyring-daemon --unlock --components=secrets >/dev/null && FECO_TEST_SECRET_SERVICE=present cargo test -p feco-launcher --lib secret_service -- --nocapture'
+          # Không có D-Bus phiên: launcher báo cần GNOME Keyring, KWallet hoặc KeePassXC.
+          FECO_TEST_SECRET_SERVICE=absent DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent cargo test -p feco-launcher --lib secret_service -- --nocapture
       - name: Diễn tập chuỗi tin cậy TUF bằng feco-tuf (tasks.md 5.1–5.3)
         shell: bash
         run: scripts/tuf-drill.sh

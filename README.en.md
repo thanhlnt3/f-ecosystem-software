@@ -2,7 +2,7 @@
 
 An open platform for third-party developers to publish **sub-apps** through a shared launcher, with shared user accounts, a self-service app-building tool (**F-Builder**), and a paid **build-to-order app** service. The idea is inspired by the launcher + app suite model of ArtCraft, but open to third parties.
 
-> **Version 1.20.0** (Tiếng Việt: [README.md](README.md)) ([changelog](CHANGELOG.md)). Integrating a sub-app into F-Eco: [developer guide](docs/en/integration-guide.md); bringing an open-source app from GitHub into F-Eco: [docs/en/github-apps.md](docs/en/github-apps.md); configuring the payment gateways, e-invoicing and email: [docs/en/payments-setup.md](docs/en/payments-setup.md). The release package (binaries, F-SDK, documentation, `THIRD_PARTY_NOTICES`, SBOM) is built with `scripts/package-release.sh`, or automatically when a `v*` tag is pushed (`.github/workflows/release.yml`, which creates a draft release).
+> **Version 1.21.0** (Tiếng Việt: [README.md](README.md)) ([changelog](CHANGELOG.md)). Integrating a sub-app into F-Eco: [developer guide](docs/en/integration-guide.md); bringing an open-source app from GitHub into F-Eco: [docs/en/github-apps.md](docs/en/github-apps.md); configuring the payment gateways, e-invoicing and email: [docs/en/payments-setup.md](docs/en/payments-setup.md). The release package (binaries, F-SDK, documentation, `THIRD_PARTY_NOTICES`, SBOM) is built with `scripts/package-release.sh`, or automatically when a `v*` tag is pushed (`.github/workflows/release.yml`, which creates a draft release).
 >
 > Working today (open items are listed at the end of the changelog and in `QUESTIONS.md`):
 > - Accounts: sign-up, email verification, sign-in, password-guessing protection, two-factor authentication (TOTP, recovery codes), signed-in devices, password recovery, account deletion after a 30-day waiting period.
@@ -42,6 +42,7 @@ An open platform for third-party developers to publish **sub-apps** through a sh
 > - Source scanning of sub-apps on submission and every 7 days (leaked secrets, suspicious code, library vulnerabilities via OSV.dev); outside apps are scanned explicitly before integration and rescanned weekly.
 > - Apps integrated into the dev repository: ThesisAI and BinhAI Office (web apps), Mentor (web and desktop), VPdf (Windows desktop), plus the Notes and Timer sample apps and three open-source apps.
 > - F-Launcher for mobile (Flutter, Android and iOS) as a companion to the desktop version.
+> - Desktop F-Launcher runs on Windows, macOS and Linux; on Linux, the sign-in is stored in Secret Service (GNOME Keyring, KWallet, KeePassXC) since 1.21.0.
 > - Verification and notification emails can go to real inboxes over SMTP (for example Gmail) on a dev machine.
 > - New look (1.20.0): a landing page on the web for visitors who are not signed in; F-Launcher defaults to the Elegant style, light theme and large grid tiles, with a "Your workspace" header showing installed apps and available updates; a shared teal palette across web, desktop and phone.
 >
@@ -82,7 +83,7 @@ Every release on [GitHub Releases](https://github.com/thanhlnt3/f-ecosystem-soft
 |---|---|---|
 | `feco-<version>-x86_64-pc-windows-msvc.zip` | Windows 10/11, x64 | F-Launcher, the server and tools (`bin/*.exe`), F-SDK, sample infrastructure configuration, documentation |
 | `feco-<version>-aarch64-apple-darwin.zip` | macOS on Apple silicon (M1 or later) | Same as above, macOS build. There is no build for Intel Macs yet |
-| `feco-<version>-x86_64-unknown-linux-gnu.zip` | Linux x64 (glibc) | Same as above, Linux build. F-Launcher on Linux cannot sign in yet (see [Linux](#linux)) |
+| `feco-<version>-x86_64-unknown-linux-gnu.zip` | Linux x64 (glibc) | Same as above, Linux build. F-Launcher needs Secret Service to store your sign-in (see [Linux](#linux)) |
 | `feco-mobile-<version>.apk` | Android 10+ | F-Launcher for mobile, test build (see [Phone](#phone)) |
 | `feco-mobile-<version>-ios-simulator.zip` | iOS Simulator on macOS | F-Launcher for mobile, for the iOS simulator |
 | `mentor-<version>-windows-x64.zip` | Windows x64 | The Mentor desktop app, installed through F-Launcher |
@@ -188,7 +189,20 @@ On Linux, the package covers the following:
 - **Server and tools** (`feco-server`, `feco-catalog`, `feco-tuf`, `f-dev`) work fully. See [Running the F-Eco server from the package](#running-the-f-eco-server-from-the-package).
 - **F-SDK** works for sub-apps on Linux (`sdk/c/lib/libfsdk_c.so`, Python, TypeScript).
 - **The F-Eco website and F-Store** work in a browser.
-- **F-Launcher** opens its window but **cannot sign in yet**. F-Launcher only stores your sign-in in the operating system's secure store, and today supports Windows Credential Manager and macOS Keychain only. On Linux it reports that F-Launcher only supports Windows and macOS. Support for the Linux secure store (Secret Service) is planned for a later release.
+- **F-Launcher** (from 1.21.0) stores your sign-in in **Secret Service**, the common Linux secure store. GNOME Keyring (preinstalled on Ubuntu, Fedora…), KWallet (KDE Plasma 5.97 or later) and KeePassXC (with Secret Service enabled) all provide it. The store must be running and unlocked (it usually unlocks when you log in).
+  - Machines without Secret Service (headless servers, minimal window managers): F-Launcher says to install one of the apps above, and never writes your sign-in to a plain file. Once installed, click **Sign in** again; no need to restart F-Launcher.
+  - Missing fonts with Vietnamese diacritics: install DejaVu or Noto (`fonts-dejavu-core`, `fonts-noto-core`), or set `FECO_LAUNCHER_FONT` to a `.ttf` file.
+
+  ```bash
+  export FECO_LAUNCHER_SERVER=https://<feco-server>/
+  export FECO_LAUNCHER_HYDRA=https://<feco-hydra>/
+  export FECO_LAUNCHER_CLIENT_ID=<client-id>
+  export FECO_LAUNCHER_TUF=https://<feco-tuf>/
+  export FECO_LAUNCHER_TRUSTED_ROOT=$HOME/F-Eco/root.json
+  ./bin/feco-launcher
+  ```
+
+  Sub-apps install into `~/.local/share/F-Eco/Launcher`. Desktop apps in the store mostly ship Windows builds today; web apps (ThesisAI, Mentor, BinhAI Office) open in the browser.
 
 ### Running the F-Eco server from the package
 
@@ -294,7 +308,7 @@ The first build takes a few minutes. When you see the line `feco-server đang ch
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.20.0"}
+# {"status":"ok","environment":"dev","version":"1.21.0"}
 ```
 
 In the `dev` environment, every address has a default value pointing to the infrastructure from step 2, and the database schema is created automatically at startup. See also the [Configuration](#configuration) section.

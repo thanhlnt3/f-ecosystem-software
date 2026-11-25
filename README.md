@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Phiên bản 1.20.0** (English: [README.en.md](README.en.md)) ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+> **Phiên bản 1.21.0** (English: [README.en.md](README.en.md)) ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
 >
 > Đã chạy được (các mục còn mở ghi ở cuối nhật ký thay đổi và trong `QUESTIONS.md`):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
@@ -42,6 +42,7 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 > - Quét mã nguồn app con khi nộp và quét lại mỗi 7 ngày (bí mật lộ, mã đáng ngờ, lỗ hổng thư viện qua OSV.dev); app bên ngoài được quét tường minh trước khi tích hợp và quét lại mỗi tuần.
 > - App tích hợp sẵn trong kho dev: ThesisAI và BinhAI Office (app web), Mentor (web và desktop), VPdf (desktop Windows), cùng app mẫu Ghi chú, Bấm giờ và ba app mã nguồn mở.
 > - F-Launcher di động (Flutter, Android và iOS) đồng hành với bản desktop.
+> - F-Launcher desktop chạy trên Windows, macOS và Linux; trên Linux, đăng nhập được lưu trong Secret Service (GNOME Keyring, KWallet, KeePassXC) từ 1.21.0.
 > - Gửi email xác minh và thông báo tới hòm thư thật qua SMTP (ví dụ Gmail) ở máy dev.
 > - Giao diện mới (1.20.0): trang chào cho người chưa đăng nhập trên web; F-Launcher mặc định phong cách Trang nhã, chủ đề sáng, ô lưới lớn, có phần "Không gian của bạn" với số app đã cài và số bản cập nhật; bảng màu xanh lục lam chung cho web, desktop và điện thoại.
 >
@@ -82,7 +83,7 @@ Mỗi bản phát hành trên [GitHub Releases](https://github.com/thanhlnt3/f-e
 |---|---|---|
 | `feco-<phiên bản>-x86_64-pc-windows-msvc.zip` | Windows 10/11, x64 | F-Launcher, máy chủ và công cụ (`bin/*.exe`), F-SDK, cấu hình hạ tầng mẫu, tài liệu |
 | `feco-<phiên bản>-aarch64-apple-darwin.zip` | macOS trên chip Apple (M1 trở lên) | Như trên, bản macOS. Chưa có bản cho Mac chip Intel |
-| `feco-<phiên bản>-x86_64-unknown-linux-gnu.zip` | Linux x64 (glibc) | Như trên, bản Linux. F-Launcher trên Linux chưa đăng nhập được (xem mục [Linux](#linux)) |
+| `feco-<phiên bản>-x86_64-unknown-linux-gnu.zip` | Linux x64 (glibc) | Như trên, bản Linux. F-Launcher cần Secret Service để lưu đăng nhập (xem mục [Linux](#linux)) |
 | `feco-mobile-<phiên bản>.apk` | Android 10+ | F-Launcher di động, bản thử (xem mục [Điện thoại](#điện-thoại)) |
 | `feco-mobile-<phiên bản>-ios-simulator.zip` | iOS Simulator trên macOS | F-Launcher di động cho trình giả lập iOS |
 | `mentor-<phiên bản>-windows-x64.zip` | Windows x64 | App desktop Mentor, cài qua F-Launcher |
@@ -188,7 +189,20 @@ Trên Linux, gói dùng được cho các phần sau:
 - **Máy chủ và công cụ** (`feco-server`, `feco-catalog`, `feco-tuf`, `f-dev`) chạy đầy đủ. Xem mục [Chạy máy chủ F-Eco từ gói](#chạy-máy-chủ-f-eco-từ-gói).
 - **F-SDK** dùng được cho app con trên Linux (`sdk/c/lib/libfsdk_c.so`, Python, TypeScript).
 - **Web F-Eco và F-Store** dùng được bằng trình duyệt.
-- **F-Launcher** mở được cửa sổ nhưng **chưa đăng nhập được**. F-Launcher chỉ lưu thông tin đăng nhập vào kho bảo mật của hệ điều hành, và hiện mới hỗ trợ Windows Credential Manager và macOS Keychain. Trên Linux sẽ có thông báo "F-Launcher chỉ hỗ trợ Windows và macOS". Hỗ trợ kho bảo mật của Linux (Secret Service) là việc của bản sau.
+- **F-Launcher** (từ bản 1.21.0) lưu đăng nhập vào **Secret Service**, kho bảo mật chung của Linux. GNOME Keyring (có sẵn trên Ubuntu, Fedora…), KWallet (KDE Plasma 5.97 trở lên) và KeePassXC (bật Secret Service) đều cung cấp dịch vụ này. Kho phải đang chạy và đã mở khóa (thường tự mở khi đăng nhập vào máy).
+  - Máy không có Secret Service (máy chủ không giao diện, trình quản lý cửa sổ tối giản): F-Launcher báo cần cài một trong các ứng dụng trên, và không lưu phiên đăng nhập ra tệp. Cài xong thì bấm **Đăng nhập** lại, không cần mở lại F-Launcher.
+  - Thiếu phông chữ có dấu tiếng Việt: cài DejaVu hoặc Noto (`fonts-dejavu-core`, `fonts-noto-core`), hoặc đặt `FECO_LAUNCHER_FONT` tới một tệp `.ttf`.
+
+  ```bash
+  export FECO_LAUNCHER_SERVER=https://<feco-server>/
+  export FECO_LAUNCHER_HYDRA=https://<feco-hydra>/
+  export FECO_LAUNCHER_CLIENT_ID=<client-id>
+  export FECO_LAUNCHER_TUF=https://<feco-tuf>/
+  export FECO_LAUNCHER_TRUSTED_ROOT=$HOME/F-Eco/root.json
+  ./bin/feco-launcher
+  ```
+
+  App con cài vào `~/.local/share/F-Eco/Launcher`. App desktop trong kho hiện chủ yếu có bản Windows; app web (ThesisAI, Mentor, BinhAI Office) mở được bằng trình duyệt.
 
 ### Chạy máy chủ F-Eco từ gói
 
@@ -294,7 +308,7 @@ Lần đầu biên dịch mất vài phút. Khi thấy dòng `feco-server đang 
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.20.0"}
+# {"status":"ok","environment":"dev","version":"1.21.0"}
 ```
 
 Ở môi trường `dev`, mọi địa chỉ đã có giá trị mặc định trỏ tới hạ tầng ở bước 2, và lược đồ cơ sở dữ liệu được tạo tự động khi khởi động. Xem thêm phần [Cấu hình](#cấu-hình).
