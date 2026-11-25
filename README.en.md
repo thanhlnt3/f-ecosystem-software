@@ -49,6 +49,9 @@ An open platform for third-party developers to publish **sub-apps** through a sh
 
 ## Table of contents
 
+- [Installing from a release](#installing-from-a-release)
+  - [Windows](#windows) · [macOS](#macos) · [Linux](#linux) · [Phone](#phone)
+  - [Running the F-Eco server from the package](#running-the-f-eco-server-from-the-package)
 - [Running the system](#running-the-system)
   - [1. Prerequisites](#1-prerequisites)
   - [2. Start the infrastructure](#2-start-the-infrastructure)
@@ -70,6 +73,152 @@ An open platform for third-party developers to publish **sub-apps** through a sh
 - [Requirements and design](#requirements-and-design)
 - [Directory structure](#directory-structure)
 - [License](#license)
+
+## Installing from a release
+
+Every release on [GitHub Releases](https://github.com/thanhlnt3/f-ecosystem-software/releases/latest) ships prebuilt packages for each operating system. You do not need Rust or the source code.
+
+| File | Operating system | Contents |
+|---|---|---|
+| `feco-<version>-x86_64-pc-windows-msvc.zip` | Windows 10/11, x64 | F-Launcher, the server and tools (`bin/*.exe`), F-SDK, sample infrastructure configuration, documentation |
+| `feco-<version>-aarch64-apple-darwin.zip` | macOS on Apple silicon (M1 or later) | Same as above, macOS build. There is no build for Intel Macs yet |
+| `feco-<version>-x86_64-unknown-linux-gnu.zip` | Linux x64 (glibc) | Same as above, Linux build. F-Launcher on Linux cannot sign in yet (see [Linux](#linux)) |
+| `feco-mobile-<version>.apk` | Android 10+ | F-Launcher for mobile, test build (see [Phone](#phone)) |
+| `feco-mobile-<version>-ios-simulator.zip` | iOS Simulator on macOS | F-Launcher for mobile, for the iOS simulator |
+| `mentor-<version>-windows-x64.zip` | Windows x64 | The Mentor desktop app, installed through F-Launcher |
+| `SHA256SUMS.txt` | | SHA-256 checksums of every file |
+
+Inside each desktop package:
+
+| Folder | Contents |
+|---|---|
+| `bin/` | `feco-launcher` (F-Launcher), `feco-server` (the server), `feco-catalog` (catalog administration), `f-dev` (developer CLI), `feco-tuf` (TUF repository) |
+| `sdk/` | F-SDK: C (header and prebuilt library), Python, TypeScript, Rust source |
+| `infra/` | `docker-compose.yml` and the Kratos and Hydra configuration for running the infrastructure |
+| `docs/`, `notices/`, `sbom/` | Integration guide, third-party licenses, SBOM (CycloneDX) |
+
+The programs are not yet signed with an Authenticode certificate or an Apple Developer ID, so Windows and macOS warn on first launch, as described below. Verify the checksums before running anything, to make sure the package has not been tampered with.
+
+### Download and verify
+
+Download the files you need together with `SHA256SUMS.txt` into one folder, then check them. On Linux:
+
+```bash
+sha256sum --ignore-missing -c SHA256SUMS.txt
+```
+
+On macOS:
+
+```bash
+shasum -a 256 --ignore-missing -c SHA256SUMS.txt
+```
+
+On Windows (PowerShell), compare the printed hash with the matching line in `SHA256SUMS.txt`:
+
+```powershell
+Get-FileHash .\feco-1.20.0-x86_64-pc-windows-msvc.zip -Algorithm SHA256
+```
+
+Every file must report `OK` (Linux, macOS) or a matching hash (Windows). If it does not match, do not run that package.
+
+### Connecting F-Launcher to an F-Eco server
+
+F-Launcher needs to know which F-Eco server to connect to. The server administrator provides these values:
+
+| Variable | Meaning |
+|---|---|
+| `FECO_LAUNCHER_SERVER` | Address of `feco-server`, for example `https://f-eco.example.com/` |
+| `FECO_LAUNCHER_HYDRA` | Sign-in address (Hydra) |
+| `FECO_LAUNCHER_CLIENT_ID` | F-Launcher's client ID |
+| `FECO_LAUNCHER_TUF` | Address of the TUF repository holding the app packages |
+| `FECO_LAUNCHER_TRUSTED_ROOT` | The trusted `root.json` of the TUF repository |
+
+Every address must use HTTPS unless the server runs on this machine (`127.0.0.1`, `localhost`). For a dev server run from source on the same machine ([Running the system](#running-the-system)), `scripts/dev-launcher.sh env` prints the values. Also set `FECO_LAUNCHER_DEV=1` to use the default addresses `http://127.0.0.1:8080/` and `http://127.0.0.1:4444/`.
+
+### Windows
+
+1. Extract the package, for example to `C:\F-Eco`.
+2. Open PowerShell, set the variables from the section above, then run F-Launcher:
+
+   ```powershell
+   cd C:\F-Eco\feco-1.20.0-x86_64-pc-windows-msvc
+   $env:FECO_LAUNCHER_SERVER = "https://<feco-server>/"
+   $env:FECO_LAUNCHER_HYDRA = "https://<feco-hydra>/"
+   $env:FECO_LAUNCHER_CLIENT_ID = "<client-id>"
+   $env:FECO_LAUNCHER_TUF = "https://<feco-tuf>/"
+   $env:FECO_LAUNCHER_TRUSTED_ROOT = "C:\F-Eco\root.json"
+   .\bin\feco-launcher.exe
+   ```
+
+3. If Windows shows "Windows protected your PC" (SmartScreen), click **More info**, then **Run anyway**. Only do this after the checksum matched.
+4. Click **Sign in**: the browser opens the F-Eco sign-in page. Your sign-in is stored in Windows Credential Manager. Apps install into `%LOCALAPPDATA%\F-Eco\Launcher`, with no administrator rights needed.
+
+### macOS
+
+The package is for Macs with Apple silicon and runs from Terminal (there is no `.app` bundle yet).
+
+```bash
+cd ~/Downloads
+unzip feco-1.20.0-aarch64-apple-darwin.zip
+cd feco-1.20.0-aarch64-apple-darwin
+xattr -dr com.apple.quarantine .
+chmod +x bin/*
+export FECO_LAUNCHER_SERVER=https://<feco-server>/
+export FECO_LAUNCHER_HYDRA=https://<feco-hydra>/
+export FECO_LAUNCHER_CLIENT_ID=<client-id>
+export FECO_LAUNCHER_TUF=https://<feco-tuf>/
+export FECO_LAUNCHER_TRUSTED_ROOT=$HOME/F-Eco/root.json
+./bin/feco-launcher
+```
+
+- The `xattr` command removes the "downloaded from the Internet" mark. Without it, macOS refuses to open the program because the developer cannot be verified (the programs have no Apple Developer ID yet).
+- On first sign-in, macOS may ask whether F-Launcher may use the Keychain: choose **Allow** or **Always Allow**. Apps install into `~/Library/Application Support/F-Eco/Launcher`.
+
+### Linux
+
+The Linux package is built on Ubuntu 26.04 (x64), so it needs a similarly recent glibc. On older distributions the programs may report a missing `GLIBC_2.xx`; in that case build from source ([Running the system](#running-the-system)).
+
+```bash
+unzip feco-1.20.0-x86_64-unknown-linux-gnu.zip
+cd feco-1.20.0-x86_64-unknown-linux-gnu
+chmod +x bin/*
+```
+
+On Linux, the package covers the following:
+- **Server and tools** (`feco-server`, `feco-catalog`, `feco-tuf`, `f-dev`) work fully. See [Running the F-Eco server from the package](#running-the-f-eco-server-from-the-package).
+- **F-SDK** works for sub-apps on Linux (`sdk/c/lib/libfsdk_c.so`, Python, TypeScript).
+- **The F-Eco website and F-Store** work in a browser.
+- **F-Launcher** opens its window but **cannot sign in yet**. F-Launcher only stores your sign-in in the operating system's secure store, and today supports Windows Credential Manager and macOS Keychain only. On Linux it reports that F-Launcher only supports Windows and macOS. Support for the Linux secure store (Secret Service) is planned for a later release.
+
+### Running the F-Eco server from the package
+
+The quickest way to try it on one machine (Windows, macOS or Linux) is to start the infrastructure with the bundled Docker setup, then run `feco-server` in `dev` mode:
+
+```bash
+docker compose -f infra/docker-compose.yml up -d --wait
+FECO_ENV=dev ./bin/feco-server
+```
+
+On Windows (PowerShell):
+
+```powershell
+docker compose -f infra/docker-compose.yml up -d --wait
+$env:FECO_ENV = "dev"; .\bin\feco-server.exe
+```
+
+- When you see `feco-server đang chạy`, open http://127.0.0.1:8080. Emails from the dev system land in Mailpit at http://127.0.0.1:8025.
+- The password of the default administrator account (`admin@f-eco.local`) is generated into `.dev/admin-password`, under the folder you ran the command from.
+- `dev` mode is for trying things out only. For a real deployment, set `FECO_ENV=production` and the required variables in [Configuration](#configuration).
+- Stop and delete the trial data: `docker compose -f infra/docker-compose.yml down`.
+
+For administration, use `feco-catalog` from `bin/` instead of `cargo run -p feco-server --bin feco-catalog --` in the sections below. Developers use `bin/f-dev` instead of `cargo run -p f-dev --`.
+
+### Phone
+
+The two mobile packages in a release are **test builds**, meant for a dev server running on your computer:
+
+- **Android** (`feco-mobile-<version>.apk`): signed with a debug key, connects to `http://10.0.2.2:8080`, which is the computer running the Android emulator. Install it into the emulator with `adb install feco-mobile-1.20.0.apk`. On a real phone the app cannot reach a server yet; rebuild it with your server's `FECO_SERVER` and `FECO_ISSUER` (see [clients/feco-mobile/README.md](clients/feco-mobile/README.md)).
+- **iOS** (`feco-mobile-<version>-ios-simulator.zip`): runs only in Xcode's iOS Simulator. Extract it, then run `xcrun simctl install booted Runner.app`. There is no package for a real iPhone yet (it needs signing with an Apple Developer account).
 
 ## Running the system
 

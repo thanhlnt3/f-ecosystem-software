@@ -49,6 +49,9 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 
 ## Mục lục
 
+- [Cài đặt từ bản phát hành](#cài-đặt-từ-bản-phát-hành)
+  - [Windows](#windows) · [macOS](#macos) · [Linux](#linux) · [Điện thoại](#điện-thoại)
+  - [Chạy máy chủ F-Eco từ gói](#chạy-máy-chủ-f-eco-từ-gói)
 - [Hướng dẫn chạy hệ thống](#hướng-dẫn-chạy-hệ-thống)
   - [1. Chuẩn bị](#1-chuẩn-bị)
   - [2. Chạy hạ tầng](#2-chạy-hạ-tầng)
@@ -70,6 +73,152 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 - [Yêu cầu và thiết kế](#yêu-cầu-và-thiết-kế)
 - [Cấu trúc thư mục](#cấu-trúc-thư-mục)
 - [Giấy phép](#giấy-phép)
+
+## Cài đặt từ bản phát hành
+
+Mỗi bản phát hành trên [GitHub Releases](https://github.com/thanhlnt3/f-ecosystem-software/releases/latest) có gói dựng sẵn cho từng hệ điều hành. Không cần cài Rust hay lấy mã nguồn.
+
+| Tệp | Hệ điều hành | Nội dung |
+|---|---|---|
+| `feco-<phiên bản>-x86_64-pc-windows-msvc.zip` | Windows 10/11, x64 | F-Launcher, máy chủ và công cụ (`bin/*.exe`), F-SDK, cấu hình hạ tầng mẫu, tài liệu |
+| `feco-<phiên bản>-aarch64-apple-darwin.zip` | macOS trên chip Apple (M1 trở lên) | Như trên, bản macOS. Chưa có bản cho Mac chip Intel |
+| `feco-<phiên bản>-x86_64-unknown-linux-gnu.zip` | Linux x64 (glibc) | Như trên, bản Linux. F-Launcher trên Linux chưa đăng nhập được (xem mục [Linux](#linux)) |
+| `feco-mobile-<phiên bản>.apk` | Android 10+ | F-Launcher di động, bản thử (xem mục [Điện thoại](#điện-thoại)) |
+| `feco-mobile-<phiên bản>-ios-simulator.zip` | iOS Simulator trên macOS | F-Launcher di động cho trình giả lập iOS |
+| `mentor-<phiên bản>-windows-x64.zip` | Windows x64 | App desktop Mentor, cài qua F-Launcher |
+| `SHA256SUMS.txt` | | Mã băm SHA-256 của mọi tệp |
+
+Trong mỗi gói desktop:
+
+| Thư mục | Nội dung |
+|---|---|
+| `bin/` | `feco-launcher` (F-Launcher), `feco-server` (máy chủ), `feco-catalog` (quản trị danh mục), `f-dev` (CLI cho nhà phát triển), `feco-tuf` (kho TUF) |
+| `sdk/` | F-SDK: C (header và thư viện dựng sẵn), Python, TypeScript, mã nguồn Rust |
+| `infra/` | `docker-compose.yml` và cấu hình Kratos, Hydra để chạy hạ tầng |
+| `docs/`, `notices/`, `sbom/` | Hướng dẫn tích hợp, giấy phép bên thứ ba, SBOM (CycloneDX) |
+
+Các chương trình chưa được ký số bằng chứng thư Authenticode hay Apple Developer ID. Vì vậy Windows và macOS sẽ cảnh báo ở lần chạy đầu, như hướng dẫn bên dưới. Trước khi chạy, hãy kiểm tra mã băm để chắc gói không bị sửa.
+
+### Tải và kiểm tra gói
+
+Tải các tệp cần dùng cùng `SHA256SUMS.txt` vào một thư mục, rồi kiểm tra. Trên Linux:
+
+```bash
+sha256sum --ignore-missing -c SHA256SUMS.txt
+```
+
+Trên macOS:
+
+```bash
+shasum -a 256 --ignore-missing -c SHA256SUMS.txt
+```
+
+Trên Windows (PowerShell), so mã in ra với dòng tương ứng trong `SHA256SUMS.txt`:
+
+```powershell
+Get-FileHash .\feco-1.20.0-x86_64-pc-windows-msvc.zip -Algorithm SHA256
+```
+
+Mỗi tệp phải báo `OK` (Linux, macOS) hoặc mã trùng khớp (Windows). Nếu không khớp, đừng chạy gói đó.
+
+### Kết nối F-Launcher với máy chủ F-Eco
+
+F-Launcher cần biết máy chủ F-Eco mà nó kết nối. Quản trị viên máy chủ cung cấp các giá trị sau:
+
+| Biến | Ý nghĩa |
+|---|---|
+| `FECO_LAUNCHER_SERVER` | Địa chỉ `feco-server`, ví dụ `https://f-eco.example.vn/` |
+| `FECO_LAUNCHER_HYDRA` | Địa chỉ đăng nhập (Hydra) |
+| `FECO_LAUNCHER_CLIENT_ID` | Client ID của F-Launcher |
+| `FECO_LAUNCHER_TUF` | Địa chỉ kho TUF chứa các gói app |
+| `FECO_LAUNCHER_TRUSTED_ROOT` | Tệp `root.json` tin cậy của kho TUF |
+
+Mọi địa chỉ phải là HTTPS, trừ khi máy chủ chạy ngay trên máy này (`127.0.0.1`, `localhost`). Với máy chủ dev chạy từ mã nguồn trên cùng máy ([Hướng dẫn chạy hệ thống](#hướng-dẫn-chạy-hệ-thống)), lệnh `scripts/dev-launcher.sh env` in sẵn các giá trị. Đặt thêm `FECO_LAUNCHER_DEV=1` để dùng địa chỉ mặc định `http://127.0.0.1:8080/` và `http://127.0.0.1:4444/`.
+
+### Windows
+
+1. Giải nén gói, ví dụ vào `C:\F-Eco`.
+2. Mở PowerShell, đặt các biến ở mục trên, rồi chạy F-Launcher:
+
+   ```powershell
+   cd C:\F-Eco\feco-1.20.0-x86_64-pc-windows-msvc
+   $env:FECO_LAUNCHER_SERVER = "https://<feco-server>/"
+   $env:FECO_LAUNCHER_HYDRA = "https://<feco-hydra>/"
+   $env:FECO_LAUNCHER_CLIENT_ID = "<client-id>"
+   $env:FECO_LAUNCHER_TUF = "https://<feco-tuf>/"
+   $env:FECO_LAUNCHER_TRUSTED_ROOT = "C:\F-Eco\root.json"
+   .\bin\feco-launcher.exe
+   ```
+
+3. Nếu Windows hiện "Windows protected your PC" (SmartScreen), bấm **More info** rồi **Run anyway**. Chỉ làm vậy sau khi mã băm đã khớp.
+4. Bấm **Đăng nhập**: trình duyệt mở trang đăng nhập F-Eco. Thông tin đăng nhập được lưu trong Windows Credential Manager. App cài vào `%LOCALAPPDATA%\F-Eco\Launcher`, không cần quyền quản trị.
+
+### macOS
+
+Gói dành cho máy Mac chip Apple, chạy từ Terminal (chưa có gói `.app`).
+
+```bash
+cd ~/Downloads
+unzip feco-1.20.0-aarch64-apple-darwin.zip
+cd feco-1.20.0-aarch64-apple-darwin
+xattr -dr com.apple.quarantine .
+chmod +x bin/*
+export FECO_LAUNCHER_SERVER=https://<feco-server>/
+export FECO_LAUNCHER_HYDRA=https://<feco-hydra>/
+export FECO_LAUNCHER_CLIENT_ID=<client-id>
+export FECO_LAUNCHER_TUF=https://<feco-tuf>/
+export FECO_LAUNCHER_TRUSTED_ROOT=$HOME/F-Eco/root.json
+./bin/feco-launcher
+```
+
+- Lệnh `xattr` gỡ dấu "tải từ Internet". Thiếu bước này, macOS báo không mở được vì không xác minh được nhà phát triển (chương trình chưa có Apple Developer ID).
+- Lần đầu đăng nhập, macOS có thể hỏi có cho F-Launcher dùng Keychain không: chọn **Allow** hoặc **Always Allow**. App cài vào `~/Library/Application Support/F-Eco/Launcher`.
+
+### Linux
+
+Gói Linux được dựng trên Ubuntu 26.04 (x64), nên cần glibc mới tương đương. Trên bản phân phối cũ hơn, chương trình có thể báo thiếu `GLIBC_2.xx`; khi đó hãy dựng từ mã nguồn ([Hướng dẫn chạy hệ thống](#hướng-dẫn-chạy-hệ-thống)).
+
+```bash
+unzip feco-1.20.0-x86_64-unknown-linux-gnu.zip
+cd feco-1.20.0-x86_64-unknown-linux-gnu
+chmod +x bin/*
+```
+
+Trên Linux, gói dùng được cho các phần sau:
+- **Máy chủ và công cụ** (`feco-server`, `feco-catalog`, `feco-tuf`, `f-dev`) chạy đầy đủ. Xem mục [Chạy máy chủ F-Eco từ gói](#chạy-máy-chủ-f-eco-từ-gói).
+- **F-SDK** dùng được cho app con trên Linux (`sdk/c/lib/libfsdk_c.so`, Python, TypeScript).
+- **Web F-Eco và F-Store** dùng được bằng trình duyệt.
+- **F-Launcher** mở được cửa sổ nhưng **chưa đăng nhập được**. F-Launcher chỉ lưu thông tin đăng nhập vào kho bảo mật của hệ điều hành, và hiện mới hỗ trợ Windows Credential Manager và macOS Keychain. Trên Linux sẽ có thông báo "F-Launcher chỉ hỗ trợ Windows và macOS". Hỗ trợ kho bảo mật của Linux (Secret Service) là việc của bản sau.
+
+### Chạy máy chủ F-Eco từ gói
+
+Cách nhanh nhất để thử trên một máy (Windows, macOS hoặc Linux) là chạy hạ tầng bằng Docker kèm theo gói, rồi chạy `feco-server` ở chế độ `dev`:
+
+```bash
+docker compose -f infra/docker-compose.yml up -d --wait
+FECO_ENV=dev ./bin/feco-server
+```
+
+Trên Windows (PowerShell):
+
+```powershell
+docker compose -f infra/docker-compose.yml up -d --wait
+$env:FECO_ENV = "dev"; .\bin\feco-server.exe
+```
+
+- Khi thấy dòng `feco-server đang chạy`, mở http://127.0.0.1:8080. Email của hệ thống dev nằm ở Mailpit http://127.0.0.1:8025.
+- Mật khẩu tài khoản quản trị viên mặc định (`admin@f-eco.local`) được sinh vào `.dev/admin-password`, trong thư mục bạn đứng khi chạy lệnh.
+- Chế độ `dev` chỉ để thử. Khi triển khai thật, đặt `FECO_ENV=production` và các biến bắt buộc ở mục [Cấu hình](#cấu-hình).
+- Dừng và xóa dữ liệu thử: `docker compose -f infra/docker-compose.yml down`.
+
+Lệnh quản trị dùng `feco-catalog` trong `bin/` thay cho `cargo run -p feco-server --bin feco-catalog --` ở các phần dưới. Nhà phát triển dùng `bin/f-dev` thay cho `cargo run -p f-dev --`.
+
+### Điện thoại
+
+Hai gói di động trong bản phát hành là **bản thử**, dùng với máy chủ dev chạy trên máy tính:
+
+- **Android** (`feco-mobile-<phiên bản>.apk`): ký bằng khóa debug, kết nối `http://10.0.2.2:8080`, tức máy tính chạy trình giả lập Android. Cài vào trình giả lập bằng `adb install feco-mobile-1.20.0.apk`. Trên điện thoại thật, app chưa kết nối được máy chủ; hãy dựng lại với `FECO_SERVER` và `FECO_ISSUER` của máy chủ (xem [clients/feco-mobile/README.md](clients/feco-mobile/README.md)).
+- **iOS** (`feco-mobile-<phiên bản>-ios-simulator.zip`): chỉ chạy trên iOS Simulator của Xcode. Giải nén rồi chạy `xcrun simctl install booted Runner.app`. Chưa có gói cho iPhone thật (cần ký bằng tài khoản Apple Developer).
 
 ## Hướng dẫn chạy hệ thống
 
