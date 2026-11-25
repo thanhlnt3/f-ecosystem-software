@@ -526,3 +526,15 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
      debug, và khi chuyển tệp sang cửa sổ đang mở đều chạy bình thường. Nghi do cơ chế một phiên
      bản (`instance.json`) khi có cửa sổ VPdf khác đang mở. Nếu người dùng gặp lại, cần nhật ký từ
      VPdf (bản release không có console) để tìm nguyên nhân.
+137. **Mentor 0.2.4 chưa đăng nhập bằng F-Eco.** Gói desktop tự chứa 0.2.4 (tích hợp 25/11/2026)
+     dùng tài khoản Mentor tạo trên máy; hai bản vá "Đăng nhập bằng F-Eco" của F-Eco không áp được
+     vì tác giả đã viết lại giao diện và gateway. Bản web vẫn là 0.2.2 có vá.
+     - Có đề nghị tác giả Mentor đưa đăng nhập F-Eco (OIDC) vào mã gốc, hay F-Eco viết lại bản vá cho 0.2.4?
+     - Gói chưa ký Authenticode (`Mentor.exe`, `gateway\mentor-gateway.exe`): kiểm duyệt thật sẽ từ chối.
+     - Repo Mentor chưa có tệp LICENSE; `f-app.toml` của tác giả ghi `license = "TODO"`.
+     - Gợi ý tác giả nâng `url` 2.5.9 và `cookie` 0.18.3 trong `apps/app/src-tauri/Cargo.lock`.
+     - Gói tải khóa học từ Google Drive của chủ dự án Mentor và gọi nhà cung cấp AI bằng khóa người
+       dùng nhập: cần chính sách quyền riêng tư thật (`privacy_policy` đang là chỗ giữ chỗ).
+138. **F-Launcher trên Linux chưa thử với phiên đăng nhập thật.** CI kiểm lưu, đọc, xóa token qua
+     GNOME Keyring không giao diện và thông báo khi không có D-Bus. Chưa thử đăng nhập trọn luồng
+     trên máy Linux có màn hình (KDE KWallet, KeePassXC), vì máy dev là Windows.

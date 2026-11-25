@@ -11,6 +11,14 @@ Thay đổi OpenSpec `launcher-linux-keyring`: F-Launcher đăng nhập được
 - **CI**: job `rust (ubuntu-latest)` chạy GNOME Keyring không giao diện, kiểm lưu, đọc, xóa token qua Secret Service, và kiểm thông báo khi không có D-Bus.
 - **README** hai thứ tiếng: mục "Cài đặt từ bản phát hành" cho Windows, macOS, Linux và điện thoại; Linux ghi cách dùng Secret Service.
 
+Thay đổi OpenSpec `mentor-desktop-0.2.4`: app desktop Mentor 0.2.4.
+
+- **Quét trước khi tích hợp** (tag `v0.2.4`, commit `c7ac6f2`): critical 0, high 0, medium 9 (`url`, `cookie` chưa nâng; `glib` chỉ trên Linux; còn lại ngừng bảo trì). Chi tiết trong `integrations/mentor/SCAN.md`.
+- **Gói của tác giả, ghim theo mã băm**: `integrations/mentor/DESKTOP_PACKAGE` (SHA-256 `3032e27f…ae369`, khớp mã băm GitHub công bố). `fetch-desktop.sh` quét mã nguồn ở commit của tag, tải gói, so SHA-256, kiểm cấu trúc gói; Windows Defender không phát hiện mối đe dọa.
+- **Mentor 0.2.4 tự chứa**: `Mentor.exe` tự bật gateway đi kèm; giao diện Làng gà; tài khoản Mentor tạo ngay trên máy. **Chưa đăng nhập bằng F-Eco** (bản vá cũ không áp được), chưa ký Authenticode (QUESTIONS.md 137).
+- **Bản phát hành F-Eco** đính gói Mentor 0.2.4 nguyên vẹn (job `mentor` của `release.yml` dùng `fetch-desktop.sh`) thay cho bản 0.2.2 tự dựng. Bản web vẫn là 0.2.2 có vá đăng nhập F-Eco.
+- **Kho dev**: `scripts/dev-apps.sh mentor` có `MENTOR_DESKTOP_VERSION` và `MENTOR_SKIP_WEB=1`; quét hằng tuần thêm commit của gói desktop.
+
 ## 1.20.0 (23/11/2026)
 
 Gộp PR [#1](https://github.com/thanhlnt3/f-ecosystem-software/pull/1) "Polish UI across F-Eco apps" (`87abdb6`, đóng góp của collaborator), và cập nhật README.

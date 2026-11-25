@@ -1,0 +1,7 @@
+# Gói desktop Mentor do tác giả dựng (integrations/feco/build.ps1 trong repo Mentor), F-Eco ghim
+# đúng tệp này và mã băm SHA-256 do GitHub công bố. fetch-desktop.sh tải và kiểm trước khi dùng.
+version=0.2.4
+tag=v0.2.4
+commit=c7ac6f22c60c157efa78eccbb727e34a9a9b8184
+url=https://github.com/katD2707/agent-mentor-maximum-experience/releases/download/v0.2.4/mentor-0.2.4-windows-x64.zip
+sha256=3032e27ff7923265906b5341dfe955f5765d649599c592bc6f7e9189b50ae369

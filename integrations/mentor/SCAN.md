@@ -77,3 +77,22 @@ hoặc unsound, phụ thuộc của Tauri trên Linux), `opentelemetry-api` và 
 
 Không có tệp `LICENSE` ở gốc repo và không manifest gói nào ở gốc khai `license` (khớp
 `NOTICE.md`: quyền dùng do tác giả xác nhận với chủ dự án F-Eco).
+
+## Mentor 0.2.4: gói desktop tự chứa (25/11/2026)
+
+Thay đổi `mentor-desktop-0.2.4`. Chủ dự án yêu cầu tích hợp gói
+`https://github.com/katD2707/agent-mentor-maximum-experience/releases/download/v0.2.4/mentor-0.2.4-windows-x64.zip`.
+
+- **Mã nguồn**: tag `v0.2.4`, commit `c7ac6f22c60c157efa78eccbb727e34a9a9b8184` (15 commit, 300 tệp so với `5ad3c9f`).
+- **Quét** (`scripts/scan-integration.sh`): 2.078 tệp, 681 thư viện, OSV đã tra; **critical 0, high 0, medium 9**, đã cho phép 2 (như trước). Hai lỗ hổng mức cao còn lại của bản 0.2.2 (`soupsieve` 2.10 cho Python dưới 3.11.5) không còn.
+- **9 phát hiện medium**, đều trong `apps/app/src-tauri/Cargo.lock` của app desktop:
+  - `url` 2.5.8 (RUSTSEC-2026-0592) và `cookie` 0.18.2 (RUSTSEC-2026-0594): đã có bản vá (2.5.9, 0.18.3), tác giả chưa nâng;
+  - `glib` 0.18.5 (RUSTSEC-2024-0429): chỉ dùng khi dựng cho Linux, không có trong gói Windows;
+  - `chrono`, `proc-macro-error`, `zvariant`, `zbus_names`, `zvariant_derive`: ngừng bảo trì, không phải lỗ hổng.
+- **Gói**: `mentor-0.2.4-windows-x64.zip`, 160.452.772 byte, SHA-256 `3032e27ff7923265906b5341dfe955f5765d649599c592bc6f7e9189b50ae369`, khớp mã băm GitHub công bố cho tệp của bản phát hành.
+  - 948 tệp, giải nén 197 MB: `Mentor.exe`, `gateway/` (gateway PyInstaller, 105 tệp `.exe`, `.dll`, `.pyd`), `THIRD_PARTY_NOTICES.md`. Không có đường dẫn tuyệt đối hay `..`.
+  - Windows Defender (`MpCmdRun -Scan -ScanType 3`): không phát hiện mối đe dọa.
+  - **Chưa ký Authenticode** (`Mentor.exe`, `gateway\mentor-gateway.exe`).
+- **Kết nối mạng của gói** (theo `integrations/feco/README.md` của Mentor): tải khóa học từ danh mục công khai trên Google Drive của chủ dự án Mentor (`MENTOR_REMOTE_CATALOG_URL`, kiểm mã băm); gọi nhà cung cấp AI bằng khóa do người dùng nhập. Không có đăng nhập bằng F-Eco.
+- **Giấy phép**: repo Mentor chưa có tệp LICENSE (`f-app.toml` của tác giả ghi `license = "TODO"`). F-Eco ghi như bản trước: "Chưa công bố giấy phép (tác giả cho phép F-Eco tích hợp)".
+- **Chưa làm**: dựng lại gói từ mã nguồn để so (cần PyInstaller và Tauri trên Windows). F-Eco dùng nguyên gói của tác giả, ghim bằng SHA-256.

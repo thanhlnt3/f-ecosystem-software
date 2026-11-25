@@ -6,18 +6,26 @@ Mentor có hai phần:
 - **app** (`apps/app`): React 19 + Vite. Chạy trên trình duyệt (cổng 5173), hoặc đóng gói thành app desktop bằng Tauri 2;
 - **gateway** (`services/gateway`): FastAPI, giữ tài khoản, khóa học và gọi AI.
 
-Trong F-Eco, Mentor có cả **app web** và **app desktop**:
-- F-Store có trang Mentor với nút "Mở ứng dụng web".
-- F-Launcher trên Windows cài và mở app desktop `Mentor.exe` (khi kho có gói desktop). Trên máy khác, và trên F-Launcher di động, Mentor là app web.
-- Người dùng đăng nhập Mentor bằng tài khoản F-Eco (OIDC). Đăng nhập bằng mật khẩu của Mentor vẫn giữ.
+Trong F-Eco, Mentor có cả **app web** và **app desktop**, ở hai phiên bản khác nhau:
 
-Thư mục này chỉ có bản vá, không có mã Mentor (NOTICE.md).
+| Dạng | Phiên bản | Nguồn | Đăng nhập |
+|---|---|---|---|
+| App web | 0.2.2 (`MENTOR_COMMIT`) | F-Eco áp bản vá trong thư mục này | Tài khoản F-Eco (OIDC), giữ cả mật khẩu Mentor |
+| App desktop Windows | 0.2.4 (`DESKTOP_PACKAGE`) | Gói tự chứa do tác giả dựng, F-Eco ghim mã băm | Tài khoản Mentor tạo ngay trên máy; **chưa** đăng nhập bằng F-Eco |
+
+- F-Store có trang Mentor với nút "Mở ứng dụng web".
+- F-Launcher trên Windows cài và mở app desktop `Mentor.exe`. Trên máy khác, và trên F-Launcher di động, Mentor là app web.
+
+Thư mục này chỉ có bản vá, script và ghi chép, không có mã Mentor (NOTICE.md).
 
 ## Tệp
 
 | Tệp | Nội dung |
 |---|---|
-| `MENTOR_COMMIT` | Commit của Mentor mà bản vá áp vào |
+| `MENTOR_COMMIT` | Commit của Mentor mà bản vá áp vào (bản web) |
+| `DESKTOP_PACKAGE` | Gói desktop đã ghim: phiên bản, tag, commit, địa chỉ tải, SHA-256 |
+| `fetch-desktop.sh` | Quét mã nguồn ở commit của tag, tải gói desktop, kiểm SHA-256 và cấu trúc gói |
+| `build-desktop.sh` | Dựng app desktop 0.2.2 từ mã gốc và bản vá (CI dùng để kiểm bản vá; không còn đính vào bản phát hành) |
 | `mentor-gateway.patch` | Gateway: route `/api/auth/feco/*` (Authlib), cột `users.feco_subject`, bảng `feco_login_codes`, cấu hình `FECO_*`, lệnh `set-role`, test `tests/test_gw_feco_auth.py`, thư viện `authlib` và `itsdangerous` |
 | `mentor-app.patch` | App: nút "Đăng nhập bằng F-Eco", đổi mã dùng một lần lấy phiên, thông báo lỗi tiếng Việt và tiếng Anh, test `src/feco-login.test.tsx` |
 | `tauri.feco.conf.json` | Cấu hình Tauri thêm khi F-Eco dựng app desktop: bỏ địa chỉ cập nhật của Mentor, vì F-Launcher cập nhật app qua TUF |
@@ -64,7 +72,7 @@ Lệnh này kết thúc các phiên đang mở của tài khoản. Lần đăng 
    Lệnh này:
    - tạo client OAuth phía máy chủ (scope `openid profile`, chuyển hướng `http://localhost:8100/api/auth/feco/callback`). Client ID và secret lưu trong `.dev/mentor-client-id` và `.dev/mentor-client-secret` (không commit);
    - ký target `web` của Mentor, `web_url` là `http://localhost:8100/api/auth/feco/login?return=http://localhost:5173`;
-   - có `MENTOR_DESKTOP_ZIP` (gói `mentor-<phiên bản>-windows-x64.zip` từ bản phát hành F-Eco) thì ký thêm target `windows-x64`;
+   - có `MENTOR_DESKTOP_ZIP` (gói `mentor-<phiên bản>-windows-x64.zip`, lấy bằng `fetch-desktop.sh`) thì ký thêm target `windows-x64`, với phiên bản `MENTOR_DESKTOP_VERSION` (mặc định bằng bản web). `MENTOR_SKIP_WEB=1` chỉ đăng bản desktop;
    - ghi mục F-Store kèm logo;
    - in các biến cần đặt cho gateway Mentor.
 3. Chạy gateway Mentor (trong thư mục Mentor đã áp bản vá) với các biến script in ra:
@@ -90,20 +98,24 @@ Lệnh này kết thúc các phiên đang mở của tài khoản. Lần đăng 
 
 ## App desktop
 
-CI của F-Eco (job `mentor-desktop` trong `.github/workflows/ci.yml` và `release.yml`) dựng app desktop Windows:
+Từ F-Eco 1.21.0, app desktop là **gói tự chứa Mentor 0.2.4** do tác giả dựng bằng `integrations/feco/build.ps1` trong repo Mentor (tag `v0.2.4`, commit `c7ac6f2`):
 
-1. Tải Mentor đúng `MENTOR_COMMIT`, áp hai bản vá.
-2. Chạy pytest của gateway và vitest của app.
-3. Dựng app:
+- `Mentor.exe` (Tauri) tự bật `gateway\mentor-gateway.exe` (gateway đóng gói bằng PyInstaller) trên một cổng localhost trống. Không cần chạy gateway hay máy chủ Mentor riêng.
+- Dữ liệu (tài khoản, tiến độ, nhật ký) nằm trong `FECO_APP_DATA_DIR` do F-Launcher đặt, giữ nguyên khi cập nhật.
+- Lần đầu mở, người dùng tạo tài khoản Mentor ngay trên máy (học sinh hoặc giáo viên). Gói **chưa có** đăng nhập bằng F-Eco: hai bản vá trong thư mục này không áp được vào 0.2.4, vì tác giả đã viết lại giao diện (Làng gà) và gateway.
+- Kết nối mạng: khóa học tải từ danh mục công khai của chủ dự án Mentor trên Google Drive (kiểm mã băm, giữ lại để học khi mất mạng); tính năng AI gọi nhà cung cấp AI bằng khóa do người dùng nhập.
+- `Mentor.exe` và gateway **chưa ký Authenticode**. Kho dev nhận gói này; kiểm duyệt thật của F-Eco sẽ từ chối cho tới khi tác giả ký.
 
-   ```bash
-   pnpm -C apps/app tauri build --no-bundle --config src-tauri/tauri.feco.conf.json
-   ```
+Job `mentor` trong `release.yml` chạy `fetch-desktop.sh`: quét mã nguồn ở commit của tag, tải gói từ bản phát hành của Mentor, so SHA-256 với `DESKTOP_PACKAGE`, kiểm cấu trúc gói, rồi đính gói nguyên vẹn vào bản phát hành F-Eco. Kết quả quét và kiểm tra: `SCAN.md`, mục "Mentor 0.2.4".
 
-   với `VITE_API_BASE=http://localhost:8100/api`.
-4. Đóng gói `Mentor.exe`, NOTICE và SOURCE.txt thành `mentor-<phiên bản>-windows-x64.zip`. Bản phát hành F-Eco đính kèm gói này.
+Đưa bản desktop vào kho dev:
 
-App desktop gọi gateway ở `http://localhost:8100`, nên gateway phải chạy trên cùng máy, như bản dùng thử của Mentor. Nút "Đăng nhập bằng F-Eco" đưa webview của app qua gateway và F-Eco, rồi quay về `http://tauri.localhost/?feco_code=...`.
+```bash
+integrations/mentor/fetch-desktop.sh ~/.feco-dev-ext/mentor-desktop
+MENTOR_DESKTOP_ZIP=~/.feco-dev-ext/mentor-desktop/mentor-0.2.4-windows-x64.zip MENTOR_DESKTOP_VERSION=0.2.4 MENTOR_SKIP_WEB=1 scripts/dev-apps.sh mentor
+```
+
+Job `mentor-desktop` trong `ci.yml` vẫn dựng bản 0.2.2 từ mã gốc và bản vá, để kiểm bản vá của bản web còn áp được và test còn qua.
 
 ## Kiểm thử
 

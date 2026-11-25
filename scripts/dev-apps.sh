@@ -22,7 +22,9 @@
 #   scripts/dev-apps.sh vpdf        # app desktop VPdf (gói dựng bằng integrations/vpdf/build.sh)
 #   scripts/dev-apps.sh mentor      # Mentor: client OAuth phía máy chủ, target web; có
 #                                   # MENTOR_DESKTOP_ZIP thì thêm target desktop; logo, danh mục; in biến
-#                                   # môi trường cho gateway Mentor (integrations/mentor/README.md)
+#                                   # môi trường cho gateway Mentor (integrations/mentor/README.md).
+#                                   # MENTOR_DESKTOP_VERSION: phiên bản riêng của bản desktop;
+#                                   # MENTOR_SKIP_WEB=1: chỉ đăng bản desktop
 #
 # Mã nguồn tải về và bản dựng nằm ngoài repo, trong $FECO_EXT_DIR (mặc định ~/.feco-dev-ext), để
 # Cargo không coi chúng là một phần workspace của F-Eco. Chỉ dùng cho dev: bản phát hành thật đi
@@ -404,10 +406,12 @@ mentor() {
   local summary="Học tập cho học sinh lớp 1 tới đại học và giáo viên: khóa học, luyện tập, hỏi đáp, kế hoạch học."
   ICON="$ROOT/assets/logos/mentor-128.png"
   WEBSITE=""
-  DESCRIPTION="Mentor là ứng dụng học tập cho học sinh từ lớp 1 tới đại học và cho giáo viên. Học sinh có khóa học, luyện tập, hỏi đáp với trợ lý Mực và theo dõi tiến độ; giáo viên đưa tài liệu lên và duyệt khóa học do AI soạn. Đăng nhập bằng tài khoản F-Eco. Dùng trên trình duyệt, hoặc cài app desktop trên Windows."
+  DESCRIPTION="Mentor là ứng dụng học tập cho học sinh từ lớp 1 tới đại học và cho giáo viên. Học sinh có khóa học, luyện tập, hỏi đáp với trợ lý Mực và theo dõi tiến độ; giáo viên đưa tài liệu lên và duyệt khóa học do AI soạn. Bản web đăng nhập bằng tài khoản F-Eco. Bản desktop Windows tự chứa (gateway chạy cùng ứng dụng), tạo tài khoản Mentor ngay trên máy; khóa học tải từ danh mục của Mentor trên Google Drive, tính năng AI dùng khóa do người dùng nhập."
   FEATURES="Khóa học theo độ tuổi, bài học từng bước|Luyện tập có ôn tập ngắt quãng|Hỏi đáp với trợ lý Mực|Kế hoạch học và nhắc giờ học|Giáo viên soạn khóa học cùng AI|Đăng nhập bằng tài khoản F-Eco"
   NOTES="Bản tích hợp đầu tiên với F-Eco: đăng nhập bằng tài khoản F-Eco (bản vá trong integrations/mentor)."
   # Target desktop trước: catalog_entry của target web ghi web_url sau cùng.
+  # Bản desktop có thể khác phiên bản bản web (ví dụ desktop 0.2.4 tự chứa, web 0.2.2 đã vá đăng nhập F-Eco).
+  local desktop_version="${MENTOR_DESKTOP_VERSION:-$version}"
   if [[ -n "${MENTOR_DESKTOP_ZIP:-}" ]]; then
     [[ -f "$MENTOR_DESKTOP_ZIP" ]] || { echo "không thấy $MENTOR_DESKTOP_ZIP" >&2; exit 1; }
     rm -rf "$pkg"
@@ -415,8 +419,15 @@ mentor() {
     "$PY" -I -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$MENTOR_DESKTOP_ZIP" "$pkg"
     [[ -f "$pkg/Mentor.exe" ]] || { echo "gói desktop thiếu Mentor.exe" >&2; exit 1; }
     WEB_URL=""
-    publish_app "$id" "$name" "$version" "$pkg" "Mentor.exe" "" "$summary" education "katD2707" \
+    local web_notes="$NOTES"
+    NOTES="${MENTOR_DESKTOP_NOTES:-$NOTES}"
+    publish_app "$id" "$name" "$desktop_version" "$pkg" "Mentor.exe" "" "$summary" education "katD2707" \
       "$license" "$source" "false" "$client"
+    NOTES="$web_notes"
+  fi
+  if [[ "${MENTOR_SKIP_WEB:-}" == 1 ]]; then
+    rm -rf "$pkg"
+    return 0
   fi
   rm -rf "$pkg"
   mkdir -p "$pkg"
@@ -451,5 +462,5 @@ case "${1:-}" in
   github) shift; github "$@" ;;
   opensource) opensource ;;
   all) samples; opensource ;;
-  *) sed -n '2,22p' "$0"; exit 2 ;;
+  *) sed -n '2,31p' "$0"; exit 2 ;;
 esac

@@ -485,16 +485,24 @@ app repository; it is used only to try single sign-on in step 5.
     ```
 
     Add `--dart-define=FECO_DEMO=true` to try it with sample data and no server. Details in [clients/feco-mobile/README.md](clients/feco-mobile/README.md).
-17. **Mentor**: a learning app for students and teachers, as both a web app and a Windows desktop app, signing in with your F-Eco account.
+17. **Mentor**: a learning app for students and teachers. The web app (0.2.2) signs in with your F-Eco account; the Windows desktop app (0.2.4, since F-Eco 1.21.0) is the author's self-contained package and uses a Mentor account created on the machine.
 
     ```bash
     scripts/dev-apps.sh mentor
     ```
 
-    - The command creates a server-side OAuth client, signs Mentor's web target and writes the catalog. Set `MENTOR_DESKTOP_ZIP` to the release's `mentor-<version>-windows-x64.zip` to add the desktop app.
+    - The command creates a server-side OAuth client, signs Mentor's web target and writes the catalog.
+    - To add the 0.2.4 desktop app, fetch the pinned package (scans the source, downloads, checks SHA-256), then sign it into the dev repository. The package starts its own bundled gateway, so no separate gateway is needed:
+
+      ```bash
+      integrations/mentor/fetch-desktop.sh ~/.feco-dev-ext/mentor-desktop
+      MENTOR_DESKTOP_ZIP=~/.feco-dev-ext/mentor-desktop/mentor-0.2.4-windows-x64.zip MENTOR_DESKTOP_VERSION=0.2.4 MENTOR_SKIP_WEB=1 scripts/dev-apps.sh mentor
+      ```
+
+      This package is not Authenticode-signed yet and does not sign in with F-Eco; see [integrations/mentor/README.md](integrations/mentor/README.md) and [SCAN.md](integrations/mentor/SCAN.md).
     - Run the Mentor gateway (port 8100) and web app (port 5173) as in [integrations/mentor/README.md](integrations/mentor/README.md), with the `FECO_*` variables the command prints.
     - In the launcher: **Sync**, Store → Mentor → **Add** → **Open**. Or open `http://localhost:5173` and click "Sign in with F-Eco".
-    - On first sign-in Mentor creates a student account. A Mentor admin promotes teachers.
+    - Web app: on first F-Eco sign-in Mentor creates a student account; a Mentor admin promotes teachers. Desktop app: on first launch, click "Create account" and pick student or teacher.
     - Before integrating an outside app, scan its repository at the exact commit you will use. Reports go to `.dev/scans/`; reviewed findings are recorded in `integrations/<app>/scan-allow.toml` and summarized in `integrations/<app>/SCAN.md`:
 
       ```bash
@@ -1032,7 +1040,7 @@ Questions awaiting a decision are in [`QUESTIONS.md`](QUESTIONS.md).
 | `tools/feco-license-check` | Checks service and container image licenses |
 | `infra/` | Dev infrastructure: `docker-compose.yml`, the Kratos configuration (schema, email templates) and Hydra |
 | `scripts/` | `dev-local.sh`: runs the infrastructure without Docker; `tuf-drill.sh`: drills the TUF chain of trust; `dev-launcher.sh`: the TUF repository and OAuth clients for trying the launcher; `dev-apps.sh`: puts sample apps, open-source apps from GitHub, the ThesisAI web app, Mentor, BinhAI Office and VPdf into the dev repository; `scan-integration.sh`: scans an outside repository before integrating it; `scan-integrations-all.sh`: rescans every integrated app |
-| `integrations/` | Integrations with outside apps: `thesisai/` (the "Sign in with F-Eco" patch for ThesisAI, guide, provenance); `mentor/` (the "Sign in with F-Eco" patch for Mentor, desktop build script, guide, provenance); `binhai-office/` and `vpdf/` (build-from-source scripts, scan results, licenses) |
+| `integrations/` | Integrations with outside apps: `thesisai/` (the "Sign in with F-Eco" patch for ThesisAI, guide, provenance); `mentor/` (the "Sign in with F-Eco" patch for the Mentor web app, the pinned desktop package and its fetch script, guide, provenance); `binhai-office/` and `vpdf/` (build-from-source scripts, scan results, licenses) |
 | `docs/security/` | Incident response procedure, TUF key management, drill reports |
 | `third_party/` | License declarations and approved exceptions |
 | `openspec/` | Requirements, design, plan |
