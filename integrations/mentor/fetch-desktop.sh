@@ -28,7 +28,7 @@ if [[ "$got" != "$sha" ]]; then
   exit 1
 fi
 py="$(command -v python3 || command -v python)"
-"$py" -I - "$zip" <<'PYEOF'
+PYTHONIOENCODING=utf-8 "$py" -X utf8 -I - "$zip" <<'PYEOF'
 import sys, zipfile
 names = zipfile.ZipFile(sys.argv[1]).namelist()
 bad = [n for n in names if n.startswith(("/", "\\")) or ".." in n.replace("\\", "/").split("/") or ":" in n]
