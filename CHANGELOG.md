@@ -16,6 +16,8 @@ Thay đổi OpenSpec `f-builder-feco-look`: F-Builder theo giao diện F-Launche
   - Chữ đạt tương phản WCAG AA, kể cả khi di chuột hay bấm nút.
 - **Mặc định chủ đề sáng** như F-Launcher. Người đã lưu chủ đề giữ lựa chọn của mình.
 - Câu hỏi mở: F-Builder có nên theo màu nhấn và phong cách người dùng chọn trong F-Launcher không (QUESTIONS.md 139).
+- Test giao diện của F-Builder dùng phông đóng gói sẵn, không dùng phông của máy. Lý do: trên Ubuntu, DejaVu Sans làm dòng thấp hơn và hai test khung Tác tử hỏng. Việc chọn phông hệ thống có unit test riêng.
+- **CI Mentor**: test "adds a deadline by text" của Mentor gõ hạn "25/11" không có năm, nên hỏng từ 26/11/2026 (job `mentor-desktop`). `mentor-app.patch` cố định ngày trong test đó là 20/11/2026. Bản 0.2.4 của tác giả còn đúng test này (QUESTIONS.md 137).
 
 ## 1.21.0 (25/11/2026)
 

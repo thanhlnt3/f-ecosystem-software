@@ -11,6 +11,8 @@ use f_builder_ui_egui::demo;
 fn a_stuck_lock_is_shown_with_a_way_out() {
     let mut h = Harness::builder().with_size(egui::vec2(1280.0, 820.0)).with_max_steps(32).build_eframe(move |cc| {
         f_builder_ui_egui::BuilderApp::setup_context(&cc.egui_ctx);
+        // The bundled fonts, not this computer's: sizes in these tests must match on every machine.
+        f_builder_ui_egui::theme::install_bundled_fonts(&cc.egui_ctx);
         demo::app(demo::engine(Mode::Beginner, true))
     });
     let summary = "a lock taken at x.rs:1 is stuck";

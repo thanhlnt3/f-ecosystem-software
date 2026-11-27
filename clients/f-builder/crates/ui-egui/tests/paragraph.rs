@@ -7,6 +7,8 @@ use f_builder_ui_egui::{BuilderApp, demo};
 fn a_formatted_glossary_word_after_unicode_still_has_its_hover_hint() {
     let mut h = Harness::builder().with_size(egui::vec2(1280.0, 820.0)).build_eframe(|cc| {
         BuilderApp::setup_context(&cc.egui_ctx);
+        // The bundled fonts, not this computer's: sizes in these tests must match on every machine.
+        f_builder_ui_egui::theme::install_bundled_fonts(&cc.egui_ctx);
         let mut app = demo::app(demo::engine(Mode::Beginner, true));
         demo::fill_project(&mut app);
         app.state.feed = vec![FeedItem::Agent { text: "ação **IPC** e `source.rs`".into(), streaming: false }];

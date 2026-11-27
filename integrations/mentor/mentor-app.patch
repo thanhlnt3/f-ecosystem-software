@@ -259,6 +259,55 @@ index e4199c1..b7eb756 100644
    },
    first: {
      chooseLanguage: "Chọn ngôn ngữ",
+diff --git a/apps/app/src/research.test.tsx b/apps/app/src/research.test.tsx
+index da03ab3..196bf64 100644
+--- a/apps/app/src/research.test.tsx
++++ b/apps/app/src/research.test.tsx
+@@ -1,4 +1,4 @@
+-import { beforeEach, describe, expect, it } from "vitest";
++import { beforeEach, describe, expect, it, vi } from "vitest";
+ import { readFileSync } from "node:fs";
+ import { resolve } from "node:path";
+ import { render, screen, waitFor, within } from "@testing-library/react";
+@@ -118,18 +118,26 @@ describe("home states", () => {
+     await waitFor(() => expect(within(entry(/Transfer Learning from Large Atomistic/)).getByText("Đang đọc")).toBeInTheDocument());
+   });
+   it("adds a deadline by text, and says so when the date cannot be read", async () => {
+-    seed(UNI);
+-    const ui = userEvent.setup();
+-    open("/nghien-cuu");
+-    await goTab(ui, "Lịch");
+-    await ui.click(await screen.findByRole("button", { name: "Thêm hạn" }));
+-    await ui.type(screen.getByLabelText("Hạn mới"), "gửi báo cáo");
+-    await ui.click(within(screen.getByLabelText("Hạn mới").closest("form")!).getByRole("button", { name: "Thêm" }));
+-    expect(await screen.findByRole("alert")).toHaveTextContent("Chưa đọc được ngày");
+-    await ui.clear(screen.getByLabelText("Hạn mới"));
+-    await ui.type(screen.getByLabelText("Hạn mới"), "gửi báo cáo 25/11, 17:00");
+-    await ui.click(within(screen.getByLabelText("Hạn mới").closest("form")!).getByRole("button", { name: "Thêm" }));
+-    expect(await screen.findByText("Gửi báo cáo")).toBeInTheDocument();
++    // F-Eco: "25/11" has no year and is read against today, so the test expired on 26/11/2026.
++    // Today is pinned to a day before it (only Date is faked; user-event's timers stay real).
++    vi.useFakeTimers({ toFake: ["Date"] });
++    vi.setSystemTime(new Date(2026, 10, 20, 9, 0));
++    try {
++      seed(UNI);
++      const ui = userEvent.setup();
++      open("/nghien-cuu");
++      await goTab(ui, "Lịch");
++      await ui.click(await screen.findByRole("button", { name: "Thêm hạn" }));
++      await ui.type(screen.getByLabelText("Hạn mới"), "gửi báo cáo");
++      await ui.click(within(screen.getByLabelText("Hạn mới").closest("form")!).getByRole("button", { name: "Thêm" }));
++      expect(await screen.findByRole("alert")).toHaveTextContent("Chưa đọc được ngày");
++      await ui.clear(screen.getByLabelText("Hạn mới"));
++      await ui.type(screen.getByLabelText("Hạn mới"), "gửi báo cáo 25/11, 17:00");
++      await ui.click(within(screen.getByLabelText("Hạn mới").closest("form")!).getByRole("button", { name: "Thêm" }));
++      expect(await screen.findByText("Gửi báo cáo")).toBeInTheDocument();
++    } finally {
++      vi.useRealTimers();
++    }
+   });
+   it("opens the agenda and saves the two boxes", async () => {
+     seed(UNI);
 diff --git a/apps/app/src/screens/Login.tsx b/apps/app/src/screens/Login.tsx
 index 9063bc2..41e5f81 100644
 --- a/apps/app/src/screens/Login.tsx

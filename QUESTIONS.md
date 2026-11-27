@@ -533,6 +533,9 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
      - Gói chưa ký Authenticode (`Mentor.exe`, `gateway\mentor-gateway.exe`): kiểm duyệt thật sẽ từ chối.
      - Repo Mentor chưa có tệp LICENSE; `f-app.toml` của tác giả ghi `license = "TODO"`.
      - Gợi ý tác giả nâng `url` 2.5.9 và `cookie` 0.18.3 trong `apps/app/src-tauri/Cargo.lock`.
+     - Gợi ý tác giả sửa test "adds a deadline by text" (`apps/app/src/research.test.tsx`). Test gõ
+       hạn "25/11" không có năm nên hỏng từ 26/11/2026, ở cả 0.2.2 và 0.2.4. F-Eco tạm cố định ngày
+       trong `mentor-app.patch` (1.22.0).
      - Gói tải khóa học từ Google Drive của chủ dự án Mentor và gọi nhà cung cấp AI bằng khóa người
        dùng nhập: cần chính sách quyền riêng tư thật (`privacy_policy` đang là chỗ giữ chỗ).
 138. **F-Launcher trên Linux chưa thử với phiên đăng nhập thật.** CI kiểm lưu, đọc, xóa token qua

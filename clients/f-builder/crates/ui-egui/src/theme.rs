@@ -232,6 +232,14 @@ pub fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(font_definitions(system_faces()));
 }
 
+/// Only the fonts built into the app (DM Sans, JetBrains Mono, f-builder-fonts), never the
+/// system's: the same faces on every computer. UI tests use it, since their sizes and positions
+/// must not depend on which fonts a machine has (DejaVu Sans on a Linux runner sets lines shorter
+/// than Segoe UI on Windows). The system font itself is tested here, in `theme::tests`.
+pub fn install_bundled_fonts(ctx: &egui::Context) {
+    ctx.set_fonts(font_definitions(None));
+}
+
 /// The font set [`install_fonts`] installs, with `system` as the first face when there is one.
 fn font_definitions(system: Option<&'static SystemFaces>) -> FontDefinitions {
     let mut fonts = FontDefinitions::default();

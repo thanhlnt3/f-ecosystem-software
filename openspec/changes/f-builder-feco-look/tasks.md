@@ -19,10 +19,10 @@
 - [x] 2.1 Bảng màu sáng/tối, bo góc Trang nhã, nút chính màu F-Eco, mặc định giao diện sáng; xác minh bằng test tương phản WCAG, test giao diện và ảnh chụp app, scenario "Giống F-Launcher"
   - Xác minh:
     - `contrast_meets_wcag_aa_in_both_themes`; `main_buttons_keep_their_contrast_in_every_state` (chữ trắng trên màu F-Eco lúc thường, di chuột, bấm); `theme_ids_round_trip` (mặc định sáng, giá trị lạ là sáng).
-    - Test giao diện `ui-egui`: 105 qua. Có điều chỉnh vì phông hệ thống cao hơn DM Sans khoảng 2%:
-      - trang Tạo bớt 10 px khoảng trống, để nút Bắt đầu vẫn trong khung ở cửa sổ cao 900 px;
-      - test thêm AI bằng địa chỉ cuộn tới nút Thêm trước khi bấm;
-      - test đổi chủ đề bấm "Studio" (tối), vì mặc định đã là sáng.
+    - Test giao diện `ui-egui`: 105 qua.
+      - Các test này dùng phông đóng gói sẵn (`theme::install_bundled_fonts`), không dùng phông của máy. Lần CI đầu trên Ubuntu, DejaVu Sans làm dòng thấp hơn và hai test khung Tác tử hỏng.
+      - Trang Tạo bớt 10 px khoảng trống: Segoe UI cao hơn DM Sans khoảng 2%, và nút Bắt đầu phải nằm trong khung ở cửa sổ cao 900 px.
+      - Test đổi chủ đề bấm "Studio" (tối), vì mặc định đã là sáng.
     - Ảnh chụp: nền `#f6f8fc`, thanh bên trắng, mục đang chọn, nút chính và bước đã xong màu `#0f6b5c`.
     - Đã chạy clippy, layers, locks, secrets, i18n-coverage (0 thiếu).
     - Chưa thử: giao diện tối trong cửa sổ thật.

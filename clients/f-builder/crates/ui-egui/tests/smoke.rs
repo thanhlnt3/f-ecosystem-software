@@ -15,6 +15,8 @@ fn harness(make: impl FnOnce() -> BuilderApp + 'static) -> Harness<'static, Buil
 fn harness_sized(size: egui::Vec2, make: impl FnOnce() -> BuilderApp + 'static) -> Harness<'static, BuilderApp> {
     Harness::builder().with_size(size).with_max_steps(32).build_eframe(move |cc| {
         BuilderApp::setup_context(&cc.egui_ctx);
+        // The bundled fonts, not this computer's: sizes in these tests must match on every machine.
+        f_builder_ui_egui::theme::install_bundled_fonts(&cc.egui_ctx);
         make()
     })
 }
@@ -1391,18 +1393,6 @@ fn an_ai_server_is_added_by_its_address() {
     h.get_by_label("Add an AI by its address");
     h.state_mut().server_form = f_builder_ui_egui::ServerForm { name: "Studio box".into(), address: url.clone(), ..Default::default() };
     h.run_steps(1);
-    // The form sits at the foot of the AI tab, and with the system font (a little taller than DM
-    // Sans) its Add button starts below the fold of the Settings window's scroll area: scroll it
-    // into view with the wheel, as a person would.
-    let form = h.get_by_label("Add an AI by its address").rect();
-    h.event(egui::Event::PointerMoved(form.center()));
-    h.event(egui::Event::MouseWheel {
-        unit: egui::MouseWheelUnit::Point,
-        delta: egui::vec2(0.0, -400.0),
-        phase: egui::TouchPhase::Move,
-        modifiers: egui::Modifiers::NONE,
-    });
-    h.run_steps(10);
     h.get_by_label("Add").click();
     assert!(wait(&mut h, |a| a.backends.iter().any(|b| b.name == "Studio box" && b.model == "qwen3:8b")), "added with a model that can chat");
     assert!(h.state().server_form.name.is_empty(), "the form empties once it's added");

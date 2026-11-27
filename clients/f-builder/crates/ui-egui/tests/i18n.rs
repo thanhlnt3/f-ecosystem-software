@@ -13,6 +13,8 @@ fn harness(mut settings: Settings, dir: &Path) -> Harness<'static, BuilderApp> {
     settings.projects_dir = Some(dir.join("projects"));
     Harness::builder().with_size(egui::vec2(1280.0, 1120.0)).with_max_steps(32).build_eframe(move |cc| {
         BuilderApp::setup_context(&cc.egui_ctx);
+        // The bundled fonts, not this computer's: sizes in these tests must match on every machine.
+        f_builder_ui_egui::theme::install_bundled_fonts(&cc.egui_ctx);
         let engine = demo::engine(Mode::Beginner, true);
         {
             // The home/settings scenario needs no sample target. Isolate the session and set

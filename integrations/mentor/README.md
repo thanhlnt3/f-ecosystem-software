@@ -27,7 +27,7 @@ Thư mục này chỉ có bản vá, script và ghi chép, không có mã Mentor
 | `fetch-desktop.sh` | Quét mã nguồn ở commit của tag, tải gói desktop, kiểm SHA-256 và cấu trúc gói |
 | `build-desktop.sh` | Dựng app desktop 0.2.2 từ mã gốc và bản vá (CI dùng để kiểm bản vá; không còn đính vào bản phát hành) |
 | `mentor-gateway.patch` | Gateway: route `/api/auth/feco/*` (Authlib), cột `users.feco_subject`, bảng `feco_login_codes`, cấu hình `FECO_*`, lệnh `set-role`, test `tests/test_gw_feco_auth.py`, thư viện `authlib` và `itsdangerous` |
-| `mentor-app.patch` | App: nút "Đăng nhập bằng F-Eco", đổi mã dùng một lần lấy phiên, thông báo lỗi tiếng Việt và tiếng Anh, test `src/feco-login.test.tsx` |
+| `mentor-app.patch` | App: nút "Đăng nhập bằng F-Eco", đổi mã dùng một lần lấy phiên, thông báo lỗi tiếng Việt và tiếng Anh, test `src/feco-login.test.tsx`; cố định ngày trong test "adds a deadline by text" của `src/research.test.tsx` (hạn "25/11" không có năm nên test hết hạn từ 26/11/2026) |
 | `tauri.feco.conf.json` | Cấu hình Tauri thêm khi F-Eco dựng app desktop: bỏ địa chỉ cập nhật của Mentor, vì F-Launcher cập nhật app qua TUF |
 
 Áp bản vá:
