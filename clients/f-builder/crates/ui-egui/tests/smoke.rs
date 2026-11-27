@@ -1391,6 +1391,18 @@ fn an_ai_server_is_added_by_its_address() {
     h.get_by_label("Add an AI by its address");
     h.state_mut().server_form = f_builder_ui_egui::ServerForm { name: "Studio box".into(), address: url.clone(), ..Default::default() };
     h.run_steps(1);
+    // The form sits at the foot of the AI tab, and with the system font (a little taller than DM
+    // Sans) its Add button starts below the fold of the Settings window's scroll area: scroll it
+    // into view with the wheel, as a person would.
+    let form = h.get_by_label("Add an AI by its address").rect();
+    h.event(egui::Event::PointerMoved(form.center()));
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, -400.0),
+        phase: egui::TouchPhase::Move,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.run_steps(10);
     h.get_by_label("Add").click();
     assert!(wait(&mut h, |a| a.backends.iter().any(|b| b.name == "Studio box" && b.model == "qwen3:8b")), "added with a model that can chat");
     assert!(h.state().server_form.name.is_empty(), "the form empties once it's added");
@@ -1628,9 +1640,11 @@ fn settings_window_tabs_draw() {
         h.run_steps(2);
         assert_eq!(edge(&h), right, "the Settings window changed width on {tab}");
     }
-    h.get_by_label("Studio Light").click();
-    h.run_steps(3);
+    // Light is the default (as F-Launcher); the dark one is a click away.
     assert_eq!(h.state().settings.theme, "studio-light");
+    h.get_by_label("Studio").click();
+    h.run_steps(3);
+    assert_eq!(h.state().settings.theme, "studio");
 
     // At the same window size, the same tab keeps its content bounds with and without scrolling.
     let content_bounds = |overflow: bool| {

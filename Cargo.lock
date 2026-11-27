@@ -1494,7 +1494,7 @@ dependencies = [
 
 [[package]]
 name = "f-dev"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "feco-manifest",
  "reqwest",
@@ -1507,7 +1507,7 @@ dependencies = [
 
 [[package]]
 name = "f-notes"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "eframe",
  "feco-sample-common",
@@ -1518,7 +1518,7 @@ dependencies = [
 
 [[package]]
 name = "f-timer"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "eframe",
  "feco-sample-common",
@@ -1556,7 +1556,7 @@ checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
 name = "feco-codescan"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "axum",
  "globset",
@@ -1574,7 +1574,7 @@ dependencies = [
 
 [[package]]
 name = "feco-config"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "feco-core",
  "thiserror 2.0.21",
@@ -1583,7 +1583,7 @@ dependencies = [
 
 [[package]]
 name = "feco-core"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1592,7 +1592,7 @@ dependencies = [
 
 [[package]]
 name = "feco-demo-app"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -1608,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "feco-launcher"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "apple-native-keyring-store",
  "axum",
@@ -1641,7 +1641,7 @@ dependencies = [
 
 [[package]]
 name = "feco-license-check"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1650,7 +1650,7 @@ dependencies = [
 
 [[package]]
 name = "feco-manifest"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "feco-core",
  "semver",
@@ -1661,7 +1661,7 @@ dependencies = [
 
 [[package]]
 name = "feco-sample-common"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "eframe",
  "fsdk",
@@ -1670,7 +1670,7 @@ dependencies = [
 
 [[package]]
 name = "feco-server"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "aes-gcm",
  "askama",
@@ -1715,7 +1715,7 @@ dependencies = [
 
 [[package]]
 name = "feco-tuf"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "aws-lc-rs",
  "base64 0.23.1",
@@ -1830,7 +1830,7 @@ checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "fsdk"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",
@@ -1847,7 +1847,7 @@ dependencies = [
 
 [[package]]
 name = "fsdk-c"
-version = "1.21.0"
+version = "1.22.0"
 dependencies = [
  "fsdk",
  "serde_json",

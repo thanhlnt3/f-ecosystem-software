@@ -1,20 +1,24 @@
 //! Design system: two themes (Studio dark, Studio Light), colour tokens, radii and type.
 //!
-//! A calm desktop look: neutral graphite (or near-white) surfaces, a slightly darker sidebar,
-//! soft rounded cards and controls, sentence-case DM Sans throughout, and ink-filled main buttons.
-//! Indigo is the app colour for highlights, progress, links and selection.
+//! The look follows F-Launcher (change f-builder-feco-look): the launcher's light and dark
+//! palettes (a pale blue-white canvas with a white sidebar, or deep navy), its "Elegant" corners,
+//! the system's own interface font (Segoe UI on Windows), and main buttons filled with F-Eco's
+//! colour. Light is the default, as in the launcher.
 //! Widgets read [`Tokens::get`] instead of hard-coding colours, so a theme switch applies everywhere.
 //! Confidence has its own fixed palette so "how sure are we" reads the same in both themes.
 
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Stroke, TextStyle, Visuals};
 use f_builder_engine::evidence::Confidence;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use skrifa::MetadataProvider;
+use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThemeKind {
-    #[default]
     Studio,
+    /// F-Launcher's default theme is light, so F-Builder's is too.
+    #[default]
     StudioLight,
 }
 
@@ -38,8 +42,8 @@ impl ThemeKind {
 
     pub fn from_id(s: &str) -> ThemeKind {
         match s.trim().to_ascii_lowercase().replace(['_', ' '], "-").as_str() {
-            "studio-light" | "light" => ThemeKind::StudioLight,
-            _ => ThemeKind::Studio,
+            "studio" | "dark" => ThemeKind::Studio,
+            _ => ThemeKind::StudioLight,
         }
     }
 }
@@ -108,77 +112,80 @@ pub fn confidence_label(c: Option<Confidence>) -> &'static str {
 
 impl Tokens {
     pub fn for_kind(kind: ThemeKind) -> Self {
+        // Corners of F-Launcher's default "Elegant" style (`feco_core::ui_palette`, `StyleId::Elegant`:
+        // 14 for buttons, 16 for cards); small controls a step tighter.
+        let (radius_sm, radius, radius_lg) = (10.0, 14.0, 16.0);
         match kind {
-            // Dark: warm near-black (#121316), #101014 for the sidebar, cards and controls in warm
-            // ink (#f2f1ee) laid over the background at 4-15%.
+            // Dark: F-Launcher's dark palette (`brand_palette` in clients/feco-launcher): window
+            // #0d1422, panels #111a2b, cards #172236, text #ebf1f9, muted #a6b3c6, edges #2c3b50.
             ThemeKind::Studio => Tokens {
                 kind,
-                chrome: Color32::from_rgb(0x10, 0x10, 0x14),
-                canvas: Color32::from_rgb(0x12, 0x13, 0x16),
-                card: Color32::from_rgb(0x1b, 0x1c, 0x1f),
-                card_border: Color32::from_rgb(0x34, 0x34, 0x36),
-                raised: Color32::from_rgb(0x22, 0x23, 0x25),
-                field: Color32::from_rgb(0x1b, 0x1c, 0x1f),
-                field_border: Color32::from_rgb(0x6c, 0x6c, 0x6c),
-                hover: Color32::from_rgb(0x22, 0x23, 0x25),
-                pressed: Color32::from_rgb(0x2d, 0x2e, 0x30),
-                text: Color32::from_rgb(0xf2, 0xf1, 0xee),
-                text_dim: Color32::from_rgb(0xb3, 0xb3, 0xb2),
-                text_faint: Color32::from_rgb(0x8d, 0x8d, 0x8d),
-                icon: Color32::from_rgb(0xa8, 0xa8, 0xa6),
+                chrome: Color32::from_rgb(0x11, 0x1a, 0x2b),
+                canvas: Color32::from_rgb(0x0d, 0x14, 0x22),
+                card: Color32::from_rgb(0x17, 0x22, 0x36),
+                card_border: Color32::from_rgb(0x2c, 0x3b, 0x50),
+                raised: Color32::from_rgb(0x1e, 0x2b, 0x42),
+                field: Color32::from_rgb(0x17, 0x22, 0x36),
+                field_border: Color32::from_rgb(0x5c, 0x6c, 0x86),
+                hover: Color32::from_rgb(0x1e, 0x2b, 0x42),
+                pressed: Color32::from_rgb(0x26, 0x35, 0x50),
+                text: Color32::from_rgb(0xeb, 0xf1, 0xf9),
+                text_dim: Color32::from_rgb(0xc6, 0xd0, 0xde),
+                text_faint: Color32::from_rgb(0xa6, 0xb3, 0xc6),
+                icon: Color32::from_rgb(0xa6, 0xb3, 0xc6),
                 accent: BRAND,
                 accent_hover: Color32::from_rgb(0x14, 0x95, 0x7f),
                 accent_ink: Color32::from_rgb(0x5f, 0xd3, 0xbd),
                 accent_soft: Color32::from_rgba_unmultiplied(0x14, 0x95, 0x7f, 44),
                 on_accent: Color32::WHITE,
-                separator: Color32::from_rgb(0x24, 0x25, 0x27),
+                separator: Color32::from_rgb(0x22, 0x30, 0x46),
                 shadow: Color32::from_black_alpha(120),
-                danger: Color32::from_rgb(0xff, 0x62, 0x59),
+                danger: Color32::from_rgb(0xff, 0x8b, 0x85),
                 warning: BEST_GUESS,
                 success: Color32::from_rgb(0x5b, 0xbf, 0x8f),
-                code_bg: Color32::from_rgb(0x06, 0x06, 0x07),
-                radius_sm: 6.0,
-                radius: 8.0,
-                radius_lg: 12.0,
+                code_bg: Color32::from_rgb(0x09, 0x0f, 0x1a),
+                radius_sm,
+                radius,
+                radius_lg,
             },
-            // Light: warm paper (#f2f1ee), sunken #e9e8e4 for the sidebar, raised #faf9f7 for cards,
-            // ink #101014.
+            // Light: F-Launcher's light palette: window #f6f8fc, white panels and cards, text
+            // #182234, muted #5b677a, edges #e0e6ef.
             ThemeKind::StudioLight => Tokens {
                 kind,
-                chrome: Color32::from_rgb(0xe9, 0xe8, 0xe4),
-                canvas: Color32::from_rgb(0xf2, 0xf1, 0xee),
-                card: Color32::from_rgb(0xfa, 0xf9, 0xf7),
-                card_border: Color32::from_rgb(0xce, 0xcd, 0xcb),
-                raised: Color32::from_rgb(0xe9, 0xe8, 0xe4),
-                field: Color32::from_rgb(0xfa, 0xf9, 0xf7),
-                field_border: Color32::from_rgb(0x86, 0x85, 0x85),
-                hover: Color32::from_rgb(0xe4, 0xe4, 0xe1),
-                pressed: Color32::from_rgb(0xdb, 0xda, 0xd8),
-                text: Color32::from_rgb(0x10, 0x10, 0x14),
-                text_dim: Color32::from_rgb(0x3d, 0x3d, 0x40),
-                text_faint: Color32::from_rgb(0x5d, 0x5c, 0x5e),
-                icon: Color32::from_rgb(0x4f, 0x4f, 0x52),
+                chrome: Color32::WHITE,
+                canvas: Color32::from_rgb(0xf6, 0xf8, 0xfc),
+                card: Color32::WHITE,
+                card_border: Color32::from_rgb(0xe0, 0xe6, 0xef),
+                raised: Color32::from_rgb(0xee, 0xf2, 0xf8),
+                field: Color32::WHITE,
+                field_border: Color32::from_rgb(0x7d, 0x89, 0x9c),
+                hover: Color32::from_rgb(0xee, 0xf2, 0xf8),
+                pressed: Color32::from_rgb(0xe2, 0xe8, 0xf1),
+                text: Color32::from_rgb(0x18, 0x22, 0x34),
+                text_dim: Color32::from_rgb(0x3b, 0x47, 0x5a),
+                text_faint: Color32::from_rgb(0x5b, 0x67, 0x7a),
+                icon: Color32::from_rgb(0x4d, 0x59, 0x6c),
                 accent: BRAND,
                 accent_hover: Color32::from_rgb(0x14, 0x95, 0x7f),
                 accent_ink: BRAND,
                 accent_soft: Color32::from_rgba_unmultiplied(0x14, 0x95, 0x7f, 28),
                 on_accent: Color32::WHITE,
-                separator: Color32::from_rgb(0xdb, 0xda, 0xd8),
+                separator: Color32::from_rgb(0xe6, 0xeb, 0xf2),
                 shadow: Color32::from_black_alpha(20),
-                danger: Color32::from_rgb(0xb3, 0x26, 0x1e),
-                warning: Color32::from_rgb(0x9a, 0x67, 0x00),
+                danger: Color32::from_rgb(0xb2, 0x2a, 0x2a),
+                warning: Color32::from_rgb(0x87, 0x4e, 0x00),
                 success: Color32::from_rgb(0x12, 0x75, 0x36),
-                code_bg: Color32::from_rgb(0xe9, 0xe8, 0xe4),
-                radius_sm: 6.0,
-                radius: 8.0,
-                radius_lg: 12.0,
+                code_bg: Color32::from_rgb(0xee, 0xf2, 0xf8),
+                radius_sm,
+                radius,
+                radius_lg,
             },
         }
     }
 
     /// The tokens of the active theme.
     pub fn get(ctx: &egui::Context) -> Tokens {
-        ctx.data(|d| d.get_temp::<Tokens>(tokens_id())).unwrap_or_else(|| Tokens::for_kind(ThemeKind::Studio))
+        ctx.data(|d| d.get_temp::<Tokens>(tokens_id())).unwrap_or_else(|| Tokens::for_kind(ThemeKind::default()))
     }
 
     pub fn dark(&self) -> bool {
@@ -218,9 +225,15 @@ pub struct BuilderFont {
 
 include!(concat!(env!("OUT_DIR"), "/f_builder_fonts.rs"));
 
-/// Install DM Sans (three weights: body, labels and bold for headings; it has no static
-/// SemiBold), JetBrains Mono (code), plus any f-builder-fonts as fallbacks.
+/// Install the interface fonts: the system's own sans as F-Launcher uses it (body and labels in its
+/// regular face, headings in its bold one), then DM Sans (three weights; it has no static SemiBold),
+/// JetBrains Mono (code), plus any f-builder-fonts as fallbacks.
 pub fn install_fonts(ctx: &egui::Context) {
+    ctx.set_fonts(font_definitions(system_faces()));
+}
+
+/// The font set [`install_fonts`] installs, with `system` as the first face when there is one.
+fn font_definitions(system: Option<&'static SystemFaces>) -> FontDefinitions {
     let mut fonts = FontDefinitions::default();
     let mut add = |name: &str, bytes: &'static [u8]| {
         fonts.font_data.insert(name.to_owned(), Arc::new(FontData::from_static(bytes)));
@@ -229,6 +242,12 @@ pub fn install_fonts(ctx: &egui::Context) {
     add("DMSans-Medium", DM_SANS_MEDIUM);
     add("DMSans-Bold", DM_SANS_BOLD);
     add("JetBrainsMono", JETBRAINS_MONO);
+    if let Some(s) = system {
+        add(SYSTEM_UI, &s.regular);
+        if let Some(bold) = &s.bold {
+            add(SYSTEM_UI_BOLD, bold);
+        }
+    }
     let mut fallbacks = Vec::new();
     for f in F_BUILDER_FONTS {
         let name = format!("craft:{}:{}", f.family, f.style);
@@ -239,19 +258,125 @@ pub fn install_fonts(ctx: &egui::Context) {
     }
     // Sans first: a mincho/serif fallback makes Japanese and Chinese UI text look like prose.
     let fallbacks = sans_first(fallbacks);
-    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "DMSans".to_owned());
+    let proportional = fonts.families.entry(FontFamily::Proportional).or_default();
+    proportional.insert(0, "DMSans".to_owned());
+    if system.is_some() {
+        proportional.insert(0, SYSTEM_UI.to_owned());
+    }
     fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "JetBrainsMono".to_owned());
     for fam in [FontFamily::Proportional, FontFamily::Monospace] {
         fonts.families.entry(fam).or_default().extend(fallbacks.iter().cloned());
     }
     let base: Vec<String> = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
-    for (fam, primary) in [("medium", "DMSans-Medium"), ("semibold", "DMSans-Bold")] {
-        let mut stack = vec![primary.to_owned()];
-        stack.extend(base.iter().cloned());
+    // A system font that has no bold face keeps its regular one for headings: one face for every
+    // letter of a heading reads better than a bolder DM Sans missing half of Vietnamese.
+    let system_heading = system.map(|s| if s.bold.is_some() { SYSTEM_UI_BOLD } else { SYSTEM_UI });
+    for (fam, first, primary) in [("medium", system.map(|_| SYSTEM_UI), "DMSans-Medium"), ("semibold", system_heading, "DMSans-Bold")] {
+        let mut stack: Vec<String> = first.into_iter().chain([primary]).map(str::to_owned).collect();
+        let rest: Vec<String> = base.iter().filter(|n| !stack.contains(n)).cloned().collect();
+        stack.extend(rest);
         fonts.families.insert(FontFamily::Name(fam.into()), stack);
     }
-    ctx.set_fonts(fonts);
+    fonts
 }
+
+/// Font names of the system face in egui's font set.
+const SYSTEM_UI: &str = "SystemUI";
+const SYSTEM_UI_BOLD: &str = "SystemUI-Bold";
+
+/// The system's interface font, read once: its regular face and, when the family has one, a bold.
+pub struct SystemFaces {
+    regular: Vec<u8>,
+    bold: Option<Vec<u8>>,
+    /// The file the regular face came from (for the log).
+    pub source: PathBuf,
+}
+
+/// The system font [`install_fonts`] uses, or `None` when none on [`system_font_candidates`] is
+/// there and usable. Read once per process (fonts are large, and install_fonts runs per window).
+pub fn system_faces() -> Option<&'static SystemFaces> {
+    static FACES: OnceLock<Option<SystemFaces>> = OnceLock::new();
+    FACES
+        .get_or_init(|| {
+            let found = find_system_faces(&system_font_candidates());
+            match &found {
+                Some(f) => log::info!("interface font: {}", f.source.display()),
+                None => log::info!("no system interface font with Vietnamese; using DM Sans"),
+            }
+            found
+        })
+        .as_ref()
+}
+
+/// F-Launcher's interface fonts (`install_fonts` in clients/feco-launcher/src/main.rs), in its
+/// order, each with its family's bold face. `WINFONTS/` is the Windows fonts folder.
+const SYSTEM_UI_FONTS: &[(&str, Option<&str>)] = &[
+    ("WINFONTS/segoeui.ttf", Some("WINFONTS/seguisb.ttf")),
+    ("WINFONTS/arial.ttf", Some("WINFONTS/arialbd.ttf")),
+    ("WINFONTS/tahoma.ttf", Some("WINFONTS/tahomabd.ttf")),
+    ("/System/Library/Fonts/Supplemental/Arial.ttf", Some("/System/Library/Fonts/Supplemental/Arial Bold.ttf")),
+    ("/Library/Fonts/Arial Unicode.ttf", None),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", Some("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")),
+    ("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", Some("/usr/share/fonts/truetype/noto/NotoSans-SemiBold.ttf")),
+    ("/usr/share/fonts/noto/NotoSans-Regular.ttf", Some("/usr/share/fonts/noto/NotoSans-SemiBold.ttf")),
+];
+
+/// A font file to try: its regular face and, maybe, its bold one.
+struct FontCandidate {
+    regular: PathBuf,
+    bold: Option<PathBuf>,
+}
+
+/// `F_BUILDER_UI_FONT` (a `.ttf` the person names) first, then [`SYSTEM_UI_FONTS`].
+fn system_font_candidates() -> Vec<FontCandidate> {
+    let mut out = Vec::new();
+    if let Some(p) = std::env::var_os("F_BUILDER_UI_FONT").filter(|p| !p.is_empty()) {
+        out.push(FontCandidate { regular: PathBuf::from(p), bold: None });
+    }
+    let fonts_dir = std::env::var_os("WINDIR").map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from).join("Fonts");
+    let path = |f: &str| f.strip_prefix("WINFONTS/").map_or_else(|| PathBuf::from(f), |name| fonts_dir.join(name));
+    for &(regular, bold) in SYSTEM_UI_FONTS {
+        out.push(FontCandidate { regular: path(regular), bold: bold.map(path) });
+    }
+    out
+}
+
+/// The first candidate whose regular face is a font egui can read and has every letter of
+/// Vietnamese. A bold face that isn't is left out; a candidate that isn't is skipped, so a broken
+/// or unsuitable file never stops the app (egui panics on a font it can't parse).
+fn find_system_faces(candidates: &[FontCandidate]) -> Option<SystemFaces> {
+    candidates.iter().find_map(|c| {
+        let regular = read_face(&c.regular)?;
+        let bold = c.bold.as_deref().and_then(read_face);
+        Some(SystemFaces { regular, bold, source: c.regular.clone() })
+    })
+}
+
+/// A font file's bytes, when it's small enough to keep, parses, and has [`VIETNAMESE`] and the
+/// arrows the interface uses.
+fn read_face(path: &std::path::Path) -> Option<Vec<u8>> {
+    /// Arial Unicode is 23 MB; nothing an interface needs is bigger.
+    const MAX_FONT_BYTES: u64 = 40 * 1024 * 1024;
+    if std::fs::metadata(path).ok()?.len() > MAX_FONT_BYTES {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    covers(&bytes, VIETNAMESE).then_some(bytes)
+}
+
+/// Whether `bytes` is a font egui can read (face 0) with a glyph for every letter of `text`.
+fn covers(bytes: &[u8], text: &str) -> bool {
+    let Ok(font) = skrifa::FontRef::from_index(bytes, 0) else {
+        return false;
+    };
+    let map = font.charmap();
+    text.chars().filter(|c| !c.is_whitespace()).all(|c| map.map(c).is_some())
+}
+
+/// All 12 Vietnamese vowels with each of the six tones, and đ, in both cases, plus the arrows the
+/// interface writes ("Settings → AI"): what a system face must have to be used.
+const VIETNAMESE: &str = "aàáảãạăằắẳẵặâầấẩẫậeèéẻẽẹêềếểễệiìíỉĩịoòóỏõọôồốổỗộơờớởỡợuùúủũụưừứửữựyỳýỷỹỵđ\
+AÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬEÈÉẺẼẸÊỀẾỂỄỆIÌÍỈĨỊOÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢUÙÚỦŨỤƯỪỨỬỮỰYỲÝỶỸỴĐ→←↑↓";
 
 /// Fallback faces, most wanted first. A stable sort keeps the manifest's order inside a rank.
 fn sans_first(fallbacks: Vec<String>) -> Vec<String> {
@@ -714,7 +839,104 @@ mod tests {
         for k in ThemeKind::ALL {
             assert_eq!(ThemeKind::from_id(k.id()), k);
         }
-        assert_eq!(ThemeKind::from_id("nonsense"), ThemeKind::Studio);
+        assert_eq!(ThemeKind::from_id("dark"), ThemeKind::Studio);
+        // Light, as in F-Launcher: the default, and what an unknown value means.
+        assert_eq!(ThemeKind::default(), ThemeKind::StudioLight);
+        assert_eq!(ThemeKind::from_id("nonsense"), ThemeKind::StudioLight);
+        assert_eq!(ThemeKind::from_id(&f_builder_engine::settings::Settings::default().theme), ThemeKind::StudioLight);
+    }
+
+    fn asset(name: &str) -> PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/fonts").join(name)
+    }
+
+    /// The bundled DM Sans lacks most of Vietnamese (ả ạ ơ ư…) and the arrows: why the interface
+    /// takes the system's font first. If this starts failing, DM Sans gained them.
+    #[test]
+    fn dm_sans_alone_cannot_show_vietnamese() {
+        assert!(!covers(DM_SANS_REGULAR, VIETNAMESE));
+        assert!(covers(DM_SANS_REGULAR, "Settings"), "the check reads DM Sans itself");
+    }
+
+    /// Scenario "Phông chỉ định bị hỏng": a file that isn't a font, a missing file and a font
+    /// without Vietnamese are passed over, and the next usable font is taken (JetBrains Mono here,
+    /// which has every letter), with no panic.
+    #[test]
+    fn a_broken_or_unsuitable_font_is_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let junk = dir.path().join("not-a-font.ttf");
+        std::fs::write(&junk, b"this is not a font file").unwrap();
+        let candidates = [
+            FontCandidate { regular: junk.clone(), bold: None },
+            FontCandidate { regular: dir.path().join("missing.ttf"), bold: None },
+            FontCandidate { regular: asset("DMSans-Regular.ttf"), bold: None },
+            FontCandidate { regular: asset("JetBrainsMono-Regular.ttf"), bold: Some(junk) },
+        ];
+        let found = find_system_faces(&candidates).expect("JetBrains Mono has every letter");
+        assert_eq!(found.source, asset("JetBrainsMono-Regular.ttf"));
+        assert!(found.bold.is_none(), "a broken bold face is left out, not loaded");
+        assert!(find_system_faces(&candidates[..3]).is_none());
+    }
+
+    /// Scenario "Chữ tiếng Việt đủ dấu": with a system font, every family starts with it, headings
+    /// with its bold face, and that one face has every Vietnamese letter and arrow, so no letter
+    /// falls through to another font or a box.
+    #[test]
+    fn vietnamese_comes_from_one_system_face() {
+        let faces: &'static SystemFaces = Box::leak(Box::new(
+            find_system_faces(&[FontCandidate { regular: asset("JetBrainsMono-Regular.ttf"), bold: Some(asset("JetBrainsMono-Regular.ttf")) }])
+                .expect("a usable face"),
+        ));
+        let fonts = font_definitions(Some(faces));
+        let first = |fam: FontFamily| fonts.families.get(&fam).and_then(|s| s.first()).cloned().unwrap_or_default();
+        assert_eq!(first(FontFamily::Proportional), SYSTEM_UI);
+        assert_eq!(first(FontFamily::Name("medium".into())), SYSTEM_UI);
+        assert_eq!(first(FontFamily::Name("semibold".into())), SYSTEM_UI_BOLD);
+        assert_eq!(first(FontFamily::Monospace), "JetBrainsMono");
+        for name in [SYSTEM_UI, SYSTEM_UI_BOLD] {
+            let data = fonts.font_data.get(name).expect("installed");
+            assert!(covers(&data.font, VIETNAMESE), "{name}");
+        }
+        let ctx = egui::Context::default();
+        ctx.set_fonts(fonts);
+        ctx.run_ui(egui::RawInput::default(), |_| {}).textures_delta.clear();
+        assert!(ctx.fonts_mut(|f| f.has_glyphs(&FontId::proportional(14.0), "Cài đặt → AI: Tiếng Việt")));
+    }
+
+    /// Without a system font the set is what it was: DM Sans first, no system names.
+    #[test]
+    fn without_a_system_font_dm_sans_leads() {
+        let fonts = font_definitions(None);
+        assert_eq!(fonts.families.get(&FontFamily::Proportional).and_then(|s| s.first()).map(String::as_str), Some("DMSans"));
+        assert_eq!(fonts.families.get(&FontFamily::Name("semibold".into())).and_then(|s| s.first()).map(String::as_str), Some("DMSans-Bold"));
+        assert!(!fonts.font_data.contains_key(SYSTEM_UI));
+    }
+
+    /// On this computer, when F-Launcher's list finds a font: it is the one installed. Windows has
+    /// Segoe UI, so there it must be found.
+    #[test]
+    fn the_system_font_is_found_where_the_launcher_finds_one() {
+        let found = system_faces();
+        if cfg!(windows) {
+            let f = found.expect("Windows has Segoe UI, Arial or Tahoma");
+            assert!(f.bold.is_some(), "and its bold face");
+        }
+        if let Some(f) = found {
+            assert!(covers(&f.regular, VIETNAMESE));
+        }
+    }
+
+    /// Main buttons: white on F-Eco's colour, and still AA when hovered or pressed (darker).
+    #[test]
+    fn main_buttons_keep_their_contrast_in_every_state() {
+        use crate::widgets::{PRIMARY_HOVER, PRIMARY_PRESSED};
+        for k in ThemeKind::ALL {
+            let t = Tokens::for_kind(k);
+            for amount in [0.0, PRIMARY_HOVER, PRIMARY_PRESSED] {
+                let fill = mix(t.accent, Color32::BLACK, amount);
+                assert!(contrast(t.on_accent, fill) >= 4.5, "{k:?} at {amount}: {:.2}", contrast(t.on_accent, fill));
+            }
+        }
     }
 
     /// WCAG 2.x contrast ratio between two opaque colours.
@@ -744,8 +966,7 @@ mod tests {
             // Send's icon on its hover colour (an icon, so 3:1).
             assert!(contrast(t.on_accent, t.accent_hover) >= 3.0, "{k:?} icon on the hover colour: {:.2}", contrast(t.on_accent, t.accent_hover));
             assert!(contrast(t.field_border, t.canvas) >= 3.0, "{k:?} control borders: {:.2}", contrast(t.field_border, t.canvas));
-            // Main buttons are ink-filled with the canvas colour as their label.
-            assert!(contrast(t.canvas, t.text) >= 4.5, "{k:?} main buttons");
+            assert!(contrast(t.canvas, t.text) >= 4.5, "{k:?} text on the canvas");
             assert_eq!(t.accent, BRAND);
         }
     }

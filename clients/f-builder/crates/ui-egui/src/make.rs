@@ -95,7 +95,7 @@ pub fn hero(app: &mut BuilderApp, ui: &mut Ui, w: f32) {
             (d.folder, d.folder_files, d.existing) = (None, None, None);
         }
     }
-    ui.add_space(18.0);
+    ui.add_space(12.0);
     if app.state.make.look {
         look(app, ui, w);
         return;
@@ -119,7 +119,7 @@ pub fn hero(app: &mut BuilderApp, ui: &mut Ui, w: f32) {
             ui.add_space(14.0);
             look_inside(app, ui);
         }
-        ui.add_space(20.0);
+        ui.add_space(16.0);
         step_title(ui, 2, "Say what you want");
         ui.add_space(12.0);
         // The example matches the tile picked above (a "recreate this website" hint under

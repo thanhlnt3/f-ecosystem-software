@@ -143,13 +143,14 @@ pub(crate) fn row(ui: &mut Ui, icon: &str, label: &str, status: Option<(egui::Co
     let fold = ui.data(|d| d.get_temp::<bool>(egui::Id::new("sidebar-folded")).unwrap_or(false));
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), ROW_H), Sense::click());
     let h = widgets::hover_t(ui, &resp);
-    let fill = if on { t.pressed } else { theme::mix(egui::Color32::TRANSPARENT, t.hover, h) };
+    // The open row is filled with F-Eco's colour and written in white, as F-Launcher's sidebar.
+    let fill = if on { t.accent } else { theme::mix(egui::Color32::TRANSPARENT, t.hover, h) };
     ui.painter().rect_filled(rect, t.radius, fill);
-    let ink = if on { t.text } else { theme::mix(t.text_dim, t.text, h) };
+    let ink = if on { t.on_accent } else { theme::mix(t.text_dim, t.text, h) };
     // Project names are shown as written; the app's own rows are translated.
     let text = if status.is_some() { label.to_string() } else { tr(label) };
     let icon_x = if fold { rect.center().x } else { rect.left() + 22.0 };
-    icons::paint(ui, egui::Rect::from_center_size(egui::pos2(icon_x, rect.center().y), Vec2::splat(16.0)), icon, 16.0, if on { t.text } else { t.icon });
+    icons::paint(ui, egui::Rect::from_center_size(egui::pos2(icon_x, rect.center().y), Vec2::splat(16.0)), icon, 16.0, if on { t.on_accent } else { t.icon });
     let name = match status {
         Some((_, s, _)) => format!("{text}, {}", tr(s)),
         None => text.clone(),
@@ -180,11 +181,19 @@ pub(crate) fn row(ui: &mut Ui, icon: &str, label: &str, status: Option<(egui::Co
     match (pill, status) {
         (Some((color, g)), _) => {
             let r = egui::Rect::from_min_size(egui::pos2(rect.right() - 10.0 - g.size().x - 12.0, rect.center().y - 10.0), Vec2::new(g.size().x + 12.0, 20.0));
+            // On the open row the pill sits on a card-coloured chip, so it reads as it does elsewhere.
+            if on {
+                ui.painter().rect_filled(r, t.r_sm(), t.card);
+            }
             ui.painter().rect_filled(r, t.r_sm(), color.gamma_multiply(0.16));
             ui.painter().galley(r.center() - g.size() / 2.0, g, color);
         }
         (None, Some((color, _, _))) => {
-            ui.painter().circle_filled(egui::pos2(rect.right() - 16.0, rect.center().y), 3.5, color);
+            let dot = egui::pos2(rect.right() - 16.0, rect.center().y);
+            if on {
+                ui.painter().circle_filled(dot, 5.0, t.on_accent);
+            }
+            ui.painter().circle_filled(dot, 3.5, color);
         }
         (None, None) => {}
     }

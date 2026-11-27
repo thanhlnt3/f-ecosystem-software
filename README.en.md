@@ -2,7 +2,7 @@
 
 An open platform for third-party developers to publish **sub-apps** through a shared launcher, with shared user accounts, a self-service app-building tool (**F-Builder**), and a paid **build-to-order app** service. The idea is inspired by the launcher + app suite model of ArtCraft, but open to third parties.
 
-> **Version 1.21.0** (Tiếng Việt: [README.md](README.md)) ([changelog](CHANGELOG.md)). Integrating a sub-app into F-Eco: [developer guide](docs/en/integration-guide.md); bringing an open-source app from GitHub into F-Eco: [docs/en/github-apps.md](docs/en/github-apps.md); configuring the payment gateways, e-invoicing and email: [docs/en/payments-setup.md](docs/en/payments-setup.md). The release package (binaries, F-SDK, documentation, `THIRD_PARTY_NOTICES`, SBOM) is built with `scripts/package-release.sh`, or automatically when a `v*` tag is pushed (`.github/workflows/release.yml`, which creates a draft release).
+> **Version 1.22.0** (Tiếng Việt: [README.md](README.md)) ([changelog](CHANGELOG.md)). Integrating a sub-app into F-Eco: [developer guide](docs/en/integration-guide.md); bringing an open-source app from GitHub into F-Eco: [docs/en/github-apps.md](docs/en/github-apps.md); configuring the payment gateways, e-invoicing and email: [docs/en/payments-setup.md](docs/en/payments-setup.md). The release package (binaries, F-SDK, documentation, `THIRD_PARTY_NOTICES`, SBOM) is built with `scripts/package-release.sh`, or automatically when a `v*` tag is pushed (`.github/workflows/release.yml`, which creates a draft release).
 >
 > Working today (open items are listed at the end of the changelog and in `QUESTIONS.md`):
 > - Accounts: sign-up, email verification, sign-in, password-guessing protection, two-factor authentication (TOTP, recovery codes), signed-in devices, password recovery, account deletion after a 30-day waiting period.
@@ -45,6 +45,7 @@ An open platform for third-party developers to publish **sub-apps** through a sh
 > - Desktop F-Launcher runs on Windows, macOS and Linux; on Linux, the sign-in is stored in Secret Service (GNOME Keyring, KWallet, KeePassXC) since 1.21.0.
 > - Verification and notification emails can go to real inboxes over SMTP (for example Gmail) on a dev machine.
 > - New look (1.20.0): a landing page on the web for visitors who are not signed in; F-Launcher defaults to the Elegant style, light theme and large grid tiles, with a "Your workspace" header showing installed apps and available updates; a shared teal palette across web, desktop and phone.
+> - F-Builder matches F-Launcher (1.22.0): light theme by default, the same palette, Elegant corners and F-Eco-coloured main buttons. F-Builder uses the system font as F-Launcher does (Segoe UI on Windows), so Vietnamese letters with diacritics show in full, in one face; set `F_BUILDER_UI_FONT=<path to a .ttf>` to pick another font.
 >
 > Not yet available: a virtual machine for trial runs of apps, a sandbox environment, an email domain (SPF, DKIM, DMARC), test accounts for VNPAY, MoMo and MISA. Not yet usable by end users.
 
@@ -308,7 +309,7 @@ The first build takes a few minutes. When you see the line `feco-server đang ch
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.21.0"}
+# {"status":"ok","environment":"dev","version":"1.22.0"}
 ```
 
 In the `dev` environment, every address has a default value pointing to the infrastructure from step 2, and the database schema is created automatically at startup. See also the [Configuration](#configuration) section.

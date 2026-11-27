@@ -2,7 +2,7 @@
 library;
 
 /// Phiên bản app, trùng `version` trong pubspec.yaml (test `app_version_matches_pubspec`).
-const appVersion = '1.21.0';
+const appVersion = '1.22.0';
 
 class AppConfig {
   const AppConfig({

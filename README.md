@@ -2,7 +2,7 @@
 
 Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con** qua một launcher chung, với tài khoản người dùng dùng chung, công cụ tự xây app (**F-Builder**) và dịch vụ **xây app theo yêu cầu** có thanh toán. Ý tưởng lấy cảm hứng từ mô hình launcher + bộ ứng dụng của ArtCraft, nhưng mở cho bên thứ ba.
 
-> **Phiên bản 1.21.0** (English: [README.en.md](README.en.md)) ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
+> **Phiên bản 1.22.0** (English: [README.en.md](README.en.md)) ([nhật ký thay đổi](CHANGELOG.md)). Tích hợp app con vào F-Eco: [hướng dẫn cho nhà phát triển](docs/integration-guide.md); đưa app mã nguồn mở từ GitHub vào F-Eco: [docs/github-apps.md](docs/github-apps.md); cấu hình cổng thanh toán, hóa đơn điện tử, email: [docs/payments-setup.md](docs/payments-setup.md). Gói phát hành (chương trình, F-SDK, tài liệu, `THIRD_PARTY_NOTICES`, SBOM) dựng bằng `scripts/package-release.sh`, hoặc tự động khi đẩy tag `v*` (`.github/workflows/release.yml`, tạo bản phát hành nháp).
 >
 > Đã chạy được (các mục còn mở ghi ở cuối nhật ký thay đổi và trong `QUESTIONS.md`):
 > - Tài khoản: đăng ký, xác minh email, đăng nhập, chống dò mật khẩu, xác thực hai lớp (TOTP, mã khôi phục), thiết bị đang đăng nhập, khôi phục mật khẩu, xóa tài khoản sau 30 ngày chờ.
@@ -45,6 +45,7 @@ Nền tảng mở để nhà phát triển bên thứ ba phát hành **app con**
 > - F-Launcher desktop chạy trên Windows, macOS và Linux; trên Linux, đăng nhập được lưu trong Secret Service (GNOME Keyring, KWallet, KeePassXC) từ 1.21.0.
 > - Gửi email xác minh và thông báo tới hòm thư thật qua SMTP (ví dụ Gmail) ở máy dev.
 > - Giao diện mới (1.20.0): trang chào cho người chưa đăng nhập trên web; F-Launcher mặc định phong cách Trang nhã, chủ đề sáng, ô lưới lớn, có phần "Không gian của bạn" với số app đã cài và số bản cập nhật; bảng màu xanh lục lam chung cho web, desktop và điện thoại.
+> - F-Builder theo giao diện F-Launcher (1.22.0): mặc định chủ đề sáng, cùng bảng màu, bo góc Trang nhã, nút chính màu F-Eco. F-Builder dùng phông hệ thống như F-Launcher (Segoe UI trên Windows), nên chữ tiếng Việt có dấu hiện đủ và đều nét; đặt `F_BUILDER_UI_FONT=<đường dẫn .ttf>` để chọn phông khác.
 >
 > Chưa có: máy ảo chạy thử app, môi trường sandbox, tên miền email (SPF, DKIM, DMARC), tài khoản thử của VNPAY, MoMo, MISA. Chưa dùng được cho người dùng cuối.
 
@@ -308,7 +309,7 @@ Lần đầu biên dịch mất vài phút. Khi thấy dòng `feco-server đang 
 
 ```bash
 curl http://127.0.0.1:8080/healthz
-# {"status":"ok","environment":"dev","version":"1.21.0"}
+# {"status":"ok","environment":"dev","version":"1.22.0"}
 ```
 
 Ở môi trường `dev`, mọi địa chỉ đã có giá trị mặc định trỏ tới hạ tầng ở bước 2, và lược đồ cơ sở dữ liệu được tạo tự động khi khởi động. Xem thêm phần [Cấu hình](#cấu-hình).

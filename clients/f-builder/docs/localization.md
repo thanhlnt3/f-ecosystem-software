@@ -157,10 +157,13 @@ cargo run -p f-builder-ui-egui --example snapshot -- --lang zh-hant --only setti
 
 Chinese, Korean and Georgian glyphs use the existing f-builder-fonts fallback, which release and CI builds
 Spanish and Estonian are Latin script and need no extra glyphs. Chinese and Korean glyphs use the existing f-builder-fonts fallback, which release and CI builds
-Vietnamese needs f-builder-fonts too: the bundled DM Sans and egui's default fonts lack the letters with
-stacked marks (ạ, ả, ấ, ế, ơ, ư, ữ…), so a build without f-builder-fonts shows them as boxes. With
-f-builder-fonts, Noto Sans CJK SC supplies those letters (a different face from the DM Sans around them);
-the script test in `theme.rs` checks every one of them. Chinese and Korean glyphs use the existing f-builder-fonts fallback, which release and CI builds
+Vietnamese comes from the system's interface font, as in F-Launcher (change f-builder-feco-look): Segoe UI,
+Arial or Tahoma on Windows, Arial on macOS, Noto Sans or DejaVu Sans on Linux, or the `.ttf` named by
+`F_BUILDER_UI_FONT`. The bundled DM Sans lacks the letters with stacked marks (ạ, ả, ấ, ế, ơ, ư, ữ…) and
+the arrows, so the app takes the first of those fonts that parses and has every Vietnamese letter
+(checked with skrifa before egui loads it) and puts it ahead of DM Sans; every letter then comes from one
+face. Only on a computer with none of them do the letters fall back to f-builder-fonts (Noto Sans CJK SC)
+or show as boxes. The tests in `theme.rs` check the choice, a broken font file, and every letter. Chinese and Korean glyphs use the existing f-builder-fonts fallback, which release and CI builds
 already include. Local builds must set `F_BUILDER_FONTS_DIR` to a f-builder-fonts checkout
 before compiling to get the same glyph coverage. The catalogs add no font assets.
 Check each script, clipping, narrow windows and native file dialogs visually

@@ -151,7 +151,7 @@ pub fn panel(t: &Tokens) -> Frame {
     Frame::new().fill(t.card).stroke(Stroke::new(1.0, t.card_border)).corner_radius(t.r()).inner_margin(Margin::same(10))
 }
 
-/// The main action: an ink-filled button (light on dark in the dark theme).
+/// The main action: a button filled with F-Eco's colour and white text, as F-Launcher's "Open".
 pub fn primary(ui: &mut Ui, label: &str) -> Response {
     primary_icon(ui, None, label, true)
 }
@@ -163,21 +163,22 @@ pub fn primary_icon(ui: &mut Ui, icon: Option<&str>, label: &str, enabled: bool)
 /// The main button at a given height and label size (Simple mode's Start is a big one).
 pub fn primary_sized(ui: &mut Ui, icon: Option<&str>, label: &str, enabled: bool, height: f32, text: f32) -> Response {
     let t = Tokens::get(ui.ctx());
-    let galley = label_galley(ui, &tr(label), text, t.canvas);
+    let galley = label_galley(ui, &tr(label), text, t.on_accent);
     let icon_w = if icon.is_some() { BUTTON_ICON_W } else { 0.0 };
     let pad = ui.spacing().button_padding;
     let size = Vec2::new(galley.size().x + icon_w + pad.x * 2.0 + 8.0 + (height - 32.0).max(0.0), (galley.size().y + pad.y * 2.0 + 8.0).max(height));
     let sense = if enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(size, sense);
+    // Hover and press darken the colour, so the white label keeps its contrast (WCAG AA).
     let fill = if !enabled {
         t.pressed
     } else if resp.is_pointer_button_down_on() {
-        theme::mix(t.text, t.canvas, 0.25)
+        theme::mix(t.accent, Color32::BLACK, PRIMARY_PRESSED)
     } else {
-        theme::mix(t.text, t.canvas, 0.14 * hover_t(ui, &resp))
+        theme::mix(t.accent, Color32::BLACK, PRIMARY_HOVER * hover_t(ui, &resp))
     };
     ui.painter().rect_filled(rect, t.radius, fill);
-    let fg = if enabled { t.canvas } else { t.text_faint };
+    let fg = if enabled { t.on_accent } else { t.text_faint };
     button_content(ui, rect, icon, galley, fg, fg);
     focus_ring(ui, &resp, rect);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tr(label)));
@@ -215,6 +216,10 @@ fn button_content(ui: &Ui, rect: egui::Rect, icon: Option<&str>, galley: std::sy
 
 /// A button icon (16 px) and the gap after it.
 const BUTTON_ICON_W: f32 = 22.0;
+
+/// How far a main button's colour moves toward black when hovered, and when pressed.
+pub(crate) const PRIMARY_HOVER: f32 = 0.15;
+pub(crate) const PRIMARY_PRESSED: f32 = 0.25;
 
 /// A borderless text button in the accent colour.
 pub fn link(ui: &mut Ui, label: &str) -> Response {

@@ -25,6 +25,9 @@ eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
+# Checks a system font before egui loads it (egui panics on one it can't parse): the same
+# parser and version egui draws with, so no new crate; MIT OR Apache-2.0.
+skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Native open/save dialogs, always shown from a worker thread (never blocks a frame).

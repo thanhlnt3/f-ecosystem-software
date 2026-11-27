@@ -1,5 +1,22 @@
 # Nhật ký thay đổi
 
+## 1.22.0 (27/11/2026)
+
+Thay đổi OpenSpec `f-builder-feco-look`: F-Builder theo giao diện F-Launcher, chữ tiếng Việt hiện đủ dấu.
+
+- **Lỗi phông tiếng Việt**:
+  - Nguyên nhân: DM Sans nhúng trong F-Builder thiếu 70 chữ tiếng Việt có dấu (ả, ạ, ằ, ơ, ư, ự…) và mũi tên. Bản dựng không có bộ phông tùy chọn hiện các chữ đó bằng phông khác nét hoặc thành ô vuông ("Settings □ AI").
+  - F-Builder đọc phông giao diện của hệ điều hành theo cùng danh sách với F-Launcher: Segoe UI và Segoe UI Semibold trên Windows; Arial trên macOS; Noto Sans hoặc DejaVu Sans trên Linux.
+  - Phông chỉ được dùng khi đọc được và có đủ 146 chữ tiếng Việt cùng mũi tên. F-Builder kiểm bằng `skrifa`, thư viện egui đang dùng (MIT OR Apache-2.0, không thêm crate mới). Tệp hỏng bị bỏ qua, app không dừng.
+  - `F_BUILDER_UI_FONT=<đường dẫn .ttf>` chọn phông khác. DM Sans và bộ phông tùy chọn vẫn là phông dự phòng.
+- **Giao diện như F-Launcher**:
+  - bảng màu sáng (nền `#f6f8fc`, thanh bên và thẻ trắng) và tối của launcher;
+  - bo góc Trang nhã: 14 cho nút, 16 cho thẻ;
+  - nút chính, mục đang chọn ở thanh bên và các bước đã xong tô màu F-Eco `#0f6b5c`, chữ trắng.
+  - Chữ đạt tương phản WCAG AA, kể cả khi di chuột hay bấm nút.
+- **Mặc định chủ đề sáng** như F-Launcher. Người đã lưu chủ đề giữ lựa chọn của mình.
+- Câu hỏi mở: F-Builder có nên theo màu nhấn và phong cách người dùng chọn trong F-Launcher không (QUESTIONS.md 139).
+
 ## 1.21.0 (25/11/2026)
 
 Thay đổi OpenSpec `launcher-linux-keyring`: F-Launcher đăng nhập được trên Linux.

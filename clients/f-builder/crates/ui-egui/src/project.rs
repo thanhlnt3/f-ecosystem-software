@@ -1128,8 +1128,8 @@ fn steps(app: &BuilderApp, ui: &mut Ui, ws: &Workspace) {
             let number = format!("{:02}", i + 1);
             let round = marker.width() / 2.0;
             if done {
-                ui.painter().rect_filled(marker, round, t.text);
-                icons::paint(ui, marker.shrink(5.0), "check", 14.0, t.canvas);
+                ui.painter().rect_filled(marker, round, t.accent);
+                icons::paint(ui, marker.shrink(5.0), "check", 14.0, t.on_accent);
             } else if now {
                 ui.painter().rect_filled(marker, round, t.accent);
                 let g = widgets::label_galley(ui, &number, 11.0, t.on_accent);

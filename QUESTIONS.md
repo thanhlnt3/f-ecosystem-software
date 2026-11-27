@@ -538,3 +538,11 @@ Ghi lại những điểm spec chưa rõ hoặc cần chủ dự án quyết đ�
 138. **F-Launcher trên Linux chưa thử với phiên đăng nhập thật.** CI kiểm lưu, đọc, xóa token qua
      GNOME Keyring không giao diện và thông báo khi không có D-Bus. Chưa thử đăng nhập trọn luồng
      trên máy Linux có màn hình (KDE KWallet, KeePassXC), vì máy dev là Windows.
+139. **F-Builder có theo cài đặt cá nhân của F-Launcher không?** Từ 1.22.0, F-Builder dùng bảng màu
+     sáng/tối, bo góc Trang nhã và phông hệ thống như F-Launcher (thay đổi `f-builder-feco-look`),
+     với màu nhấn cố định là màu F-Eco `#0f6b5c`.
+     - F-Launcher cho chọn chủ đề "Theo hệ thống", màu nhấn (Xanh dương, Xanh lục lam…) và tám
+       phong cách họa sĩ. F-Builder có nên đọc các lựa chọn này (ví dụ khi được mở từ launcher), hay
+       giữ cài đặt riêng như hiện nay?
+     - Màu nhấn Xanh lục lam của launcher (`#0d9488`) với chữ trắng chỉ đạt tương phản 3,7:1, dưới
+       mức AA 4,5:1, nên F-Builder giữ `#0f6b5c` cho nút có chữ.

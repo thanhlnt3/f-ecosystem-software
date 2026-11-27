@@ -93,7 +93,7 @@ pub struct Settings {
     /// own engines and with Ghidra when it's installed. Off is Clean room: nothing inside the
     /// original is read, only what can be seen from outside ([`crate::clean_room`]).
     pub deep_mode: bool,
-    /// `studio` (dark) or `studio-light`.
+    /// `studio-light` (the default, as F-Launcher) or `studio` (dark).
     pub theme: String,
     /// UI language (BCP 47), empty = system.
     pub language: String,
@@ -198,7 +198,7 @@ impl Default for Settings {
             version: SETTINGS_VERSION,
             mode: Mode::Beginner,
             deep_mode: false,
-            theme: "studio".into(),
+            theme: "studio-light".into(),
             language: String::new(),
             first_run_done: false,
             engines: EngineSettings::default(),
